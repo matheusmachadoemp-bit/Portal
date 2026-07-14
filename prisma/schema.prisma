@@ -1,0 +1,458 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// AUTH / USERS / PERMISSIONS
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMINISTRADOR
+  GESTOR
+  GERENTE
+  SUPERVISOR
+  COLABORADOR
+}
+
+enum AccessLevel {
+  NENHUM
+  VISUALIZAR
+  EDITAR
+  TOTAL
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(COLABORADOR)
+  active        Boolean   @default(true)
+  avatarUrl     String?
+  phone         String?
+  resetToken    String?
+  resetTokenExp DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  permissions      UserPermission[]
+  menuPreferences  MenuPreference?
+  auditLogs        AuditLog[]
+  salesEntries     SalesEntry[]
+  marketingEntries MarketingEntry[]
+  goals            Goal[]
+  vaultEntries     VaultEntry[]
+  vaultAccess      VaultAccessLog[]
+  courses          Course[]
+  files            FileItem[]
+  products         Product[]
+  occurrences      Occurrence[] @relation("OccurrenceCreatedBy")
+}
+
+model UserPermission {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moduleKey String
+  level     AccessLevel @default(VISUALIZAR)
+  createdAt DateTime    @default(now())
+
+  @@unique([userId, moduleKey])
+}
+
+// ---------------------------------------------------------------------------
+// MENU / CATEGORIES (drag & drop, custom categories)
+// ---------------------------------------------------------------------------
+
+model Category {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  icon        String   @default("LayoutGrid")
+  color       String   @default("#2952E3")
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  isSystem    Boolean  @default(false)
+  contentType String   @default("custom")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subcategories Subcategory[]
+}
+
+model Subcategory {
+  id         String   @id @default(cuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  key        String
+  name       String
+  icon       String   @default("Folder")
+  color      String   @default("#2952E3")
+  order      Int      @default(0)
+  active     Boolean  @default(true)
+  isSystem   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([categoryId, key])
+}
+
+model MenuPreference {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderJson String
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// VENDAS
+// ---------------------------------------------------------------------------
+
+enum PeriodType {
+  DIARIO
+  SEMANAL
+  MENSAL
+}
+
+model SalesEntry {
+  id                  String     @id @default(cuid())
+  date                DateTime
+  periodType          PeriodType @default(DIARIO)
+  faturamentoDelivery Float      @default(0)
+  faturamentoSalao    Float      @default(0)
+  pedidosDelivery     Int        @default(0)
+  pedidosBalcao       Int        @default(0)
+  pedidosSalao        Int        @default(0)
+  mesasAtendidas      Int        @default(0)
+  taxaServicoValor    Float      @default(0)
+  metaDiaria          Float      @default(0)
+  observacoes         String?
+  createdById         String
+  createdBy           User       @relation(fields: [createdById], references: [id])
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// MARKETING
+// ---------------------------------------------------------------------------
+
+model MarketingEntry {
+  id                  String   @id @default(cuid())
+  date                DateTime
+  investimentoTrafego Float    @default(0)
+  receitaTrafego      Float    @default(0)
+  pedidosCampanha     Int      @default(0)
+  visitasSite         Int      @default(0)
+  conversoes          Int      @default(0)
+  seguidoresInicio    Int      @default(0)
+  seguidoresFim       Int      @default(0)
+  curtidas            Int      @default(0)
+  comentarios         Int      @default(0)
+  compartilhamentos   Int      @default(0)
+  salvamentos         Int      @default(0)
+  alcance             Int      @default(0)
+  impressoes          Int      @default(0)
+  observacoes         String?
+  planoDeAcao         String?
+  createdById         String
+  createdBy           User     @relation(fields: [createdById], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// METAS
+// ---------------------------------------------------------------------------
+
+enum GoalCategory {
+  GERENCIA
+  SALAO
+  COZINHA
+  DELIVERY
+}
+
+enum GoalStatus {
+  NAO_INICIADA
+  EM_ANDAMENTO
+  EM_RISCO
+  CONCLUIDA
+  NAO_ATINGIDA
+}
+
+model Goal {
+  id             String       @id @default(cuid())
+  name           String
+  category       GoalCategory
+  responsavel    String
+  description    String?
+  indicador      String?
+  valorMeta      Float        @default(0)
+  valorRealizado Float        @default(0)
+  unidade        String       @default("R$")
+  startDate      DateTime
+  endDate        DateTime
+  bonificacao    String?
+  status         GoalStatus   @default(NAO_INICIADA)
+  observacoes    String?
+  planoDeAcao    String?
+  createdById    String
+  createdBy      User         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  attachments GoalAttachment[]
+}
+
+model GoalAttachment {
+  id        String   @id @default(cuid())
+  goalId    String
+  goal      Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileUrl   String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// RH
+// ---------------------------------------------------------------------------
+
+enum EmployeeStatus {
+  ATIVO
+  FERIAS
+  AFASTADO
+  DESLIGADO
+}
+
+model Employee {
+  id                String         @id @default(cuid())
+  name              String
+  cargo             String
+  setor             String
+  admissionDate     DateTime
+  terminationDate   DateTime?
+  status            EmployeeStatus @default(ATIVO)
+  phone             String?
+  email             String?
+  gestorResponsavel String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  occurrences Occurrence[]
+}
+
+enum OccurrenceType {
+  FALTA
+  ATRASO
+  ATESTADO
+}
+
+enum OccurrenceStatus {
+  PENDENTE
+  JUSTIFICADA
+  NAO_JUSTIFICADA
+}
+
+model Occurrence {
+  id               String           @id @default(cuid())
+  employeeId       String
+  employee         Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date             DateTime
+  type             OccurrenceType
+  horarioPrevisto  String?
+  horarioRealizado String?
+  minutosAtraso    Int              @default(0)
+  justificativa    String?
+  anexoUrl         String?
+  observacao       String?
+  status           OccurrenceStatus @default(PENDENTE)
+  createdById      String
+  createdBy        User             @relation("OccurrenceCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime         @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// ADMINISTRATIVO
+// ---------------------------------------------------------------------------
+
+model VaultEntry {
+  id             String   @id @default(cuid())
+  systemName     String
+  site           String?
+  username       String
+  passwordCipher String
+  category       String   @default("Geral")
+  responsavel    String?
+  observacao     String?
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  history VaultHistory[]
+  access  VaultAccessLog[]
+}
+
+model VaultHistory {
+  id           String     @id @default(cuid())
+  vaultEntryId String
+  vaultEntry   VaultEntry @relation(fields: [vaultEntryId], references: [id], onDelete: Cascade)
+  changedBy    String
+  changeType   String
+  createdAt    DateTime   @default(now())
+}
+
+model VaultAccessLog {
+  id           String     @id @default(cuid())
+  vaultEntryId String
+  vaultEntry   VaultEntry @relation(fields: [vaultEntryId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  action       String
+  createdAt    DateTime   @default(now())
+}
+
+model Course {
+  id                  String    @id @default(cuid())
+  name                String
+  plataforma          String?
+  link                String?
+  usuario             String?
+  senha               String?
+  responsavel         String?
+  percentualConcluido Int       @default(0)
+  startDate           DateTime?
+  prazo               DateTime?
+  certificadoUrl      String?
+  observacoes         String?
+  createdById         String
+  createdBy           User      @relation(fields: [createdById], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+enum FileFolderType {
+  ARQUIVO
+  CARTILHA
+  LOGO
+}
+
+model FileItem {
+  id          String         @id @default(cuid())
+  name        String
+  folderType  FileFolderType @default(ARQUIVO)
+  parentId    String?
+  parent      FileItem?      @relation("FileTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    FileItem[]     @relation("FileTree")
+  isFolder    Boolean        @default(false)
+  fileUrl     String?
+  mimeType    String?
+  sizeBytes   Int?
+  version     Int            @default(1)
+  createdById String
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// FICHA TECNICA
+// ---------------------------------------------------------------------------
+
+enum ProductCategory {
+  PIZZA_SALGADA
+  PIZZA_DOCE
+  COMBO
+  ESFIHA_SALGADA
+  ESFIHA_DOCE
+  ACOMPANHAMENTO
+  BURGER
+  BEBIDA
+  DRINK
+}
+
+model Ingredient {
+  id                  String    @id @default(cuid())
+  name                String
+  fornecedor          String?
+  unidade             String    @default("g")
+  precoAtual          Float     @default(0)
+  quantidadeEmbalagem Float     @default(1)
+  percentualPerda     Float     @default(0)
+  estoqueMinimo       Float     @default(0)
+  estoqueAtual        Float     @default(0)
+  lastPurchaseDate    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt            DateTime @updatedAt
+
+  priceHistory IngredientPriceHistory[]
+  productLinks ProductIngredient[]
+}
+
+model IngredientPriceHistory {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  price        Float
+  createdAt    DateTime   @default(now())
+}
+
+model Product {
+  id           String          @id @default(cuid())
+  name         String
+  code         String          @unique
+  category     ProductCategory
+  photoUrl     String?
+  description  String?
+  rendimento   String?
+  tamanho      String?
+  pesoFinal    Float?
+  precoVenda   Float           @default(0)
+  modoPreparo  String?
+  tempoPreparo Int?
+  validade     String?
+  responsavel  String?
+  createdById  String
+  createdBy    User            @relation(fields: [createdById], references: [id])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  ingredients ProductIngredient[]
+}
+
+model ProductIngredient {
+  id              String     @id @default(cuid())
+  productId       String
+  product         Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredientId    String
+  ingredient      Ingredient @relation(fields: [ingredientId], references: [id])
+  quantidadeUsada Float
+  percentualPerda Float      @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// AUDIT
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  before     String?
+  after      String?
+  createdAt  DateTime @default(now())
+}
