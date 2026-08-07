@@ -57,6 +57,7 @@ export function Sidebar({
   const [confirmDelete, setConfirmDelete] = useState<
     { type: "category" | "subcategory"; id: string; name: string } | null
   >(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
 
   const pathname = usePathname();
@@ -163,13 +164,24 @@ export function Sidebar({
 
   async function doDelete() {
     if (!confirmDelete) return;
-    if (confirmDelete.type === "category") {
-      await fetch(`/api/menu/categories/${confirmDelete.id}`, { method: "DELETE" });
-    } else {
-      await fetch(`/api/menu/subcategories/${confirmDelete.id}`, { method: "DELETE" });
+    setDeleteError(null);
+    try {
+      const res = await fetch(
+        confirmDelete.type === "category"
+          ? `/api/menu/categories/${confirmDelete.id}`
+          : `/api/menu/subcategories/${confirmDelete.id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? "Não foi possível excluir. Tente novamente.");
+        return;
+      }
+      setConfirmDelete(null);
+      refresh();
+    } catch {
+      setDeleteError("Falha de conexão ao excluir. Verifique sua internet e tente novamente.");
     }
-    setConfirmDelete(null);
-    refresh();
   }
 
   async function doMoveSubcategory(toCategoryId: string) {
@@ -362,10 +374,16 @@ export function Sidebar({
       <ConfirmDialog
         open={!!confirmDelete}
         title={`Excluir ${confirmDelete?.type === "category" ? "categoria" : "subcategoria"}`}
-        message={`Tem certeza que deseja excluir "${confirmDelete?.name}"? Essa ação não poderá ser desfeita.`}
+        message={
+          deleteError ??
+          `Tem certeza que deseja excluir "${confirmDelete?.name}"? Essa ação não poderá ser desfeita.`
+        }
         onConfirm={doDelete}
-        onCancel={() => setConfirmDelete(null)}
-        confirmLabel="Excluir"
+        onCancel={() => {
+          setConfirmDelete(null);
+          setDeleteError(null);
+        }}
+        confirmLabel={deleteError ? "Tentar novamente" : "Excluir"}
         danger
       />
 
