@@ -1,0 +1,33 @@
+import { prisma } from "@/lib/prisma";
+import { PageContainer } from "@/components/page-container";
+import { FinanceTabs } from "../finance-tabs";
+import { ContasReceberClient } from "./contas-receber-client";
+import { subDays } from "date-fns";
+
+export default async function ContasAReceberPage() {
+  const [receivables, categorias, contas] = await Promise.all([
+    prisma.receivable.findMany({
+      where: { dataVencimento: { gte: subDays(new Date(), 120) } },
+      orderBy: { dataVencimento: "asc" },
+      include: { categoria: true, bankAccount: true, createdBy: { select: { name: true } } },
+    }),
+    prisma.financialCategory.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.bankAccount.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+  ]);
+
+  const serialized = receivables.map((r) => ({
+    ...r,
+    dataCompetencia: r.dataCompetencia.toISOString(),
+    dataVencimento: r.dataVencimento.toISOString(),
+    dataRecebimento: r.dataRecebimento ? r.dataRecebimento.toISOString() : null,
+  }));
+
+  return (
+    <PageContainer title="Financeiro" subtitle="Contas a Receber">
+      <div className="space-y-6">
+        <FinanceTabs />
+        <ContasReceberClient initialReceivables={serialized} categorias={categorias} contas={contas} />
+      </div>
+    </PageContainer>
+  );
+}

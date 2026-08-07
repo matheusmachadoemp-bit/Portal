@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { allDreCategories } from "../src/lib/dre-structure";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
@@ -82,14 +83,32 @@ const CATEGORIES = [
     ],
   },
   {
+    key: "financeiro",
+    name: "Financeiro",
+    icon: "Wallet",
+    order: 7,
+    contentType: "financeiro",
+    subs: [
+      { key: "dashboard", name: "Dashboard Financeiro", icon: "LayoutDashboard" },
+      { key: "contas-a-pagar", name: "Contas a Pagar", icon: "ArrowUpCircle" },
+      { key: "contas-a-receber", name: "Contas a Receber", icon: "ArrowDownCircle" },
+      { key: "fluxo-de-caixa", name: "Fluxo de Caixa", icon: "Waves" },
+      { key: "caixa-da-empresa", name: "Caixa da Empresa", icon: "Vault" },
+      { key: "dre", name: "DRE", icon: "FileBarChart" },
+      { key: "categorias-financeiras", name: "Categorias Financeiras", icon: "Tags" },
+      { key: "contas-bancarias", name: "Contas Bancárias", icon: "Landmark" },
+      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
+    ],
+  },
+  {
     key: "configuracoes",
     name: "Configurações",
     icon: "Settings",
-    order: 7,
+    order: 8,
     contentType: "configuracoes",
     subs: [],
   },
-  { key: "usuarios", name: "Usuários", icon: "UserCog", order: 8, contentType: "usuarios", subs: [] },
+  { key: "usuarios", name: "Usuários", icon: "UserCog", order: 9, contentType: "usuarios", subs: [] },
 ];
 
 async function main() {
@@ -391,6 +410,37 @@ async function main() {
           ],
         },
       },
+    });
+  }
+
+  // --- Financeiro: categorias (vinculadas à DRE) ---
+  const dreCategoryTypeMap: Record<string, "RECEITA" | "DESPESA" | "CUSTO" | "INVESTIMENTO"> = {
+    faturamentos: "RECEITA",
+    "receitas-nao-operacionais": "RECEITA",
+    "custos-vendas": "CUSTO",
+    cmv: "CUSTO",
+    embalagens: "CUSTO",
+    investimentos: "INVESTIMENTO",
+  };
+  for (const cat of allDreCategories()) {
+    const type = dreCategoryTypeMap[cat.groupKey] ?? "DESPESA";
+    await prisma.financialCategory.upsert({
+      where: { name: cat.name },
+      update: { dreKey: cat.key, type },
+      create: { name: cat.name, dreKey: cat.key, type },
+    });
+  }
+
+  // --- Financeiro: contas bancárias ---
+  const existingAccounts = await prisma.bankAccount.count();
+  if (existingAccounts === 0) {
+    await prisma.bankAccount.createMany({
+      data: [
+        { name: "Banco Inter", bank: "Inter", tipo: "Conta Corrente", color: "#f97316", icon: "Landmark" },
+        { name: "Nubank", bank: "Nubank", tipo: "Conta Corrente", color: "#a855f7", icon: "Landmark" },
+        { name: "Mercado Pago", bank: "Mercado Pago", tipo: "Conta Digital", color: "#2952E3", icon: "Wallet" },
+        { name: "Caixa Físico", bank: null, tipo: "Caixa", color: "#22c55e", icon: "Banknote" },
+      ],
     });
   }
 

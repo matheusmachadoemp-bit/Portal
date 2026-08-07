@@ -6,6 +6,7 @@ export const MODULES = [
   { key: "marketing", label: "Marketing" },
   { key: "metas", label: "Metas" },
   { key: "rh", label: "RH" },
+  { key: "financeiro", label: "Financeiro" },
   { key: "administrativo", label: "Administrativo" },
   { key: "ficha-tecnica", label: "Ficha Técnica" },
   { key: "configuracoes", label: "Configurações" },

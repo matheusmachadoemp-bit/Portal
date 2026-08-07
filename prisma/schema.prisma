@@ -45,18 +45,22 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  permissions      UserPermission[]
-  menuPreferences  MenuPreference?
-  auditLogs        AuditLog[]
-  salesEntries     SalesEntry[]
-  marketingEntries MarketingEntry[]
-  goals            Goal[]
-  vaultEntries     VaultEntry[]
-  vaultAccess      VaultAccessLog[]
-  courses          Course[]
-  files            FileItem[]
-  products         Product[]
-  occurrences      Occurrence[] @relation("OccurrenceCreatedBy")
+  permissions        UserPermission[]
+  menuPreferences    MenuPreference?
+  auditLogs          AuditLog[]
+  salesEntries       SalesEntry[]
+  marketingEntries   MarketingEntry[]
+  goals              Goal[]
+  vaultEntries       VaultEntry[]
+  vaultAccess        VaultAccessLog[]
+  courses            Course[]
+  files              FileItem[]
+  products           Product[]
+  occurrences        Occurrence[]        @relation("OccurrenceCreatedBy")
+  payables           Payable[]
+  receivables        Receivable[]
+  cashMovements      CashMovement[]
+  recurringTemplates RecurringTemplate[]
 }
 
 model UserPermission {
@@ -339,7 +343,7 @@ model Course {
   createdById         String
   createdBy           User      @relation(fields: [createdById], references: [id])
   createdAt           DateTime  @default(now())
-  updatedAt            DateTime @updatedAt
+  updatedAt           DateTime  @updatedAt
 }
 
 enum FileFolderType {
@@ -394,7 +398,7 @@ model Ingredient {
   estoqueAtual        Float     @default(0)
   lastPurchaseDate    DateTime?
   createdAt           DateTime  @default(now())
-  updatedAt            DateTime @updatedAt
+  updatedAt           DateTime  @updatedAt
 
   priceHistory IngredientPriceHistory[]
   productLinks ProductIngredient[]
@@ -439,6 +443,197 @@ model ProductIngredient {
   ingredient      Ingredient @relation(fields: [ingredientId], references: [id])
   quantidadeUsada Float
   percentualPerda Float      @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// FINANCEIRO
+// ---------------------------------------------------------------------------
+
+enum Company {
+  NORD_PIZZA
+  ZARKI_SUSHI
+  GRUPO_NORD
+}
+
+enum PaymentMethod {
+  PIX
+  DINHEIRO
+  CARTAO_DEBITO
+  CARTAO_CREDITO
+  TED
+  DOC
+  TRANSFERENCIA
+  CHEQUE
+  OUTRO
+}
+
+enum FinanceEntryStatus {
+  EM_ABERTO
+  PAGO
+  PARCIALMENTE_PAGO
+  CANCELADO
+  ATRASADO
+}
+
+enum FinanceCategoryType {
+  RECEITA
+  DESPESA
+  CUSTO
+  INVESTIMENTO
+}
+
+enum CashMovementType {
+  ENTRADA
+  SAIDA
+  TRANSFERENCIA
+  APORTE_SOCIO
+  RETIRADA_SOCIO
+}
+
+model BankAccount {
+  id           String   @id @default(cuid())
+  name         String
+  bank         String?
+  agencia      String?
+  conta        String?
+  tipo         String   @default("Conta Corrente")
+  saldoInicial Float    @default(0)
+  saldoAtual   Float    @default(0)
+  color        String   @default("#2952E3")
+  icon         String   @default("Landmark")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  payables             Payable[]
+  receivables          Receivable[]
+  cashMovements        CashMovement[]      @relation("CashMovementAccount")
+  cashMovementsDestino CashMovement[]      @relation("CashMovementDestino")
+  recurringTemplates   RecurringTemplate[]
+}
+
+model FinancialCategory {
+  id        String              @id @default(cuid())
+  name      String              @unique
+  type      FinanceCategoryType @default(DESPESA)
+  dreKey    String
+  active    Boolean             @default(true)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  payables           Payable[]
+  receivables        Receivable[]
+  recurringTemplates RecurringTemplate[]
+}
+
+model FinanceAttachment {
+  id         String   @id @default(cuid())
+  entityType String // PAYABLE | RECEIVABLE
+  entityId   String
+  fileName   String
+  fileUrl    String
+  createdAt  DateTime @default(now())
+}
+
+model RecurringTemplate {
+  id                String            @id @default(cuid())
+  tipo              String // PAGAR | RECEBER
+  descricao         String
+  fornecedorCliente String?
+  categoriaId       String
+  categoria         FinancialCategory @relation(fields: [categoriaId], references: [id])
+  empresa           Company
+  centroCusto       String?
+  valor             Float
+  diaVencimento     Int
+  bankAccountId     String
+  bankAccount       BankAccount       @relation(fields: [bankAccountId], references: [id])
+  formaPagamento    PaymentMethod     @default(PIX)
+  infinita          Boolean           @default(false)
+  quantidadeMeses   Int?
+  dataInicio        DateTime
+  active            Boolean           @default(true)
+  createdById       String
+  createdBy         User              @relation(fields: [createdById], references: [id])
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  payables    Payable[]
+  receivables Receivable[]
+}
+
+model Payable {
+  id                  String             @id @default(cuid())
+  number              String
+  fornecedor          String
+  descricao           String
+  categoriaId         String
+  categoria           FinancialCategory  @relation(fields: [categoriaId], references: [id])
+  centroCusto         String?
+  empresa             Company
+  valor               Float
+  dataCompetencia     DateTime
+  dataVencimento      DateTime
+  dataPagamento       DateTime?
+  bankAccountId       String?
+  bankAccount         BankAccount?       @relation(fields: [bankAccountId], references: [id])
+  formaPagamento      PaymentMethod?
+  parcelado           Boolean            @default(false)
+  quantidadeParcelas  Int?
+  parcelaAtual        Int?
+  observacoes         String?
+  status              FinanceEntryStatus @default(EM_ABERTO)
+  recurringTemplateId String?
+  recurringTemplate   RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id])
+  createdById         String
+  createdBy           User               @relation(fields: [createdById], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model Receivable {
+  id                  String             @id @default(cuid())
+  number              String
+  cliente             String
+  descricao           String
+  categoriaId         String
+  categoria           FinancialCategory  @relation(fields: [categoriaId], references: [id])
+  centroCusto         String?
+  empresa             Company
+  valor               Float
+  dataCompetencia     DateTime
+  dataVencimento      DateTime
+  dataRecebimento     DateTime?
+  bankAccountId       String?
+  bankAccount         BankAccount?       @relation(fields: [bankAccountId], references: [id])
+  formaRecebimento    PaymentMethod?
+  parcelado           Boolean            @default(false)
+  quantidadeParcelas  Int?
+  parcelaAtual        Int?
+  observacoes         String?
+  status              FinanceEntryStatus @default(EM_ABERTO)
+  recurringTemplateId String?
+  recurringTemplate   RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id])
+  createdById         String
+  createdBy           User               @relation(fields: [createdById], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model CashMovement {
+  id            String           @id @default(cuid())
+  type          CashMovementType
+  bankAccountId String
+  bankAccount   BankAccount      @relation("CashMovementAccount", fields: [bankAccountId], references: [id])
+  destinoId     String?
+  destino       BankAccount?     @relation("CashMovementDestino", fields: [destinoId], references: [id])
+  valor         Float
+  descricao     String?
+  empresa       Company?
+  date          DateTime         @default(now())
+  createdById   String
+  createdBy     User             @relation(fields: [createdById], references: [id])
+  createdAt     DateTime         @default(now())
 }
 
 // ---------------------------------------------------------------------------
