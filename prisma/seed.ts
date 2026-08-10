@@ -26,10 +26,18 @@ const CATEGORIES = [
     subs: [],
   },
   {
+    key: "universidade",
+    name: "Universidade Grupo Nord",
+    icon: "GraduationCap",
+    order: 3,
+    contentType: "universidade",
+    subs: [],
+  },
+  {
     key: "metas",
     name: "Metas",
     icon: "Target",
-    order: 3,
+    order: 4,
     contentType: "metas",
     subs: [
       { key: "gerencia", name: "Metas da Gerência", icon: "Briefcase" },
@@ -42,7 +50,7 @@ const CATEGORIES = [
     key: "rh",
     name: "RH",
     icon: "Users",
-    order: 4,
+    order: 5,
     contentType: "rh",
     subs: [
       { key: "colaboradores", name: "Colaboradores", icon: "IdCard" },
@@ -53,7 +61,7 @@ const CATEGORIES = [
     key: "administrativo",
     name: "Administrativo",
     icon: "Building2",
-    order: 5,
+    order: 6,
     contentType: "administrativo",
     subs: [
       { key: "senhas", name: "Senhas", icon: "KeyRound" },
@@ -67,7 +75,7 @@ const CATEGORIES = [
     key: "ficha-tecnica",
     name: "Ficha Técnica",
     icon: "ClipboardList",
-    order: 6,
+    order: 7,
     contentType: "ficha-tecnica",
     subs: [
       { key: "pizzas-salgadas", name: "Pizzas Salgadas", icon: "Pizza" },
@@ -86,7 +94,7 @@ const CATEGORIES = [
     key: "financeiro",
     name: "Financeiro",
     icon: "Wallet",
-    order: 7,
+    order: 8,
     contentType: "financeiro",
     subs: [
       { key: "dashboard", name: "Dashboard Financeiro", icon: "LayoutDashboard" },
@@ -104,11 +112,11 @@ const CATEGORIES = [
     key: "configuracoes",
     name: "Configurações",
     icon: "Settings",
-    order: 8,
+    order: 9,
     contentType: "configuracoes",
     subs: [],
   },
-  { key: "usuarios", name: "Usuários", icon: "UserCog", order: 9, contentType: "usuarios", subs: [] },
+  { key: "usuarios", name: "Usuários", icon: "UserCog", order: 10, contentType: "usuarios", subs: [] },
 ];
 
 async function main() {
