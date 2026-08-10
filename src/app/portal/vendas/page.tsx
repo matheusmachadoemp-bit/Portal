@@ -2,10 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { VendasClient } from "./vendas-client";
 import { subDays } from "date-fns";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function VendasPage() {
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
   const entries = await prisma.salesEntry.findMany({
-    where: { date: { gte: subDays(new Date(), 90) } },
+    where: { empresaId: { in: empresaIds }, date: { gte: subDays(new Date(), 90) } },
     orderBy: { date: "desc" },
     include: { createdBy: { select: { name: true } } },
   });
@@ -19,7 +23,7 @@ export default async function VendasPage() {
 
   return (
     <PageContainer title="Vendas" subtitle="Faturamento, pedidos, ticket médio e taxa de serviço">
-      <VendasClient initialEntries={serialized} />
+      <VendasClient initialEntries={serialized} canCreate={ctx?.mode === "single"} />
     </PageContainer>
   );
 }

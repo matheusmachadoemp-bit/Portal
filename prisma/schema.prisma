@@ -31,21 +31,25 @@ enum AccessLevel {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String
-  email         String    @unique
-  passwordHash  String
-  role          Role      @default(COLABORADOR)
-  active        Boolean   @default(true)
-  avatarUrl     String?
-  phone         String?
-  resetToken    String?
-  resetTokenExp DateTime?
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  passwordHash     String
+  role             Role      @default(COLABORADOR)
+  active           Boolean   @default(true)
+  avatarUrl        String?
+  phone            String?
+  resetToken       String?
+  resetTokenExp    DateTime?
+  lastLoginAt      DateTime?
+  canViewGrupoNord Boolean   @default(false)
+  defaultEmpresaId String?
+  defaultEmpresa   Empresa?  @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   permissions        UserPermission[]
+  empresaAccess      UserEmpresaAccess[]
   menuPreferences    MenuPreference?
   auditLogs          AuditLog[]
   salesEntries       SalesEntry[]
@@ -72,6 +76,48 @@ model UserPermission {
   createdAt DateTime    @default(now())
 
   @@unique([userId, moduleKey])
+}
+
+// ---------------------------------------------------------------------------
+// EMPRESAS (multiloja) — Grupo Nord > Empresas (Nord Pizza, Zarki Sushi, ...)
+// ---------------------------------------------------------------------------
+
+model Empresa {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  logo      String?
+  color     String   @default("#2952E3")
+  active    Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userAccess         UserEmpresaAccess[]
+  usersDefault       User[]              @relation("UserDefaultEmpresa")
+  salesEntries       SalesEntry[]
+  marketingEntries   MarketingEntry[]
+  goals              Goal[]
+  employees          Employee[]
+  products           Product[]
+  ingredients        Ingredient[]
+  bankAccounts       BankAccount[]
+  payables           Payable[]
+  receivables        Receivable[]
+  cashMovements      CashMovement[]
+  recurringTemplates RecurringTemplate[]
+  auditLogs          AuditLog[]
+}
+
+model UserEmpresaAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, empresaId])
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +177,8 @@ enum PeriodType {
 
 model SalesEntry {
   id                  String     @id @default(cuid())
+  empresaId           String
+  empresa             Empresa    @relation(fields: [empresaId], references: [id])
   date                DateTime
   periodType          PeriodType @default(DIARIO)
   faturamentoDelivery Float      @default(0)
@@ -154,6 +202,8 @@ model SalesEntry {
 
 model MarketingEntry {
   id                  String   @id @default(cuid())
+  empresaId           String
+  empresa             Empresa  @relation(fields: [empresaId], references: [id])
   date                DateTime
   investimentoTrafego Float    @default(0)
   receitaTrafego      Float    @default(0)
@@ -197,6 +247,8 @@ enum GoalStatus {
 
 model Goal {
   id             String       @id @default(cuid())
+  empresaId      String
+  empresa        Empresa      @relation(fields: [empresaId], references: [id])
   name           String
   category       GoalCategory
   responsavel    String
@@ -241,6 +293,8 @@ enum EmployeeStatus {
 
 model Employee {
   id                String         @id @default(cuid())
+  empresaId         String
+  empresa           Empresa        @relation(fields: [empresaId], references: [id])
   name              String
   cargo             String
   setor             String
@@ -388,6 +442,8 @@ enum ProductCategory {
 
 model Ingredient {
   id                  String    @id @default(cuid())
+  empresaId           String
+  empresa             Empresa   @relation(fields: [empresaId], references: [id])
   name                String
   fornecedor          String?
   unidade             String    @default("g")
@@ -414,6 +470,8 @@ model IngredientPriceHistory {
 
 model Product {
   id           String          @id @default(cuid())
+  empresaId    String
+  empresa      Empresa         @relation(fields: [empresaId], references: [id])
   name         String
   code         String          @unique
   category     ProductCategory
@@ -448,12 +506,6 @@ model ProductIngredient {
 // ---------------------------------------------------------------------------
 // FINANCEIRO
 // ---------------------------------------------------------------------------
-
-enum Company {
-  NORD_PIZZA
-  ZARKI_SUSHI
-  GRUPO_NORD
-}
 
 enum PaymentMethod {
   PIX
@@ -492,6 +544,8 @@ enum CashMovementType {
 
 model BankAccount {
   id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id])
   name         String
   bank         String?
   agencia      String?
@@ -542,7 +596,8 @@ model RecurringTemplate {
   fornecedorCliente String?
   categoriaId       String
   categoria         FinancialCategory @relation(fields: [categoriaId], references: [id])
-  empresa           Company
+  empresaId         String
+  empresa           Empresa           @relation(fields: [empresaId], references: [id])
   centroCusto       String?
   valor             Float
   diaVencimento     Int
@@ -570,7 +625,8 @@ model Payable {
   categoriaId         String
   categoria           FinancialCategory  @relation(fields: [categoriaId], references: [id])
   centroCusto         String?
-  empresa             Company
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
   valor               Float
   dataCompetencia     DateTime
   dataVencimento      DateTime
@@ -599,7 +655,8 @@ model Receivable {
   categoriaId         String
   categoria           FinancialCategory  @relation(fields: [categoriaId], references: [id])
   centroCusto         String?
-  empresa             Company
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
   valor               Float
   dataCompetencia     DateTime
   dataVencimento      DateTime
@@ -629,7 +686,8 @@ model CashMovement {
   destino       BankAccount?     @relation("CashMovementDestino", fields: [destinoId], references: [id])
   valor         Float
   descricao     String?
-  empresa       Company?
+  empresaId     String?
+  empresa       Empresa?         @relation(fields: [empresaId], references: [id])
   date          DateTime         @default(now())
   createdById   String
   createdBy     User             @relation(fields: [createdById], references: [id])
@@ -644,6 +702,8 @@ model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
   user       User?    @relation(fields: [userId], references: [id])
+  empresaId  String?
+  empresa    Empresa? @relation(fields: [empresaId], references: [id])
   action     String
   entityType String
   entityId   String?

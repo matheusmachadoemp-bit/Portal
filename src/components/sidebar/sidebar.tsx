@@ -34,16 +34,23 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { logoutAction } from "@/app/actions/logout";
+import { StoreSwitcher } from "./store-switcher";
 import type { CategoryDTO, SubcategoryDTO } from "./types";
 
 export function Sidebar({
   initialCategories,
   userName,
   userRole,
+  empresas,
+  activeEmpresaId,
+  canViewGrupoNord,
 }: {
   initialCategories: CategoryDTO[];
   userName: string;
   userRole: string;
+  empresas: { id: string; key: string; name: string; color: string; logo: string | null }[];
+  activeEmpresaId: string;
+  canViewGrupoNord: boolean;
 }) {
   const [categories, setCategories] = useState<CategoryDTO[]>(initialCategories);
   const [collapsed, setCollapsed] = useState(false);
@@ -228,8 +235,17 @@ export function Sidebar({
         </button>
       </div>
 
+      <div className="pt-2">
+        <StoreSwitcher
+          empresas={empresas}
+          activeEmpresaId={activeEmpresaId}
+          canViewGrupoNord={canViewGrupoNord}
+          collapsed={collapsed}
+        />
+      </div>
+
       {!collapsed && (
-        <div className="px-3 pt-3">
+        <div className="px-3 pt-1">
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nord-gray" />
             <input

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -9,6 +10,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
 
   const before = await prisma.salesEntry.findUnique({ where: { id } });
+  if (!before) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, before.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
 
   const entry = await prisma.salesEntry.update({
     where: { id },
@@ -30,6 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,
+      empresaId: before.empresaId,
       action: "UPDATE",
       entityType: "SalesEntry",
       entityId: id,
@@ -47,11 +53,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
 
   const before = await prisma.salesEntry.findUnique({ where: { id } });
+  if (!before) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, before.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+
   await prisma.salesEntry.delete({ where: { id } });
 
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,
+      empresaId: before.empresaId,
       action: "DELETE",
       entityType: "SalesEntry",
       entityId: id,

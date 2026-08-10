@@ -114,29 +114,58 @@ const CATEGORIES = [
 async function main() {
   console.log("Seeding database...");
 
+  // --- Empresas (Grupo Nord > Nord Pizza, Zarki Sushi) ---
+  const nordPizza = await prisma.empresa.upsert({
+    where: { key: "nord-pizza" },
+    update: {},
+    create: { key: "nord-pizza", name: "Nord Pizza & Burger", color: "#2952E3", order: 0 },
+  });
+  const zarkiSushi = await prisma.empresa.upsert({
+    where: { key: "zarki-sushi" },
+    update: {},
+    create: { key: "zarki-sushi", name: "Zarki Sushi", color: "#e91e63", order: 1 },
+  });
+
   const passwordHash = await bcrypt.hash("Nord@2026", 10);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@nordpizza.com" },
-    update: {},
+    update: { canViewGrupoNord: true, defaultEmpresaId: nordPizza.id },
     create: {
       name: "Administrador Nord",
       email: "admin@nordpizza.com",
       passwordHash,
       role: "ADMINISTRADOR",
+      canViewGrupoNord: true,
+      defaultEmpresaId: nordPizza.id,
     },
   });
 
   const gerentePass = await bcrypt.hash("Gerente@2026", 10);
   const gerente = await prisma.user.upsert({
     where: { email: "gerente@nordpizza.com" },
-    update: {},
+    update: { defaultEmpresaId: nordPizza.id },
     create: {
       name: "Gerente Nord",
       email: "gerente@nordpizza.com",
       passwordHash: gerentePass,
       role: "GERENTE",
+      defaultEmpresaId: nordPizza.id,
     },
+  });
+
+  // acesso do admin às duas lojas; gerente só à Nord Pizza
+  for (const empresa of [nordPizza, zarkiSushi]) {
+    await prisma.userEmpresaAccess.upsert({
+      where: { userId_empresaId: { userId: admin.id, empresaId: empresa.id } },
+      update: {},
+      create: { userId: admin.id, empresaId: empresa.id },
+    });
+  }
+  await prisma.userEmpresaAccess.upsert({
+    where: { userId_empresaId: { userId: gerente.id, empresaId: nordPizza.id } },
+    update: {},
+    create: { userId: gerente.id, empresaId: nordPizza.id },
   });
 
   for (const cat of CATEGORIES) {
@@ -171,62 +200,72 @@ async function main() {
     }
   }
 
-  // --- Vendas: last 30 days ---
   const today = new Date();
+
+  // --- Vendas: last 30 days, para cada empresa ---
   const existingSales = await prisma.salesEntry.count();
   if (existingSales === 0) {
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const base = 3200 + Math.random() * 1800;
-      const delivery = Math.round(base * 0.55);
-      const salao = Math.round(base * 0.45);
-      await prisma.salesEntry.create({
-        data: {
-          date,
-          faturamentoDelivery: delivery,
-          faturamentoSalao: salao,
-          pedidosDelivery: Math.round(delivery / 65),
-          pedidosBalcao: Math.round(Math.random() * 8),
-          pedidosSalao: Math.round(salao / 95),
-          mesasAtendidas: Math.round(salao / 130),
-          taxaServicoValor: Math.round(salao * 0.1),
-          metaDiaria: 4200,
-          createdById: admin.id,
-        },
-      });
+    for (const [empresa, factor] of [
+      [nordPizza, 1],
+      [zarkiSushi, 0.75],
+    ] as const) {
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const base = (3200 + Math.random() * 1800) * factor;
+        const delivery = Math.round(base * 0.55);
+        const salao = Math.round(base * 0.45);
+        await prisma.salesEntry.create({
+          data: {
+            empresaId: empresa.id,
+            date,
+            faturamentoDelivery: delivery,
+            faturamentoSalao: salao,
+            pedidosDelivery: Math.round(delivery / 65),
+            pedidosBalcao: Math.round(Math.random() * 8),
+            pedidosSalao: Math.round(salao / 95),
+            mesasAtendidas: Math.round(salao / 130),
+            taxaServicoValor: Math.round(salao * 0.1),
+            metaDiaria: Math.round(4200 * factor),
+            createdById: admin.id,
+          },
+        });
+      }
     }
   }
 
-  // --- Marketing: last 6 months ---
+  // --- Marketing: last 6 months, para cada empresa ---
   const existingMkt = await prisma.marketingEntry.count();
   if (existingMkt === 0) {
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const invest = 800 + Math.random() * 600;
-      const receita = invest * (2.5 + Math.random() * 2);
-      const visitas = 2000 + Math.round(Math.random() * 3000);
-      const conversoes = Math.round(visitas * (0.02 + Math.random() * 0.03));
-      const alcance = 15000 + Math.round(Math.random() * 10000);
-      await prisma.marketingEntry.create({
-        data: {
-          date,
-          investimentoTrafego: Math.round(invest),
-          receitaTrafego: Math.round(receita),
-          pedidosCampanha: Math.round(conversoes * 0.6),
-          visitasSite: visitas,
-          conversoes,
-          seguidoresInicio: 8000 + i * 120,
-          seguidoresFim: 8000 + (i - 1 >= 0 ? (i - 1) * 120 : 720) + 300,
-          curtidas: Math.round(alcance * 0.05),
-          comentarios: Math.round(alcance * 0.005),
-          compartilhamentos: Math.round(alcance * 0.008),
-          salvamentos: Math.round(alcance * 0.01),
-          alcance,
-          impressoes: Math.round(alcance * 1.8),
-          createdById: admin.id,
-        },
-      });
+    for (const empresa of [nordPizza, zarkiSushi]) {
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const invest = 800 + Math.random() * 600;
+        const receita = invest * (2.5 + Math.random() * 2);
+        const visitas = 2000 + Math.round(Math.random() * 3000);
+        const conversoes = Math.round(visitas * (0.02 + Math.random() * 0.03));
+        const alcance = 15000 + Math.round(Math.random() * 10000);
+        await prisma.marketingEntry.create({
+          data: {
+            empresaId: empresa.id,
+            date,
+            investimentoTrafego: Math.round(invest),
+            receitaTrafego: Math.round(receita),
+            pedidosCampanha: Math.round(conversoes * 0.6),
+            visitasSite: visitas,
+            conversoes,
+            seguidoresInicio: 8000 + i * 120,
+            seguidoresFim: 8000 + (i - 1 >= 0 ? (i - 1) * 120 : 720) + 300,
+            curtidas: Math.round(alcance * 0.05),
+            comentarios: Math.round(alcance * 0.005),
+            compartilhamentos: Math.round(alcance * 0.008),
+            salvamentos: Math.round(alcance * 0.01),
+            alcance,
+            impressoes: Math.round(alcance * 1.8),
+            createdById: admin.id,
+          },
+        });
+      }
     }
   }
 
@@ -238,6 +277,7 @@ async function main() {
     await prisma.goal.createMany({
       data: [
         {
+          empresaId: nordPizza.id,
           name: "Faturamento mensal",
           category: "GERENCIA",
           responsavel: "Gerente Nord",
@@ -252,6 +292,7 @@ async function main() {
           createdById: admin.id,
         },
         {
+          empresaId: nordPizza.id,
           name: "Reduzir tempo de atendimento no salão",
           category: "SALAO",
           responsavel: "Supervisor Salão",
@@ -265,6 +306,7 @@ async function main() {
           createdById: admin.id,
         },
         {
+          empresaId: nordPizza.id,
           name: "Reduzir CMV médio",
           category: "COZINHA",
           responsavel: "Chef de Cozinha",
@@ -278,6 +320,7 @@ async function main() {
           createdById: admin.id,
         },
         {
+          empresaId: nordPizza.id,
           name: "Tempo médio de entrega",
           category: "DELIVERY",
           responsavel: "Coordenador Delivery",
@@ -290,6 +333,34 @@ async function main() {
           status: "CONCLUIDA",
           createdById: admin.id,
         },
+        {
+          empresaId: zarkiSushi.id,
+          name: "Faturamento mensal",
+          category: "GERENCIA",
+          responsavel: "Gerente Zarki",
+          indicador: "Faturamento",
+          valorMeta: 100000,
+          valorRealizado: 61000,
+          unidade: "R$",
+          startDate: start,
+          endDate: end,
+          status: "EM_ANDAMENTO",
+          createdById: admin.id,
+        },
+        {
+          empresaId: zarkiSushi.id,
+          name: "Reduzir CMV médio",
+          category: "COZINHA",
+          responsavel: "Chef Zarki",
+          indicador: "CMV %",
+          valorMeta: 35,
+          valorRealizado: 37,
+          unidade: "%",
+          startDate: start,
+          endDate: end,
+          status: "EM_RISCO",
+          createdById: admin.id,
+        },
       ],
     });
   }
@@ -300,6 +371,7 @@ async function main() {
     const employees = await prisma.$transaction([
       prisma.employee.create({
         data: {
+          empresaId: nordPizza.id,
           name: "Carlos Silva",
           cargo: "Pizzaiolo",
           setor: "Cozinha",
@@ -310,6 +382,7 @@ async function main() {
       }),
       prisma.employee.create({
         data: {
+          empresaId: nordPizza.id,
           name: "Ana Souza",
           cargo: "Atendente",
           setor: "Salão",
@@ -320,12 +393,35 @@ async function main() {
       }),
       prisma.employee.create({
         data: {
+          empresaId: nordPizza.id,
           name: "Bruno Costa",
           cargo: "Motoboy",
           setor: "Delivery",
           admissionDate: new Date(2022, 8, 20),
           status: "ATIVO",
           gestorResponsavel: "Gerente Nord",
+        },
+      }),
+      prisma.employee.create({
+        data: {
+          empresaId: zarkiSushi.id,
+          name: "Kenji Tanaka",
+          cargo: "Sushiman",
+          setor: "Cozinha",
+          admissionDate: new Date(2023, 6, 1),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Zarki",
+        },
+      }),
+      prisma.employee.create({
+        data: {
+          empresaId: zarkiSushi.id,
+          name: "Larissa Nunes",
+          cargo: "Atendente",
+          setor: "Salão",
+          admissionDate: new Date(2024, 1, 15),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Zarki",
         },
       }),
     ]);
@@ -354,11 +450,12 @@ async function main() {
     });
   }
 
-  // --- Ficha técnica: insumos + produto exemplo ---
+  // --- Ficha técnica: insumos + produto exemplo (Nord Pizza) ---
   const existingIngredients = await prisma.ingredient.count();
   if (existingIngredients === 0) {
     const massa = await prisma.ingredient.create({
       data: {
+        empresaId: nordPizza.id,
         name: "Farinha de Trigo",
         fornecedor: "Moinho Sul",
         unidade: "kg",
@@ -370,6 +467,7 @@ async function main() {
     });
     const mussarela = await prisma.ingredient.create({
       data: {
+        empresaId: nordPizza.id,
         name: "Mussarela",
         fornecedor: "Laticínios Nord",
         unidade: "kg",
@@ -381,6 +479,7 @@ async function main() {
     });
     const molho = await prisma.ingredient.create({
       data: {
+        empresaId: nordPizza.id,
         name: "Molho de Tomate",
         fornecedor: "Hortifruti Central",
         unidade: "kg",
@@ -393,6 +492,7 @@ async function main() {
 
     await prisma.product.create({
       data: {
+        empresaId: nordPizza.id,
         name: "Pizza Mussarela",
         code: "PZ-001",
         category: "PIZZA_SALGADA",
@@ -411,9 +511,68 @@ async function main() {
         },
       },
     });
+
+    // --- Ficha técnica: insumos + produto exemplo (Zarki Sushi) ---
+    const salmao = await prisma.ingredient.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Salmão Fresco",
+        fornecedor: "Salmão Brasil",
+        unidade: "kg",
+        precoAtual: 68,
+        quantidadeEmbalagem: 1,
+        estoqueMinimo: 5,
+        estoqueAtual: 12,
+      },
+    });
+    const arroz = await prisma.ingredient.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Arroz para Sushi",
+        fornecedor: "Distribuidora Oriental",
+        unidade: "kg",
+        precoAtual: 12,
+        quantidadeEmbalagem: 5,
+        estoqueMinimo: 10,
+        estoqueAtual: 25,
+      },
+    });
+    const nori = await prisma.ingredient.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Alga Nori",
+        fornecedor: "Distribuidora Oriental",
+        unidade: "un",
+        precoAtual: 1.8,
+        quantidadeEmbalagem: 50,
+        estoqueMinimo: 30,
+        estoqueAtual: 90,
+      },
+    });
+
+    await prisma.product.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Combo Salmão 20 peças",
+        code: "SK-001",
+        category: "COMBO",
+        rendimento: "20 peças",
+        precoVenda: 89,
+        tempoPreparo: 20,
+        responsavel: "Chef Zarki",
+        createdById: admin.id,
+        ingredients: {
+          create: [
+            { ingredientId: salmao.id, quantidadeUsada: 0.3, percentualPerda: 5 },
+            { ingredientId: arroz.id, quantidadeUsada: 0.4, percentualPerda: 2 },
+            { ingredientId: nori.id, quantidadeUsada: 10, percentualPerda: 0 },
+          ],
+        },
+      },
+    });
   }
 
-  // --- Financeiro: categorias (vinculadas à DRE) ---
+  // --- Financeiro: categorias (vinculadas à DRE, compartilhadas — mesmo plano de contas) ---
   const dreCategoryTypeMap: Record<string, "RECEITA" | "DESPESA" | "CUSTO" | "INVESTIMENTO"> = {
     faturamentos: "RECEITA",
     "receitas-nao-operacionais": "RECEITA",
@@ -431,22 +590,23 @@ async function main() {
     });
   }
 
-  // --- Financeiro: contas bancárias ---
+  // --- Financeiro: contas bancárias (uma por empresa) ---
   const existingAccounts = await prisma.bankAccount.count();
   if (existingAccounts === 0) {
     await prisma.bankAccount.createMany({
       data: [
-        { name: "Banco Inter", bank: "Inter", tipo: "Conta Corrente", color: "#f97316", icon: "Landmark" },
-        { name: "Nubank", bank: "Nubank", tipo: "Conta Corrente", color: "#a855f7", icon: "Landmark" },
-        { name: "Mercado Pago", bank: "Mercado Pago", tipo: "Conta Digital", color: "#2952E3", icon: "Wallet" },
-        { name: "Caixa Físico", bank: null, tipo: "Caixa", color: "#22c55e", icon: "Banknote" },
+        { empresaId: nordPizza.id, name: "Banco Inter", bank: "Inter", tipo: "Conta Corrente", color: "#f97316", icon: "Landmark" },
+        { empresaId: nordPizza.id, name: "Mercado Pago", bank: "Mercado Pago", tipo: "Conta Digital", color: "#2952E3", icon: "Wallet" },
+        { empresaId: nordPizza.id, name: "Caixa Físico", bank: null, tipo: "Caixa", color: "#22c55e", icon: "Banknote" },
+        { empresaId: zarkiSushi.id, name: "Nubank", bank: "Nubank", tipo: "Conta Corrente", color: "#a855f7", icon: "Landmark" },
+        { empresaId: zarkiSushi.id, name: "Caixa Físico", bank: null, tipo: "Caixa", color: "#22c55e", icon: "Banknote" },
       ],
     });
   }
 
   console.log("Seed concluído.");
-  console.log("Login admin: admin@nordpizza.com / Nord@2026");
-  console.log(`Login gerente: ${gerente.email} / Gerente@2026`);
+  console.log("Login admin: admin@nordpizza.com / Nord@2026 (acesso Nord Pizza + Zarki Sushi + Grupo Nord)");
+  console.log(`Login gerente: ${gerente.email} / Gerente@2026 (acesso apenas Nord Pizza)`);
 }
 
 main()

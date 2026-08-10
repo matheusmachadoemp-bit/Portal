@@ -47,9 +47,11 @@ const emptyForm = {
 export function CaixaClient({
   initialMovements,
   accounts,
+  canCreate = true,
 }: {
   initialMovements: MovementDTO[];
   accounts: { id: string; name: string; saldoAtual: number }[];
+  canCreate?: boolean;
 }) {
   const [movements, setMovements] = useState(initialMovements);
   const [showForm, setShowForm] = useState(false);
@@ -95,14 +97,22 @@ export function CaixaClient({
       <Section
         title="Movimentações do caixa"
         action={
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-          >
-            <Plus size={13} /> Nova movimentação
-          </button>
+          canCreate ? (
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+            >
+              <Plus size={13} /> Nova movimentação
+            </button>
+          ) : undefined
         }
       >
+        {!canCreate && (
+          <p className="mb-3 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+            Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+            registrar movimentações.
+          </p>
+        )}
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>

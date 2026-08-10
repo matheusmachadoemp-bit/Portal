@@ -45,12 +45,14 @@ export function ColaboradoresClient({
   desligamentos,
   quadroMedio,
   totalOcorrencias,
+  canCreate = true,
 }: {
   initialEmployees: EmployeeDTO[];
   turnover: number;
   desligamentos: number;
   quadroMedio: number;
   totalOcorrencias: number;
+  canCreate?: boolean;
 }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [showForm, setShowForm] = useState(false);
@@ -128,13 +130,21 @@ export function ColaboradoresClient({
             Ocorrências
           </Link>
         </div>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Novo colaborador
-        </button>
+        {canCreate && (
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Novo colaborador
+          </button>
+        )}
       </div>
+      {!canCreate && (
+        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+          cadastrar ou editar colaboradores.
+        </p>
+      )}
 
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
@@ -161,7 +171,7 @@ export function ColaboradoresClient({
                 </td>
                 <td className="py-2.5 px-4 text-nord-gray">{e.gestorResponsavel}</td>
                 <td className="py-2.5 px-4">
-                  <div className="flex items-center gap-2 justify-end">
+                  <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
                     <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
                       <Pencil size={14} />
                     </button>

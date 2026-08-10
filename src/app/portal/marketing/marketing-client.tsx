@@ -57,7 +57,13 @@ const emptyForm = {
   planoDeAcao: "",
 };
 
-export function MarketingClient({ initialEntries }: { initialEntries: MarketingEntryDTO[] }) {
+export function MarketingClient({
+  initialEntries,
+  canCreate = true,
+}: {
+  initialEntries: MarketingEntryDTO[];
+  canCreate?: boolean;
+}) {
   const [entries, setEntries] = useState(initialEntries);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<MarketingEntryDTO | null>(null);
@@ -170,14 +176,22 @@ export function MarketingClient({ initialEntries }: { initialEntries: MarketingE
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Novo período de marketing
-        </button>
-      </div>
+      {!canCreate && (
+        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar
+          ou editar dados.
+        </p>
+      )}
+      {canCreate && (
+        <div className="flex justify-end">
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Novo período de marketing
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <div className="nord-card p-4">
@@ -242,14 +256,16 @@ export function MarketingClient({ initialEntries }: { initialEntries: MarketingE
                   </td>
                   <td className="py-2 pr-4 text-nord-gray">{formatPercent(pct(e.conversoes, e.visitasSite))}</td>
                   <td className="py-2 pr-4">
-                    <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-red-400">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    {canCreate && (
+                      <div className="flex items-center gap-2 justify-end">
+                        <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-red-400">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -2,13 +2,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { addMonths, setDate } from "date-fns";
+import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 
 const MAX_INFINITE_MONTHS = 24; // gera 24 meses por vez para recorrências infinitas
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+
   const templates = await prisma.recurringTemplate.findMany({
+    where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: { createdAt: "desc" },
     include: { categoria: true, bankAccount: true },
   });
@@ -18,6 +24,15 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const empresa = await requireActiveSingleEmpresa();
+  if (!empresa) {
+    return NextResponse.json(
+      { error: "Selecione uma loja específica (não é possível cadastrar no modo Grupo Nord)." },
+      { status: 400 }
+    );
+  }
+
   const body = await req.json();
 
   const tipo: "PAGAR" | "RECEBER" = body.tipo;
@@ -32,7 +47,7 @@ export async function POST(req: Request) {
       descricao: body.descricao,
       fornecedorCliente: body.fornecedorCliente || null,
       categoriaId: body.categoriaId,
-      empresa: body.empresa,
+      empresaId: empresa.id,
       centroCusto: body.centroCusto || null,
       valor,
       diaVencimento,
@@ -52,7 +67,7 @@ export async function POST(req: Request) {
     entries.push({
       descricao: body.descricao,
       categoriaId: body.categoriaId,
-      empresa: body.empresa,
+      empresaId: empresa.id,
       centroCusto: body.centroCusto || null,
       valor,
       dataCompetencia: competencia,

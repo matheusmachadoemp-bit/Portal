@@ -46,9 +46,11 @@ const emptyForm = {
 export function OcorrenciasClient({
   initialOccurrences,
   employees,
+  canCreate = true,
 }: {
   initialOccurrences: OccurrenceDTO[];
   employees: { id: string; name: string; setor: string }[];
+  canCreate?: boolean;
 }) {
   const [occurrences, setOccurrences] = useState(initialOccurrences);
   const [showForm, setShowForm] = useState(false);
@@ -147,13 +149,21 @@ export function OcorrenciasClient({
             Ocorrências
           </Link>
         </div>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Nova ocorrência
-        </button>
+        {canCreate && (
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Nova ocorrência
+          </button>
+        )}
       </div>
+      {!canCreate && (
+        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+          registrar ou editar ocorrências.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Section title="Ranking de atrasos">
@@ -207,7 +217,7 @@ export function OcorrenciasClient({
                   <Badge tone={STATUS_TONE[o.status]}>{o.status.replaceAll("_", " ")}</Badge>
                 </td>
                 <td className="py-2.5 px-4">
-                  <div className="flex items-center gap-2 justify-end">
+                  <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
                     <button onClick={() => openEdit(o)} className="text-nord-gray hover:text-white">
                       <Pencil size={14} />
                     </button>

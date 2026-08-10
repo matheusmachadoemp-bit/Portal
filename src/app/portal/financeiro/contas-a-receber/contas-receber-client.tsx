@@ -6,7 +6,6 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
-import { COMPANY_LABEL } from "../finance-tabs";
 import { apiRequest } from "@/lib/api-client";
 
 type ReceivableDTO = {
@@ -17,7 +16,7 @@ type ReceivableDTO = {
   categoriaId: string;
   categoria: { name: string; dreKey: string };
   centroCusto: string | null;
-  empresa: string;
+  empresa: { id: string; name: string; color: string };
   valor: number;
   dataCompetencia: string;
   dataVencimento: string;
@@ -66,7 +65,6 @@ const emptyForm = {
   descricao: "",
   categoriaId: "",
   centroCusto: "",
-  empresa: "NORD_PIZZA",
   valor: "",
   dataCompetencia: format(new Date(), "yyyy-MM-dd"),
   dataVencimento: format(new Date(), "yyyy-MM-dd"),
@@ -84,10 +82,12 @@ export function ContasReceberClient({
   initialReceivables,
   categorias,
   contas,
+  canCreate = true,
 }: {
   initialReceivables: ReceivableDTO[];
   categorias: { id: string; name: string; dreKey: string }[];
   contas: { id: string; name: string }[];
+  canCreate?: boolean;
 }) {
   const [receivables, setReceivables] = useState(initialReceivables);
   const [showForm, setShowForm] = useState(false);
@@ -98,21 +98,19 @@ export function ContasReceberClient({
   const [rowError, setRowError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterEmpresa, setFilterEmpresa] = useState("");
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(
     () =>
       receivables
         .filter((p) => !filterStatus || p.status === filterStatus)
-        .filter((p) => !filterEmpresa || p.empresa === filterEmpresa)
         .filter(
           (p) =>
             !search ||
             p.cliente.toLowerCase().includes(search.toLowerCase()) ||
             p.descricao.toLowerCase().includes(search.toLowerCase())
         ),
-    [receivables, filterStatus, filterEmpresa, search]
+    [receivables, filterStatus, search]
   );
 
   const totalFiltrado = filtered.reduce((a, p) => a + p.valor, 0);
@@ -137,7 +135,6 @@ export function ContasReceberClient({
       descricao: p.descricao,
       categoriaId: p.categoriaId,
       centroCusto: p.centroCusto ?? "",
-      empresa: p.empresa,
       valor: String(p.valor),
       dataCompetencia: format(new Date(p.dataCompetencia), "yyyy-MM-dd"),
       dataVencimento: format(new Date(p.dataVencimento), "yyyy-MM-dd"),
@@ -193,7 +190,6 @@ export function ContasReceberClient({
       descricao: `${p.descricao} (cópia)`,
       categoriaId: p.categoriaId,
       centroCusto: p.centroCusto,
-      empresa: p.empresa,
       valor: p.valor,
       dataCompetencia: p.dataCompetencia,
       dataVencimento: p.dataVencimento,
@@ -227,7 +223,7 @@ export function ContasReceberClient({
       p.cliente,
       p.descricao,
       p.categoria.name,
-      p.empresa,
+      p.empresa.name,
       p.valor,
       format(new Date(p.dataVencimento), "dd/MM/yyyy"),
       STATUS_LABEL[p.status],
@@ -252,12 +248,6 @@ export function ContasReceberClient({
             onChange={(e) => setSearch(e.target.value)}
             className="bg-nord-panel border border-nord-border rounded-lg px-3 py-1.5 text-xs text-white w-40"
           />
-          <select value={filterEmpresa} onChange={(e) => setFilterEmpresa(e.target.value)} className="input-sm">
-            <option value="">Todas as empresas</option>
-            <option value="NORD_PIZZA">Nord Pizza & Burger</option>
-            <option value="ZARKI_SUSHI">Zarki Sushi</option>
-            <option value="GRUPO_NORD">Grupo Nord</option>
-          </select>
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input-sm">
             <option value="">Todos os status</option>
             {Object.entries(STATUS_LABEL).map(([k, v]) => (
@@ -269,12 +259,20 @@ export function ContasReceberClient({
           <button onClick={exportCsv} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white">
             <Download size={13} /> Excel
           </button>
-          <button onClick={openNew} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium">
-            <Plus size={13} /> Nova conta
-          </button>
+          {canCreate && (
+            <button onClick={openNew} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium">
+              <Plus size={13} /> Nova conta
+            </button>
+          )}
         </div>
       }
     >
+      {!canCreate && (
+        <p className="mb-3 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+          lançar ou editar contas.
+        </p>
+      )}
       <FormError message={rowError} />
       <p className="text-xs text-nord-gray mb-3">
         Total filtrado: <span className="text-white font-medium">{formatCurrency(totalFiltrado)}</span> ({filtered.length} lançamentos)
@@ -299,14 +297,14 @@ export function ContasReceberClient({
                 <td className="py-2 pr-4 text-nord-gray">{p.number}</td>
                 <td className="py-2 pr-4 text-white">{p.cliente}</td>
                 <td className="py-2 pr-4 text-nord-gray">{p.categoria.name}</td>
-                <td className="py-2 pr-4 text-nord-gray">{COMPANY_LABEL[p.empresa]}</td>
+                <td className="py-2 pr-4 text-nord-gray">{p.empresa.name}</td>
                 <td className="py-2 pr-4 text-nord-gray">{formatCurrency(p.valor)}</td>
                 <td className="py-2 pr-4 text-nord-gray">{format(new Date(p.dataVencimento), "dd/MM/yyyy")}</td>
                 <td className="py-2 pr-4">
                   <Badge tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
                 </td>
                 <td className="py-2 pr-4">
-                  <div className="flex items-center gap-2 justify-end">
+                  <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
                     {p.status !== "PAGO" && (
                       <button onClick={() => markReceived(p)} title="Marcar como recebido" className="text-nord-gray hover:text-emerald-400">
                         <Check size={14} />
@@ -356,13 +354,6 @@ export function ContasReceberClient({
           </Field>
           <Field label="Centro de custo">
             <input value={form.centroCusto} onChange={(e) => setForm({ ...form, centroCusto: e.target.value })} className="input" />
-          </Field>
-          <Field label="Empresa">
-            <select value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} className="input">
-              <option value="NORD_PIZZA">Nord Pizza & Burger</option>
-              <option value="ZARKI_SUSHI">Zarki Sushi</option>
-              <option value="GRUPO_NORD">Grupo Nord</option>
-            </select>
           </Field>
           <Field label="Valor (R$)">
             <input type="number" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} className="input" />

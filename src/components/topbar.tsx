@@ -1,9 +1,19 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, Building2 } from "lucide-react";
 import { useState } from "react";
 
-export function Topbar({ title, subtitle }: { title: string; subtitle?: string }) {
+export function Topbar({
+  title,
+  subtitle,
+  empresaLabel,
+  empresaColor = "#2952E3",
+}: {
+  title: string;
+  subtitle?: string;
+  empresaLabel?: string;
+  empresaColor?: string;
+}) {
   const [showNotifications, setShowNotifications] = useState(false);
 
   return (
@@ -13,6 +23,15 @@ export function Topbar({ title, subtitle }: { title: string; subtitle?: string }
         {subtitle && <p className="text-nord-gray text-xs">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-3">
+        {empresaLabel && (
+          <span
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
+            style={{ color: empresaColor, borderColor: `${empresaColor}55`, backgroundColor: `${empresaColor}15` }}
+          >
+            <Building2 size={12} />
+            Você está gerenciando: {empresaLabel}
+          </span>
+        )}
         <div className="relative hidden md:block">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nord-gray" />
           <input

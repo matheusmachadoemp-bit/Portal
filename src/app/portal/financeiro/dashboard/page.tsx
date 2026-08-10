@@ -20,25 +20,28 @@ import {
 } from "date-fns";
 import { FinanceCharts } from "./charts";
 import { DynamicIcon } from "@/components/dynamic-icon";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 async function getData() {
   const now = new Date();
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const [accounts, payablesOpen, receivablesOpen, dreThisMonth, dreLastMonth] = await Promise.all([
-    prisma.bankAccount.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
     prisma.payable.findMany({
-      where: { status: { in: ["EM_ABERTO", "ATRASADO"] } },
+      where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
       include: { categoria: true },
     }),
     prisma.receivable.findMany({
-      where: { status: { in: ["EM_ABERTO", "ATRASADO"] } },
+      where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
       include: { categoria: true },
     }),
-    computeDre({ month: now.getMonth() + 1, year: now.getFullYear(), empresa: "ALL" }),
+    computeDre({ month: now.getMonth() + 1, year: now.getFullYear(), empresaIds }),
     computeDre({
       month: subMonths(now, 1).getMonth() + 1,
       year: subMonths(now, 1).getFullYear(),
-      empresa: "ALL",
+      empresaIds,
     }),
   ]);
 
@@ -159,12 +162,12 @@ export default async function FinanceiroDashboardPage() {
   const d = await getData();
 
   return (
-    <PageContainer title="Financeiro" subtitle="Dashboard financeiro — Grupo Nord">
+    <PageContainer title="Financeiro" subtitle="Dashboard financeiro">
       <div className="space-y-6">
         <FinanceTabs />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Caixa atual (consolidado)" value={formatCurrency(d.caixaAtual)} icon="Wallet" />
+          <StatCard label="Caixa atual" value={formatCurrency(d.caixaAtual)} icon="Wallet" />
           <StatCard label="Faturamento do dia" value={formatCurrency(d.faturamentoHoje)} icon="Calendar" />
           <StatCard label="Faturamento da semana" value={formatCurrency(d.faturamentoSemana)} icon="CalendarDays" />
           <StatCard

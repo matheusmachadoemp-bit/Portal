@@ -18,10 +18,13 @@ export default async function UsuariosPage() {
     );
   }
 
-  const users = await prisma.user.findMany({
-    orderBy: { name: "asc" },
-    include: { permissions: true },
-  });
+  const [users, empresas] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { name: "asc" },
+      include: { permissions: true, empresaAccess: true },
+    }),
+    prisma.empresa.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+  ]);
 
   const serialized = users.map((u) => ({
     id: u.id,
@@ -33,11 +36,19 @@ export default async function UsuariosPage() {
     lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
     createdAt: u.createdAt.toISOString(),
     permissions: u.permissions.map((p) => ({ moduleKey: p.moduleKey, level: p.level })),
+    empresaIds: u.empresaAccess.map((a) => a.empresaId),
+    canViewGrupoNord: u.canViewGrupoNord,
+    defaultEmpresaId: u.defaultEmpresaId,
   }));
 
   return (
     <PageContainer title="Usuários" subtitle="Gestão de acessos e permissões do portal">
-      <UsuariosClient initialUsers={serialized} modules={MODULES} currentUserId={session.user.id} />
+      <UsuariosClient
+        initialUsers={serialized}
+        modules={MODULES}
+        currentUserId={session.user.id}
+        empresas={empresas.map((e) => ({ id: e.id, name: e.name }))}
+      />
     </PageContainer>
   );
 }

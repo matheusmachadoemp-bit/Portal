@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { DRE_STRUCTURE, type DreRowDef } from "@/lib/dre-structure";
-import type { Company } from "@prisma/client";
 
 export type DreComputedRow = {
   key: string;
@@ -16,16 +15,16 @@ export type DreComputedRow = {
 export async function computeDre({
   month,
   year,
-  empresa,
+  empresaIds,
 }: {
   month: number; // 1-12
   year: number;
-  empresa?: Company | "ALL";
+  empresaIds: string[];
 }): Promise<DreComputedRow[]> {
   const start = new Date(year, month - 1, 1);
   const end = new Date(year, month, 0, 23, 59, 59, 999);
 
-  const empresaFilter = empresa && empresa !== "ALL" ? { empresa } : {};
+  const empresaFilter = { empresaId: { in: empresaIds } };
 
   const [payables, receivables] = await Promise.all([
     prisma.payable.findMany({

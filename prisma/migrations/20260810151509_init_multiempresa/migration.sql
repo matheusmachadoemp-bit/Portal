@@ -28,6 +28,18 @@ CREATE TYPE "FileFolderType" AS ENUM ('ARQUIVO', 'CARTILHA', 'LOGO');
 -- CreateEnum
 CREATE TYPE "ProductCategory" AS ENUM ('PIZZA_SALGADA', 'PIZZA_DOCE', 'COMBO', 'ESFIHA_SALGADA', 'ESFIHA_DOCE', 'ACOMPANHAMENTO', 'BURGER', 'BEBIDA', 'DRINK');
 
+-- CreateEnum
+CREATE TYPE "PaymentMethod" AS ENUM ('PIX', 'DINHEIRO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'TED', 'DOC', 'TRANSFERENCIA', 'CHEQUE', 'OUTRO');
+
+-- CreateEnum
+CREATE TYPE "FinanceEntryStatus" AS ENUM ('EM_ABERTO', 'PAGO', 'PARCIALMENTE_PAGO', 'CANCELADO', 'ATRASADO');
+
+-- CreateEnum
+CREATE TYPE "FinanceCategoryType" AS ENUM ('RECEITA', 'DESPESA', 'CUSTO', 'INVESTIMENTO');
+
+-- CreateEnum
+CREATE TYPE "CashMovementType" AS ENUM ('ENTRADA', 'SAIDA', 'TRANSFERENCIA', 'APORTE_SOCIO', 'RETIRADA_SOCIO');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -41,6 +53,8 @@ CREATE TABLE "User" (
     "resetToken" TEXT,
     "resetTokenExp" TIMESTAMP(3),
     "lastLoginAt" TIMESTAMP(3),
+    "canViewGrupoNord" BOOLEAN NOT NULL DEFAULT false,
+    "defaultEmpresaId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -56,6 +70,31 @@ CREATE TABLE "UserPermission" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "UserPermission_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Empresa" (
+    "id" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "logo" TEXT,
+    "color" TEXT NOT NULL DEFAULT '#2952E3',
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Empresa_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "UserEmpresaAccess" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "UserEmpresaAccess_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -105,6 +144,7 @@ CREATE TABLE "MenuPreference" (
 -- CreateTable
 CREATE TABLE "SalesEntry" (
     "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
     "periodType" "PeriodType" NOT NULL DEFAULT 'DIARIO',
     "faturamentoDelivery" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -126,6 +166,7 @@ CREATE TABLE "SalesEntry" (
 -- CreateTable
 CREATE TABLE "MarketingEntry" (
     "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
     "investimentoTrafego" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "receitaTrafego" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -152,6 +193,7 @@ CREATE TABLE "MarketingEntry" (
 -- CreateTable
 CREATE TABLE "Goal" (
     "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "category" "GoalCategory" NOT NULL,
     "responsavel" TEXT NOT NULL,
@@ -187,6 +229,7 @@ CREATE TABLE "GoalAttachment" (
 -- CreateTable
 CREATE TABLE "Employee" (
     "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "cargo" TEXT NOT NULL,
     "setor" TEXT NOT NULL,
@@ -302,6 +345,7 @@ CREATE TABLE "FileItem" (
 -- CreateTable
 CREATE TABLE "Ingredient" (
     "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "fornecedor" TEXT,
     "unidade" TEXT NOT NULL DEFAULT 'g',
@@ -330,6 +374,7 @@ CREATE TABLE "IngredientPriceHistory" (
 -- CreateTable
 CREATE TABLE "Product" (
     "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "category" "ProductCategory" NOT NULL,
@@ -362,9 +407,151 @@ CREATE TABLE "ProductIngredient" (
 );
 
 -- CreateTable
+CREATE TABLE "BankAccount" (
+    "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "bank" TEXT,
+    "agencia" TEXT,
+    "conta" TEXT,
+    "tipo" TEXT NOT NULL DEFAULT 'Conta Corrente',
+    "saldoInicial" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "saldoAtual" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "color" TEXT NOT NULL DEFAULT '#2952E3',
+    "icon" TEXT NOT NULL DEFAULT 'Landmark',
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "BankAccount_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "FinancialCategory" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "type" "FinanceCategoryType" NOT NULL DEFAULT 'DESPESA',
+    "dreKey" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "FinancialCategory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "FinanceAttachment" (
+    "id" TEXT NOT NULL,
+    "entityType" TEXT NOT NULL,
+    "entityId" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "fileUrl" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "FinanceAttachment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RecurringTemplate" (
+    "id" TEXT NOT NULL,
+    "tipo" TEXT NOT NULL,
+    "descricao" TEXT NOT NULL,
+    "fornecedorCliente" TEXT,
+    "categoriaId" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
+    "centroCusto" TEXT,
+    "valor" DOUBLE PRECISION NOT NULL,
+    "diaVencimento" INTEGER NOT NULL,
+    "bankAccountId" TEXT NOT NULL,
+    "formaPagamento" "PaymentMethod" NOT NULL DEFAULT 'PIX',
+    "infinita" BOOLEAN NOT NULL DEFAULT false,
+    "quantidadeMeses" INTEGER,
+    "dataInicio" TIMESTAMP(3) NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "RecurringTemplate_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Payable" (
+    "id" TEXT NOT NULL,
+    "number" TEXT NOT NULL,
+    "fornecedor" TEXT NOT NULL,
+    "descricao" TEXT NOT NULL,
+    "categoriaId" TEXT NOT NULL,
+    "centroCusto" TEXT,
+    "empresaId" TEXT NOT NULL,
+    "valor" DOUBLE PRECISION NOT NULL,
+    "dataCompetencia" TIMESTAMP(3) NOT NULL,
+    "dataVencimento" TIMESTAMP(3) NOT NULL,
+    "dataPagamento" TIMESTAMP(3),
+    "bankAccountId" TEXT,
+    "formaPagamento" "PaymentMethod",
+    "parcelado" BOOLEAN NOT NULL DEFAULT false,
+    "quantidadeParcelas" INTEGER,
+    "parcelaAtual" INTEGER,
+    "observacoes" TEXT,
+    "status" "FinanceEntryStatus" NOT NULL DEFAULT 'EM_ABERTO',
+    "recurringTemplateId" TEXT,
+    "createdById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Payable_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Receivable" (
+    "id" TEXT NOT NULL,
+    "number" TEXT NOT NULL,
+    "cliente" TEXT NOT NULL,
+    "descricao" TEXT NOT NULL,
+    "categoriaId" TEXT NOT NULL,
+    "centroCusto" TEXT,
+    "empresaId" TEXT NOT NULL,
+    "valor" DOUBLE PRECISION NOT NULL,
+    "dataCompetencia" TIMESTAMP(3) NOT NULL,
+    "dataVencimento" TIMESTAMP(3) NOT NULL,
+    "dataRecebimento" TIMESTAMP(3),
+    "bankAccountId" TEXT,
+    "formaRecebimento" "PaymentMethod",
+    "parcelado" BOOLEAN NOT NULL DEFAULT false,
+    "quantidadeParcelas" INTEGER,
+    "parcelaAtual" INTEGER,
+    "observacoes" TEXT,
+    "status" "FinanceEntryStatus" NOT NULL DEFAULT 'EM_ABERTO',
+    "recurringTemplateId" TEXT,
+    "createdById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Receivable_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CashMovement" (
+    "id" TEXT NOT NULL,
+    "type" "CashMovementType" NOT NULL,
+    "bankAccountId" TEXT NOT NULL,
+    "destinoId" TEXT,
+    "valor" DOUBLE PRECISION NOT NULL,
+    "descricao" TEXT,
+    "empresaId" TEXT,
+    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdById" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "CashMovement_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "AuditLog" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
+    "empresaId" TEXT,
     "action" TEXT NOT NULL,
     "entityType" TEXT NOT NULL,
     "entityId" TEXT,
@@ -382,6 +569,12 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX "UserPermission_userId_moduleKey_key" ON "UserPermission"("userId", "moduleKey");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Empresa_key_key" ON "Empresa"("key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "UserEmpresaAccess_userId_empresaId_key" ON "UserEmpresaAccess"("userId", "empresaId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Category_key_key" ON "Category"("key");
 
 -- CreateIndex
@@ -393,8 +586,20 @@ CREATE UNIQUE INDEX "MenuPreference_userId_key" ON "MenuPreference"("userId");
 -- CreateIndex
 CREATE UNIQUE INDEX "Product_code_key" ON "Product"("code");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "FinancialCategory_name_key" ON "FinancialCategory"("name");
+
+-- AddForeignKey
+ALTER TABLE "User" ADD CONSTRAINT "User_defaultEmpresaId_fkey" FOREIGN KEY ("defaultEmpresaId") REFERENCES "Empresa"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
 -- AddForeignKey
 ALTER TABLE "UserPermission" ADD CONSTRAINT "UserPermission_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "UserEmpresaAccess" ADD CONSTRAINT "UserEmpresaAccess_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "UserEmpresaAccess" ADD CONSTRAINT "UserEmpresaAccess_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Subcategory" ADD CONSTRAINT "Subcategory_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -403,16 +608,28 @@ ALTER TABLE "Subcategory" ADD CONSTRAINT "Subcategory_categoryId_fkey" FOREIGN K
 ALTER TABLE "MenuPreference" ADD CONSTRAINT "MenuPreference_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "SalesEntry" ADD CONSTRAINT "SalesEntry_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "SalesEntry" ADD CONSTRAINT "SalesEntry_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "MarketingEntry" ADD CONSTRAINT "MarketingEntry_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "MarketingEntry" ADD CONSTRAINT "MarketingEntry_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Goal" ADD CONSTRAINT "Goal_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Goal" ADD CONSTRAINT "Goal_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "GoalAttachment" ADD CONSTRAINT "GoalAttachment_goalId_fkey" FOREIGN KEY ("goalId") REFERENCES "Goal"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Employee" ADD CONSTRAINT "Employee_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Occurrence" ADD CONSTRAINT "Occurrence_employeeId_fkey" FOREIGN KEY ("employeeId") REFERENCES "Employee"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -442,7 +659,13 @@ ALTER TABLE "FileItem" ADD CONSTRAINT "FileItem_parentId_fkey" FOREIGN KEY ("par
 ALTER TABLE "FileItem" ADD CONSTRAINT "FileItem_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Ingredient" ADD CONSTRAINT "Ingredient_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "IngredientPriceHistory" ADD CONSTRAINT "IngredientPriceHistory_ingredientId_fkey" FOREIGN KEY ("ingredientId") REFERENCES "Ingredient"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Product" ADD CONSTRAINT "Product_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Product" ADD CONSTRAINT "Product_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -454,4 +677,64 @@ ALTER TABLE "ProductIngredient" ADD CONSTRAINT "ProductIngredient_productId_fkey
 ALTER TABLE "ProductIngredient" ADD CONSTRAINT "ProductIngredient_ingredientId_fkey" FOREIGN KEY ("ingredientId") REFERENCES "Ingredient"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "BankAccount" ADD CONSTRAINT "BankAccount_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RecurringTemplate" ADD CONSTRAINT "RecurringTemplate_categoriaId_fkey" FOREIGN KEY ("categoriaId") REFERENCES "FinancialCategory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RecurringTemplate" ADD CONSTRAINT "RecurringTemplate_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RecurringTemplate" ADD CONSTRAINT "RecurringTemplate_bankAccountId_fkey" FOREIGN KEY ("bankAccountId") REFERENCES "BankAccount"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RecurringTemplate" ADD CONSTRAINT "RecurringTemplate_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Payable" ADD CONSTRAINT "Payable_categoriaId_fkey" FOREIGN KEY ("categoriaId") REFERENCES "FinancialCategory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Payable" ADD CONSTRAINT "Payable_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Payable" ADD CONSTRAINT "Payable_bankAccountId_fkey" FOREIGN KEY ("bankAccountId") REFERENCES "BankAccount"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Payable" ADD CONSTRAINT "Payable_recurringTemplateId_fkey" FOREIGN KEY ("recurringTemplateId") REFERENCES "RecurringTemplate"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Payable" ADD CONSTRAINT "Payable_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Receivable" ADD CONSTRAINT "Receivable_categoriaId_fkey" FOREIGN KEY ("categoriaId") REFERENCES "FinancialCategory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Receivable" ADD CONSTRAINT "Receivable_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Receivable" ADD CONSTRAINT "Receivable_bankAccountId_fkey" FOREIGN KEY ("bankAccountId") REFERENCES "BankAccount"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Receivable" ADD CONSTRAINT "Receivable_recurringTemplateId_fkey" FOREIGN KEY ("recurringTemplateId") REFERENCES "RecurringTemplate"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Receivable" ADD CONSTRAINT "Receivable_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CashMovement" ADD CONSTRAINT "CashMovement_bankAccountId_fkey" FOREIGN KEY ("bankAccountId") REFERENCES "BankAccount"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CashMovement" ADD CONSTRAINT "CashMovement_destinoId_fkey" FOREIGN KEY ("destinoId") REFERENCES "BankAccount"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CashMovement" ADD CONSTRAINT "CashMovement_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "CashMovement" ADD CONSTRAINT "CashMovement_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE SET NULL ON UPDATE CASCADE;

@@ -16,6 +16,9 @@ type UserDTO = {
   lastLoginAt: string | null;
   createdAt: string;
   permissions: { moduleKey: string; level: string }[];
+  empresaIds: string[];
+  canViewGrupoNord: boolean;
+  defaultEmpresaId: string | null;
 };
 
 const ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR", "COLABORADOR"];
@@ -34,23 +37,32 @@ const emptyForm = {
   role: "COLABORADOR",
   phone: "",
   active: true,
+  canViewGrupoNord: false,
+  defaultEmpresaId: "",
 };
 
 export function UsuariosClient({
   initialUsers,
   modules,
   currentUserId,
+  empresas,
 }: {
   initialUsers: UserDTO[];
   modules: readonly { key: string; label: string }[];
   currentUserId: string;
+  empresas: { id: string; name: string }[];
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<UserDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [permissions, setPermissions] = useState<Record<string, string>>({});
+  const [empresaIds, setEmpresaIds] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  function toggleEmpresa(id: string) {
+    setEmpresaIds((prev) => (prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]));
+  }
 
   async function refresh() {
     const res = await fetch("/api/usuarios");
@@ -62,6 +74,7 @@ export function UsuariosClient({
     setEditing(null);
     setForm(emptyForm);
     setPermissions({});
+    setEmpresaIds([]);
     setShowForm(true);
   }
 
@@ -74,17 +87,22 @@ export function UsuariosClient({
       role: u.role,
       phone: u.phone ?? "",
       active: u.active,
+      canViewGrupoNord: u.canViewGrupoNord,
+      defaultEmpresaId: u.defaultEmpresaId ?? "",
     });
     const perm: Record<string, string> = {};
     u.permissions.forEach((p) => (perm[p.moduleKey] = p.level));
     setPermissions(perm);
+    setEmpresaIds(u.empresaIds);
     setShowForm(true);
   }
 
   async function submit() {
     const payload = {
       ...form,
+      defaultEmpresaId: form.defaultEmpresaId || empresaIds[0] || null,
       permissions: Object.entries(permissions).map(([moduleKey, level]) => ({ moduleKey, level })),
+      empresaIds,
     };
     if (editing) {
       await fetch(`/api/usuarios/${editing.id}`, {
@@ -200,6 +218,59 @@ export function UsuariosClient({
             </select>
           </Field>
         </div>
+
+        {form.role !== "ADMINISTRADOR" && form.role !== "GESTOR" && (
+          <div className="mt-5">
+            <h4 className="text-sm text-white font-medium mb-2">Acesso às lojas</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {empresas.map((e) => (
+                <label
+                  key={e.id}
+                  className="flex items-center gap-2 bg-nord-panel border border-nord-border rounded-lg px-3 py-2 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={empresaIds.includes(e.id)}
+                    onChange={() => toggleEmpresa(e.id)}
+                    className="accent-nord-blue"
+                  />
+                  <span className="text-xs text-nord-gray">{e.name}</span>
+                </label>
+              ))}
+            </div>
+            {empresaIds.length > 0 && (
+              <div className="mt-2">
+                <Field label="Loja padrão ao entrar">
+                  <select
+                    value={form.defaultEmpresaId}
+                    onChange={(e) => setForm({ ...form, defaultEmpresaId: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">Primeira loja com acesso</option>
+                    {empresas
+                      .filter((e) => empresaIds.includes(e.id))
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              </div>
+            )}
+            <label className="flex items-center gap-2 mt-2">
+              <input
+                type="checkbox"
+                checked={form.canViewGrupoNord}
+                onChange={(e) => setForm({ ...form, canViewGrupoNord: e.target.checked })}
+                className="accent-nord-blue"
+              />
+              <span className="text-xs text-nord-gray">
+                Pode visualizar o Grupo Nord (consolidado entre lojas)
+              </span>
+            </label>
+          </div>
+        )}
 
         {form.role !== "ADMINISTRADOR" && (
           <div className="mt-5">

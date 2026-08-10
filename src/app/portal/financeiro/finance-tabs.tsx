@@ -35,12 +35,3 @@ export function FinanceTabs() {
     </div>
   );
 }
-
-export const COMPANY_LABEL: Record<string, string> = {
-  ALL: "Grupo Nord (consolidado)",
-  NORD_PIZZA: "Nord Pizza & Burger",
-  ZARKI_SUSHI: "Zarki Sushi",
-  GRUPO_NORD: "Grupo Nord (rateio)",
-};
-
-export const COMPANY_OPTIONS = ["ALL", "NORD_PIZZA", "ZARKI_SUSHI", "GRUPO_NORD"];

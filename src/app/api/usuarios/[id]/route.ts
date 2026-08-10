@@ -22,6 +22,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     role: body.role ?? undefined,
     active: body.active ?? undefined,
     phone: body.phone ?? undefined,
+    canViewGrupoNord: body.canViewGrupoNord !== undefined ? !!body.canViewGrupoNord : undefined,
+    defaultEmpresaId: body.defaultEmpresaId !== undefined ? body.defaultEmpresaId || null : undefined,
   };
   if (body.password) data.passwordHash = await bcrypt.hash(body.password, 10);
 
@@ -35,6 +37,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         moduleKey: p.moduleKey,
         level: p.level as never,
       })),
+    });
+  }
+
+  if (body.empresaIds) {
+    await prisma.userEmpresaAccess.deleteMany({ where: { userId: id } });
+    await prisma.userEmpresaAccess.createMany({
+      data: (body.empresaIds as string[]).map((empresaId) => ({ userId: id, empresaId })),
     });
   }
 

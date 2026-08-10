@@ -31,7 +31,13 @@ const emptyForm = {
   estoqueAtual: "",
 };
 
-export function InsumosClient({ initialIngredients }: { initialIngredients: IngredientDTO[] }) {
+export function InsumosClient({
+  initialIngredients,
+  canCreate = true,
+}: {
+  initialIngredients: IngredientDTO[];
+  canCreate?: boolean;
+}) {
   const [ingredients, setIngredients] = useState(initialIngredients);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IngredientDTO | null>(null);
@@ -103,14 +109,22 @@ export function InsumosClient({ initialIngredients }: { initialIngredients: Ingr
     <Section
       title="Insumos cadastrados"
       action={
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Novo insumo
-        </button>
+        canCreate ? (
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Novo insumo
+          </button>
+        ) : undefined
       }
     >
+      {!canCreate && (
+        <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+          cadastrar ou editar insumos.
+        </p>
+      )}
       {priceAlert && (
         <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-nord-blue/10 border border-nord-blue/30">
           <AlertTriangle size={14} className="text-nord-blue-light mt-0.5 shrink-0" />
@@ -149,7 +163,7 @@ export function InsumosClient({ initialIngredients }: { initialIngredients: Ingr
                     {baixo && <Badge tone="danger">Repor estoque</Badge>}
                   </td>
                   <td className="py-2.5 pr-4">
-                    <div className="flex items-center gap-2 justify-end">
+                    <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
                       <button onClick={() => openEdit(i)} className="text-nord-gray hover:text-white">
                         <Pencil size={14} />
                       </button>

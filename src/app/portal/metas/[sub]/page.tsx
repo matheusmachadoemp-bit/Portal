@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { MetasClient } from "./metas-client";
 import { notFound } from "next/navigation";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 const SUB_MAP: Record<string, { category: string; label: string }> = {
   gerencia: { category: "GERENCIA", label: "Metas da Gerência" },
@@ -15,8 +16,11 @@ export default async function MetasSubPage({ params }: { params: Promise<{ sub: 
   const info = SUB_MAP[sub];
   if (!info) notFound();
 
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
   const goals = await prisma.goal.findMany({
-    where: { category: info.category as never },
+    where: { category: info.category as never, empresaId: { in: empresaIds } },
     orderBy: { endDate: "asc" },
     include: { attachments: true },
   });
@@ -29,7 +33,7 @@ export default async function MetasSubPage({ params }: { params: Promise<{ sub: 
 
   return (
     <PageContainer title="Metas" subtitle={info.label}>
-      <MetasClient initialGoals={serialized} category={info.category} />
+      <MetasClient initialGoals={serialized} category={info.category} canCreate={ctx?.mode === "single"} />
     </PageContainer>
   );
 }

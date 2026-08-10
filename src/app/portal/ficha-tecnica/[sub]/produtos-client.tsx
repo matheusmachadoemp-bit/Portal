@@ -58,10 +58,12 @@ export function ProdutosClient({
   initialProducts,
   ingredientOptions,
   category,
+  canCreate = true,
 }: {
   initialProducts: ProductDTO[];
   ingredientOptions: IngredientOption[];
   category: string;
+  canCreate?: boolean;
 }) {
   const [products, setProducts] = useState(initialProducts);
   const [showForm, setShowForm] = useState(false);
@@ -162,14 +164,22 @@ export function ProdutosClient({
     <Section
       title="Produtos cadastrados"
       action={
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Novo produto
-        </button>
+        canCreate ? (
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Novo produto
+          </button>
+        ) : undefined
       }
     >
+      {!canCreate && (
+        <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+          cadastrar ou editar fichas técnicas.
+        </p>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {products.map((p) => {
           const totalCost = productTotalCost(p.ingredients);
@@ -198,7 +208,7 @@ export function ProdutosClient({
               <div className="text-xs text-nord-gray">
                 {p.ingredients.length} ingrediente(s) • {p.tempoPreparo ?? "-"} min preparo
               </div>
-              <div className="flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1">
+              <div className={`flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1 ${!canCreate ? "hidden" : ""}`}>
                 <button onClick={() => openEdit(p)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
                   <Pencil size={12} /> Editar
                 </button>

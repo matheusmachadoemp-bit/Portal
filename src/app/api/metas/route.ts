@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
 
   const goals = await prisma.goal.findMany({
-    where: category ? { category: category as never } : undefined,
+    where: {
+      empresaId: { in: empresaIdsForContext(ctx) },
+      ...(category ? { category: category as never } : {}),
+    },
     orderBy: { endDate: "asc" },
     include: { attachments: true },
   });
@@ -22,10 +29,19 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const empresa = await requireActiveSingleEmpresa();
+  if (!empresa) {
+    return NextResponse.json(
+      { error: "Selecione uma loja específica (não é possível criar metas no modo Grupo Nord)." },
+      { status: 400 }
+    );
+  }
+
   const body = await req.json();
 
   const goal = await prisma.goal.create({
     data: {
+      empresaId: empresa.id,
       name: body.name,
       category: body.category,
       responsavel: body.responsavel,

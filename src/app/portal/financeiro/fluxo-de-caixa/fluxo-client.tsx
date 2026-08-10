@@ -17,9 +17,8 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { COMPANY_LABEL } from "../finance-tabs";
 
-type Entry = { valor: number; date: string; empresa: string; categoria: string };
+type Entry = { valor: number; date: string; empresa: { id: string; name: string }; categoria: string };
 
 export function FluxoCaixaClient({
   data,
@@ -29,12 +28,18 @@ export function FluxoCaixaClient({
   const [granularidade, setGranularidade] = useState<"diario" | "semanal" | "mensal">("diario");
   const [empresa, setEmpresa] = useState("");
 
+  const empresaOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of [...data.payables, ...data.receivables]) map.set(e.empresa.id, e.empresa.name);
+    return [...map.entries()];
+  }, [data.payables, data.receivables]);
+
   const payables = useMemo(
-    () => data.payables.filter((p) => !empresa || p.empresa === empresa),
+    () => data.payables.filter((p) => !empresa || p.empresa.id === empresa),
     [data.payables, empresa]
   );
   const receivables = useMemo(
-    () => data.receivables.filter((r) => !empresa || r.empresa === empresa),
+    () => data.receivables.filter((r) => !empresa || r.empresa.id === empresa),
     [data.receivables, empresa]
   );
 
@@ -88,9 +93,11 @@ export function FluxoCaixaClient({
         ))}
         <select value={empresa} onChange={(e) => setEmpresa(e.target.value)} className="input-sm ml-auto">
           <option value="">Todas as empresas</option>
-          <option value="NORD_PIZZA">{COMPANY_LABEL.NORD_PIZZA}</option>
-          <option value="ZARKI_SUSHI">{COMPANY_LABEL.ZARKI_SUSHI}</option>
-          <option value="GRUPO_NORD">{COMPANY_LABEL.GRUPO_NORD}</option>
+          {empresaOptions.map(([id, name]) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
         </select>
       </div>
 

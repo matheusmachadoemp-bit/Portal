@@ -7,8 +7,10 @@ import { ptBR } from "date-fns/locale";
 import { DashboardCharts } from "./charts";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight } from "lucide-react";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import type { Empresa } from "@prisma/client";
 
-async function getData() {
+async function getData(empresaIds: string[]) {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
@@ -18,12 +20,18 @@ async function getData() {
   const todayEnd = endOfDay(now);
 
   const [thisMonth, prevMonth, today, occurrences, marketing, goals] = await Promise.all([
-    prisma.salesEntry.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.salesEntry.findMany({ where: { date: { gte: prevMonthStart, lte: prevMonthEnd } } }),
-    prisma.salesEntry.findMany({ where: { date: { gte: todayStart, lte: todayEnd } } }),
-    prisma.occurrence.findMany({ where: { date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.marketingEntry.findMany({ orderBy: { date: "desc" }, take: 1 }),
-    prisma.goal.findMany({ where: { endDate: { gte: now } }, orderBy: { endDate: "asc" }, take: 5 }),
+    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: prevMonthStart, lte: prevMonthEnd } } }),
+    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: todayStart, lte: todayEnd } } }),
+    prisma.occurrence.findMany({
+      where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: { in: empresaIds } } },
+    }),
+    prisma.marketingEntry.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { date: "desc" }, take: 1 }),
+    prisma.goal.findMany({
+      where: { empresaId: { in: empresaIds }, endDate: { gte: now } },
+      orderBy: { endDate: "asc" },
+      take: 5,
+    }),
   ]);
 
   const sum = (arr: typeof thisMonth, key: keyof (typeof thisMonth)[number]) =>
@@ -69,7 +77,9 @@ async function getData() {
   for (let i = 5; i >= 0; i--) {
     const start = startOfMonth(subMonths(now, i));
     const end = endOfMonth(subMonths(now, i));
-    const entries = await prisma.salesEntry.findMany({ where: { date: { gte: start, lte: end } } });
+    const entries = await prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
+    });
     const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
     monthlyEvolution.push({ month: format(start, "MMM", { locale: ptBR }), total });
   }
@@ -95,13 +105,46 @@ async function getData() {
   };
 }
 
+async function getComparisonRow(empresa: Empresa) {
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  const [thisMonth, occurrences] = await Promise.all([
+    prisma.salesEntry.findMany({ where: { empresaId: empresa.id, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.occurrence.findMany({
+      where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: empresa.id } },
+    }),
+  ]);
+
+  const fatMes = thisMonth.reduce((a, e) => a + e.faturamentoDelivery + e.faturamentoSalao, 0);
+  const pedidosMes = thisMonth.reduce((a, e) => a + e.pedidosDelivery + e.pedidosBalcao + e.pedidosSalao, 0);
+  const metaMensal = thisMonth.reduce((a, e) => a + e.metaDiaria, 0) || 0;
+
+  return {
+    empresa,
+    fatMes,
+    pedidosMes,
+    ticketMedio: safeDiv(fatMes, pedidosMes),
+    metaMensal,
+    percentualMeta: pct(fatMes, metaMensal),
+    faltas: occurrences.filter((o) => o.type === "FALTA").length,
+  };
+}
+
 export default async function InicioPage() {
-  const d = await getData();
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const d = await getData(empresaIds);
   const percentualMeta = pct(d.fatMes, d.metaMensal);
   const abaixoDaMeta = percentualMeta < 70;
+  const subtitle =
+    ctx?.mode === "single" ? `Visão geral da ${ctx.empresa.name}` : "Visão geral consolidada — Grupo Nord";
+
+  const comparison = ctx?.mode === "grupo" ? await Promise.all(ctx.empresas.map(getComparisonRow)) : null;
 
   return (
-    <PageContainer title="Início" subtitle="Visão geral da Nord Pizza & Burger">
+    <PageContainer title="Início" subtitle={subtitle}>
       {abaixoDaMeta && (
         <div className="nord-card p-4 flex items-center gap-3 border-amber-600/40 bg-amber-950/10">
           <AlertTriangle size={18} className="text-amber-400 shrink-0" />
@@ -146,6 +189,46 @@ export default async function InicioPage() {
           color="#a855f7"
         />
       </div>
+
+      {comparison && (
+        <Section title="Comparativo entre lojas — mês atual">
+          <div className="overflow-x-auto nord-scrollbar">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                  <th className="py-2 pr-4">Loja</th>
+                  <th className="py-2 pr-4">Faturamento</th>
+                  <th className="py-2 pr-4">Pedidos</th>
+                  <th className="py-2 pr-4">Ticket médio</th>
+                  <th className="py-2 pr-4">Meta mensal</th>
+                  <th className="py-2 pr-4">% da meta</th>
+                  <th className="py-2 pr-4">Faltas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparison.map((c) => (
+                  <tr key={c.empresa.id} className="border-b border-nord-border/50 hover:bg-white/5">
+                    <td className="py-2.5 pr-4 text-white flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.empresa.color }} />
+                      {c.empresa.name}
+                    </td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.fatMes)}</td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatNumber(c.pedidosMes)}</td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.ticketMedio)}</td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.metaMensal)}</td>
+                    <td className="py-2.5 pr-4">
+                      <Badge tone={c.percentualMeta < 70 ? "danger" : c.percentualMeta < 100 ? "warning" : "success"}>
+                        {formatPercent(c.percentualMeta)}
+                      </Badge>
+                    </td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatNumber(c.faltas)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
 
       <DashboardCharts
         dailySeries={d.dailySeries}

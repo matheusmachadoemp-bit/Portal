@@ -3,11 +3,17 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
 import type { FinanceEntryStatus } from "@prisma/client";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
+  const existingCheck = await prisma.receivable.findUnique({ where: { id } });
+  if (!existingCheck) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existingCheck.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
   const body = await req.json();
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -41,7 +47,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         descricao: body.descricao ?? undefined,
         categoriaId: body.categoriaId ?? undefined,
         centroCusto: body.centroCusto ?? undefined,
-        empresa: body.empresa ?? undefined,
         valor: body.valor !== undefined ? nextValor : undefined,
         dataCompetencia: body.dataCompetencia ? new Date(body.dataCompetencia) : undefined,
         dataVencimento: body.dataVencimento ? new Date(body.dataVencimento) : undefined,
@@ -64,6 +69,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await tx.auditLog.create({
       data: {
         userId: session.user.id,
+        empresaId: before.empresaId,
         action: "UPDATE",
         entityType: "Receivable",
         entityId: id,
@@ -82,6 +88,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
+  const existingCheck = await prisma.receivable.findUnique({ where: { id } });
+  if (!existingCheck) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existingCheck.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
 
   await prisma.$transaction(async (tx) => {
     const before = await tx.receivable.findUniqueOrThrow({ where: { id } });
@@ -96,6 +107,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     await tx.auditLog.create({
       data: {
         userId: session.user.id,
+        empresaId: before.empresaId,
         action: "DELETE",
         entityType: "Receivable",
         entityId: id,

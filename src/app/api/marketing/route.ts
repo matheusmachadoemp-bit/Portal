@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+
   const entries = await prisma.marketingEntry.findMany({
+    where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: { date: "desc" },
     include: { createdBy: { select: { name: true } } },
   });
@@ -18,10 +23,19 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const empresa = await requireActiveSingleEmpresa();
+  if (!empresa) {
+    return NextResponse.json(
+      { error: "Selecione uma loja específica (não é possível lançar dados no modo Grupo Nord)." },
+      { status: 400 }
+    );
+  }
+
   const body = await req.json();
 
   const entry = await prisma.marketingEntry.create({
     data: {
+      empresaId: empresa.id,
       date: new Date(body.date),
       investimentoTrafego: Number(body.investimentoTrafego) || 0,
       receitaTrafego: Number(body.receitaTrafego) || 0,

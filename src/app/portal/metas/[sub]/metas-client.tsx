@@ -58,7 +58,15 @@ const emptyForm = {
   planoDeAcao: "",
 };
 
-export function MetasClient({ initialGoals, category }: { initialGoals: GoalDTO[]; category: string }) {
+export function MetasClient({
+  initialGoals,
+  category,
+  canCreate = true,
+}: {
+  initialGoals: GoalDTO[];
+  category: string;
+  canCreate?: boolean;
+}) {
   const [goals, setGoals] = useState(initialGoals);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GoalDTO | null>(null);
@@ -149,14 +157,22 @@ export function MetasClient({ initialGoals, category }: { initialGoals: GoalDTO[
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Nova meta
-        </button>
-      </div>
+      {!canCreate && (
+        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para criar
+          ou editar metas.
+        </p>
+      )}
+      {canCreate && (
+        <div className="flex justify-end">
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Nova meta
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {ranked.map((g, idx) => {
@@ -211,7 +227,7 @@ export function MetasClient({ initialGoals, category }: { initialGoals: GoalDTO[
                 </div>
               )}
 
-              <div className="flex items-center gap-2 pt-1 border-t border-nord-border/60 mt-1">
+              <div className={`flex items-center gap-2 pt-1 border-t border-nord-border/60 mt-1 ${!canCreate ? "hidden" : ""}`}>
                 <button
                   onClick={() => openEdit(g)}
                   className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5"

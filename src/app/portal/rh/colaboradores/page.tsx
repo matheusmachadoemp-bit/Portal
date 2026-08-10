@@ -2,14 +2,19 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ColaboradoresClient } from "./colaboradores-client";
 import { startOfMonth } from "date-fns";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function ColaboradoresPage() {
   const now = new Date();
   const monthStart = startOfMonth(now);
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const [employees, occurrencesThisMonth] = await Promise.all([
-    prisma.employee.findMany({ orderBy: { name: "asc" } }),
-    prisma.occurrence.findMany({ where: { date: { gte: monthStart } } }),
+    prisma.employee.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
+    prisma.occurrence.findMany({
+      where: { date: { gte: monthStart }, employee: { empresaId: { in: empresaIds } } },
+    }),
   ]);
 
   const activeStart = employees.filter(
@@ -36,6 +41,7 @@ export default async function ColaboradoresPage() {
         desligamentos={desligamentos}
         quadroMedio={quadroMedio}
         totalOcorrencias={occurrencesThisMonth.length}
+        canCreate={ctx?.mode === "single"}
       />
     </PageContainer>
   );

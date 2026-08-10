@@ -14,7 +14,6 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { COMPANY_LABEL } from "../finance-tabs";
 
 type DreRow = {
   key: string;
@@ -31,26 +30,36 @@ const MONTHS = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
+type ComparisonRow = {
+  empresa: { id: string; name: string; color: string };
+  faturamento: number;
+  lucroLiquido: number;
+  margem: number;
+  cmv: number;
+  margemPct: number;
+};
+
 export function DreClient({
   initialRows,
   initialMonth,
   initialYear,
   monthlyEvolution,
+  comparison,
 }: {
   initialRows: DreRow[];
   initialMonth: number;
   initialYear: number;
   monthlyEvolution: { month: string; faturamento: number; lucroLiquido: number }[];
+  comparison?: ComparisonRow[] | null;
 }) {
   const [month, setMonth] = useState(initialMonth);
   const [year, setYear] = useState(initialYear);
-  const [empresa, setEmpresa] = useState("ALL");
   const [rows, setRows] = useState(initialRows);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/financeiro/dre?month=${month}&year=${year}&empresa=${empresa}`)
+    fetch(`/api/financeiro/dre?month=${month}&year=${year}`)
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled) setRows(data.rows);
@@ -58,7 +67,7 @@ export function DreClient({
     return () => {
       cancelled = true;
     };
-  }, [month, year, empresa]);
+  }, [month, year]);
 
   function exportCsv() {
     const header = ["Linha", "Valor", "%"];
@@ -89,11 +98,6 @@ export function DreClient({
             </option>
           ))}
         </select>
-        <select value={empresa} onChange={(e) => setEmpresa(e.target.value)} className="input-sm">
-          <option value="ALL">{COMPANY_LABEL.ALL}</option>
-          <option value="NORD_PIZZA">{COMPANY_LABEL.NORD_PIZZA}</option>
-          <option value="ZARKI_SUSHI">{COMPANY_LABEL.ZARKI_SUSHI}</option>
-        </select>
         <button
           onClick={exportCsv}
           className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white"
@@ -101,6 +105,42 @@ export function DreClient({
           <Download size={13} /> Exportar DRE
         </button>
       </div>
+
+      {comparison && comparison.length > 0 && (
+        <Section title="Comparativo entre lojas — mês atual">
+          <div className="overflow-x-auto nord-scrollbar">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                  <th className="py-2 pr-4">Loja</th>
+                  <th className="py-2 pr-4">Faturamento</th>
+                  <th className="py-2 pr-4">CMV</th>
+                  <th className="py-2 pr-4">Margem de Contribuição</th>
+                  <th className="py-2 pr-4">Lucro Líquido</th>
+                  <th className="py-2 pr-4">Margem %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparison.map((c) => (
+                  <tr key={c.empresa.id} className="border-b border-nord-border/50 hover:bg-white/5">
+                    <td className="py-2.5 pr-4 text-white flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.empresa.color }} />
+                      {c.empresa.name}
+                    </td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.faturamento)}</td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.cmv)}</td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.margem)}</td>
+                    <td className={`py-2.5 pr-4 ${c.lucroLiquido < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                      {formatCurrency(c.lucroLiquido)}
+                    </td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{formatPercent(c.margemPct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
 
       <Section title={`DRE — ${MONTHS[month - 1]}/${year}`}>
         <div className="overflow-x-auto nord-scrollbar">

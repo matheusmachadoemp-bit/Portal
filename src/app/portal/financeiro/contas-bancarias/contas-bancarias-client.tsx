@@ -34,7 +34,13 @@ const emptyForm = {
   icon: "Landmark",
 };
 
-export function ContasBancariasClient({ initialAccounts }: { initialAccounts: AccountDTO[] }) {
+export function ContasBancariasClient({
+  initialAccounts,
+  canCreate = true,
+}: {
+  initialAccounts: AccountDTO[];
+  canCreate?: boolean;
+}) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AccountDTO | null>(null);
@@ -118,14 +124,22 @@ export function ContasBancariasClient({ initialAccounts }: { initialAccounts: Ac
     <Section
       title="Contas Bancárias"
       action={
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Nova conta
-        </button>
+        canCreate ? (
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Nova conta
+          </button>
+        ) : undefined
       }
     >
+      {!canCreate && (
+        <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+          cadastrar ou editar contas bancárias.
+        </p>
+      )}
       <FormError message={rowError} />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {accounts.map((a) => (
@@ -146,7 +160,7 @@ export function ContasBancariasClient({ initialAccounts }: { initialAccounts: Ac
             <p className="text-xs text-nord-gray">
               {a.bank} {a.agencia && `• Ag. ${a.agencia}`} {a.conta && `• Conta ${a.conta}`}
             </p>
-            <div className="flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1">
+            <div className={`flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1 ${!canCreate ? "hidden" : ""}`}>
               <button onClick={() => openEdit(a)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
                 <Pencil size={12} /> Editar
               </button>

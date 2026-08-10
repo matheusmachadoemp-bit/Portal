@@ -3,6 +3,7 @@ import { PageContainer } from "@/components/page-container";
 import { notFound } from "next/navigation";
 import { ProdutosClient } from "./produtos-client";
 import { InsumosClient } from "./insumos-client";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 const SUB_MAP: Record<string, { category: string; label: string }> = {
   "pizzas-salgadas": { category: "PIZZA_SALGADA", label: "Pizzas Salgadas" },
@@ -18,9 +19,13 @@ const SUB_MAP: Record<string, { category: string; label: string }> = {
 
 export default async function FichaTecnicaSubPage({ params }: { params: Promise<{ sub: string }> }) {
   const { sub } = await params;
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canCreate = ctx?.mode === "single";
 
   if (sub === "insumos") {
     const ingredients = await prisma.ingredient.findMany({
+      where: { empresaId: { in: empresaIds } },
       orderBy: { name: "asc" },
       include: { priceHistory: { orderBy: { createdAt: "desc" }, take: 10 } },
     });
@@ -32,7 +37,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
 
     return (
       <PageContainer title="Ficha Técnica" subtitle="Insumos">
-        <InsumosClient initialIngredients={serialized} />
+        <InsumosClient initialIngredients={serialized} canCreate={canCreate} />
       </PageContainer>
     );
   }
@@ -42,11 +47,11 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
 
   const [products, ingredients] = await Promise.all([
     prisma.product.findMany({
-      where: { category: info.category as never },
+      where: { empresaId: { in: empresaIds }, category: info.category as never },
       orderBy: { name: "asc" },
       include: { ingredients: { include: { ingredient: true } } },
     }),
-    prisma.ingredient.findMany({ orderBy: { name: "asc" } }),
+    prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
   ]);
 
   const serializedProducts = products.map((p) => ({
@@ -79,6 +84,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
         initialProducts={serializedProducts}
         ingredientOptions={serializedIngredients}
         category={info.category}
+        canCreate={canCreate}
       />
     </PageContainer>
   );

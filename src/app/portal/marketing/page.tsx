@@ -1,9 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { MarketingClient } from "./marketing-client";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function MarketingPage() {
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
   const entries = await prisma.marketingEntry.findMany({
+    where: { empresaId: { in: empresaIds } },
     orderBy: { date: "desc" },
     include: { createdBy: { select: { name: true } } },
   });
@@ -12,7 +17,7 @@ export default async function MarketingPage() {
 
   return (
     <PageContainer title="Marketing" subtitle="Tráfego pago, redes sociais e conversão">
-      <MarketingClient initialEntries={serialized} />
+      <MarketingClient initialEntries={serialized} canCreate={ctx?.mode === "single"} />
     </PageContainer>
   );
 }

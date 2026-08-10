@@ -3,16 +3,20 @@ import { PageContainer } from "@/components/page-container";
 import { FinanceTabs } from "../finance-tabs";
 import { ContasReceberClient } from "./contas-receber-client";
 import { subDays } from "date-fns";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function ContasAReceberPage() {
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
   const [receivables, categorias, contas] = await Promise.all([
     prisma.receivable.findMany({
-      where: { dataVencimento: { gte: subDays(new Date(), 120) } },
+      where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), 120) } },
       orderBy: { dataVencimento: "asc" },
-      include: { categoria: true, bankAccount: true, createdBy: { select: { name: true } } },
+      include: { categoria: true, bankAccount: true, createdBy: { select: { name: true } }, empresa: true },
     }),
     prisma.financialCategory.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    prisma.bankAccount.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
   ]);
 
   const serialized = receivables.map((r) => ({
@@ -26,7 +30,12 @@ export default async function ContasAReceberPage() {
     <PageContainer title="Financeiro" subtitle="Contas a Receber">
       <div className="space-y-6">
         <FinanceTabs />
-        <ContasReceberClient initialReceivables={serialized} categorias={categorias} contas={contas} />
+        <ContasReceberClient
+          initialReceivables={serialized}
+          categorias={categorias}
+          contas={contas}
+          canCreate={ctx?.mode === "single"}
+        />
       </div>
     </PageContainer>
   );
