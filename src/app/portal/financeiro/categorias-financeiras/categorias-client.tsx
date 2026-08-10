@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 
 type CategoryDTO = {
   id: string;
@@ -43,6 +44,9 @@ export function CategoriasClient({
   const [editing, setEditing] = useState<CategoryDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(
@@ -71,18 +75,19 @@ export function CategoriasClient({
   }
 
   async function submit() {
-    if (editing) {
-      await fetch(`/api/financeiro/categorias/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/financeiro/categorias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    if (!form.name.trim() || !form.dreKey) {
+      setFormError("Nome e linha da DRE são obrigatórios.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    const result = editing
+      ? await apiRequest(`/api/financeiro/categorias/${editing.id}`, "PATCH", form)
+      : await apiRequest("/api/financeiro/categorias", "POST", form);
+    setSaving(false);
+    if (!result.ok) {
+      setFormError(result.error);
+      return;
     }
     setShowForm(false);
     refresh();
@@ -90,7 +95,12 @@ export function CategoriasClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/financeiro/categorias/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/financeiro/categorias/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -118,6 +128,7 @@ export function CategoriasClient({
         </div>
       }
     >
+      <FormError message={rowError} />
       <p className="text-xs text-nord-gray mb-3">
         Toda categoria financeira possui vínculo obrigatório com uma linha da DRE — o lançamento associado a ela
         alimenta automaticamente aquela linha.
@@ -157,6 +168,7 @@ export function CategoriasClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar categoria" : "Nova categoria financeira"}>
+        <FormError message={formError} />
         <div className="space-y-3">
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Nome</span>
@@ -183,8 +195,12 @@ export function CategoriasClient({
             </select>
           </label>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {saving ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

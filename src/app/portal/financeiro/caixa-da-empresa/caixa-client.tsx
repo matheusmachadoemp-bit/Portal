@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Section, Badge, StatCard } from "@/components/ui/stat-card";
-import { Modal } from "@/components/ui/modal";
+import { Modal, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
+import { apiRequest } from "@/lib/api-client";
 
 type MovementDTO = {
   id: string;
@@ -53,6 +54,8 @@ export function CaixaClient({
   const [movements, setMovements] = useState(initialMovements);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...emptyForm, bankAccountId: accounts[0]?.id ?? "" });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const totalCaixa = accounts.reduce((a, acc) => a + acc.saldoAtual, 0);
 
@@ -63,11 +66,18 @@ export function CaixaClient({
   }
 
   async function submit() {
-    await fetch("/api/financeiro/caixa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+    if (!form.bankAccountId || !form.valor) {
+      setFormError("Selecione a conta e informe o valor.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    const result = await apiRequest("/api/financeiro/caixa", "POST", form);
+    setSaving(false);
+    if (!result.ok) {
+      setFormError(result.error);
+      return;
+    }
     setShowForm(false);
     setForm({ ...emptyForm, bankAccountId: accounts[0]?.id ?? "" });
     refresh();
@@ -133,6 +143,7 @@ export function CaixaClient({
       </Section>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Nova movimentação de caixa">
+        <FormError message={formError} />
         <div className="space-y-3">
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Tipo de movimentação</span>
@@ -190,8 +201,12 @@ export function CaixaClient({
             <input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="input" />
           </label>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Registrar movimentação
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {saving ? "Salvando..." : "Registrar movimentação"}
         </button>
       </Modal>
 

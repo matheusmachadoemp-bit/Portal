@@ -1,7 +1,17 @@
 "use client";
 
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { ReactNode, useEffect } from "react";
+
+export function FormError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div className="flex items-start gap-2 p-3 rounded-lg bg-red-950/40 border border-red-900 mb-3">
+      <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
+      <p className="text-xs text-red-300">{message}</p>
+    </div>
+  );
+}
 
 export function Modal({
   open,

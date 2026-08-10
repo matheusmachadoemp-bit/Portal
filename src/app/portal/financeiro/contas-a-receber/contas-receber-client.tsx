@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Check, Download, Copy } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { COMPANY_LABEL } from "../finance-tabs";
+import { apiRequest } from "@/lib/api-client";
 
 type ReceivableDTO = {
   id: string;
@@ -93,6 +94,9 @@ export function ContasReceberClient({
   const [editing, setEditing] = useState<ReceivableDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterEmpresa, setFilterEmpresa] = useState("");
   const [search, setSearch] = useState("");
@@ -150,57 +154,68 @@ export function ContasReceberClient({
   }
 
   async function submit() {
+    if (!form.categoriaId) {
+      setFormError("Selecione uma categoria financeira antes de salvar.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
     const payload = { ...form, dataRecebimento: form.dataRecebimento || null };
-    if (editing) {
-      await fetch(`/api/financeiro/receber/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/financeiro/receber", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const result = editing
+      ? await apiRequest(`/api/financeiro/receber/${editing.id}`, "PATCH", payload)
+      : await apiRequest("/api/financeiro/receber", "POST", payload);
+    setSaving(false);
+    if (!result.ok) {
+      setFormError(result.error);
+      return;
     }
     setShowForm(false);
     refresh();
   }
 
   async function markReceived(p: ReceivableDTO) {
-    await fetch(`/api/financeiro/receber/${p.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "PAGO", dataRecebimento: format(new Date(), "yyyy-MM-dd") }),
+    setRowError(null);
+    const result = await apiRequest(`/api/financeiro/receber/${p.id}`, "PATCH", {
+      status: "PAGO",
+      dataRecebimento: format(new Date(), "yyyy-MM-dd"),
     });
+    if (!result.ok) {
+      setRowError(result.error);
+      return;
+    }
     refresh();
   }
 
   async function duplicate(p: ReceivableDTO) {
-    await fetch("/api/financeiro/receber", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cliente: p.cliente,
-        descricao: `${p.descricao} (cópia)`,
-        categoriaId: p.categoriaId,
-        centroCusto: p.centroCusto,
-        empresa: p.empresa,
-        valor: p.valor,
-        dataCompetencia: p.dataCompetencia,
-        dataVencimento: p.dataVencimento,
-        bankAccountId: p.bankAccountId,
-        formaRecebimento: p.formaRecebimento,
-        status: "EM_ABERTO",
-      }),
+    setRowError(null);
+    const result = await apiRequest("/api/financeiro/receber", "POST", {
+      cliente: p.cliente,
+      descricao: `${p.descricao} (cópia)`,
+      categoriaId: p.categoriaId,
+      centroCusto: p.centroCusto,
+      empresa: p.empresa,
+      valor: p.valor,
+      dataCompetencia: p.dataCompetencia,
+      dataVencimento: p.dataVencimento,
+      bankAccountId: p.bankAccountId,
+      formaRecebimento: p.formaRecebimento,
+      status: "EM_ABERTO",
     });
+    if (!result.ok) {
+      setRowError(result.error);
+      return;
+    }
     refresh();
   }
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/financeiro/receber/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/financeiro/receber/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -260,6 +275,7 @@ export function ContasReceberClient({
         </div>
       }
     >
+      <FormError message={rowError} />
       <p className="text-xs text-nord-gray mb-3">
         Total filtrado: <span className="text-white font-medium">{formatCurrency(totalFiltrado)}</span> ({filtered.length} lançamentos)
       </p>
@@ -321,6 +337,7 @@ export function ContasReceberClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar conta a receber" : "Nova conta a receber"} widthClass="max-w-2xl">
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cliente">
             <input value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} className="input" />
@@ -415,8 +432,12 @@ export function ContasReceberClient({
             </Field>
           </div>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {saving ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

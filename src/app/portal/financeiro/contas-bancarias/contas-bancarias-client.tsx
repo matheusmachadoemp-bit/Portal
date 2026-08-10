@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency } from "@/lib/calc";
+import { apiRequest } from "@/lib/api-client";
 
 type AccountDTO = {
   id: string;
@@ -39,6 +40,9 @@ export function ContasBancariasClient({ initialAccounts }: { initialAccounts: Ac
   const [editing, setEditing] = useState<AccountDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/financeiro/bank-accounts");
@@ -68,35 +72,44 @@ export function ContasBancariasClient({ initialAccounts }: { initialAccounts: Ac
   }
 
   async function submit() {
-    if (editing) {
-      await fetch(`/api/financeiro/bank-accounts/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/financeiro/bank-accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    if (!form.name.trim()) {
+      setFormError("Informe o nome da conta.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    const result = editing
+      ? await apiRequest(`/api/financeiro/bank-accounts/${editing.id}`, "PATCH", form)
+      : await apiRequest("/api/financeiro/bank-accounts", "POST", form);
+    setSaving(false);
+    if (!result.ok) {
+      setFormError(result.error);
+      return;
     }
     setShowForm(false);
     refresh();
   }
 
   async function toggleActive(a: AccountDTO) {
-    await fetch(`/api/financeiro/bank-accounts/${a.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: !a.active }),
+    setRowError(null);
+    const result = await apiRequest(`/api/financeiro/bank-accounts/${a.id}`, "PATCH", {
+      active: !a.active,
     });
+    if (!result.ok) {
+      setRowError(result.error);
+      return;
+    }
     refresh();
   }
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/financeiro/bank-accounts/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/financeiro/bank-accounts/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -113,6 +126,7 @@ export function ContasBancariasClient({ initialAccounts }: { initialAccounts: Ac
         </button>
       }
     >
+      <FormError message={rowError} />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {accounts.map((a) => (
           <div key={a.id} className="nord-card p-4 flex flex-col gap-2">
@@ -148,6 +162,7 @@ export function ContasBancariasClient({ initialAccounts }: { initialAccounts: Ac
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar conta" : "Nova conta bancária"}>
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="block">
@@ -186,8 +201,12 @@ export function ContasBancariasClient({ initialAccounts }: { initialAccounts: Ac
             <ColorPicker value={form.color} onChange={(v) => setForm({ ...form, color: v })} />
           </div>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {saving ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

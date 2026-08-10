@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Check, Download, Copy, Repeat } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { COMPANY_LABEL } from "../finance-tabs";
+import { apiRequest } from "@/lib/api-client";
 
 type PayableDTO = {
   id: string;
@@ -93,6 +94,10 @@ export function ContasPagarClient({
   const [editing, setEditing] = useState<PayableDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
   const [filterEmpresa, setFilterEmpresa] = useState("");
   const [search, setSearch] = useState("");
@@ -165,38 +170,41 @@ export function ContasPagarClient({
   }
 
   async function submit() {
+    if (!form.categoriaId) {
+      setFormError("Selecione uma categoria financeira antes de salvar.");
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
     const payload = { ...form, dataPagamento: form.dataPagamento || null };
-    if (editing) {
-      await fetch(`/api/financeiro/pagar/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/financeiro/pagar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const result = editing
+      ? await apiRequest(`/api/financeiro/pagar/${editing.id}`, "PATCH", payload)
+      : await apiRequest("/api/financeiro/pagar", "POST", payload);
+    setSaving(false);
+    if (!result.ok) {
+      setFormError(result.error);
+      return;
     }
     setShowForm(false);
     refresh();
   }
 
   async function markPaid(p: PayableDTO) {
-    await fetch(`/api/financeiro/pagar/${p.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "PAGO", dataPagamento: format(new Date(), "yyyy-MM-dd") }),
+    setRowError(null);
+    const result = await apiRequest(`/api/financeiro/pagar/${p.id}`, "PATCH", {
+      status: "PAGO",
+      dataPagamento: format(new Date(), "yyyy-MM-dd"),
     });
+    if (!result.ok) {
+      setRowError(result.error);
+      return;
+    }
     refresh();
   }
 
   async function duplicate(p: PayableDTO) {
-    await fetch("/api/financeiro/pagar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    setRowError(null);
+    const result = await apiRequest("/api/financeiro/pagar", "POST", {
         fornecedor: p.fornecedor,
         descricao: `${p.descricao} (cópia)`,
         categoriaId: p.categoriaId,
@@ -208,14 +216,22 @@ export function ContasPagarClient({
         bankAccountId: p.bankAccountId,
         formaPagamento: p.formaPagamento,
         status: "EM_ABERTO",
-      }),
     });
+    if (!result.ok) {
+      setRowError(result.error);
+      return;
+    }
     refresh();
   }
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/financeiro/pagar/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/financeiro/pagar/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -242,11 +258,19 @@ export function ContasPagarClient({
   }
 
   async function submitRecurring() {
-    await fetch("/api/financeiro/recorrentes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...recurringForm, tipo: "PAGAR" }),
+    if (!recurringForm.categoriaId || !recurringForm.bankAccountId) {
+      setRecurringError("Selecione categoria e conta bancária antes de salvar.");
+      return;
+    }
+    setRecurringError(null);
+    const result = await apiRequest("/api/financeiro/recorrentes", "POST", {
+      ...recurringForm,
+      tipo: "PAGAR",
     });
+    if (!result.ok) {
+      setRecurringError(result.error);
+      return;
+    }
     setShowRecurring(false);
     refresh();
   }
@@ -288,6 +312,7 @@ export function ContasPagarClient({
         </div>
       }
     >
+      <FormError message={rowError} />
       <p className="text-xs text-nord-gray mb-3">
         Total filtrado: <span className="text-white font-medium">{formatCurrency(totalFiltrado)}</span> ({filtered.length} lançamentos)
       </p>
@@ -349,6 +374,7 @@ export function ContasPagarClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar conta a pagar" : "Nova conta a pagar"} widthClass="max-w-2xl">
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Fornecedor">
             <input value={form.fornecedor} onChange={(e) => setForm({ ...form, fornecedor: e.target.value })} className="input" />
@@ -443,12 +469,17 @@ export function ContasPagarClient({
             </Field>
           </div>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {saving ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 
       <Modal open={showRecurring} onClose={() => setShowRecurring(false)} title="Nova conta recorrente" widthClass="max-w-lg">
+        <FormError message={recurringError} />
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <Field label="Descrição (ex: Aluguel, Internet, Energia, Sistema, Salários...)">
