@@ -6,6 +6,7 @@ import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { classifyKpi, formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
 import { format } from "date-fns";
+import { MarketingTabs } from "../marketing-tabs";
 import {
   ResponsiveContainer,
   LineChart,
@@ -57,7 +58,7 @@ const emptyForm = {
   planoDeAcao: "",
 };
 
-export function MarketingClient({
+export function TrafegoPagoClient({
   initialEntries,
   canCreate = true,
 }: {
@@ -176,6 +177,7 @@ export function MarketingClient({
 
   return (
     <div className="space-y-6">
+      <MarketingTabs />
       {!canCreate && (
         <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar

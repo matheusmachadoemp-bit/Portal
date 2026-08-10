@@ -48,23 +48,30 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  permissions        UserPermission[]
-  empresaAccess      UserEmpresaAccess[]
-  menuPreferences    MenuPreference?
-  auditLogs          AuditLog[]
-  salesEntries       SalesEntry[]
-  marketingEntries   MarketingEntry[]
-  goals              Goal[]
-  vaultEntries       VaultEntry[]
-  vaultAccess        VaultAccessLog[]
-  courses            Course[]
-  files              FileItem[]
-  products           Product[]
-  occurrences        Occurrence[]        @relation("OccurrenceCreatedBy")
-  payables           Payable[]
-  receivables        Receivable[]
-  cashMovements      CashMovement[]
-  recurringTemplates RecurringTemplate[]
+  permissions                   UserPermission[]
+  empresaAccess                 UserEmpresaAccess[]
+  menuPreferences               MenuPreference?
+  auditLogs                     AuditLog[]
+  salesEntries                  SalesEntry[]
+  marketingEntries              MarketingEntry[]
+  marketingTasksResponsavel     MarketingTask[]     @relation("MarketingTaskResponsavel")
+  marketingTasksCreated         MarketingTask[]     @relation("MarketingTaskCreatedBy")
+  marketingComments             MarketingComment[]
+  marketingCampaignsResponsavel MarketingCampaign[] @relation("MarketingCampaignResponsavel")
+  marketingCampaignsCreated     MarketingCampaign[] @relation("MarketingCampaignCreatedBy")
+  marketingFiles                MarketingFile[]
+  marketingIdeas                MarketingIdea[]
+  goals                         Goal[]
+  vaultEntries                  VaultEntry[]
+  vaultAccess                   VaultAccessLog[]
+  courses                       Course[]
+  files                         FileItem[]
+  products                      Product[]
+  occurrences                   Occurrence[]        @relation("OccurrenceCreatedBy")
+  payables                      Payable[]
+  receivables                   Receivable[]
+  cashMovements                 CashMovement[]
+  recurringTemplates            RecurringTemplate[]
 }
 
 model UserPermission {
@@ -83,20 +90,25 @@ model UserPermission {
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  name      String
-  logo      String?
-  color     String   @default("#2952E3")
-  active    Boolean  @default(true)
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  key            String   @unique
+  name           String
+  logo           String?
+  color          String   @default("#2952E3")
+  active         Boolean  @default(true)
+  order          Int      @default(0)
+  driveFolderUrl String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   userAccess         UserEmpresaAccess[]
   usersDefault       User[]              @relation("UserDefaultEmpresa")
   salesEntries       SalesEntry[]
   marketingEntries   MarketingEntry[]
+  marketingTasks     MarketingTask[]
+  marketingCampaigns MarketingCampaign[]
+  marketingFiles     MarketingFile[]
+  marketingIdeas     MarketingIdea[]
   goals              Goal[]
   employees          Employee[]
   products           Product[]
@@ -224,6 +236,143 @@ model MarketingEntry {
   createdBy           User     @relation(fields: [createdById], references: [id])
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// MARKETING OS — calendário de conteúdo, tarefas (kanban), campanhas,
+// biblioteca de arquivos e banco de ideias
+// ---------------------------------------------------------------------------
+
+enum MarketingStatus {
+  IDEIA
+  A_PRODUZIR
+  EM_PRODUCAO
+  EM_EDICAO
+  EM_ANALISE
+  AGENDADO
+  PUBLICADO
+  RESULTADOS
+}
+
+enum MarketingPriority {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum MarketingCampaignStatus {
+  PLANEJADA
+  EM_ANDAMENTO
+  PAUSADA
+  CONCLUIDA
+}
+
+enum MarketingIdeaStatus {
+  NOVA
+  EM_AVALIACAO
+  APROVADA
+  DESCARTADA
+}
+
+model MarketingTask {
+  id               String             @id @default(cuid())
+  empresaId        String
+  empresa          Empresa            @relation(fields: [empresaId], references: [id])
+  title            String
+  description      String?
+  objetivo         String?
+  category         String?
+  socialNetwork    String?
+  format           String?
+  status           MarketingStatus    @default(A_PRODUZIR)
+  priority         MarketingPriority  @default(MEDIA)
+  date             DateTime?
+  time             String?
+  responsavelId    String?
+  responsavel      User?              @relation("MarketingTaskResponsavel", fields: [responsavelId], references: [id])
+  checklist        String?
+  tags             String?
+  estimatedMinutes Int?
+  actualMinutes    Int?
+  recurrenceRule   String?
+  campaignId       String?
+  campaign         MarketingCampaign? @relation(fields: [campaignId], references: [id])
+  order            Int                @default(0)
+  createdById      String
+  createdBy        User               @relation("MarketingTaskCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  comments MarketingComment[]
+  files    MarketingFile[]
+}
+
+model MarketingComment {
+  id        String        @id @default(cuid())
+  taskId    String
+  task      MarketingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User          @relation(fields: [authorId], references: [id])
+  text      String
+  createdAt DateTime      @default(now())
+}
+
+model MarketingCampaign {
+  id            String                  @id @default(cuid())
+  empresaId     String
+  empresa       Empresa                 @relation(fields: [empresaId], references: [id])
+  name          String
+  objective     String?
+  startDate     DateTime
+  endDate       DateTime
+  budget        Float                   @default(0)
+  investimento  Float                   @default(0)
+  retorno       Float                   @default(0)
+  responsavelId String?
+  responsavel   User?                   @relation("MarketingCampaignResponsavel", fields: [responsavelId], references: [id])
+  status        MarketingCampaignStatus @default(PLANEJADA)
+  resultados    String?
+  createdById   String
+  createdBy     User                    @relation("MarketingCampaignCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  tasks MarketingTask[]
+}
+
+model MarketingFile {
+  id           String         @id @default(cuid())
+  empresaId    String
+  empresa      Empresa        @relation(fields: [empresaId], references: [id])
+  name         String
+  category     String         @default("Artes")
+  fileUrl      String
+  mimeType     String?
+  sizeBytes    Int?
+  tags         String?
+  taskId       String?
+  task         MarketingTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  uploadedById String
+  uploadedBy   User           @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime       @default(now())
+}
+
+model MarketingIdea {
+  id          String              @id @default(cuid())
+  empresaId   String
+  empresa     Empresa             @relation(fields: [empresaId], references: [id])
+  title       String
+  description String?
+  references  String?
+  links       String?
+  category    String?
+  tags        String?
+  status      MarketingIdeaStatus @default(NOVA)
+  createdById String
+  createdBy   User                @relation(fields: [createdById], references: [id])
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 }
 
 // ---------------------------------------------------------------------------
