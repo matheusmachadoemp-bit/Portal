@@ -76,7 +76,7 @@ export function CoursesClient({
 
   return (
     <div className="space-y-6">
-      <UniversityTabs />
+      <UniversityTabs isAdmin={isAdmin} />
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">

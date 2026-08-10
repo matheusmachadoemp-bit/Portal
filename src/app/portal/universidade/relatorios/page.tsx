@@ -1,7 +1,9 @@
+import { auth } from "@/auth";
 import { PageContainer } from "@/components/page-container";
 import { UniversityTabs } from "../university-tabs";
 import { Section } from "@/components/ui/stat-card";
 import { Download } from "lucide-react";
+import { canManageUsers } from "@/lib/permissions";
 
 const REPORTS = [
   { type: "treinamentos", label: "Treinamentos realizados e pendências", desc: "Status, progresso e datas de cada matrícula por colaborador." },
@@ -9,11 +11,13 @@ const REPORTS = [
   { type: "ranking", label: "Ranking de XP", desc: "Pontuação total acumulada por colaborador." },
 ];
 
-export default function RelatoriosPage() {
+export default async function RelatoriosPage() {
+  const session = await auth();
+  const isAdmin = session ? canManageUsers(session.user.role) : false;
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Relatórios">
       <div className="space-y-6">
-        <UniversityTabs />
+        <UniversityTabs isAdmin={isAdmin} />
         <Section title="Exportar dados (CSV)">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {REPORTS.map((r) => (

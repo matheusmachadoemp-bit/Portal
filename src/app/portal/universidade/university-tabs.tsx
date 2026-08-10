@@ -16,11 +16,14 @@ const TABS = [
   { href: "/portal/universidade/relatorios", label: "Relatórios" },
 ];
 
-export function UniversityTabs() {
+const GESTOR_TAB = { href: "/portal/universidade/gestor", label: "Painel do Gestor" };
+
+export function UniversityTabs({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
+  const tabs = isAdmin ? [...TABS, GESTOR_TAB] : TABS;
   return (
     <div className="flex gap-2 flex-wrap">
-      {TABS.map((t) => (
+      {tabs.map((t) => (
         <Link
           key={t.href}
           href={t.href}

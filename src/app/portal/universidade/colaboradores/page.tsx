@@ -46,7 +46,7 @@ export default async function ColaboradoresPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Colaboradores">
       <div className="space-y-6">
-        <UniversityTabs />
+        <UniversityTabs isAdmin={isAdmin} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {profiles.map((p) => (

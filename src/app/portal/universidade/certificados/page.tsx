@@ -23,7 +23,7 @@ export default async function CertificadosPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Certificados">
       <div className="space-y-6">
-        <UniversityTabs />
+        <UniversityTabs isAdmin={isAdmin} />
 
         {certificates.length === 0 ? (
           <p className="text-sm text-nord-gray text-center py-8">Nenhum certificado emitido ainda.</p>

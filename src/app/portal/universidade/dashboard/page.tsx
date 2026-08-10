@@ -1,21 +1,41 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { PageContainer } from "@/components/page-container";
 import { DashboardClient } from "./dashboard-client";
-import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
+import { canManageUsers } from "@/lib/permissions";
+import { startOfMonth, endOfMonth, subMonths, subDays, format } from "date-fns";
+
+const OVERDUE_DAYS = 7;
 
 export default async function UniversidadeDashboardPage() {
+  const session = await auth();
   const now = new Date();
 
-  const [users, enrollments, certificates, moduleProgress, attempts, courses] = await Promise.all([
-    prisma.user.count({ where: { active: true } }),
-    prisma.trainingEnrollment.findMany({ include: { course: { select: { name: true } } } }),
-    prisma.trainingCertificate.count(),
-    prisma.trainingModuleProgress.findMany({ select: { watchedSeconds: true } }),
-    prisma.trainingAttempt.findMany({ select: { score: true } }),
-    prisma.trainingCourse.findMany({
-      select: { id: true, name: true, category: true, _count: { select: { enrollments: true } } },
-    }),
-  ]);
+  const [users, enrollments, certificates, moduleProgress, attempts, courses, overdueEnrollments, xpEventsThisMonth] =
+    await Promise.all([
+      prisma.user.count({ where: { active: true } }),
+      prisma.trainingEnrollment.findMany({ include: { course: { select: { name: true } } } }),
+      prisma.trainingCertificate.count(),
+      prisma.trainingModuleProgress.findMany({ select: { watchedSeconds: true } }),
+      prisma.trainingAttempt.findMany({ select: { score: true } }),
+      prisma.trainingCourse.findMany({
+        select: { id: true, name: true, category: true, _count: { select: { enrollments: true } } },
+      }),
+      prisma.trainingEnrollment.findMany({
+        where: {
+          status: { not: "CONCLUIDO" },
+          createdAt: { lte: subDays(now, OVERDUE_DAYS) },
+          course: { mandatory: true },
+        },
+        select: { id: true },
+      }),
+      prisma.trainingXpEvent.findMany({
+        where: { createdAt: { gte: startOfMonth(now) } },
+        include: { user: { select: { name: true } } },
+      }),
+    ]);
+
+  const pendingAssessments = await prisma.trainingAttempt.count({ where: { passed: false } });
 
   const trainedUserIds = new Set(enrollments.filter((e) => e.status === "CONCLUIDO").map((e) => e.userId));
   const concluidos = enrollments.filter((e) => e.status === "CONCLUIDO").length;
@@ -47,9 +67,30 @@ export default async function UniversidadeDashboardPage() {
     monthlyEvolution.push({ month: format(monthDate, "MM/yyyy"), concluidos: count });
   }
 
+  const xpByUser = new Map<string, { name: string; xp: number }>();
+  for (const ev of xpEventsThisMonth) {
+    const cur = xpByUser.get(ev.userId) ?? { name: ev.user.name, xp: 0 };
+    cur.xp += ev.amount;
+    xpByUser.set(ev.userId, cur);
+  }
+  const topPerformer = [...xpByUser.values()].sort((a, b) => b.xp - a.xp)[0] ?? null;
+
+  const enrollmentsByUser = new Map<string, number>();
+  for (const e of enrollments) {
+    if (e.status === "CONCLUIDO") enrollmentsByUser.set(e.userId, (enrollmentsByUser.get(e.userId) ?? 0) + 1);
+  }
+  let mostCoursesUser: { userId: string; count: number } | null = null;
+  for (const [userId, count] of enrollmentsByUser) {
+    if (!mostCoursesUser || count > mostCoursesUser.count) mostCoursesUser = { userId, count };
+  }
+  const mostCoursesUserName = mostCoursesUser
+    ? (await prisma.user.findUnique({ where: { id: mostCoursesUser.userId }, select: { name: true } }))?.name ?? null
+    : null;
+
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Treinamento corporativo e videoaulas">
       <DashboardClient
+        isAdmin={session ? canManageUsers(session.user.role) : false}
         colaboradoresCadastrados={users}
         colaboradoresTreinados={trainedUserIds.size}
         cursosConcluidos={concluidos}
@@ -61,6 +102,11 @@ export default async function UniversidadeDashboardPage() {
         topCourses={topCourses}
         byCategory={byCategory}
         monthlyEvolution={monthlyEvolution}
+        atrasados={overdueEnrollments.length}
+        avaliacoesPendentes={pendingAssessments}
+        topPerformer={topPerformer}
+        mostCoursesUserName={mostCoursesUserName}
+        mostCoursesCount={mostCoursesUser?.count ?? 0}
       />
     </PageContainer>
   );

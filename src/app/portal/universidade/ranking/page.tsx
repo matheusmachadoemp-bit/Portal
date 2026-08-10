@@ -1,11 +1,15 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { PageContainer } from "@/components/page-container";
 import { UniversityTabs } from "../university-tabs";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { levelForXp } from "@/lib/university";
+import { canManageUsers } from "@/lib/permissions";
 import { Trophy, Medal } from "lucide-react";
 
 export default async function RankingPage() {
+  const session = await auth();
+  const isAdmin = session ? canManageUsers(session.user.role) : false;
   const [xpByUser, certificatesByUser, hoursByUser] = await Promise.all([
     prisma.trainingXpEvent.groupBy({ by: ["userId"], _sum: { amount: true } }),
     prisma.trainingCertificate.groupBy({ by: ["userId"], _count: { id: true } }),
@@ -39,12 +43,45 @@ export default async function RankingPage() {
     .sort((a, b) => b.xp - a.xp);
 
   const top10 = ranking.slice(0, 10);
+  const top3 = top10.slice(0, 3);
   const medalColors = ["#eab308", "#94a3b8", "#b45309"];
+  const podiumOrder = top3.length === 3 ? [top3[1], top3[0], top3[2]] : top3;
+  const podiumHeight = ["h-24", "h-32", "h-20"];
 
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Ranking">
       <div className="space-y-6">
-        <UniversityTabs />
+        <UniversityTabs isAdmin={isAdmin} />
+
+        {top3.length > 0 && (
+          <Section title="Pódio do mês">
+            <div className="flex items-end justify-center gap-4 pt-4">
+              {podiumOrder.map((r) => {
+                const originalIdx = top3.findIndex((t) => t.userId === r.userId);
+                return (
+                  <div key={r.userId} className="flex flex-col items-center">
+                    <div
+                      className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-semibold mb-2 border-2"
+                      style={{ borderColor: medalColors[originalIdx], backgroundColor: `${medalColors[originalIdx]}22` }}
+                    >
+                      {r.name.charAt(0).toUpperCase()}
+                    </div>
+                    <p className="text-white text-xs font-medium text-center max-w-[100px] truncate">{r.name}</p>
+                    <p className="text-[11px] text-nord-gray mb-2">{r.xp} XP</p>
+                    <div
+                      className={`w-20 ${podiumHeight[originalIdx]} rounded-t-lg flex items-start justify-center pt-1.5`}
+                      style={{ backgroundColor: `${medalColors[originalIdx]}33` }}
+                    >
+                      <span className="text-sm font-bold" style={{ color: medalColors[originalIdx] }}>
+                        {originalIdx + 1}º
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
+        )}
 
         <Section title="Top 10 colaboradores — experiência (XP)">
           {top10.length === 0 ? (

@@ -18,7 +18,7 @@ type LibraryItem = {
 
 const isImage = (url: string) => /\.(png|jpe?g|webp|gif)$/i.test(url);
 
-export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] }) {
+export function LibraryClient({ initialItems, isAdmin }: { initialItems: LibraryItem[]; isAdmin: boolean }) {
   const [items, setItems] = useState(initialItems);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -85,7 +85,7 @@ export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] })
 
   return (
     <div className="space-y-6">
-      <UniversityTabs />
+      <UniversityTabs isAdmin={isAdmin} />
 
       <div className="flex items-center gap-3 flex-wrap justify-between">
         <div className="relative flex-1 min-w-[220px] max-w-md">

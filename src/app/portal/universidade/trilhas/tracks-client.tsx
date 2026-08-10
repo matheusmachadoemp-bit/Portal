@@ -113,7 +113,7 @@ export function TracksClient({
 
   return (
     <div className="space-y-6">
-      <UniversityTabs />
+      <UniversityTabs isAdmin={isAdmin} />
 
       {isAdmin && (
         <div className="flex justify-end">
