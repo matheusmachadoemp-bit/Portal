@@ -54,11 +54,11 @@ model User {
   auditLogs                     AuditLog[]
   salesEntries                  SalesEntry[]
   marketingEntries              MarketingEntry[]
-  marketingTasksResponsavel     MarketingTask[]     @relation("MarketingTaskResponsavel")
-  marketingTasksCreated         MarketingTask[]     @relation("MarketingTaskCreatedBy")
+  marketingTasksResponsavel     MarketingTask[]       @relation("MarketingTaskResponsavel")
+  marketingTasksCreated         MarketingTask[]       @relation("MarketingTaskCreatedBy")
   marketingComments             MarketingComment[]
-  marketingCampaignsResponsavel MarketingCampaign[] @relation("MarketingCampaignResponsavel")
-  marketingCampaignsCreated     MarketingCampaign[] @relation("MarketingCampaignCreatedBy")
+  marketingCampaignsResponsavel MarketingCampaign[]   @relation("MarketingCampaignResponsavel")
+  marketingCampaignsCreated     MarketingCampaign[]   @relation("MarketingCampaignCreatedBy")
   marketingFiles                MarketingFile[]
   marketingIdeas                MarketingIdea[]
   goals                         Goal[]
@@ -67,11 +67,18 @@ model User {
   courses                       Course[]
   files                         FileItem[]
   products                      Product[]
-  occurrences                   Occurrence[]        @relation("OccurrenceCreatedBy")
+  occurrences                   Occurrence[]          @relation("OccurrenceCreatedBy")
   payables                      Payable[]
   receivables                   Receivable[]
   cashMovements                 CashMovement[]
   recurringTemplates            RecurringTemplate[]
+  trainingCoursesCreated        TrainingCourse[]
+  trainingEnrollments           TrainingEnrollment[]
+  trainingAttempts              TrainingAttempt[]
+  trainingCertificates          TrainingCertificate[]
+  trainingBadges                TrainingUserBadge[]
+  trainingXpEvents              TrainingXpEvent[]
+  trainingLibraryItems          TrainingLibraryItem[]
 }
 
 model UserPermission {
@@ -102,7 +109,7 @@ model Empresa {
   updatedAt      DateTime @updatedAt
 
   userAccess         UserEmpresaAccess[]
-  usersDefault       User[]              @relation("UserDefaultEmpresa")
+  usersDefault       User[]                @relation("UserDefaultEmpresa")
   salesEntries       SalesEntry[]
   marketingEntries   MarketingEntry[]
   marketingTasks     MarketingTask[]
@@ -119,6 +126,9 @@ model Empresa {
   cashMovements      CashMovement[]
   recurringTemplates RecurringTemplate[]
   auditLogs          AuditLog[]
+  trainingTracks     TrainingTrack[]
+  trainingCourses    TrainingCourse[]
+  trainingLibrary    TrainingLibraryItem[]
 }
 
 model UserEmpresaAccess {
@@ -841,6 +851,257 @@ model CashMovement {
   createdById   String
   createdBy     User             @relation(fields: [createdById], references: [id])
   createdAt     DateTime         @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// UNIVERSIDADE GRUPO NORD — treinamentos, trilhas, videoaulas, avaliações,
+// certificados, gamificação e biblioteca
+// ---------------------------------------------------------------------------
+
+enum CourseStatus {
+  RASCUNHO
+  PUBLICADO
+  ARQUIVADO
+}
+
+enum ModuleType {
+  VIDEO
+  PDF
+  CHECKLIST
+  LINK
+}
+
+enum EnrollmentStatus {
+  NAO_INICIADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  REPROVADO
+}
+
+enum QuestionType {
+  MULTIPLA_ESCOLHA
+  VERDADEIRO_FALSO
+  DISSERTATIVA
+}
+
+model TrainingTrack {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  cargo       String?
+  empresaId   String?
+  empresa     Empresa? @relation(fields: [empresaId], references: [id])
+  description String?
+  icon        String   @default("GraduationCap")
+  color       String   @default("#2952E3")
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  courses TrainingTrackCourse[]
+}
+
+model TrainingCourse {
+  id           String       @id @default(cuid())
+  name         String
+  slug         String       @unique
+  category     String?
+  description  String?
+  cargo        String?
+  empresaId    String?
+  empresa      Empresa?     @relation(fields: [empresaId], references: [id])
+  imageUrl     String?
+  instructor   String?
+  cargaHoraria Int          @default(0)
+  status       CourseStatus @default(RASCUNHO)
+  mandatory    Boolean      @default(false)
+  version      Int          @default(1)
+  order        Int          @default(0)
+  createdById  String
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  modules              TrainingModule[]
+  tracks               TrainingTrackCourse[]
+  enrollments          TrainingEnrollment[]
+  quiz                 TrainingQuiz?
+  trainingCertificates TrainingCertificate[]
+}
+
+model TrainingTrackCourse {
+  id       String         @id @default(cuid())
+  trackId  String
+  track    TrainingTrack  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  courseId String
+  course   TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order    Int            @default(0)
+
+  @@unique([trackId, courseId])
+}
+
+model TrainingModule {
+  id              String         @id @default(cuid())
+  courseId        String
+  course          TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title           String
+  type            ModuleType     @default(VIDEO)
+  videoUrl        String?
+  durationSeconds Int            @default(0)
+  pdfUrl          String?
+  content         String?
+  order           Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  progress TrainingModuleProgress[]
+}
+
+model TrainingEnrollment {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  courseId        String
+  course          TrainingCourse   @relation(fields: [courseId], references: [id])
+  status          EnrollmentStatus @default(NAO_INICIADO)
+  progressPercent Int              @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  moduleProgress TrainingModuleProgress[]
+  attempts       TrainingAttempt[]
+  certificate    TrainingCertificate?
+
+  @@unique([userId, courseId])
+}
+
+model TrainingModuleProgress {
+  id             String             @id @default(cuid())
+  enrollmentId   String
+  enrollment     TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  moduleId       String
+  module         TrainingModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  watchedSeconds Int                @default(0)
+  percentWatched Int                @default(0)
+  completed      Boolean            @default(false)
+  playCount      Int                @default(0)
+  lastDevice     String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  lastAccessAt   DateTime           @default(now())
+
+  @@unique([enrollmentId, moduleId])
+}
+
+model TrainingQuiz {
+  id               String         @id @default(cuid())
+  courseId         String         @unique
+  course           TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  minScore         Int            @default(70)
+  maxAttempts      Int            @default(3)
+  timeLimitMinutes Int?
+
+  questions TrainingQuestion[]
+  attempts  TrainingAttempt[]
+}
+
+model TrainingQuestion {
+  id     String       @id @default(cuid())
+  quizId String
+  quiz   TrainingQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text   String
+  type   QuestionType @default(MULTIPLA_ESCOLHA)
+  order  Int          @default(0)
+
+  options TrainingQuestionOption[]
+}
+
+model TrainingQuestionOption {
+  id         String           @id @default(cuid())
+  questionId String
+  question   TrainingQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  correct    Boolean          @default(false)
+  order      Int              @default(0)
+}
+
+model TrainingAttempt {
+  id            String             @id @default(cuid())
+  quizId        String
+  quiz          TrainingQuiz       @relation(fields: [quizId], references: [id])
+  enrollmentId  String
+  enrollment    TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User               @relation(fields: [userId], references: [id])
+  score         Int                @default(0)
+  passed        Boolean            @default(false)
+  answers       String?
+  attemptNumber Int                @default(1)
+  startedAt     DateTime           @default(now())
+  submittedAt   DateTime?
+}
+
+model TrainingCertificate {
+  id           String             @id @default(cuid())
+  code         String             @unique
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  courseId     String
+  course       TrainingCourse     @relation(fields: [courseId], references: [id])
+  enrollmentId String             @unique
+  enrollment   TrainingEnrollment @relation(fields: [enrollmentId], references: [id])
+  cargaHoraria Int                @default(0)
+  issuedAt     DateTime           @default(now())
+}
+
+model TrainingBadge {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  icon        String   @default("Award")
+  color       String   @default("#eab308")
+  createdAt   DateTime @default(now())
+
+  users TrainingUserBadge[]
+}
+
+model TrainingUserBadge {
+  id       String        @id @default(cuid())
+  userId   String
+  user     User          @relation(fields: [userId], references: [id])
+  badgeId  String
+  badge    TrainingBadge @relation(fields: [badgeId], references: [id])
+  earnedAt DateTime      @default(now())
+
+  @@unique([userId, badgeId])
+}
+
+model TrainingXpEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+}
+
+model TrainingLibraryItem {
+  id           String   @id @default(cuid())
+  name         String
+  category     String   @default("Documentos")
+  fileUrl      String
+  mimeType     String?
+  sizeBytes    Int?
+  tags         String?
+  empresaId    String?
+  empresa      Empresa? @relation(fields: [empresaId], references: [id])
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
 }
 
 // ---------------------------------------------------------------------------

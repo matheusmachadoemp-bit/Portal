@@ -4,6 +4,7 @@ export const MODULES = [
   { key: "inicio", label: "Início" },
   { key: "vendas", label: "Vendas" },
   { key: "marketing", label: "Marketing" },
+  { key: "universidade", label: "Universidade Grupo Nord" },
   { key: "metas", label: "Metas" },
   { key: "rh", label: "RH" },
   { key: "financeiro", label: "Financeiro" },
@@ -20,7 +21,7 @@ export function isAdmin(role: Role) {
   return role === "ADMINISTRADOR";
 }
 
-export function canManageUsers(role: Role) {
+export function canManageUsers(role: Role | string) {
   return role === "ADMINISTRADOR" || role === "GESTOR";
 }
 
