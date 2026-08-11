@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, Paperclip, Award, Clock } from "lucide-react";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber, pct } from "@/lib/calc";
+import { GOAL_STATUS_LABEL, GOAL_STATUS_TONE } from "@/lib/goals";
 import { differenceInCalendarDays, format } from "date-fns";
 
 type GoalDTO = {
@@ -26,22 +27,6 @@ type GoalDTO = {
   attachments: { id: string; fileName: string; fileUrl: string }[];
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  NAO_INICIADA: "Não iniciada",
-  EM_ANDAMENTO: "Em andamento",
-  EM_RISCO: "Em risco",
-  CONCLUIDA: "Concluída",
-  NAO_ATINGIDA: "Não atingida",
-};
-
-const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
-  NAO_INICIADA: "default",
-  EM_ANDAMENTO: "info",
-  EM_RISCO: "warning",
-  CONCLUIDA: "success",
-  NAO_ATINGIDA: "danger",
-};
-
 const emptyForm = {
   name: "",
   responsavel: "",
@@ -53,7 +38,6 @@ const emptyForm = {
   startDate: format(new Date(), "yyyy-MM-dd"),
   endDate: format(new Date(), "yyyy-MM-dd"),
   bonificacao: "",
-  status: "NAO_INICIADA",
   observacoes: "",
   planoDeAcao: "",
 };
@@ -109,7 +93,6 @@ export function MetasClient({
       startDate: format(new Date(g.startDate), "yyyy-MM-dd"),
       endDate: format(new Date(g.endDate), "yyyy-MM-dd"),
       bonificacao: g.bonificacao ?? "",
-      status: g.status,
       observacoes: g.observacoes ?? "",
       planoDeAcao: g.planoDeAcao ?? "",
     });
@@ -179,7 +162,12 @@ export function MetasClient({
           const percent = pct(g.valorRealizado, g.valorMeta);
           const daysLeft = differenceInCalendarDays(new Date(g.endDate), new Date());
           return (
-            <div key={g.id} className="nord-card p-4 flex flex-col gap-3">
+            <div
+              key={g.id}
+              className={`nord-card p-4 flex flex-col gap-3 ${
+                g.status === "EM_RISCO" ? "border-amber-500/50 ring-1 ring-amber-500/20" : ""
+              }`}
+            >
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -188,7 +176,7 @@ export function MetasClient({
                   </div>
                   <p className="text-xs text-nord-gray">{g.responsavel}</p>
                 </div>
-                <Badge tone={STATUS_TONE[g.status]}>{STATUS_LABEL[g.status]}</Badge>
+                <Badge tone={GOAL_STATUS_TONE[g.status]}>{GOAL_STATUS_LABEL[g.status]}</Badge>
               </div>
 
               <div>
@@ -278,15 +266,6 @@ export function MetasClient({
           </Field>
           <Field label="Unidade de medida">
             <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" />
-          </Field>
-          <Field label="Status">
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
-              {Object.entries(STATUS_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
           </Field>
           <Field label="Data inicial">
             <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="input" />

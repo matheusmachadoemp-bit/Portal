@@ -44,6 +44,9 @@ const CATEGORIES = [
       { key: "salao", name: "Metas do Salão", icon: "Utensils" },
       { key: "cozinha", name: "Metas da Cozinha", icon: "ChefHat" },
       { key: "delivery", name: "Metas do Delivery", icon: "Bike" },
+      { key: "marketing", name: "Metas de Marketing", icon: "Megaphone" },
+      { key: "administrativo", name: "Metas Administrativas", icon: "FileText" },
+      { key: "acumulada", name: "Venda Acumulada", icon: "Trophy" },
     ],
   },
   {
@@ -432,6 +435,39 @@ async function main() {
           gestorResponsavel: "Gerente Zarki",
         },
       }),
+      prisma.employee.create({
+        data: {
+          empresaId: nordPizza.id,
+          name: "João Pereira",
+          cargo: "Garçom",
+          setor: "Salão",
+          admissionDate: new Date(2022, 3, 5),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Nord",
+        },
+      }),
+      prisma.employee.create({
+        data: {
+          empresaId: nordPizza.id,
+          name: "Pedro Lima",
+          cargo: "Garçom",
+          setor: "Salão",
+          admissionDate: new Date(2023, 7, 18),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Nord",
+        },
+      }),
+      prisma.employee.create({
+        data: {
+          empresaId: nordPizza.id,
+          name: "Carlos Rocha",
+          cargo: "Garçom",
+          setor: "Salão",
+          admissionDate: new Date(2024, 0, 9),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Nord",
+        },
+      }),
     ]);
 
     await prisma.occurrence.create({
@@ -455,6 +491,18 @@ async function main() {
         status: "NAO_JUSTIFICADA",
         createdById: admin.id,
       },
+    });
+
+    const joao = employees[5];
+    const pedro = employees[6];
+    const carlos = employees[7];
+    await prisma.waiterSaleEntry.createMany({
+      data: [
+        { employeeId: joao.id, empresaId: nordPizza.id, amount: 285320, date: new Date(2025, 5, 30), createdById: admin.id },
+        { employeeId: joao.id, empresaId: nordPizza.id, amount: 200000, date: new Date(today.getFullYear(), today.getMonth(), 1), createdById: admin.id },
+        { employeeId: pedro.id, empresaId: nordPizza.id, amount: 410250, date: new Date(today.getFullYear(), today.getMonth(), 1), createdById: admin.id },
+        { employeeId: carlos.id, empresaId: nordPizza.id, amount: 325600, date: new Date(today.getFullYear(), today.getMonth(), 1), createdById: admin.id },
+      ],
     });
   }
 

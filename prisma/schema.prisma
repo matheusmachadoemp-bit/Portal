@@ -62,6 +62,7 @@ model User {
   marketingFiles                MarketingFile[]
   marketingIdeas                MarketingIdea[]
   goals                         Goal[]
+  waiterSalesCreated            WaiterSaleEntry[]     @relation("WaiterSaleCreatedBy")
   vaultEntries                  VaultEntry[]
   vaultAccess                   VaultAccessLog[]
   courses                       Course[]
@@ -118,6 +119,7 @@ model Empresa {
   marketingIdeas     MarketingIdea[]
   goals              Goal[]
   employees          Employee[]
+  waiterSales        WaiterSaleEntry[]
   products           Product[]
   ingredients        Ingredient[]
   bankAccounts       BankAccount[]
@@ -394,6 +396,8 @@ enum GoalCategory {
   SALAO
   COZINHA
   DELIVERY
+  MARKETING
+  ADMINISTRATIVO
 }
 
 enum GoalStatus {
@@ -457,6 +461,7 @@ model Employee {
   name              String
   cargo             String
   setor             String
+  photoUrl          String?
   admissionDate     DateTime
   terminationDate   DateTime?
   status            EmployeeStatus @default(ATIVO)
@@ -467,6 +472,27 @@ model Employee {
   updatedAt         DateTime       @updatedAt
 
   occurrences Occurrence[]
+  waiterSales WaiterSaleEntry[]
+}
+
+// ---------------------------------------------------------------------------
+// VENDA ACUMULADA (garçons)
+// ---------------------------------------------------------------------------
+
+model WaiterSaleEntry {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  amount      Float
+  date        DateTime
+  note        String?
+  createdById String
+  createdBy   User     @relation("WaiterSaleCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
 }
 
 enum OccurrenceType {
