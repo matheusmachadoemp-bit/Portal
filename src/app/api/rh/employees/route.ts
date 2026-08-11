@@ -13,6 +13,7 @@ export async function GET() {
   const employees = await prisma.employee.findMany({
     where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: { name: "asc" },
+    include: { empresa: { select: { name: true } } },
   });
   return NextResponse.json({ employees });
 }
@@ -41,7 +42,16 @@ export async function POST(req: Request) {
       status: body.status || "ATIVO",
       phone: body.phone || null,
       email: body.email || null,
+      cpf: body.cpf || null,
+      birthDate: body.birthDate ? new Date(body.birthDate) : null,
+      escala: body.escala || null,
       gestorResponsavel: body.gestorResponsavel || null,
+      supervisorResponsavel: body.supervisorResponsavel || null,
+      salarioFixo: body.salarioFixo ? Number(body.salarioFixo) : null,
+      lastEvaluationDate: body.lastEvaluationDate ? new Date(body.lastEvaluationDate) : null,
+      lastEvaluationNote: body.lastEvaluationNote || null,
+      lastTrainingDate: body.lastTrainingDate ? new Date(body.lastTrainingDate) : null,
+      lastTrainingName: body.lastTrainingName || null,
     },
   });
 

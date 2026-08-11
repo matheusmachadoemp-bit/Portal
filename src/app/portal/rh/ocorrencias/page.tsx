@@ -11,15 +11,23 @@ export default async function OcorrenciasPage() {
     prisma.occurrence.findMany({
       where: { employee: { empresaId: { in: empresaIds } } },
       orderBy: { date: "desc" },
-      include: { employee: { select: { id: true, name: true, setor: true } } },
+      include: {
+        employee: { select: { id: true, name: true, setor: true } },
+        createdBy: { select: { name: true } },
+      },
     }),
     prisma.employee.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
   ]);
 
-  const serialized = occurrences.map((o) => ({ ...o, date: o.date.toISOString() }));
+  const serialized = occurrences.map((o) => ({
+    ...o,
+    date: o.date.toISOString(),
+    prazo: o.prazo ? o.prazo.toISOString() : null,
+    createdAt: o.createdAt.toISOString(),
+  }));
 
   return (
-    <PageContainer title="RH" subtitle="Ocorrências: faltas, atrasos e atestados">
+    <PageContainer title="RH" subtitle="Ocorrências disciplinares e da rotina">
       <OcorrenciasClient
         initialOccurrences={serialized}
         employees={employees.map((e) => ({ id: e.id, name: e.name, setor: e.setor }))}

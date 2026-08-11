@@ -13,15 +13,15 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
-  const occurrences = await prisma.occurrence.findMany({
+  const documents = await prisma.employeeDocument.findMany({
     where: {
-      employee: { empresaId: { in: empresaIdsForContext(ctx) } },
+      empresaId: { in: empresaIdsForContext(ctx) },
       ...(employeeId ? { employeeId } : {}),
     },
-    orderBy: { date: "desc" },
-    include: { employee: { select: { name: true, setor: true } }, createdBy: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    include: { employee: { select: { name: true, setor: true } } },
   });
-  return NextResponse.json({ occurrences });
+  return NextResponse.json({ documents });
 }
 
 export async function POST(req: Request) {
@@ -42,23 +42,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Colaborador inválido para a loja ativa." }, { status: 400 });
   }
 
-  const occurrence = await prisma.occurrence.create({
+  const document = await prisma.employeeDocument.create({
     data: {
       employeeId: body.employeeId,
-      date: new Date(body.date),
-      type: body.type,
-      horarioPrevisto: body.horarioPrevisto || null,
-      horarioRealizado: body.horarioRealizado || null,
-      minutosAtraso: Number(body.minutosAtraso) || 0,
-      justificativa: body.justificativa || null,
-      medidasTomadas: body.medidasTomadas || null,
-      prazo: body.prazo ? new Date(body.prazo) : null,
-      anexoUrl: body.anexoUrl || null,
+      empresaId: empresa.id,
+      categoria: body.categoria,
+      nome: body.nome,
+      fileUrl: body.fileUrl,
+      mimeType: body.mimeType || null,
+      validade: body.validade ? new Date(body.validade) : null,
       observacao: body.observacao || null,
-      status: body.status || "PENDENTE",
       createdById: session.user.id,
     },
   });
 
-  return NextResponse.json({ occurrence });
+  return NextResponse.json({ document });
 }

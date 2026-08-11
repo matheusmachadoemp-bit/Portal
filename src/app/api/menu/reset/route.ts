@@ -16,7 +16,16 @@ const DEFAULT_ORDER = [
 
 const DEFAULT_SUB_ORDER: Record<string, string[]> = {
   metas: ["gerencia", "salao", "cozinha", "delivery"],
-  rh: ["colaboradores", "ocorrencias"],
+  rh: [
+    "colaboradores",
+    "financeiro",
+    "ponto-eletronico",
+    "ocorrencias",
+    "ferias",
+    "uniformes",
+    "documentos",
+    "dashboard",
+  ],
   administrativo: ["senhas", "cursos", "cartilhas", "logo", "arquivos"],
   "ficha-tecnica": [
     "pizzas-salgadas",

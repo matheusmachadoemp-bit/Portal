@@ -66,7 +66,13 @@ const CATEGORIES = [
     contentType: "rh",
     subs: [
       { key: "colaboradores", name: "Colaboradores", icon: "IdCard" },
+      { key: "financeiro", name: "Financeiro", icon: "DollarSign" },
+      { key: "ponto-eletronico", name: "Ponto Eletrônico", icon: "Clock" },
       { key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" },
+      { key: "ferias", name: "Férias", icon: "Palmtree" },
+      { key: "uniformes", name: "Uniformes", icon: "Shirt" },
+      { key: "documentos", name: "Documentos", icon: "FolderOpen" },
+      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
     ],
   },
   {
