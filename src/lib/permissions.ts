@@ -6,6 +6,7 @@ export const MODULES = [
   { key: "marketing", label: "Marketing" },
   { key: "universidade", label: "Universidade Grupo Nord" },
   { key: "metas", label: "Metas" },
+  { key: "estoque", label: "Estoque" },
   { key: "rh", label: "RH" },
   { key: "financeiro", label: "Financeiro" },
   { key: "administrativo", label: "Administrativo" },

@@ -28,6 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       percentualPerda: body.percentualPerda !== undefined ? Number(body.percentualPerda) : undefined,
       estoqueMinimo: body.estoqueMinimo !== undefined ? Number(body.estoqueMinimo) : undefined,
       estoqueAtual: body.estoqueAtual !== undefined ? Number(body.estoqueAtual) : undefined,
+      validade: body.validade !== undefined ? (body.validade ? new Date(body.validade) : null) : undefined,
       lastPurchaseDate: body.lastPurchaseDate ? new Date(body.lastPurchaseDate) : undefined,
       ...(priceChanged ? { priceHistory: { create: { price: Number(body.precoAtual) } } } : {}),
     },

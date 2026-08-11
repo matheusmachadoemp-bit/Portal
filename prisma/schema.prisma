@@ -63,6 +63,7 @@ model User {
   marketingIdeas                MarketingIdea[]
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]     @relation("WaiterSaleCreatedBy")
+  stockMovementsCreated         StockMovement[]       @relation("StockMovementCreatedBy")
   vaultEntries                  VaultEntry[]
   vaultAccess                   VaultAccessLog[]
   courses                       Course[]
@@ -123,6 +124,7 @@ model Empresa {
   waiterSales        WaiterSaleEntry[]
   products           Product[]
   ingredients        Ingredient[]
+  stockMovements     StockMovement[]
   bankAccounts       BankAccount[]
   payables           Payable[]
   receivables        Receivable[]
@@ -639,12 +641,14 @@ model Ingredient {
   percentualPerda     Float     @default(0)
   estoqueMinimo       Float     @default(0)
   estoqueAtual        Float     @default(0)
+  validade            DateTime?
   lastPurchaseDate    DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   priceHistory IngredientPriceHistory[]
   productLinks ProductIngredient[]
+  movements    StockMovement[]
 }
 
 model IngredientPriceHistory {
@@ -653,6 +657,32 @@ model IngredientPriceHistory {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
   price        Float
   createdAt    DateTime   @default(now())
+}
+
+enum StockMovementType {
+  ENTRADA
+  SAIDA
+  AJUSTE
+  PERDA
+  TRANSFERENCIA
+  INVENTARIO
+}
+
+model StockMovement {
+  id           String            @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  empresaId    String
+  empresa      Empresa           @relation(fields: [empresaId], references: [id])
+  type         StockMovementType
+  quantidade   Float
+  estoqueApos  Float
+  motivo       String?
+  createdById  String
+  createdBy    User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime          @default(now())
+
+  @@index([ingredientId])
 }
 
 model Product {

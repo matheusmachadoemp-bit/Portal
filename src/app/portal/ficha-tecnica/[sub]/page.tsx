@@ -33,6 +33,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
     const serialized = ingredients.map((i) => ({
       ...i,
       lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.toISOString() : null,
+      validade: i.validade ? i.validade.toISOString() : null,
       priceHistory: i.priceHistory.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
     }));
 

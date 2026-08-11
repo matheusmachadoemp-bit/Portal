@@ -120,6 +120,17 @@ const CATEGORIES = [
     subs: [],
   },
   { key: "usuarios", name: "Usuários", icon: "UserCog", order: 10, contentType: "usuarios", subs: [] },
+  {
+    key: "estoque",
+    name: "Estoque",
+    icon: "Boxes",
+    order: 11,
+    contentType: "estoque",
+    subs: [
+      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
+      { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
+    ],
+  },
 ];
 
 async function main() {
