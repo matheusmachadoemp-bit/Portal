@@ -29,7 +29,11 @@ export function PlayerClient({
   moduleProgress: ModuleProg[];
 }) {
   const router = useRouter();
-  const [activeModuleId, setActiveModuleId] = useState(course.modules[0]?.id ?? null);
+  const initialModuleId =
+    course.modules.find((m) => !moduleProgress.find((p) => p.moduleId === m.id)?.completed)?.id ??
+    course.modules[0]?.id ??
+    null;
+  const [activeModuleId, setActiveModuleId] = useState(initialModuleId);
   const [progressMap, setProgressMap] = useState(new Map(moduleProgress.map((p) => [p.moduleId, p])));
   const [showQuiz, setShowQuiz] = useState(false);
   const [quizResult, setQuizResult] = useState<{ score: number; passed: boolean } | null>(null);
