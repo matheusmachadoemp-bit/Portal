@@ -7,42 +7,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
-  const existing = await prisma.occurrence.findUnique({ where: { id }, include: { employee: true } });
+  const existing = await prisma.vacation.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
-  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.employee.empresaId))) {
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
   const body = await req.json();
 
-  const occurrence = await prisma.occurrence.update({
+  const vacation = await prisma.vacation.update({
     where: { id },
     data: {
-      date: body.date ? new Date(body.date) : undefined,
-      type: body.type ?? undefined,
-      horarioPrevisto: body.horarioPrevisto ?? undefined,
-      horarioRealizado: body.horarioRealizado ?? undefined,
-      minutosAtraso: body.minutosAtraso !== undefined ? Number(body.minutosAtraso) : undefined,
-      justificativa: body.justificativa ?? undefined,
-      medidasTomadas: body.medidasTomadas ?? undefined,
-      prazo: body.prazo ? new Date(body.prazo) : body.prazo === null ? null : undefined,
-      anexoUrl: body.anexoUrl ?? undefined,
-      observacao: body.observacao ?? undefined,
+      periodoAquisitivoInicio: body.periodoAquisitivoInicio ? new Date(body.periodoAquisitivoInicio) : undefined,
+      periodoAquisitivoFim: body.periodoAquisitivoFim ? new Date(body.periodoAquisitivoFim) : undefined,
+      diasDireito: body.diasDireito !== undefined ? Number(body.diasDireito) : undefined,
+      dataInicio: body.dataInicio !== undefined ? (body.dataInicio ? new Date(body.dataInicio) : null) : undefined,
+      dataFim: body.dataFim !== undefined ? (body.dataFim ? new Date(body.dataFim) : null) : undefined,
+      dias: body.dias !== undefined ? (body.dias ? Number(body.dias) : null) : undefined,
       status: body.status ?? undefined,
+      observacao: body.observacao ?? undefined,
     },
   });
 
-  return NextResponse.json({ occurrence });
+  return NextResponse.json({ vacation });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
-  const existing = await prisma.occurrence.findUnique({ where: { id }, include: { employee: true } });
+  const existing = await prisma.vacation.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
-  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.employee.empresaId))) {
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
-  await prisma.occurrence.delete({ where: { id } });
+  await prisma.vacation.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

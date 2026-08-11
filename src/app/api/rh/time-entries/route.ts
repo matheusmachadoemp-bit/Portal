@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { computeHorasTrabalhadas } from "@/lib/rh-helpers";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -13,15 +14,15 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
-  const occurrences = await prisma.occurrence.findMany({
+  const entries = await prisma.timeEntry.findMany({
     where: {
-      employee: { empresaId: { in: empresaIdsForContext(ctx) } },
+      empresaId: { in: empresaIdsForContext(ctx) },
       ...(employeeId ? { employeeId } : {}),
     },
     orderBy: { date: "desc" },
-    include: { employee: { select: { name: true, setor: true } }, createdBy: { select: { name: true } } },
+    include: { employee: { select: { name: true, setor: true } } },
   });
-  return NextResponse.json({ occurrences });
+  return NextResponse.json({ entries });
 }
 
 export async function POST(req: Request) {
@@ -42,23 +43,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Colaborador inválido para a loja ativa." }, { status: 400 });
   }
 
-  const occurrence = await prisma.occurrence.create({
-    data: {
+  const horasTrabalhadas = computeHorasTrabalhadas({
+    entrada: body.entrada,
+    saidaAlmoco: body.saidaAlmoco,
+    retornoAlmoco: body.retornoAlmoco,
+    saida: body.saida,
+  });
+
+  const entry = await prisma.timeEntry.upsert({
+    where: { employeeId_date: { employeeId: body.employeeId, date: new Date(body.date) } },
+    create: {
       employeeId: body.employeeId,
+      empresaId: empresa.id,
       date: new Date(body.date),
-      type: body.type,
-      horarioPrevisto: body.horarioPrevisto || null,
-      horarioRealizado: body.horarioRealizado || null,
-      minutosAtraso: Number(body.minutosAtraso) || 0,
-      justificativa: body.justificativa || null,
-      medidasTomadas: body.medidasTomadas || null,
-      prazo: body.prazo ? new Date(body.prazo) : null,
-      anexoUrl: body.anexoUrl || null,
-      observacao: body.observacao || null,
-      status: body.status || "PENDENTE",
-      createdById: session.user.id,
+      entrada: body.entrada || null,
+      saidaAlmoco: body.saidaAlmoco || null,
+      retornoAlmoco: body.retornoAlmoco || null,
+      saida: body.saida || null,
+      horasTrabalhadas,
+      atrasoMinutos: Number(body.atrasoMinutos) || 0,
+      falta: !!body.falta,
+    },
+    update: {
+      entrada: body.entrada || null,
+      saidaAlmoco: body.saidaAlmoco || null,
+      retornoAlmoco: body.retornoAlmoco || null,
+      saida: body.saida || null,
+      horasTrabalhadas,
+      atrasoMinutos: Number(body.atrasoMinutos) || 0,
+      falta: !!body.falta,
     },
   });
 
-  return NextResponse.json({ occurrence });
+  return NextResponse.json({ entry });
 }

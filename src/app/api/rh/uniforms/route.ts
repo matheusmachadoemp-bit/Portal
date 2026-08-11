@@ -13,15 +13,15 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
-  const occurrences = await prisma.occurrence.findMany({
+  const deliveries = await prisma.uniformDelivery.findMany({
     where: {
-      employee: { empresaId: { in: empresaIdsForContext(ctx) } },
+      empresaId: { in: empresaIdsForContext(ctx) },
       ...(employeeId ? { employeeId } : {}),
     },
-    orderBy: { date: "desc" },
-    include: { employee: { select: { name: true, setor: true } }, createdBy: { select: { name: true } } },
+    orderBy: { dataEntrega: "desc" },
+    include: { employee: { select: { name: true, setor: true } } },
   });
-  return NextResponse.json({ occurrences });
+  return NextResponse.json({ deliveries });
 }
 
 export async function POST(req: Request) {
@@ -42,23 +42,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Colaborador inválido para a loja ativa." }, { status: 400 });
   }
 
-  const occurrence = await prisma.occurrence.create({
+  const delivery = await prisma.uniformDelivery.create({
     data: {
       employeeId: body.employeeId,
-      date: new Date(body.date),
-      type: body.type,
-      horarioPrevisto: body.horarioPrevisto || null,
-      horarioRealizado: body.horarioRealizado || null,
-      minutosAtraso: Number(body.minutosAtraso) || 0,
-      justificativa: body.justificativa || null,
-      medidasTomadas: body.medidasTomadas || null,
-      prazo: body.prazo ? new Date(body.prazo) : null,
-      anexoUrl: body.anexoUrl || null,
+      empresaId: empresa.id,
+      item: body.item,
+      quantidade: Number(body.quantidade) || 1,
+      tamanho: body.tamanho || null,
+      dataEntrega: new Date(body.dataEntrega),
+      responsavel: body.responsavel || null,
+      status: body.status || "ENTREGUE",
       observacao: body.observacao || null,
-      status: body.status || "PENDENTE",
       createdById: session.user.id,
     },
   });
 
-  return NextResponse.json({ occurrence });
+  return NextResponse.json({ delivery });
 }

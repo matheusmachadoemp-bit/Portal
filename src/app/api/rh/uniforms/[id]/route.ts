@@ -7,42 +7,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
-  const existing = await prisma.occurrence.findUnique({ where: { id }, include: { employee: true } });
+  const existing = await prisma.uniformDelivery.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
-  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.employee.empresaId))) {
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
   const body = await req.json();
 
-  const occurrence = await prisma.occurrence.update({
+  const delivery = await prisma.uniformDelivery.update({
     where: { id },
     data: {
-      date: body.date ? new Date(body.date) : undefined,
-      type: body.type ?? undefined,
-      horarioPrevisto: body.horarioPrevisto ?? undefined,
-      horarioRealizado: body.horarioRealizado ?? undefined,
-      minutosAtraso: body.minutosAtraso !== undefined ? Number(body.minutosAtraso) : undefined,
-      justificativa: body.justificativa ?? undefined,
-      medidasTomadas: body.medidasTomadas ?? undefined,
-      prazo: body.prazo ? new Date(body.prazo) : body.prazo === null ? null : undefined,
-      anexoUrl: body.anexoUrl ?? undefined,
-      observacao: body.observacao ?? undefined,
+      item: body.item ?? undefined,
+      quantidade: body.quantidade !== undefined ? Number(body.quantidade) : undefined,
+      tamanho: body.tamanho ?? undefined,
+      dataEntrega: body.dataEntrega ? new Date(body.dataEntrega) : undefined,
+      responsavel: body.responsavel ?? undefined,
       status: body.status ?? undefined,
+      observacao: body.observacao ?? undefined,
     },
   });
 
-  return NextResponse.json({ occurrence });
+  return NextResponse.json({ delivery });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
-  const existing = await prisma.occurrence.findUnique({ where: { id }, include: { employee: true } });
+  const existing = await prisma.uniformDelivery.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
-  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.employee.empresaId))) {
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
-  await prisma.occurrence.delete({ where: { id } });
+  await prisma.uniformDelivery.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

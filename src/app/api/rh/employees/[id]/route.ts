@@ -25,7 +25,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       status: body.status ?? undefined,
       phone: body.phone ?? undefined,
       email: body.email ?? undefined,
+      cpf: body.cpf ?? undefined,
+      birthDate: body.birthDate !== undefined ? (body.birthDate ? new Date(body.birthDate) : null) : undefined,
+      escala: body.escala ?? undefined,
       gestorResponsavel: body.gestorResponsavel ?? undefined,
+      supervisorResponsavel: body.supervisorResponsavel ?? undefined,
+      salarioFixo: body.salarioFixo !== undefined ? (body.salarioFixo ? Number(body.salarioFixo) : null) : undefined,
+      lastEvaluationDate:
+        body.lastEvaluationDate !== undefined ? (body.lastEvaluationDate ? new Date(body.lastEvaluationDate) : null) : undefined,
+      lastEvaluationNote: body.lastEvaluationNote ?? undefined,
+      lastTrainingDate:
+        body.lastTrainingDate !== undefined ? (body.lastTrainingDate ? new Date(body.lastTrainingDate) : null) : undefined,
+      lastTrainingName: body.lastTrainingName ?? undefined,
     },
   });
 

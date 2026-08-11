@@ -11,7 +11,11 @@ export default async function ColaboradoresPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const [employees, occurrencesThisMonth] = await Promise.all([
-    prisma.employee.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
+    prisma.employee.findMany({
+      where: { empresaId: { in: empresaIds } },
+      orderBy: { name: "asc" },
+      include: { empresa: { select: { name: true } } },
+    }),
     prisma.occurrence.findMany({
       where: { date: { gte: monthStart }, employee: { empresaId: { in: empresaIds } } },
     }),
@@ -31,6 +35,9 @@ export default async function ColaboradoresPage() {
     ...e,
     admissionDate: e.admissionDate.toISOString(),
     terminationDate: e.terminationDate ? e.terminationDate.toISOString() : null,
+    birthDate: e.birthDate ? e.birthDate.toISOString() : null,
+    lastEvaluationDate: e.lastEvaluationDate ? e.lastEvaluationDate.toISOString() : null,
+    lastTrainingDate: e.lastTrainingDate ? e.lastTrainingDate.toISOString() : null,
   }));
 
   return (
@@ -42,6 +49,7 @@ export default async function ColaboradoresPage() {
         quadroMedio={quadroMedio}
         totalOcorrencias={occurrencesThisMonth.length}
         canCreate={ctx?.mode === "single"}
+        showLoja={ctx?.mode === "grupo"}
       />
     </PageContainer>
   );

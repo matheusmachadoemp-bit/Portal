@@ -56,23 +56,27 @@ model User {
   auditLogs                     AuditLog[]
   salesEntries                  SalesEntry[]
   marketingEntries              MarketingEntry[]
-  marketingTasksResponsavel     MarketingTask[]       @relation("MarketingTaskResponsavel")
-  marketingTasksCreated         MarketingTask[]       @relation("MarketingTaskCreatedBy")
+  marketingTasksResponsavel     MarketingTask[]        @relation("MarketingTaskResponsavel")
+  marketingTasksCreated         MarketingTask[]        @relation("MarketingTaskCreatedBy")
   marketingComments             MarketingComment[]
-  marketingCampaignsResponsavel MarketingCampaign[]   @relation("MarketingCampaignResponsavel")
-  marketingCampaignsCreated     MarketingCampaign[]   @relation("MarketingCampaignCreatedBy")
+  marketingCampaignsResponsavel MarketingCampaign[]    @relation("MarketingCampaignResponsavel")
+  marketingCampaignsCreated     MarketingCampaign[]    @relation("MarketingCampaignCreatedBy")
   marketingFiles                MarketingFile[]
   marketingIdeas                MarketingIdea[]
   goals                         Goal[]
-  waiterSalesCreated            WaiterSaleEntry[]     @relation("WaiterSaleCreatedBy")
-  stockMovementsCreated         StockMovement[]       @relation("StockMovementCreatedBy")
-  salesCreated                  Sale[]                @relation("SaleCreatedBy")
+  waiterSalesCreated            WaiterSaleEntry[]      @relation("WaiterSaleCreatedBy")
+  stockMovementsCreated         StockMovement[]        @relation("StockMovementCreatedBy")
+  salesCreated                  Sale[]                 @relation("SaleCreatedBy")
   vaultEntries                  VaultEntry[]
   vaultAccess                   VaultAccessLog[]
   courses                       Course[]
   files                         FileItem[]
   products                      Product[]
-  occurrences                   Occurrence[]          @relation("OccurrenceCreatedBy")
+  occurrences                   Occurrence[]           @relation("OccurrenceCreatedBy")
+  rhFinanceEntries              EmployeeFinanceEntry[] @relation("RhFinanceCreatedBy")
+  vacationsCreated              Vacation[]             @relation("VacationCreatedBy")
+  uniformDeliveriesCreated      UniformDelivery[]      @relation("UniformCreatedBy")
+  employeeDocumentsCreated      EmployeeDocument[]     @relation("EmployeeDocumentCreatedBy")
   payables                      Payable[]
   receivables                   Receivable[]
   cashMovements                 CashMovement[]
@@ -142,32 +146,37 @@ model Empresa {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  userAccess         UserEmpresaAccess[]
-  usersDefault       User[]                  @relation("UserDefaultEmpresa")
-  salesEntries       SalesEntry[]
-  marketingEntries   MarketingEntry[]
-  marketingTasks     MarketingTask[]
-  marketingCampaigns MarketingCampaign[]
-  marketingFiles     MarketingFile[]
-  marketingIdeas     MarketingIdea[]
-  goals              Goal[]
-  employees          Employee[]
-  waiterSales        WaiterSaleEntry[]
-  sales              Sale[]
-  clientes           Cliente[]
-  products           Product[]
-  ingredients        Ingredient[]
-  stockMovements     StockMovement[]
-  bankAccounts       BankAccount[]
-  payables           Payable[]
-  receivables        Receivable[]
-  cashMovements      CashMovement[]
-  recurringTemplates RecurringTemplate[]
-  auditLogs          AuditLog[]
-  trainingTracks     TrainingTrack[]
-  trainingCourses    TrainingCourse[]
-  trainingLibrary    TrainingLibraryItem[]
-  qualityConfigs     CategoryQualityConfig[]
+  userAccess             UserEmpresaAccess[]
+  usersDefault           User[]                  @relation("UserDefaultEmpresa")
+  salesEntries           SalesEntry[]
+  marketingEntries       MarketingEntry[]
+  marketingTasks         MarketingTask[]
+  marketingCampaigns     MarketingCampaign[]
+  marketingFiles         MarketingFile[]
+  marketingIdeas         MarketingIdea[]
+  goals                  Goal[]
+  employees              Employee[]
+  waiterSales            WaiterSaleEntry[]
+  sales                  Sale[]
+  clientes               Cliente[]
+  products               Product[]
+  ingredients            Ingredient[]
+  stockMovements         StockMovement[]
+  bankAccounts           BankAccount[]
+  payables               Payable[]
+  receivables            Receivable[]
+  cashMovements          CashMovement[]
+  recurringTemplates     RecurringTemplate[]
+  auditLogs              AuditLog[]
+  trainingTracks         TrainingTrack[]
+  trainingCourses        TrainingCourse[]
+  trainingLibrary        TrainingLibraryItem[]
+  qualityConfigs         CategoryQualityConfig[]
+  employeeFinanceEntries EmployeeFinanceEntry[]
+  timeEntries            TimeEntry[]
+  vacations              Vacation[]
+  uniformDeliveries      UniformDelivery[]
+  employeeDocuments      EmployeeDocument[]
 }
 
 model UserEmpresaAccess {
@@ -563,25 +572,39 @@ enum EmployeeStatus {
 }
 
 model Employee {
-  id                String         @id @default(cuid())
-  empresaId         String
-  empresa           Empresa        @relation(fields: [empresaId], references: [id])
-  name              String
-  cargo             String
-  setor             String
-  photoUrl          String?
-  admissionDate     DateTime
-  terminationDate   DateTime?
-  status            EmployeeStatus @default(ATIVO)
-  phone             String?
-  email             String?
-  gestorResponsavel String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  id                    String         @id @default(cuid())
+  empresaId             String
+  empresa               Empresa        @relation(fields: [empresaId], references: [id])
+  name                  String
+  cargo                 String
+  setor                 String
+  photoUrl              String?
+  admissionDate         DateTime
+  terminationDate       DateTime?
+  status                EmployeeStatus @default(ATIVO)
+  phone                 String?
+  email                 String?
+  cpf                   String?
+  birthDate             DateTime?
+  escala                String?
+  gestorResponsavel     String?
+  supervisorResponsavel String?
+  salarioFixo           Float?
+  lastEvaluationDate    DateTime?
+  lastEvaluationNote    String?
+  lastTrainingDate      DateTime?
+  lastTrainingName      String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
-  occurrences Occurrence[]
-  waiterSales WaiterSaleEntry[]
-  sales       Sale[]
+  occurrences       Occurrence[]
+  waiterSales       WaiterSaleEntry[]
+  sales             Sale[]
+  financeEntries    EmployeeFinanceEntry[]
+  timeEntries       TimeEntry[]
+  vacations         Vacation[]
+  uniformDeliveries UniformDelivery[]
+  documents         EmployeeDocument[]
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +631,13 @@ enum OccurrenceType {
   FALTA
   ATRASO
   ATESTADO
+  ADVERTENCIA
+  SUSPENSAO
+  ELOGIO
+  ACIDENTE
+  RECLAMACAO
+  CONFLITO_INTERNO
+  FEEDBACK
 }
 
 enum OccurrenceStatus {
@@ -626,12 +656,184 @@ model Occurrence {
   horarioRealizado String?
   minutosAtraso    Int              @default(0)
   justificativa    String?
+  medidasTomadas   String?
+  prazo            DateTime?
   anexoUrl         String?
   observacao       String?
   status           OccurrenceStatus @default(PENDENTE)
   createdById      String
   createdBy        User             @relation("OccurrenceCreatedBy", fields: [createdById], references: [id])
   createdAt        DateTime         @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// RH — FINANCEIRO DO COLABORADOR
+// ---------------------------------------------------------------------------
+
+enum RhFinanceType {
+  SALARIO
+  COMISSAO
+  BONIFICACAO
+  DESCONTO
+  VALE_TRANSPORTE
+  VALE_ALIMENTACAO
+  OUTRO
+}
+
+model EmployeeFinanceEntry {
+  id          String        @id @default(cuid())
+  employeeId  String
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId   String
+  empresa     Empresa       @relation(fields: [empresaId], references: [id])
+  date        DateTime
+  description String
+  type        RhFinanceType
+  value       Float
+  observacao  String?
+  createdById String
+  createdBy   User          @relation("RhFinanceCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+
+  @@index([employeeId])
+}
+
+// ---------------------------------------------------------------------------
+// RH — PONTO ELETRÔNICO
+// ---------------------------------------------------------------------------
+
+model TimeEntry {
+  id               String   @id @default(cuid())
+  employeeId       String
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId        String
+  empresa          Empresa  @relation(fields: [empresaId], references: [id])
+  date             DateTime
+  entrada          String?
+  saidaAlmoco      String?
+  retornoAlmoco    String?
+  saida            String?
+  horasTrabalhadas Float    @default(0)
+  atrasoMinutos    Int      @default(0)
+  falta            Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  @@unique([employeeId, date])
+}
+
+// ---------------------------------------------------------------------------
+// RH — FÉRIAS
+// ---------------------------------------------------------------------------
+
+enum VacationStatus {
+  PLANEJADA
+  APROVADA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+model Vacation {
+  id                      String         @id @default(cuid())
+  employeeId              String
+  employee                Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId               String
+  empresa                 Empresa        @relation(fields: [empresaId], references: [id])
+  periodoAquisitivoInicio DateTime
+  periodoAquisitivoFim    DateTime
+  diasDireito             Int            @default(30)
+  dataInicio              DateTime?
+  dataFim                 DateTime?
+  dias                    Int?
+  status                  VacationStatus @default(PLANEJADA)
+  observacao              String?
+  createdById             String
+  createdBy               User           @relation("VacationCreatedBy", fields: [createdById], references: [id])
+  createdAt               DateTime       @default(now())
+
+  @@index([employeeId])
+}
+
+// ---------------------------------------------------------------------------
+// RH — UNIFORMES
+// ---------------------------------------------------------------------------
+
+enum UniformItemType {
+  CAMISA
+  CALCA
+  AVENTAL
+  BONE
+  TOUCA
+  SAPATO
+  CINTO
+  OUTRO
+}
+
+enum UniformStatus {
+  ENTREGUE
+  TROCADO
+  DEVOLVIDO
+  PERDIDO
+}
+
+model UniformDelivery {
+  id          String          @id @default(cuid())
+  employeeId  String
+  employee    Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId   String
+  empresa     Empresa         @relation(fields: [empresaId], references: [id])
+  item        UniformItemType
+  quantidade  Int             @default(1)
+  tamanho     String?
+  dataEntrega DateTime
+  responsavel String?
+  status      UniformStatus   @default(ENTREGUE)
+  observacao  String?
+  createdById String
+  createdBy   User            @relation("UniformCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime        @default(now())
+
+  @@index([employeeId])
+}
+
+// ---------------------------------------------------------------------------
+// RH — DOCUMENTOS
+// ---------------------------------------------------------------------------
+
+enum DocumentCategory {
+  RG
+  CPF
+  CTPS
+  COMPROVANTE_RESIDENCIA
+  TITULO_ELEITOR
+  RESERVISTA
+  EXAME_ADMISSIONAL
+  ASO
+  CNH
+  CONTRATO
+  TERMO
+  CERTIFICADO
+  TREINAMENTO
+  OUTRO
+}
+
+model EmployeeDocument {
+  id          String           @id @default(cuid())
+  employeeId  String
+  employee    Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId   String
+  empresa     Empresa          @relation(fields: [empresaId], references: [id])
+  categoria   DocumentCategory
+  nome        String
+  fileUrl     String
+  mimeType    String?
+  validade    DateTime?
+  observacao  String?
+  createdById String
+  createdBy   User             @relation("EmployeeDocumentCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime         @default(now())
+
+  @@index([employeeId])
 }
 
 // ---------------------------------------------------------------------------
