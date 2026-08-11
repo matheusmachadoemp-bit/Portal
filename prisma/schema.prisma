@@ -98,19 +98,20 @@ model UserPermission {
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id             String   @id @default(cuid())
-  key            String   @unique
-  name           String
-  logo           String?
-  color          String   @default("#2952E3")
-  active         Boolean  @default(true)
-  order          Int      @default(0)
-  driveFolderUrl String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  logo            String?
+  color           String   @default("#2952E3")
+  active          Boolean  @default(true)
+  order           Int      @default(0)
+  driveFolderUrl  String?
+  taxaIfoodPadrao Float    @default(30)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   userAccess         UserEmpresaAccess[]
-  usersDefault       User[]                @relation("UserDefaultEmpresa")
+  usersDefault       User[]                  @relation("UserDefaultEmpresa")
   salesEntries       SalesEntry[]
   marketingEntries   MarketingEntry[]
   marketingTasks     MarketingTask[]
@@ -131,6 +132,7 @@ model Empresa {
   trainingTracks     TrainingTrack[]
   trainingCourses    TrainingCourse[]
   trainingLibrary    TrainingLibraryItem[]
+  qualityConfigs     CategoryQualityConfig[]
 }
 
 model UserEmpresaAccess {
@@ -666,6 +668,7 @@ model Product {
   tamanho      String?
   pesoFinal    Float?
   precoVenda   Float           @default(0)
+  taxaIfood    Float?
   modoPreparo  String?
   tempoPreparo Int?
   validade     String?
@@ -684,8 +687,21 @@ model ProductIngredient {
   product         Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   ingredientId    String
   ingredient      Ingredient @relation(fields: [ingredientId], references: [id])
+  order           Int        @default(0)
   quantidadeUsada Float
   percentualPerda Float      @default(0)
+}
+
+model CategoryQualityConfig {
+  id                String          @id @default(cuid())
+  empresaId         String
+  empresa           Empresa         @relation(fields: [empresaId], references: [id])
+  category          ProductCategory
+  cmvMaximoPercent  Float           @default(35)
+  diasDesatualizada Int             @default(90)
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([empresaId, category])
 }
 
 // ---------------------------------------------------------------------------

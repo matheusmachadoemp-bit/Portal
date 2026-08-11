@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { changePasswordAction } from "@/app/actions/account";
 import { format } from "date-fns";
@@ -20,14 +20,33 @@ export function ConfiguracoesClient({
   userRole,
   isAdmin,
   auditLogs,
+  taxaIfoodPadrao,
+  empresaNome,
 }: {
   userName: string;
   userEmail: string;
   userRole: string;
   isAdmin: boolean;
   auditLogs: { id: string; action: string; entityType: string; entityId: string | null; createdAt: string; userName: string }[];
+  taxaIfoodPadrao: number | null;
+  empresaNome: string | null;
 }) {
   const [state, formAction, pending] = useActionState(changePasswordAction, {});
+  const [ifoodValue, setIfoodValue] = useState(taxaIfoodPadrao !== null ? String(taxaIfoodPadrao) : "");
+  const [ifoodSaving, setIfoodSaving] = useState(false);
+  const [ifoodMessage, setIfoodMessage] = useState<string | null>(null);
+
+  async function saveIfoodRate() {
+    setIfoodSaving(true);
+    setIfoodMessage(null);
+    const res = await fetch("/api/configuracoes/ifood", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taxaIfoodPadrao: ifoodValue }),
+    });
+    setIfoodSaving(false);
+    setIfoodMessage(res.ok ? "Taxa atualizada com sucesso." : "Não foi possível atualizar a taxa.");
+  }
 
   return (
     <div className="space-y-6">
@@ -67,6 +86,41 @@ export function ConfiguracoesClient({
         {state?.error && <p className="text-sm text-red-400 mt-2">{state.error}</p>}
         {state?.message && <p className="text-sm text-emerald-400 mt-2">{state.message}</p>}
       </Section>
+
+      {isAdmin && (
+        <Section title="Ficha Técnica — Taxa iFood padrão">
+          {taxaIfoodPadrao === null ? (
+            <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+              Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+              configurar a taxa iFood padrão.
+            </p>
+          ) : (
+            <div className="flex items-end gap-3 max-w-md">
+              <label className="block flex-1">
+                <span className="block text-xs text-nord-gray mb-1">Taxa iFood padrão para {empresaNome} (%)</span>
+                <input
+                  type="number"
+                  value={ifoodValue}
+                  onChange={(e) => setIfoodValue(e.target.value)}
+                  className="input"
+                />
+              </label>
+              <button
+                onClick={saveIfoodRate}
+                disabled={ifoodSaving}
+                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
+              >
+                Salvar
+              </button>
+            </div>
+          )}
+          {ifoodMessage && <p className="text-xs text-emerald-400 mt-2">{ifoodMessage}</p>}
+          <p className="text-xs text-nord-gray mt-3">
+            Usada para calcular o preço sugerido no iFood em cada ficha técnica. Pode ser sobrescrita
+            individualmente em cada produto.
+          </p>
+        </Section>
+      )}
 
       <Section title="Integrações e webhooks (em preparação)">
         <p className="text-xs text-nord-gray mb-4">

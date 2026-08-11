@@ -42,3 +42,18 @@ export function precoVendaSugerido(totalCost: number, cmvAlvoPercent: number): n
   if (!cmvAlvoPercent) return 0;
   return totalCost / (cmvAlvoPercent / 100);
 }
+
+/**
+ * Reajusta o preço de venda para absorver a taxa da plataforma iFood mantendo
+ * a mesma margem líquida da venda direta (preço / (1 - taxa%)).
+ */
+export function precoIfoodSugerido(precoVenda: number, taxaIfoodPercent: number): number {
+  const taxa = taxaIfoodPercent / 100;
+  if (taxa >= 1) return 0;
+  return precoVenda / (1 - taxa);
+}
+
+export function lucroIfoodEstimado(precoIfood: number, totalCost: number, taxaIfoodPercent: number): number {
+  const taxa = taxaIfoodPercent / 100;
+  return precoIfood * (1 - taxa) - totalCost;
+}

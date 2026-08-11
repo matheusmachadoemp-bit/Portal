@@ -20,6 +20,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       name: body.name ?? undefined,
       code: body.code ?? undefined,
       category: body.category ?? undefined,
+      photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
+      taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
       description: body.description ?? undefined,
       rendimento: body.rendimento ?? undefined,
       tamanho: body.tamanho ?? undefined,
@@ -36,11 +38,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await prisma.productIngredient.deleteMany({ where: { productId: id } });
     await prisma.productIngredient.createMany({
       data: body.ingredients.map(
-        (i: { ingredientId: string; quantidadeUsada: string; percentualPerda: string }) => ({
+        (i: { ingredientId: string; quantidadeUsada: string; percentualPerda: string }, idx: number) => ({
           productId: id,
           ingredientId: i.ingredientId,
           quantidadeUsada: Number(i.quantidadeUsada) || 0,
           percentualPerda: Number(i.percentualPerda) || 0,
+          order: idx,
         })
       ),
     });
@@ -48,7 +51,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const product = await prisma.product.findUnique({
     where: { id },
-    include: { ingredients: { include: { ingredient: true } } },
+    include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
   });
 
   return NextResponse.json({ product });
