@@ -3,18 +3,26 @@ import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { redirect } from "next/navigation";
 import { getActiveEmpresaContext } from "@/lib/empresa";
+import { visibleModuleKeys } from "@/lib/permissions";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [categories, empresaContext] = await Promise.all([
+  const [allCategories, empresaContext, dbUser] = await Promise.all([
     prisma.category.findMany({
       orderBy: { order: "asc" },
       include: { subcategories: { orderBy: { order: "asc" } } },
     }),
     getActiveEmpresaContext(),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { permissionProfile: { select: { modulePermissions: { select: { moduleKey: true, canView: true } } } } },
+    }),
   ]);
+
+  const visible = visibleModuleKeys(session.user.role, dbUser?.permissionProfile?.modulePermissions);
+  const categories = visible ? allCategories.filter((c) => visible.has(c.key)) : allCategories;
 
   if (!empresaContext) {
     return (

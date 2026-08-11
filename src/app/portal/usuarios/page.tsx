@@ -18,12 +18,13 @@ export default async function UsuariosPage() {
     );
   }
 
-  const [users, empresas] = await Promise.all([
+  const [users, empresas, profiles] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
       include: { permissions: true, empresaAccess: true },
     }),
     prisma.empresa.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.permissionProfile.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   const serialized = users.map((u) => ({
@@ -39,6 +40,7 @@ export default async function UsuariosPage() {
     empresaIds: u.empresaAccess.map((a) => a.empresaId),
     canViewGrupoNord: u.canViewGrupoNord,
     defaultEmpresaId: u.defaultEmpresaId,
+    permissionProfileId: u.permissionProfileId,
   }));
 
   return (
@@ -48,6 +50,7 @@ export default async function UsuariosPage() {
         modules={MODULES}
         currentUserId={session.user.id}
         empresas={empresas.map((e) => ({ id: e.id, name: e.name }))}
+        profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
       />
     </PageContainer>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { format } from "date-fns";
@@ -19,6 +20,7 @@ type UserDTO = {
   empresaIds: string[];
   canViewGrupoNord: boolean;
   defaultEmpresaId: string | null;
+  permissionProfileId: string | null;
 };
 
 const ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR", "COLABORADOR"];
@@ -39,6 +41,7 @@ const emptyForm = {
   active: true,
   canViewGrupoNord: false,
   defaultEmpresaId: "",
+  permissionProfileId: "",
 };
 
 export function UsuariosClient({
@@ -46,11 +49,13 @@ export function UsuariosClient({
   modules,
   currentUserId,
   empresas,
+  profiles,
 }: {
   initialUsers: UserDTO[];
   modules: readonly { key: string; label: string }[];
   currentUserId: string;
   empresas: { id: string; name: string }[];
+  profiles: { id: string; name: string }[];
 }) {
   const [users, setUsers] = useState(initialUsers);
   const [showForm, setShowForm] = useState(false);
@@ -89,6 +94,7 @@ export function UsuariosClient({
       active: u.active,
       canViewGrupoNord: u.canViewGrupoNord,
       defaultEmpresaId: u.defaultEmpresaId ?? "",
+      permissionProfileId: u.permissionProfileId ?? "",
     });
     const perm: Record<string, string> = {};
     u.permissions.forEach((p) => (perm[p.moduleKey] = p.level));
@@ -132,12 +138,20 @@ export function UsuariosClient({
     <Section
       title="Usuários do portal"
       action={
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Plus size={13} /> Novo usuário
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/portal/usuarios/permissoes"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white"
+          >
+            <ShieldCheck size={13} /> Perfis de permissão
+          </Link>
+          <button
+            onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Novo usuário
+          </button>
+        </div>
       }
     >
       <div className="overflow-x-auto nord-scrollbar">
@@ -215,6 +229,20 @@ export function UsuariosClient({
             >
               <option value="1">Ativo</option>
               <option value="0">Inativo</option>
+            </select>
+          </Field>
+          <Field label="Perfil de permissão">
+            <select
+              value={form.permissionProfileId}
+              onChange={(e) => setForm({ ...form, permissionProfileId: e.target.value })}
+              className="input"
+            >
+              <option value="">— nenhum (vê tudo, sem restrição) —</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
           </Field>
         </div>

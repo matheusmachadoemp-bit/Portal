@@ -31,22 +31,24 @@ enum AccessLevel {
 }
 
 model User {
-  id               String    @id @default(cuid())
-  name             String
-  email            String    @unique
-  passwordHash     String
-  role             Role      @default(COLABORADOR)
-  active           Boolean   @default(true)
-  avatarUrl        String?
-  phone            String?
-  resetToken       String?
-  resetTokenExp    DateTime?
-  lastLoginAt      DateTime?
-  canViewGrupoNord Boolean   @default(false)
-  defaultEmpresaId String?
-  defaultEmpresa   Empresa?  @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                  String             @id @default(cuid())
+  name                String
+  email               String             @unique
+  passwordHash        String
+  role                Role               @default(COLABORADOR)
+  active              Boolean            @default(true)
+  avatarUrl           String?
+  phone               String?
+  resetToken          String?
+  resetTokenExp       DateTime?
+  lastLoginAt         DateTime?
+  canViewGrupoNord    Boolean            @default(false)
+  defaultEmpresaId    String?
+  defaultEmpresa      Empresa?           @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
+  permissionProfileId String?
+  permissionProfile   PermissionProfile? @relation(fields: [permissionProfileId], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   permissions                   UserPermission[]
   empresaAccess                 UserEmpresaAccess[]
@@ -92,6 +94,34 @@ model UserPermission {
   createdAt DateTime    @default(now())
 
   @@unique([userId, moduleKey])
+}
+
+// Perfis de permissão (templates) — independentes do enum Role, para não
+// afetar login/sessão. Cada perfil tem um conjunto de permissões por módulo
+// (Ver/Criar/Editar/Excluir) e pode ser atribuído a vários usuários.
+model PermissionProfile {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  modulePermissions ModulePermission[]
+  users             User[]
+}
+
+model ModulePermission {
+  id        String            @id @default(cuid())
+  profileId String
+  profile   PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  moduleKey String
+  canView   Boolean           @default(false)
+  canCreate Boolean           @default(false)
+  canEdit   Boolean           @default(false)
+  canDelete Boolean           @default(false)
+
+  @@unique([profileId, moduleKey])
 }
 
 // ---------------------------------------------------------------------------
