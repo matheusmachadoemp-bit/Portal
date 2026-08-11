@@ -141,6 +141,18 @@ const CATEGORIES = [
     ],
   },
   { key: "cmv", name: "CMV", icon: "Percent", order: 12, contentType: "cmv", subs: [] },
+  {
+    key: "crm",
+    name: "CRM",
+    icon: "Contact",
+    order: 13,
+    contentType: "crm",
+    subs: [
+      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
+      { key: "rfv", name: "Análise RFV", icon: "Users" },
+      { key: "clientes", name: "Clientes", icon: "BookUser" },
+    ],
+  },
 ];
 
 async function main() {

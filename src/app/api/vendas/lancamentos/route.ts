@@ -65,6 +65,17 @@ export async function POST(req: Request) {
   });
   const valorTotal = parsedItems.reduce((sum, i) => sum + i.faturamento, 0);
 
+  let clienteId: string | null = null;
+  const clienteTelefone = (body.clienteTelefone || "").trim();
+  if (clienteTelefone) {
+    const cliente = await prisma.cliente.upsert({
+      where: { empresaId_telefone: { empresaId: empresa.id, telefone: clienteTelefone } },
+      update: { nome: body.clienteNome || undefined },
+      create: { empresaId: empresa.id, nome: body.clienteNome || clienteTelefone, telefone: clienteTelefone },
+    });
+    clienteId = cliente.id;
+  }
+
   const sale = await prisma.sale.create({
     data: {
       empresaId: empresa.id,
@@ -72,6 +83,7 @@ export async function POST(req: Request) {
       channel: body.channel || "SALAO",
       formaPagamento: body.formaPagamento || "OUTRO",
       garcomId: body.garcomId || null,
+      clienteId,
       mesaNumero: body.mesaNumero || null,
       bairro: body.bairro || null,
       regiao: body.regiao || null,

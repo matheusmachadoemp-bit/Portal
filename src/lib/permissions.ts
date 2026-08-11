@@ -3,6 +3,7 @@ import type { Role } from "@prisma/client";
 export const MODULES = [
   { key: "inicio", label: "Início" },
   { key: "vendas", label: "Vendas" },
+  { key: "crm", label: "CRM" },
   { key: "marketing", label: "Marketing" },
   { key: "universidade", label: "Universidade Grupo Nord" },
   { key: "metas", label: "Metas" },

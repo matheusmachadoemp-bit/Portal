@@ -39,6 +39,8 @@ const emptyForm = {
   mesaNumero: "",
   bairro: "",
   regiao: "",
+  clienteNome: "",
+  clienteTelefone: "",
 };
 
 export function LancamentosClient({
@@ -233,6 +235,16 @@ export function LancamentosClient({
               ))}
             </select>
           </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Telefone do cliente (opcional, para CRM/RFV)</span>
+            <input value={form.clienteTelefone} onChange={(e) => setForm({ ...form, clienteTelefone: e.target.value })} className="input" placeholder="(11) 99999-9999" />
+          </label>
+          {form.clienteTelefone && (
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Nome do cliente</span>
+              <input value={form.clienteNome} onChange={(e) => setForm({ ...form, clienteNome: e.target.value })} className="input" />
+            </label>
+          )}
           {form.channel !== "DELIVERY" && (
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Mesa (opcional)</span>

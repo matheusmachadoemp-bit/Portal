@@ -154,6 +154,7 @@ model Empresa {
   employees          Employee[]
   waiterSales        WaiterSaleEntry[]
   sales              Sale[]
+  clientes           Cliente[]
   products           Product[]
   ingredients        Ingredient[]
   stockMovements     StockMovement[]
@@ -278,6 +279,8 @@ model Sale {
   formaPagamento PaymentMethod @default(OUTRO)
   garcomId       String?
   garcom         Employee?     @relation(fields: [garcomId], references: [id])
+  clienteId      String?
+  cliente        Cliente?      @relation(fields: [clienteId], references: [id])
   mesaNumero     String?
   bairro         String?
   regiao         String?
@@ -289,6 +292,25 @@ model Sale {
   items SaleItem[]
 
   @@index([empresaId, dateTime])
+}
+
+// ---------------------------------------------------------------------------
+// CRM
+// ---------------------------------------------------------------------------
+
+model Cliente {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nome      String
+  telefone  String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendas Sale[]
+
+  @@unique([empresaId, telefone])
 }
 
 model SaleItem {
