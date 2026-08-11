@@ -31,22 +31,24 @@ enum AccessLevel {
 }
 
 model User {
-  id               String    @id @default(cuid())
-  name             String
-  email            String    @unique
-  passwordHash     String
-  role             Role      @default(COLABORADOR)
-  active           Boolean   @default(true)
-  avatarUrl        String?
-  phone            String?
-  resetToken       String?
-  resetTokenExp    DateTime?
-  lastLoginAt      DateTime?
-  canViewGrupoNord Boolean   @default(false)
-  defaultEmpresaId String?
-  defaultEmpresa   Empresa?  @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                  String             @id @default(cuid())
+  name                String
+  email               String             @unique
+  passwordHash        String
+  role                Role               @default(COLABORADOR)
+  active              Boolean            @default(true)
+  avatarUrl           String?
+  phone               String?
+  resetToken          String?
+  resetTokenExp       DateTime?
+  lastLoginAt         DateTime?
+  canViewGrupoNord    Boolean            @default(false)
+  defaultEmpresaId    String?
+  defaultEmpresa      Empresa?           @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
+  permissionProfileId String?
+  permissionProfile   PermissionProfile? @relation(fields: [permissionProfileId], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   permissions                   UserPermission[]
   empresaAccess                 UserEmpresaAccess[]
@@ -62,6 +64,9 @@ model User {
   marketingFiles                MarketingFile[]
   marketingIdeas                MarketingIdea[]
   goals                         Goal[]
+  waiterSalesCreated            WaiterSaleEntry[]     @relation("WaiterSaleCreatedBy")
+  stockMovementsCreated         StockMovement[]       @relation("StockMovementCreatedBy")
+  salesCreated                  Sale[]                @relation("SaleCreatedBy")
   vaultEntries                  VaultEntry[]
   vaultAccess                   VaultAccessLog[]
   courses                       Course[]
@@ -92,24 +97,53 @@ model UserPermission {
   @@unique([userId, moduleKey])
 }
 
+// Perfis de permissão (templates) — independentes do enum Role, para não
+// afetar login/sessão. Cada perfil tem um conjunto de permissões por módulo
+// (Ver/Criar/Editar/Excluir) e pode ser atribuído a vários usuários.
+model PermissionProfile {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  modulePermissions ModulePermission[]
+  users             User[]
+}
+
+model ModulePermission {
+  id        String            @id @default(cuid())
+  profileId String
+  profile   PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  moduleKey String
+  canView   Boolean           @default(false)
+  canCreate Boolean           @default(false)
+  canEdit   Boolean           @default(false)
+  canDelete Boolean           @default(false)
+
+  @@unique([profileId, moduleKey])
+}
+
 // ---------------------------------------------------------------------------
 // EMPRESAS (multiloja) — Grupo Nord > Empresas (Nord Pizza, Zarki Sushi, ...)
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id             String   @id @default(cuid())
-  key            String   @unique
-  name           String
-  logo           String?
-  color          String   @default("#2952E3")
-  active         Boolean  @default(true)
-  order          Int      @default(0)
-  driveFolderUrl String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  logo            String?
+  color           String   @default("#2952E3")
+  active          Boolean  @default(true)
+  order           Int      @default(0)
+  driveFolderUrl  String?
+  taxaIfoodPadrao Float    @default(30)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   userAccess         UserEmpresaAccess[]
-  usersDefault       User[]                @relation("UserDefaultEmpresa")
+  usersDefault       User[]                  @relation("UserDefaultEmpresa")
   salesEntries       SalesEntry[]
   marketingEntries   MarketingEntry[]
   marketingTasks     MarketingTask[]
@@ -118,8 +152,12 @@ model Empresa {
   marketingIdeas     MarketingIdea[]
   goals              Goal[]
   employees          Employee[]
+  waiterSales        WaiterSaleEntry[]
+  sales              Sale[]
+  clientes           Cliente[]
   products           Product[]
   ingredients        Ingredient[]
+  stockMovements     StockMovement[]
   bankAccounts       BankAccount[]
   payables           Payable[]
   receivables        Receivable[]
@@ -129,6 +167,7 @@ model Empresa {
   trainingTracks     TrainingTrack[]
   trainingCourses    TrainingCourse[]
   trainingLibrary    TrainingLibraryItem[]
+  qualityConfigs     CategoryQualityConfig[]
 }
 
 model UserEmpresaAccess {
@@ -216,6 +255,77 @@ model SalesEntry {
   createdBy           User       @relation(fields: [createdById], references: [id])
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// VENDAS — lançamentos granulares (por venda/pedido), usados para as
+// análises de Curva ABC, desempenho por garçom, horário, forma de
+// pagamento e área de entrega. Complementa o SalesEntry (agregado diário)
+// acima, que continua sendo o lançamento macro do dia.
+// ---------------------------------------------------------------------------
+
+enum SaleChannel {
+  SALAO
+  DELIVERY
+  BALCAO
+}
+
+model Sale {
+  id             String        @id @default(cuid())
+  empresaId      String
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  dateTime       DateTime
+  channel        SaleChannel   @default(SALAO)
+  formaPagamento PaymentMethod @default(OUTRO)
+  garcomId       String?
+  garcom         Employee?     @relation(fields: [garcomId], references: [id])
+  clienteId      String?
+  cliente        Cliente?      @relation(fields: [clienteId], references: [id])
+  mesaNumero     String?
+  bairro         String?
+  regiao         String?
+  valorTotal     Float         @default(0)
+  createdById    String
+  createdBy      User          @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+
+  items SaleItem[]
+
+  @@index([empresaId, dateTime])
+}
+
+// ---------------------------------------------------------------------------
+// CRM
+// ---------------------------------------------------------------------------
+
+model Cliente {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nome      String
+  telefone  String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendas Sale[]
+
+  @@unique([empresaId, telefone])
+}
+
+model SaleItem {
+  id            String           @id @default(cuid())
+  saleId        String
+  sale          Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?         @relation(fields: [productId], references: [id])
+  nome          String
+  categoria     ProductCategory?
+  quantidade    Float
+  precoUnitario Float
+  faturamento   Float
+
+  @@index([saleId])
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +504,8 @@ enum GoalCategory {
   SALAO
   COZINHA
   DELIVERY
+  MARKETING
+  ADMINISTRATIVO
 }
 
 enum GoalStatus {
@@ -457,6 +569,7 @@ model Employee {
   name              String
   cargo             String
   setor             String
+  photoUrl          String?
   admissionDate     DateTime
   terminationDate   DateTime?
   status            EmployeeStatus @default(ATIVO)
@@ -467,6 +580,28 @@ model Employee {
   updatedAt         DateTime       @updatedAt
 
   occurrences Occurrence[]
+  waiterSales WaiterSaleEntry[]
+  sales       Sale[]
+}
+
+// ---------------------------------------------------------------------------
+// VENDA ACUMULADA (garçons)
+// ---------------------------------------------------------------------------
+
+model WaiterSaleEntry {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  amount      Float
+  date        DateTime
+  note        String?
+  createdById String
+  createdBy   User     @relation("WaiterSaleCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
 }
 
 enum OccurrenceType {
@@ -597,6 +732,7 @@ enum ProductCategory {
   BURGER
   BEBIDA
   DRINK
+  SOBREMESA
 }
 
 model Ingredient {
@@ -611,12 +747,14 @@ model Ingredient {
   percentualPerda     Float     @default(0)
   estoqueMinimo       Float     @default(0)
   estoqueAtual        Float     @default(0)
+  validade            DateTime?
   lastPurchaseDate    DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   priceHistory IngredientPriceHistory[]
   productLinks ProductIngredient[]
+  movements    StockMovement[]
 }
 
 model IngredientPriceHistory {
@@ -625,6 +763,32 @@ model IngredientPriceHistory {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
   price        Float
   createdAt    DateTime   @default(now())
+}
+
+enum StockMovementType {
+  ENTRADA
+  SAIDA
+  AJUSTE
+  PERDA
+  TRANSFERENCIA
+  INVENTARIO
+}
+
+model StockMovement {
+  id           String            @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  empresaId    String
+  empresa      Empresa           @relation(fields: [empresaId], references: [id])
+  type         StockMovementType
+  quantidade   Float
+  estoqueApos  Float
+  motivo       String?
+  createdById  String
+  createdBy    User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime          @default(now())
+
+  @@index([ingredientId])
 }
 
 model Product {
@@ -640,6 +804,7 @@ model Product {
   tamanho      String?
   pesoFinal    Float?
   precoVenda   Float           @default(0)
+  taxaIfood    Float?
   modoPreparo  String?
   tempoPreparo Int?
   validade     String?
@@ -650,6 +815,7 @@ model Product {
   updatedAt    DateTime        @updatedAt
 
   ingredients ProductIngredient[]
+  saleItems   SaleItem[]
 }
 
 model ProductIngredient {
@@ -658,8 +824,21 @@ model ProductIngredient {
   product         Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   ingredientId    String
   ingredient      Ingredient @relation(fields: [ingredientId], references: [id])
+  order           Int        @default(0)
   quantidadeUsada Float
   percentualPerda Float      @default(0)
+}
+
+model CategoryQualityConfig {
+  id                String          @id @default(cuid())
+  empresaId         String
+  empresa           Empresa         @relation(fields: [empresaId], references: [id])
+  category          ProductCategory
+  cmvMaximoPercent  Float           @default(35)
+  diasDesatualizada Int             @default(90)
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([empresaId, category])
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +850,7 @@ enum PaymentMethod {
   DINHEIRO
   CARTAO_DEBITO
   CARTAO_CREDITO
+  VOUCHER
   TED
   DOC
   TRANSFERENCIA

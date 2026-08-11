@@ -3,6 +3,7 @@ import { PageContainer } from "@/components/page-container";
 import { notFound } from "next/navigation";
 import { ProdutosClient } from "./produtos-client";
 import { InsumosClient } from "./insumos-client";
+import { QualidadePanel } from "./qualidade-panel";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 const SUB_MAP: Record<string, { category: string; label: string }> = {
@@ -32,6 +33,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
     const serialized = ingredients.map((i) => ({
       ...i,
       lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.toISOString() : null,
+      validade: i.validade ? i.validade.toISOString() : null,
       priceHistory: i.priceHistory.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
     }));
 
@@ -45,14 +47,21 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   const info = SUB_MAP[sub];
   if (!info) notFound();
 
-  const [products, ingredients] = await Promise.all([
+  const [products, ingredients, qualityConfig] = await Promise.all([
     prisma.product.findMany({
       where: { empresaId: { in: empresaIds }, category: info.category as never },
       orderBy: { name: "asc" },
-      include: { ingredients: { include: { ingredient: true } } },
+      include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
     }),
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
+    ctx?.mode === "single"
+      ? prisma.categoryQualityConfig.findUnique({
+          where: { empresaId_category: { empresaId: ctx.empresa.id, category: info.category as never } },
+        })
+      : Promise.resolve(null),
   ]);
+
+  const taxaIfoodPadrao = ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : 30;
 
   const serializedProducts = products.map((p) => ({
     ...p,
@@ -79,13 +88,25 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   }));
 
   return (
-    <PageContainer title="Ficha Técnica" subtitle={info.label}>
-      <ProdutosClient
-        initialProducts={serializedProducts}
-        ingredientOptions={serializedIngredients}
-        category={info.category}
-        canCreate={canCreate}
-      />
+    <PageContainer title="Ficha Técnica" subtitle={info.label} backHref="/portal/ficha-tecnica" backLabel="Ficha Técnica">
+      <div className="space-y-6">
+        <QualidadePanel
+          products={serializedProducts}
+          category={info.category}
+          initialConfig={{
+            cmvMaximoPercent: qualityConfig?.cmvMaximoPercent ?? 35,
+            diasDesatualizada: qualityConfig?.diasDesatualizada ?? 90,
+          }}
+          canEdit={canCreate}
+        />
+        <ProdutosClient
+          initialProducts={serializedProducts}
+          ingredientOptions={serializedIngredients}
+          category={info.category}
+          canCreate={canCreate}
+          taxaIfoodPadrao={taxaIfoodPadrao}
+        />
+      </div>
     </PageContainer>
   );
 }

@@ -24,6 +24,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     phone: body.phone ?? undefined,
     canViewGrupoNord: body.canViewGrupoNord !== undefined ? !!body.canViewGrupoNord : undefined,
     defaultEmpresaId: body.defaultEmpresaId !== undefined ? body.defaultEmpresaId || null : undefined,
+    permissionProfileId: body.permissionProfileId !== undefined ? body.permissionProfileId || null : undefined,
   };
   if (body.password) data.passwordHash = await bcrypt.hash(body.password, 10);
 

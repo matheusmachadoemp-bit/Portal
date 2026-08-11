@@ -16,6 +16,7 @@ type IngredientDTO = {
   percentualPerda: number;
   estoqueMinimo: number;
   estoqueAtual: number;
+  validade: string | null;
   lastPurchaseDate: string | null;
   priceHistory: { id: string; price: number; createdAt: string }[];
 };
@@ -29,6 +30,7 @@ const emptyForm = {
   percentualPerda: "0",
   estoqueMinimo: "",
   estoqueAtual: "",
+  validade: "",
 };
 
 export function InsumosClient({
@@ -68,6 +70,7 @@ export function InsumosClient({
       percentualPerda: String(i.percentualPerda),
       estoqueMinimo: String(i.estoqueMinimo),
       estoqueAtual: String(i.estoqueAtual),
+      validade: i.validade ? i.validade.slice(0, 10) : "",
     });
     setShowForm(true);
   }
@@ -206,6 +209,9 @@ export function InsumosClient({
           </Field>
           <Field label="Estoque atual">
             <input type="number" value={form.estoqueAtual} onChange={(e) => setForm({ ...form, estoqueAtual: e.target.value })} className="input" />
+          </Field>
+          <Field label="Validade">
+            <input type="date" value={form.validade} onChange={(e) => setForm({ ...form, validade: e.target.value })} className="input" />
           </Field>
         </div>
         <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">

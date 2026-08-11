@@ -9,6 +9,8 @@ const SUB_MAP: Record<string, { category: string; label: string }> = {
   salao: { category: "SALAO", label: "Metas do Salão" },
   cozinha: { category: "COZINHA", label: "Metas da Cozinha" },
   delivery: { category: "DELIVERY", label: "Metas do Delivery" },
+  marketing: { category: "MARKETING", label: "Metas de Marketing" },
+  administrativo: { category: "ADMINISTRATIVO", label: "Metas Administrativas" },
 };
 
 export default async function MetasSubPage({ params }: { params: Promise<{ sub: string }> }) {
@@ -32,7 +34,7 @@ export default async function MetasSubPage({ params }: { params: Promise<{ sub: 
   }));
 
   return (
-    <PageContainer title="Metas" subtitle={info.label}>
+    <PageContainer title="Metas" subtitle={info.label} backHref="/portal/metas" backLabel="Visão geral de metas">
       <MetasClient initialGoals={serialized} category={info.category} canCreate={ctx?.mode === "single"} />
     </PageContainer>
   );

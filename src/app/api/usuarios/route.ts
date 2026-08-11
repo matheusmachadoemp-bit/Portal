@@ -51,6 +51,7 @@ export async function POST(req: Request) {
       phone: body.phone || null,
       canViewGrupoNord: !!body.canViewGrupoNord,
       defaultEmpresaId: body.defaultEmpresaId || empresaIds[0] || null,
+      permissionProfileId: body.permissionProfileId || null,
       empresaAccess: { create: empresaIds.map((empresaId) => ({ empresaId })) },
     },
   });

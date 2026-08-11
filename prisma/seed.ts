@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { allDreCategories } from "../src/lib/dre-structure";
+import { MODULES, PERMISSION_PROFILES } from "../src/lib/permissions";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
@@ -15,7 +16,15 @@ const CATEGORIES = [
     icon: "ShoppingCart",
     order: 1,
     contentType: "vendas",
-    subs: [],
+    subs: [
+      { key: "lancamentos", name: "Lançamentos", icon: "ReceiptText" },
+      { key: "itens-vendidos", name: "Itens Vendidos (Curva ABC)", icon: "BarChart3" },
+      { key: "garcons", name: "Desempenho por Garçom", icon: "Users" },
+      { key: "por-hora", name: "Vendas por Hora", icon: "Clock" },
+      { key: "periodo", name: "Vendas por Período", icon: "CalendarRange" },
+      { key: "pagamento", name: "Forma de Pagamento", icon: "CreditCard" },
+      { key: "entrega", name: "Área de Entrega", icon: "MapPin" },
+    ],
   },
   {
     key: "marketing",
@@ -44,6 +53,9 @@ const CATEGORIES = [
       { key: "salao", name: "Metas do Salão", icon: "Utensils" },
       { key: "cozinha", name: "Metas da Cozinha", icon: "ChefHat" },
       { key: "delivery", name: "Metas do Delivery", icon: "Bike" },
+      { key: "marketing", name: "Metas de Marketing", icon: "Megaphone" },
+      { key: "administrativo", name: "Metas Administrativas", icon: "FileText" },
+      { key: "acumulada", name: "Venda Acumulada", icon: "Trophy" },
     ],
   },
   {
@@ -117,6 +129,30 @@ const CATEGORIES = [
     subs: [],
   },
   { key: "usuarios", name: "Usuários", icon: "UserCog", order: 10, contentType: "usuarios", subs: [] },
+  {
+    key: "estoque",
+    name: "Estoque",
+    icon: "Boxes",
+    order: 11,
+    contentType: "estoque",
+    subs: [
+      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
+      { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
+    ],
+  },
+  { key: "cmv", name: "CMV", icon: "Percent", order: 12, contentType: "cmv", subs: [] },
+  {
+    key: "crm",
+    name: "CRM",
+    icon: "Contact",
+    order: 13,
+    contentType: "crm",
+    subs: [
+      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
+      { key: "rfv", name: "Análise RFV", icon: "Users" },
+      { key: "clientes", name: "Clientes", icon: "BookUser" },
+    ],
+  },
 ];
 
 async function main() {
@@ -205,6 +241,50 @@ async function main() {
         },
       });
       subOrder++;
+    }
+  }
+
+  // --- Perfis de permissão ---
+  // Todo perfil começa com "Ver" liberado em todos os módulos (para não
+  // esconder nada que já era visível hoje) e Criar/Editar/Excluir em branco,
+  // exceto o Administrador, que tem acesso total. Ajustável depois na tela
+  // de Permissões.
+  for (const profile of PERMISSION_PROFILES) {
+    const isAdminProfile = profile.key === "administrador";
+    const record = await prisma.permissionProfile.upsert({
+      where: { key: profile.key },
+      update: { name: profile.name },
+      create: { key: profile.key, name: profile.name, isSystem: true },
+    });
+    for (const mod of MODULES) {
+      await prisma.modulePermission.upsert({
+        where: { profileId_moduleKey: { profileId: record.id, moduleKey: mod.key } },
+        update: {},
+        create: {
+          profileId: record.id,
+          moduleKey: mod.key,
+          canView: true,
+          canCreate: isAdminProfile,
+          canEdit: isAdminProfile,
+          canDelete: isAdminProfile,
+        },
+      });
+    }
+  }
+
+  const roleToProfileKey: Record<string, string> = {
+    ADMINISTRADOR: "administrador",
+    GESTOR: "gestor",
+    GERENTE: "gerente",
+    SUPERVISOR: "supervisor",
+    COLABORADOR: "funcionario",
+  };
+  const usersWithoutProfile = await prisma.user.findMany({ where: { permissionProfileId: null } });
+  for (const u of usersWithoutProfile) {
+    const profileKey = roleToProfileKey[u.role] ?? "funcionario";
+    const profile = await prisma.permissionProfile.findUnique({ where: { key: profileKey } });
+    if (profile) {
+      await prisma.user.update({ where: { id: u.id }, data: { permissionProfileId: profile.id } });
     }
   }
 
@@ -432,6 +512,39 @@ async function main() {
           gestorResponsavel: "Gerente Zarki",
         },
       }),
+      prisma.employee.create({
+        data: {
+          empresaId: nordPizza.id,
+          name: "João Pereira",
+          cargo: "Garçom",
+          setor: "Salão",
+          admissionDate: new Date(2022, 3, 5),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Nord",
+        },
+      }),
+      prisma.employee.create({
+        data: {
+          empresaId: nordPizza.id,
+          name: "Pedro Lima",
+          cargo: "Garçom",
+          setor: "Salão",
+          admissionDate: new Date(2023, 7, 18),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Nord",
+        },
+      }),
+      prisma.employee.create({
+        data: {
+          empresaId: nordPizza.id,
+          name: "Carlos Rocha",
+          cargo: "Garçom",
+          setor: "Salão",
+          admissionDate: new Date(2024, 0, 9),
+          status: "ATIVO",
+          gestorResponsavel: "Gerente Nord",
+        },
+      }),
     ]);
 
     await prisma.occurrence.create({
@@ -455,6 +568,18 @@ async function main() {
         status: "NAO_JUSTIFICADA",
         createdById: admin.id,
       },
+    });
+
+    const joao = employees[5];
+    const pedro = employees[6];
+    const carlos = employees[7];
+    await prisma.waiterSaleEntry.createMany({
+      data: [
+        { employeeId: joao.id, empresaId: nordPizza.id, amount: 285320, date: new Date(2025, 5, 30), createdById: admin.id },
+        { employeeId: joao.id, empresaId: nordPizza.id, amount: 200000, date: new Date(today.getFullYear(), today.getMonth(), 1), createdById: admin.id },
+        { employeeId: pedro.id, empresaId: nordPizza.id, amount: 410250, date: new Date(today.getFullYear(), today.getMonth(), 1), createdById: admin.id },
+        { employeeId: carlos.id, empresaId: nordPizza.id, amount: 325600, date: new Date(today.getFullYear(), today.getMonth(), 1), createdById: admin.id },
+      ],
     });
   }
 

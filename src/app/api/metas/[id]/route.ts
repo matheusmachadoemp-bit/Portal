@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { computeGoalStatus } from "@/lib/goals";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -14,6 +15,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const body = await req.json();
 
+  const valorMeta = body.valorMeta !== undefined ? Number(body.valorMeta) : existing.valorMeta;
+  const valorRealizado = body.valorRealizado !== undefined ? Number(body.valorRealizado) : existing.valorRealizado;
+  const endDate = body.endDate ? new Date(body.endDate) : existing.endDate;
+
   const goal = await prisma.goal.update({
     where: { id },
     data: {
@@ -22,13 +27,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       responsavel: body.responsavel ?? undefined,
       description: body.description ?? undefined,
       indicador: body.indicador ?? undefined,
-      valorMeta: body.valorMeta !== undefined ? Number(body.valorMeta) : undefined,
-      valorRealizado: body.valorRealizado !== undefined ? Number(body.valorRealizado) : undefined,
+      valorMeta,
+      valorRealizado,
       unidade: body.unidade ?? undefined,
       startDate: body.startDate ? new Date(body.startDate) : undefined,
-      endDate: body.endDate ? new Date(body.endDate) : undefined,
+      endDate,
       bonificacao: body.bonificacao ?? undefined,
-      status: body.status ?? undefined,
+      status: computeGoalStatus(valorRealizado, valorMeta, endDate) as never,
       observacoes: body.observacoes ?? undefined,
       planoDeAcao: body.planoDeAcao ?? undefined,
     },

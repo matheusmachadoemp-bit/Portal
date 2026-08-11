@@ -185,6 +185,7 @@ export function CoursesClient({
       </div>
 
       <CourseBuilderModal
+        key={editing?.id ?? "new"}
         open={showBuilder}
         onClose={() => setShowBuilder(false)}
         onSaved={() => {

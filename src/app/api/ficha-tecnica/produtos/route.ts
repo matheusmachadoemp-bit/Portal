@@ -19,7 +19,7 @@ export async function GET(req: Request) {
       ...(category ? { category: category as never } : {}),
     },
     orderBy: { name: "asc" },
-    include: { ingredients: { include: { ingredient: true } } },
+    include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
   });
 
   return NextResponse.json({ products });
@@ -46,6 +46,7 @@ export async function POST(req: Request) {
       code: body.code,
       category: body.category,
       photoUrl: body.photoUrl || null,
+      taxaIfood: body.taxaIfood !== undefined && body.taxaIfood !== "" ? Number(body.taxaIfood) : null,
       description: body.description || null,
       rendimento: body.rendimento || null,
       tamanho: body.tamanho || null,
@@ -58,15 +59,16 @@ export async function POST(req: Request) {
       createdById: session.user.id,
       ingredients: {
         create: (body.ingredients || []).map(
-          (i: { ingredientId: string; quantidadeUsada: string; percentualPerda: string }) => ({
+          (i: { ingredientId: string; quantidadeUsada: string; percentualPerda: string }, idx: number) => ({
             ingredientId: i.ingredientId,
             quantidadeUsada: Number(i.quantidadeUsada) || 0,
             percentualPerda: Number(i.percentualPerda) || 0,
+            order: idx,
           })
         ),
       },
     },
-    include: { ingredients: { include: { ingredient: true } } },
+    include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
   });
 
   return NextResponse.json({ product });

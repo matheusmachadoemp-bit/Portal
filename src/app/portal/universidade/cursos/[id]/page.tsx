@@ -36,7 +36,7 @@ export default async function CoursePlayerPage({ params }: { params: Promise<{ i
     : null;
 
   return (
-    <PageContainer title={course.name} subtitle="Videoaula">
+    <PageContainer title={course.name} subtitle="Videoaula" backHref="/portal/universidade/cursos" backLabel="Voltar para cursos">
       <PlayerClient
         course={{ ...course, quiz: sanitizedQuiz } as never}
         enrollment={{

@@ -43,6 +43,7 @@ export async function POST(req: Request) {
       percentualPerda: Number(body.percentualPerda) || 0,
       estoqueMinimo: Number(body.estoqueMinimo) || 0,
       estoqueAtual: Number(body.estoqueAtual) || 0,
+      validade: body.validade ? new Date(body.validade) : null,
       lastPurchaseDate: body.lastPurchaseDate ? new Date(body.lastPurchaseDate) : null,
       priceHistory: { create: { price: Number(body.precoAtual) || 0 } },
     },

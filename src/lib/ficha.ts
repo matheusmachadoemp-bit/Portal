@@ -1,3 +1,15 @@
+export const PRODUCT_CATEGORY_LABEL: Record<string, string> = {
+  PIZZA_SALGADA: "Pizzas Salgadas",
+  PIZZA_DOCE: "Pizzas Doces",
+  COMBO: "Combos",
+  ESFIHA_SALGADA: "Esfihas Salgadas",
+  ESFIHA_DOCE: "Esfihas Doces",
+  ACOMPANHAMENTO: "Acompanhamentos",
+  BURGER: "Burgers",
+  BEBIDA: "Bebidas",
+  DRINK: "Drinks",
+};
+
 export type IngredientForCalc = {
   precoAtual: number;
   quantidadeEmbalagem: number;
@@ -41,4 +53,19 @@ export function margemBrutaPercent(totalCost: number, precoVenda: number): numbe
 export function precoVendaSugerido(totalCost: number, cmvAlvoPercent: number): number {
   if (!cmvAlvoPercent) return 0;
   return totalCost / (cmvAlvoPercent / 100);
+}
+
+/**
+ * Reajusta o preço de venda para absorver a taxa da plataforma iFood mantendo
+ * a mesma margem líquida da venda direta (preço / (1 - taxa%)).
+ */
+export function precoIfoodSugerido(precoVenda: number, taxaIfoodPercent: number): number {
+  const taxa = taxaIfoodPercent / 100;
+  if (taxa >= 1) return 0;
+  return precoVenda / (1 - taxa);
+}
+
+export function lucroIfoodEstimado(precoIfood: number, totalCost: number, taxaIfoodPercent: number): number {
+  const taxa = taxaIfoodPercent / 100;
+  return precoIfood * (1 - taxa) - totalCost;
 }

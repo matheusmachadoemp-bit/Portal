@@ -1,11 +1,28 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus } from "lucide-react";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatCurrency, formatPercent } from "@/lib/calc";
-import { cmvPercent, margemBrutaPercent, margemContribuicao, productTotalCost } from "@/lib/ficha";
+import {
+  cmvPercent,
+  lucroIfoodEstimado,
+  margemBrutaPercent,
+  margemContribuicao,
+  precoIfoodSugerido,
+  productTotalCost,
+} from "@/lib/ficha";
 
 type IngredientOption = {
   id: string;
@@ -20,6 +37,8 @@ type ProductDTO = {
   name: string;
   code: string;
   category: string;
+  photoUrl: string | null;
+  taxaIfood: number | null;
   description: string | null;
   rendimento: string | null;
   tamanho: string | null;
@@ -38,11 +57,13 @@ type ProductDTO = {
   }[];
 };
 
-type IngredientLine = { ingredientId: string; quantidadeUsada: string; percentualPerda: string };
+type IngredientLine = { key: string; ingredientId: string; quantidadeUsada: string; percentualPerda: string };
 
 const emptyForm = {
   name: "",
   code: "",
+  photoUrl: "",
+  taxaIfood: "",
   description: "",
   rendimento: "",
   tamanho: "",
@@ -54,16 +75,22 @@ const emptyForm = {
   responsavel: "",
 };
 
+function newLineKey() {
+  return Math.random().toString(36).slice(2);
+}
+
 export function ProdutosClient({
   initialProducts,
   ingredientOptions,
   category,
   canCreate = true,
+  taxaIfoodPadrao,
 }: {
   initialProducts: ProductDTO[];
   ingredientOptions: IngredientOption[];
   category: string;
   canCreate?: boolean;
+  taxaIfoodPadrao: number;
 }) {
   const [products, setProducts] = useState(initialProducts);
   const [showForm, setShowForm] = useState(false);
@@ -71,6 +98,9 @@ export function ProdutosClient({
   const [form, setForm] = useState(emptyForm);
   const [lines, setLines] = useState<IngredientLine[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   async function refresh() {
     const res = await fetch(`/api/ficha-tecnica/produtos?category=${category}`);
@@ -81,7 +111,7 @@ export function ProdutosClient({
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
-    setLines([{ ingredientId: ingredientOptions[0]?.id ?? "", quantidadeUsada: "", percentualPerda: "0" }]);
+    setLines([{ key: newLineKey(), ingredientId: ingredientOptions[0]?.id ?? "", quantidadeUsada: "", percentualPerda: "0" }]);
     setShowForm(true);
   }
 
@@ -90,6 +120,8 @@ export function ProdutosClient({
     setForm({
       name: p.name,
       code: p.code,
+      photoUrl: p.photoUrl ?? "",
+      taxaIfood: p.taxaIfood !== null ? String(p.taxaIfood) : "",
       description: p.description ?? "",
       rendimento: p.rendimento ?? "",
       tamanho: p.tamanho ?? "",
@@ -102,6 +134,7 @@ export function ProdutosClient({
     });
     setLines(
       p.ingredients.map((pi) => ({
+        key: newLineKey(),
         ingredientId: pi.ingredient.id,
         quantidadeUsada: String(pi.quantidadeUsada),
         percentualPerda: String(pi.percentualPerda),
@@ -111,15 +144,35 @@ export function ProdutosClient({
   }
 
   function addLine() {
-    setLines((l) => [...l, { ingredientId: ingredientOptions[0]?.id ?? "", quantidadeUsada: "", percentualPerda: "0" }]);
+    setLines((l) => [...l, { key: newLineKey(), ingredientId: ingredientOptions[0]?.id ?? "", quantidadeUsada: "", percentualPerda: "0" }]);
   }
 
-  function removeLine(idx: number) {
-    setLines((l) => l.filter((_, i) => i !== idx));
+  function removeLine(key: string) {
+    setLines((l) => l.filter((line) => line.key !== key));
   }
 
-  function updateLine(idx: number, patch: Partial<IngredientLine>) {
-    setLines((l) => l.map((line, i) => (i === idx ? { ...line, ...patch } : line)));
+  function updateLine(key: string, patch: Partial<IngredientLine>) {
+    setLines((l) => l.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  }
+
+  function handleLineDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setLines((prev) => {
+      const oldIndex = prev.findIndex((l) => l.key === active.id);
+      const newIndex = prev.findIndex((l) => l.key === over.id);
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }
+
+  async function handlePhotoUpload(file: File) {
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    setUploading(false);
+    if (data.fileUrl) setForm((f) => ({ ...f, photoUrl: data.fileUrl }));
   }
 
   const previewCost = useMemo(() => {
@@ -133,6 +186,8 @@ export function ProdutosClient({
   }, [lines, ingredientOptions]);
 
   const previewPrecoVenda = Number(form.precoVenda) || 0;
+  const previewTaxaIfood = form.taxaIfood ? Number(form.taxaIfood) : taxaIfoodPadrao;
+  const previewPrecoIfood = precoIfoodSugerido(previewPrecoVenda, previewTaxaIfood);
 
   async function submit() {
     const payload = { ...form, category, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
@@ -186,14 +241,27 @@ export function ProdutosClient({
           const cmv = cmvPercent(totalCost, p.precoVenda);
           const margem = margemContribuicao(totalCost, p.precoVenda);
           const margemPct = margemBrutaPercent(totalCost, p.precoVenda);
+          const taxaIfood = p.taxaIfood ?? taxaIfoodPadrao;
+          const precoIfood = precoIfoodSugerido(p.precoVenda, taxaIfood);
+          const lucroIfood = lucroIfoodEstimado(precoIfood, totalCost, taxaIfood);
           return (
             <div key={p.id} className="nord-card p-4 flex flex-col gap-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-white font-medium text-sm">{p.name}</p>
-                  <p className="text-xs text-nord-gray">
-                    {p.code} • {p.tamanho}
-                  </p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {p.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.photoUrl} alt={p.name} className="w-11 h-11 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-lg bg-nord-panel flex items-center justify-center text-nord-gray shrink-0">
+                      <ImagePlus size={16} />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-white font-medium text-sm truncate">{p.name}</p>
+                    <p className="text-xs text-nord-gray truncate">
+                      {p.code} • {p.tamanho}
+                    </p>
+                  </div>
                 </div>
                 <Badge tone={cmv > 35 ? "danger" : cmv > 28 ? "warning" : "success"}>
                   CMV {formatPercent(cmv)}
@@ -204,6 +272,11 @@ export function ProdutosClient({
                 <span>Custo total: <span className="text-white">{formatCurrency(totalCost)}</span></span>
                 <span>Margem: <span className="text-white">{formatCurrency(margem)}</span></span>
                 <span>Margem %: <span className="text-white">{formatPercent(margemPct)}</span></span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs text-nord-gray bg-nord-panel rounded-lg p-2 border border-nord-border">
+                <span>Taxa iFood: <span className="text-white">{formatPercent(taxaIfood, 0)}</span></span>
+                <span>Preço iFood: <span className="text-white">{formatCurrency(precoIfood)}</span></span>
+                <span className="col-span-2">Lucro estimado iFood: <span className="text-white">{formatCurrency(lucroIfood)}</span></span>
               </div>
               <div className="text-xs text-nord-gray">
                 {p.ingredients.length} ingrediente(s) • {p.tempoPreparo ?? "-"} min preparo
@@ -227,6 +300,27 @@ export function ProdutosClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar produto" : "Novo produto"} widthClass="max-w-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          {form.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={form.photoUrl} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+          ) : (
+            <div className="w-16 h-16 rounded-lg bg-nord-panel flex items-center justify-center text-nord-gray shrink-0">
+              <ImagePlus size={20} />
+            </div>
+          )}
+          <label className="text-xs text-nord-blue-light hover:text-white cursor-pointer">
+            {uploading ? "Enviando..." : "Enviar foto do produto"}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => e.target.files?.[0] && handlePhotoUpload(e.target.files[0])}
+            />
+          </label>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome do produto">
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
@@ -249,14 +343,21 @@ export function ProdutosClient({
           <Field label="Tempo de preparo (min)">
             <input type="number" value={form.tempoPreparo} onChange={(e) => setForm({ ...form, tempoPreparo: e.target.value })} className="input" />
           </Field>
+          <Field label={`Taxa iFood (% — padrão ${formatPercent(taxaIfoodPadrao, 0)})`}>
+            <input
+              type="number"
+              value={form.taxaIfood}
+              onChange={(e) => setForm({ ...form, taxaIfood: e.target.value })}
+              placeholder={String(taxaIfoodPadrao)}
+              className="input"
+            />
+          </Field>
           <Field label="Validade">
             <input value={form.validade} onChange={(e) => setForm({ ...form, validade: e.target.value })} className="input" />
           </Field>
-          <div className="col-span-2">
-            <Field label="Responsável pela ficha">
-              <input value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} className="input" />
-            </Field>
-          </div>
+          <Field label="Responsável pela ficha">
+            <input value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} className="input" />
+          </Field>
           <div className="col-span-2">
             <Field label="Descrição">
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input min-h-12" />
@@ -276,42 +377,23 @@ export function ProdutosClient({
               + adicionar ingrediente
             </button>
           </div>
-          <div className="space-y-2">
-            {lines.map((line, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                <select
-                  value={line.ingredientId}
-                  onChange={(e) => updateLine(idx, { ingredientId: e.target.value })}
-                  className="input col-span-5"
-                >
-                  {ingredientOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name} ({o.unidade})
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  placeholder="Qtd."
-                  value={line.quantidadeUsada}
-                  onChange={(e) => updateLine(idx, { quantidadeUsada: e.target.value })}
-                  className="input col-span-3"
-                />
-                <input
-                  type="number"
-                  placeholder="% perda"
-                  value={line.percentualPerda}
-                  onChange={(e) => updateLine(idx, { percentualPerda: e.target.value })}
-                  className="input col-span-3"
-                />
-                <button onClick={() => removeLine(idx)} className="col-span-1 text-nord-gray hover:text-red-400">
-                  <X size={14} />
-                </button>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleLineDragEnd}>
+            <SortableContext items={lines.map((l) => l.key)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {lines.map((line) => (
+                  <IngredientRow
+                    key={line.key}
+                    line={line}
+                    ingredientOptions={ingredientOptions}
+                    onUpdate={(patch) => updateLine(line.key, patch)}
+                    onRemove={() => removeLine(line.key)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
 
-          <div className="mt-3 grid grid-cols-3 gap-2 text-xs bg-nord-panel rounded-lg p-3 border border-nord-border">
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2 text-xs bg-nord-panel rounded-lg p-3 border border-nord-border">
             <span className="text-nord-gray">
               Custo total: <span className="text-white">{formatCurrency(previewCost)}</span>
             </span>
@@ -320,6 +402,12 @@ export function ProdutosClient({
             </span>
             <span className="text-nord-gray">
               Margem: <span className="text-white">{formatCurrency(margemContribuicao(previewCost, previewPrecoVenda))}</span>
+            </span>
+            <span className="text-nord-gray">
+              Preço sugerido iFood: <span className="text-white">{formatCurrency(previewPrecoIfood)}</span>
+            </span>
+            <span className="text-nord-gray">
+              Lucro estimado iFood: <span className="text-white">{formatCurrency(lucroIfoodEstimado(previewPrecoIfood, previewCost, previewTaxaIfood))}</span>
             </span>
           </div>
         </div>
@@ -355,6 +443,57 @@ export function ProdutosClient({
         }
       `}</style>
     </Section>
+  );
+}
+
+function IngredientRow({
+  line,
+  ingredientOptions,
+  onUpdate,
+  onRemove,
+}: {
+  line: IngredientLine;
+  ingredientOptions: IngredientOption[];
+  onUpdate: (patch: Partial<IngredientLine>) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: line.key });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  return (
+    <div ref={setNodeRef} style={style} className="grid grid-cols-12 gap-2 items-center">
+      <button {...attributes} {...listeners} className="col-span-1 text-nord-gray/60 hover:text-white cursor-grab">
+        <GripVertical size={14} />
+      </button>
+      <select
+        value={line.ingredientId}
+        onChange={(e) => onUpdate({ ingredientId: e.target.value })}
+        className="input col-span-4"
+      >
+        {ingredientOptions.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name} ({o.unidade})
+          </option>
+        ))}
+      </select>
+      <input
+        type="number"
+        placeholder="Qtd."
+        value={line.quantidadeUsada}
+        onChange={(e) => onUpdate({ quantidadeUsada: e.target.value })}
+        className="input col-span-3"
+      />
+      <input
+        type="number"
+        placeholder="% perda"
+        value={line.percentualPerda}
+        onChange={(e) => onUpdate({ percentualPerda: e.target.value })}
+        className="input col-span-3"
+      />
+      <button onClick={onRemove} className="col-span-1 text-nord-gray hover:text-red-400">
+        <X size={14} />
+      </button>
+    </div>
   );
 }
 

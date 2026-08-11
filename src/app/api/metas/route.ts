@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { computeGoalStatus } from "@/lib/goals";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -39,6 +40,10 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
+  const valorMeta = Number(body.valorMeta) || 0;
+  const valorRealizado = Number(body.valorRealizado) || 0;
+  const endDate = new Date(body.endDate);
+
   const goal = await prisma.goal.create({
     data: {
       empresaId: empresa.id,
@@ -47,13 +52,13 @@ export async function POST(req: Request) {
       responsavel: body.responsavel,
       description: body.description || null,
       indicador: body.indicador || null,
-      valorMeta: Number(body.valorMeta) || 0,
-      valorRealizado: Number(body.valorRealizado) || 0,
+      valorMeta,
+      valorRealizado,
       unidade: body.unidade || "R$",
       startDate: new Date(body.startDate),
-      endDate: new Date(body.endDate),
+      endDate,
       bonificacao: body.bonificacao || null,
-      status: body.status || "NAO_INICIADA",
+      status: computeGoalStatus(valorRealizado, valorMeta, endDate) as never,
       observacoes: body.observacoes || null,
       planoDeAcao: body.planoDeAcao || null,
       createdById: session.user.id,

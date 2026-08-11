@@ -3,12 +3,14 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ConfiguracoesClient } from "./configuracoes-client";
+import { getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function ConfiguracoesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const isAdmin = session.user.role === "ADMINISTRADOR" || session.user.role === "GESTOR";
+  const ctx = await getActiveEmpresaContext();
 
   const auditLogs = isAdmin
     ? await prisma.auditLog.findMany({
@@ -35,6 +37,8 @@ export default async function ConfiguracoesPage() {
         userRole={session.user.role}
         isAdmin={isAdmin}
         auditLogs={serializedLogs}
+        taxaIfoodPadrao={ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : null}
+        empresaNome={ctx?.mode === "single" ? ctx.empresa.name : null}
       />
     </PageContainer>
   );
