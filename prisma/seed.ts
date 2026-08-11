@@ -131,6 +131,7 @@ const CATEGORIES = [
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
     ],
   },
+  { key: "cmv", name: "CMV", icon: "Percent", order: 12, contentType: "cmv", subs: [] },
 ];
 
 async function main() {

@@ -1,3 +1,15 @@
+export const PRODUCT_CATEGORY_LABEL: Record<string, string> = {
+  PIZZA_SALGADA: "Pizzas Salgadas",
+  PIZZA_DOCE: "Pizzas Doces",
+  COMBO: "Combos",
+  ESFIHA_SALGADA: "Esfihas Salgadas",
+  ESFIHA_DOCE: "Esfihas Doces",
+  ACOMPANHAMENTO: "Acompanhamentos",
+  BURGER: "Burgers",
+  BEBIDA: "Bebidas",
+  DRINK: "Drinks",
+};
+
 export type IngredientForCalc = {
   precoAtual: number;
   quantidadeEmbalagem: number;
