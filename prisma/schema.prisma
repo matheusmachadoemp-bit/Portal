@@ -66,6 +66,7 @@ model User {
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]     @relation("WaiterSaleCreatedBy")
   stockMovementsCreated         StockMovement[]       @relation("StockMovementCreatedBy")
+  salesCreated                  Sale[]                @relation("SaleCreatedBy")
   vaultEntries                  VaultEntry[]
   vaultAccess                   VaultAccessLog[]
   courses                       Course[]
@@ -152,6 +153,7 @@ model Empresa {
   goals              Goal[]
   employees          Employee[]
   waiterSales        WaiterSaleEntry[]
+  sales              Sale[]
   products           Product[]
   ingredients        Ingredient[]
   stockMovements     StockMovement[]
@@ -252,6 +254,56 @@ model SalesEntry {
   createdBy           User       @relation(fields: [createdById], references: [id])
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// VENDAS — lançamentos granulares (por venda/pedido), usados para as
+// análises de Curva ABC, desempenho por garçom, horário, forma de
+// pagamento e área de entrega. Complementa o SalesEntry (agregado diário)
+// acima, que continua sendo o lançamento macro do dia.
+// ---------------------------------------------------------------------------
+
+enum SaleChannel {
+  SALAO
+  DELIVERY
+  BALCAO
+}
+
+model Sale {
+  id             String        @id @default(cuid())
+  empresaId      String
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  dateTime       DateTime
+  channel        SaleChannel   @default(SALAO)
+  formaPagamento PaymentMethod @default(OUTRO)
+  garcomId       String?
+  garcom         Employee?     @relation(fields: [garcomId], references: [id])
+  mesaNumero     String?
+  bairro         String?
+  regiao         String?
+  valorTotal     Float         @default(0)
+  createdById    String
+  createdBy      User          @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+
+  items SaleItem[]
+
+  @@index([empresaId, dateTime])
+}
+
+model SaleItem {
+  id            String           @id @default(cuid())
+  saleId        String
+  sale          Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?         @relation(fields: [productId], references: [id])
+  nome          String
+  categoria     ProductCategory?
+  quantidade    Float
+  precoUnitario Float
+  faturamento   Float
+
+  @@index([saleId])
 }
 
 // ---------------------------------------------------------------------------
@@ -507,6 +559,7 @@ model Employee {
 
   occurrences Occurrence[]
   waiterSales WaiterSaleEntry[]
+  sales       Sale[]
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +710,7 @@ enum ProductCategory {
   BURGER
   BEBIDA
   DRINK
+  SOBREMESA
 }
 
 model Ingredient {
@@ -739,6 +793,7 @@ model Product {
   updatedAt    DateTime        @updatedAt
 
   ingredients ProductIngredient[]
+  saleItems   SaleItem[]
 }
 
 model ProductIngredient {
@@ -773,6 +828,7 @@ enum PaymentMethod {
   DINHEIRO
   CARTAO_DEBITO
   CARTAO_CREDITO
+  VOUCHER
   TED
   DOC
   TRANSFERENCIA

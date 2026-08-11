@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { VendasClient } from "./vendas-client";
+import { VendasTabs } from "./vendas-tabs";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -23,7 +24,10 @@ export default async function VendasPage() {
 
   return (
     <PageContainer title="Vendas" subtitle="Faturamento, pedidos, ticket médio e taxa de serviço">
-      <VendasClient initialEntries={serialized} canCreate={ctx?.mode === "single"} />
+      <div className="space-y-6">
+        <VendasTabs />
+        <VendasClient initialEntries={serialized} canCreate={ctx?.mode === "single"} />
+      </div>
     </PageContainer>
   );
 }

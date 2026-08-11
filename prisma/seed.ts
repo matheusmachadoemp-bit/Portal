@@ -16,7 +16,15 @@ const CATEGORIES = [
     icon: "ShoppingCart",
     order: 1,
     contentType: "vendas",
-    subs: [],
+    subs: [
+      { key: "lancamentos", name: "Lançamentos", icon: "ReceiptText" },
+      { key: "itens-vendidos", name: "Itens Vendidos (Curva ABC)", icon: "BarChart3" },
+      { key: "garcons", name: "Desempenho por Garçom", icon: "Users" },
+      { key: "por-hora", name: "Vendas por Hora", icon: "Clock" },
+      { key: "periodo", name: "Vendas por Período", icon: "CalendarRange" },
+      { key: "pagamento", name: "Forma de Pagamento", icon: "CreditCard" },
+      { key: "entrega", name: "Área de Entrega", icon: "MapPin" },
+    ],
   },
   {
     key: "marketing",
