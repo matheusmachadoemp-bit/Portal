@@ -201,8 +201,7 @@ const BASELINE_ONLY = [
   { name: "20260810222805_universidade_grupo_nord", checksum: "31d3052e64c32eacb5f2d2ee2a9728a03d9999be4e540e7865c7a926f5017ce3" },
 ];
 
-export async function POST(req: NextRequest) {
-  const token = req.headers.get("x-migration-token");
+async function runMigrations(token: string | null) {
   if (token !== MIGRATION_TOKEN) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -248,4 +247,12 @@ export async function POST(req: NextRequest) {
   } finally {
     await client.end();
   }
+}
+
+export async function POST(req: NextRequest) {
+  return runMigrations(req.headers.get("x-migration-token"));
+}
+
+export async function GET(req: NextRequest) {
+  return runMigrations(req.nextUrl.searchParams.get("token"));
 }
