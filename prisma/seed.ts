@@ -196,7 +196,7 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@nordpizza.com" },
-    update: { canViewGrupoNord: true, defaultEmpresaId: nordPizza.id },
+    update: { passwordHash, canViewGrupoNord: true, defaultEmpresaId: nordPizza.id },
     create: {
       name: "Administrador Nord",
       email: "admin@nordpizza.com",
@@ -210,7 +210,7 @@ async function main() {
   const gerentePass = await bcrypt.hash("Gerente@2026", 10);
   const gerente = await prisma.user.upsert({
     where: { email: "gerente@nordpizza.com" },
-    update: { defaultEmpresaId: nordPizza.id },
+    update: { passwordHash: gerentePass, defaultEmpresaId: nordPizza.id },
     create: {
       name: "Gerente Nord",
       email: "gerente@nordpizza.com",
