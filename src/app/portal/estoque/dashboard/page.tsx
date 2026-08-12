@@ -32,14 +32,15 @@ export default async function EstoqueDashboardPage() {
     (i) => i.validade && i.validade <= vencimentoLimite && i.validade >= now
   );
 
+  const ingredientById = new Map(ingredients.map((i) => [i.id, i]));
   const entradasPeriodo = movements.filter((m) => m.type === "ENTRADA");
   const saidasPeriodo = movements.filter((m) => m.type === "SAIDA" || m.type === "PERDA");
   const valorEntradas = entradasPeriodo.reduce((sum, m) => {
-    const ing = ingredients.find((i) => i.id === m.ingredientId);
+    const ing = ingredientById.get(m.ingredientId);
     return sum + m.quantidade * (ing ? ingredientCostPerUnit(ing) : 0);
   }, 0);
   const valorSaidas = saidasPeriodo.reduce((sum, m) => {
-    const ing = ingredients.find((i) => i.id === m.ingredientId);
+    const ing = ingredientById.get(m.ingredientId);
     return sum + m.quantidade * (ing ? ingredientCostPerUnit(ing) : 0);
   }, 0);
 

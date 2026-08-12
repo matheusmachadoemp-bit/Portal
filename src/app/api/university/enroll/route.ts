@@ -28,10 +28,9 @@ export async function POST(req: Request) {
       include: { courses: { include: { course: true } } },
     });
     if (!track) return NextResponse.json({ error: "Trilha não encontrada." }, { status: 404 });
-    const enrollments = [];
-    for (const tc of track.courses) {
-      enrollments.push(await enrollUserInCourse(targetUserId, tc.courseId));
-    }
+    const enrollments = await Promise.all(
+      track.courses.map((tc) => enrollUserInCourse(targetUserId, tc.courseId))
+    );
     return NextResponse.json({ enrollments });
   }
 

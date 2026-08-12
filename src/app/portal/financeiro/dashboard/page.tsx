@@ -54,12 +54,22 @@ async function getData() {
     ano: { from: startOfYear(now), to: endOfYear(now) },
   };
 
-  const receivablesPaid = await prisma.receivable.findMany({
-    where: { status: { in: ["PAGO", "PARCIALMENTE_PAGO"] }, dataCompetencia: { gte: subDays(now, 400) } },
-  });
-  const payablesPaid = await prisma.payable.findMany({
-    where: { status: { in: ["PAGO", "PARCIALMENTE_PAGO"] }, dataCompetencia: { gte: subDays(now, 400) } },
-  });
+  const [receivablesPaid, payablesPaid] = await Promise.all([
+    prisma.receivable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: subDays(now, 400) },
+        empresaId: { in: empresaIds },
+      },
+    }),
+    prisma.payable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: subDays(now, 400) },
+        empresaId: { in: empresaIds },
+      },
+    }),
+  ]);
 
   const sumInRange = (arr: { valor: number; dataCompetencia: Date }[], from: Date, to: Date) =>
     arr.filter((e) => e.dataCompetencia >= from && e.dataCompetencia <= to).reduce((a, e) => a + e.valor, 0);

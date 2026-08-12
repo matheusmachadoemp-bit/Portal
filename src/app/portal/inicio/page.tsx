@@ -73,16 +73,20 @@ async function getData(empresaIds: string[]) {
     { name: "Salão", value: fatSalao },
   ];
 
-  const monthlyEvolution = [] as { month: string; total: number }[];
-  for (let i = 5; i >= 0; i--) {
-    const start = startOfMonth(subMonths(now, i));
-    const end = endOfMonth(subMonths(now, i));
-    const entries = await prisma.salesEntry.findMany({
-      where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
-    });
-    const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
-    monthlyEvolution.push({ month: format(start, "MMM", { locale: ptBR }), total });
-  }
+  const monthlyRanges = Array.from({ length: 6 }, (_, idx) => {
+    const i = 5 - idx;
+    return { start: startOfMonth(subMonths(now, i)), end: endOfMonth(subMonths(now, i)) };
+  });
+  const monthlyEvolution = await Promise.all(
+    monthlyRanges.map(async ({ start, end }) => {
+      const entries = await prisma.salesEntry.findMany({
+        where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
+        select: { faturamentoDelivery: true, faturamentoSalao: true },
+      });
+      const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
+      return { month: format(start, "MMM", { locale: ptBR }), total };
+    })
+  );
 
   return {
     fatMes,
