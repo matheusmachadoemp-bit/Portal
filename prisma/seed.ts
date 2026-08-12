@@ -18,7 +18,7 @@ const CATEGORIES = [
     contentType: "vendas",
     subs: [
       { key: "lancamentos", name: "Lançamentos", icon: "ReceiptText" },
-      { key: "itens-vendidos", name: "Itens Vendidos (Curva ABC)", icon: "BarChart3" },
+      { key: "itens-vendidos", name: "Curva ABC", icon: "BarChart3" },
       { key: "garcons", name: "Desempenho por Garçom", icon: "Users" },
       { key: "por-hora", name: "Vendas por Hora", icon: "Clock" },
       { key: "periodo", name: "Vendas por Período", icon: "CalendarRange" },

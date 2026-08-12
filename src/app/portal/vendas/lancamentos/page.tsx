@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { LancamentosClient } from "./lancamentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -37,7 +36,6 @@ export default async function LancamentosPage() {
   return (
     <PageContainer title="Vendas" subtitle="Lançamentos">
       <div className="space-y-6">
-        <VendasTabs />
         <LancamentosClient
           initialSales={serializedSales}
           products={products.map((p) => ({ id: p.id, name: p.name, category: p.category, precoVenda: p.precoVenda }))}

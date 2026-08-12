@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { PeriodoClient } from "./periodo-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { resolvePeriod } from "@/lib/periods";
@@ -24,7 +23,6 @@ export default async function VendasPorPeriodoPage() {
   return (
     <PageContainer title="Vendas" subtitle="Vendas por Período">
       <div className="space-y-6">
-        <VendasTabs />
         <PeriodoClient initialKey="mes" initialAtual={toSummary(atualSales)} initialAnterior={toSummary(anteriorSales)} />
       </div>
     </PageContainer>

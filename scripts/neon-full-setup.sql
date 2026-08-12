@@ -536,3 +536,18 @@ JOIN (VALUES
   ('insumos', 'Insumos', 'Boxes', 9)
 ) AS s(key, name, icon, ord) ON true
 WHERE c.key = 'ficha-tecnica';
+
+-- Subcategorias de Vendas
+INSERT INTO "Subcategory" (id, "categoryId", key, name, icon, "order", "isSystem", "createdAt", "updatedAt")
+SELECT gen_random_uuid()::text, c.id, s.key, s.name, s.icon, s.ord, true, now(), now()
+FROM "Category" c
+JOIN (VALUES
+  ('lancamentos', 'Lançamentos', 'ReceiptText', 0),
+  ('itens-vendidos', 'Curva ABC', 'BarChart3', 1),
+  ('garcons', 'Desempenho por Garçom', 'Users', 2),
+  ('por-hora', 'Vendas por Hora', 'Clock', 3),
+  ('periodo', 'Vendas por Período', 'CalendarRange', 4),
+  ('pagamento', 'Forma de Pagamento', 'CreditCard', 5),
+  ('entrega', 'Área de Entrega', 'MapPin', 6)
+) AS s(key, name, icon, ord) ON true
+WHERE c.key = 'vendas';

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { Section } from "@/components/ui/stat-card";
 import { PagamentoChart } from "./chart";
 import { formatCurrency, formatPercent } from "@/lib/calc";
@@ -27,7 +26,6 @@ export default async function VendasPorPagamentoPage() {
   return (
     <PageContainer title="Vendas" subtitle="Forma de Pagamento">
       <div className="space-y-6">
-        <VendasTabs />
         <Section title="Vendas por forma de pagamento (últimos 30 dias)">
           <PagamentoChart data={byMethod.map((m) => ({ name: m.label, value: Math.round(m.valor) }))} />
           <div className="mt-4 space-y-1.5">
