@@ -138,6 +138,9 @@ export function PlayerClient({
         <ProgressBar percent={overallPercent} />
         <p className="text-[11px] text-nord-gray mt-1 mb-3">{overallPercent}% concluído</p>
         <div className="space-y-1">
+          {course.modules.length === 0 && (
+            <p className="text-xs text-nord-gray px-2.5 py-2">Nenhuma aula cadastrada ainda.</p>
+          )}
           {course.modules.map((m) => {
             const Icon = TYPE_ICON[m.type] ?? Video;
             const prog = progressMap.get(m.id);
@@ -189,6 +192,12 @@ export function PlayerClient({
       </div>
 
       <div className="nord-card p-5">
+        {!showQuiz && !activeModule && (
+          <p className="text-sm text-nord-gray">
+            Este curso ainda não possui aulas cadastradas. Volte em breve ou entre em contato com a equipe de treinamento.
+          </p>
+        )}
+
         {!showQuiz && activeModule && (
           <div>
             <div className="flex items-center justify-between mb-3">
