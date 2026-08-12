@@ -13,7 +13,6 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { MarketingTabs } from "../marketing-tabs";
 import { TaskModal } from "../task-modal";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
@@ -113,8 +112,6 @@ export function TasksClient({
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map((f) => (

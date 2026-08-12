@@ -551,3 +551,21 @@ JOIN (VALUES
   ('entrega', 'Área de Entrega', 'MapPin', 6)
 ) AS s(key, name, icon, ord) ON true
 WHERE c.key = 'vendas';
+
+-- Subcategorias de Marketing
+INSERT INTO "Subcategory" (id, "categoryId", key, name, icon, "order", "isSystem", "createdAt", "updatedAt")
+SELECT gen_random_uuid()::text, c.id, s.key, s.name, s.icon, s.ord, true, now(), now()
+FROM "Category" c
+JOIN (VALUES
+  ('calendario', 'Calendário de Conteúdo', 'CalendarDays', 0),
+  ('tarefas', 'Tarefas', 'ListTodo', 1),
+  ('campanhas', 'Campanhas', 'Megaphone', 2),
+  ('biblioteca', 'Biblioteca de Arquivos', 'FolderOpen', 3),
+  ('drive', 'Google Drive', 'HardDrive', 4),
+  ('ideias', 'Banco de Ideias', 'Sparkles', 5),
+  ('trafego-pago', 'Tráfego Pago', 'TrendingUp', 6),
+  ('redes-sociais', 'Redes Sociais', 'Share2', 7),
+  ('equipe', 'Equipe', 'Users', 8),
+  ('relatorios', 'Relatórios', 'FileBarChart', 9)
+) AS s(key, name, icon, ord) ON true
+WHERE c.key = 'marketing';

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { TaskModal } from "../task-modal";
@@ -140,8 +139,6 @@ export function DashboardClient({
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       {canCreate && (
         <div className="flex justify-end">
           <button

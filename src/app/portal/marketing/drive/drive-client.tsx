@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderOpen, Save, ExternalLink } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { Section } from "@/components/ui/stat-card";
 
 function toEmbedUrl(url: string) {
@@ -35,8 +34,6 @@ export function DriveClient({ driveFolderUrl, canEdit }: { driveFolderUrl: strin
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       <Section
         title="Pasta do Google Drive"
         action={

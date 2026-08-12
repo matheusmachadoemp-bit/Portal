@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { TaskModal } from "../task-modal";
 import { STATUS_COLOR } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "../marketing-types";
@@ -84,8 +83,6 @@ export function CalendarClient({
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button onClick={() => setCursor(new Date())} className="px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white">

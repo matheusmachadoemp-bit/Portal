@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/stat-card";
 import { formatCurrency, formatNumber, safeDiv } from "@/lib/calc";
@@ -110,8 +109,6 @@ export function CampaignsClient({
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       {canCreate && (
         <div className="flex justify-end">
           <button
