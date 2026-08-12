@@ -66,6 +66,11 @@ model User {
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]      @relation("WaiterSaleCreatedBy")
   stockMovementsCreated         StockMovement[]        @relation("StockMovementCreatedBy")
+  purchasesCreated              Purchase[]             @relation("PurchaseCreatedBy")
+  transfersCreated              Transfer[]             @relation("TransferCreatedBy")
+  lossesCreated                 Loss[]                 @relation("LossCreatedBy")
+  stockCountsCreated            StockCount[]           @relation("StockCountCreatedBy")
+  actionPlansCreated            ActionPlan[]           @relation("ActionPlanCreatedBy")
   salesCreated                  Sale[]                 @relation("SaleCreatedBy")
   vaultEntries                  VaultEntry[]
   vaultAccess                   VaultAccessLog[]
@@ -134,19 +139,29 @@ model ModulePermission {
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id              String   @id @default(cuid())
-  key             String   @unique
-  name            String
-  logo            String?
-  color           String   @default("#2952E3")
-  active          Boolean  @default(true)
-  order           Int      @default(0)
-  driveFolderUrl  String?
-  taxaIfoodPadrao Float    @default(30)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                             String   @id @default(cuid())
+  key                            String   @unique
+  name                           String
+  logo                           String?
+  color                          String   @default("#2952E3")
+  active                         Boolean  @default(true)
+  order                          Int      @default(0)
+  driveFolderUrl                 String?
+  taxaIfoodPadrao                Float    @default(30)
+  metaCmvPercent                 Float    @default(30)
+  metaDivergenciaContagemPercent Float    @default(3)
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
 
   userAccess             UserEmpresaAccess[]
+  suppliers              Supplier[]
+  purchases              Purchase[]
+  receivings             Receiving[]
+  transfersOrigem        Transfer[]              @relation("TransferOrigem")
+  transfersDestino       Transfer[]              @relation("TransferDestino")
+  losses                 Loss[]
+  stockCounts            StockCount[]
+  actionPlans            ActionPlan[]
   usersDefault           User[]                  @relation("UserDefaultEmpresa")
   salesEntries           SalesEntry[]
   marketingEntries       MarketingEntry[]
@@ -938,25 +953,47 @@ enum ProductCategory {
 }
 
 model Ingredient {
-  id                  String    @id @default(cuid())
-  empresaId           String
-  empresa             Empresa   @relation(fields: [empresaId], references: [id])
-  name                String
-  fornecedor          String?
-  unidade             String    @default("g")
-  precoAtual          Float     @default(0)
-  quantidadeEmbalagem Float     @default(1)
-  percentualPerda     Float     @default(0)
-  estoqueMinimo       Float     @default(0)
-  estoqueAtual        Float     @default(0)
-  validade            DateTime?
-  lastPurchaseDate    DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                     String         @id @default(cuid())
+  empresaId              String
+  empresa                Empresa        @relation(fields: [empresaId], references: [id])
+  name                   String
+  fornecedor             String?
+  unidade                String         @default("g")
+  precoAtual             Float          @default(0)
+  quantidadeEmbalagem    Float          @default(1)
+  percentualPerda        Float          @default(0)
+  estoqueMinimo          Float          @default(0)
+  estoqueAtual           Float          @default(0)
+  validade               DateTime?
+  lastPurchaseDate       DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  // --- Cadastro de produto/insumo (módulo Estoque) ---
+  categoryId             String?
+  category               StockCategory? @relation(fields: [categoryId], references: [id])
+  setor                  String?
+  codigoInterno          String?
+  codigoBarras           String?
+  localArmazenamento     String?
+  unidadeCompra          String?
+  fatorConversao         Float          @default(1)
+  pesoEmbalagem          Float?
+  rendimentoAproveitavel Float?
+  estoqueMaximo          Float?
+  pontoReposicao         Float?
+  fornecedorPrincipalId  String?
+  fornecedorPrincipal    Supplier?      @relation(fields: [fornecedorPrincipalId], references: [id])
+  perecivel              Boolean        @default(false)
+  active                 Boolean        @default(true)
+  fotoUrl                String?
 
-  priceHistory IngredientPriceHistory[]
-  productLinks ProductIngredient[]
-  movements    StockMovement[]
+  priceHistory  IngredientPriceHistory[]
+  productLinks  ProductIngredient[]
+  movements     StockMovement[]
+  purchaseItems PurchaseItem[]
+  losses        Loss[]
+  transferItems TransferItem[]
+  countItems    StockCountItem[]
 }
 
 model IngredientPriceHistory {
@@ -977,20 +1014,27 @@ enum StockMovementType {
 }
 
 model StockMovement {
-  id           String            @id @default(cuid())
-  ingredientId String
-  ingredient   Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  empresaId    String
-  empresa      Empresa           @relation(fields: [empresaId], references: [id])
-  type         StockMovementType
-  quantidade   Float
-  estoqueApos  Float
-  motivo       String?
-  createdById  String
-  createdBy    User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id])
-  createdAt    DateTime          @default(now())
+  id            String            @id @default(cuid())
+  ingredientId  String
+  ingredient    Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  empresaId     String
+  empresa       Empresa           @relation(fields: [empresaId], references: [id])
+  type          StockMovementType
+  quantidade    Float
+  estoqueApos   Float
+  motivo        String?
+  /// Origem funcional do lançamento, para relatórios de CMV Real e auditoria: COMPRA, MANUAL, VENDA, PERDA, CORTESIA, CONSUMO_INTERNO, TRANSFERENCIA_ENVIADA, TRANSFERENCIA_RECEBIDA, DEVOLUCAO_FORNECEDOR, CANCELAMENTO, CONTAGEM, AJUSTE_POSITIVO, AJUSTE_NEGATIVO.
+  origin        String?
+  origem        String?
+  destino       String?
+  documentoUrl  String?
+  autorizadoPor String?
+  createdById   String
+  createdBy     User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
 
   @@index([ingredientId])
+  @@index([empresaId, createdAt])
 }
 
 model Product {
@@ -1041,6 +1085,301 @@ model CategoryQualityConfig {
   updatedAt         DateTime        @updatedAt
 
   @@unique([empresaId, category])
+}
+
+// ---------------------------------------------------------------------------
+// ESTOQUE — módulo completo (compras, fornecedores, recebimento,
+// transferências, perdas, contagens, planos de ação)
+// ---------------------------------------------------------------------------
+
+model StockCategory {
+  id                    String   @id @default(cuid())
+  key                   String   @unique
+  name                  String
+  color                 String   @default("#2952E3")
+  icon                  String   @default("Boxes")
+  setor                 String?
+  order                 Int      @default(0)
+  metaPerdaPercent      Float    @default(2)
+  periodicidadeContagem String   @default("SEMANAL")
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  ingredients Ingredient[]
+}
+
+model Supplier {
+  id                 String   @id @default(cuid())
+  empresaId          String
+  empresa            Empresa  @relation(fields: [empresaId], references: [id])
+  razaoSocial        String
+  nomeFantasia       String?
+  cnpj               String?
+  telefone           String?
+  whatsapp           String?
+  email              String?
+  endereco           String?
+  prazoPagamentoDias Int?
+  prazoEntregaDias   Int?
+  pedidoMinimo       Float?
+  avaliacao          Float    @default(0)
+  active             Boolean  @default(true)
+  observacao         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  ingredients Ingredient[]
+  purchases   Purchase[]
+}
+
+enum PurchaseStatus {
+  PEDIDO_REALIZADO
+  AGUARDANDO_ENTREGA
+  RECEBIDO_PARCIAL
+  RECEBIDO
+  DIVERGENCIA
+  CANCELADO
+}
+
+model Purchase {
+  id                   String         @id @default(cuid())
+  empresaId            String
+  empresa              Empresa        @relation(fields: [empresaId], references: [id])
+  supplierId           String
+  supplier             Supplier       @relation(fields: [supplierId], references: [id])
+  numeroNota           String?
+  data                 DateTime       @default(now())
+  compradorResponsavel String?
+  formaPagamento       PaymentMethod?
+  dataVencimento       DateTime?
+  notaFiscalUrl        String?
+  desconto             Float          @default(0)
+  frete                Float          @default(0)
+  status               PurchaseStatus @default(PEDIDO_REALIZADO)
+  observacoes          String?
+  createdById          String
+  createdBy            User           @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  items     PurchaseItem[]
+  receiving Receiving?
+
+  @@index([empresaId, data])
+}
+
+model PurchaseItem {
+  id            String     @id @default(cuid())
+  purchaseId    String
+  purchase      Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  ingredientId  String
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
+  quantidade    Float
+  unidade       String
+  valorUnitario Float
+  valorTotal    Float
+
+  @@index([purchaseId])
+}
+
+enum ReceivingStatus {
+  APROVADO
+  APROVADO_RESSALVA
+  RECEBIDO_PARCIAL
+  RECUSADO
+  AGUARDANDO_SOLUCAO
+}
+
+model Receiving {
+  id                String          @id @default(cuid())
+  purchaseId        String          @unique
+  purchase          Purchase        @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  empresaId         String
+  empresa           Empresa         @relation(fields: [empresaId], references: [id])
+  dataHora          DateTime        @default(now())
+  responsavel       String?
+  status            ReceivingStatus @default(AGUARDANDO_SOLUCAO)
+  /// Divergências marcadas: FALTA, EXCESSO, PESO_INCORRETO, PRODUTO_DANIFICADO, FORA_TEMPERATURA, VALIDADE_CURTA, PRODUTO_DIFERENTE, PRECO_DIFERENTE — lista separada por vírgula.
+  divergencias      String?
+  detalhes          String?
+  fotoMercadoriaUrl String?
+  fotoNotaUrl       String?
+  observacao        String?
+  createdAt         DateTime        @default(now())
+}
+
+enum TransferStatus {
+  SOLICITADA
+  SEPARACAO
+  ENVIADA
+  RECEBIDA
+  DIVERGENCIA
+}
+
+model Transfer {
+  id                     String         @id @default(cuid())
+  origemEmpresaId        String
+  origemEmpresa          Empresa        @relation("TransferOrigem", fields: [origemEmpresaId], references: [id])
+  destinoEmpresaId       String
+  destinoEmpresa         Empresa        @relation("TransferDestino", fields: [destinoEmpresaId], references: [id])
+  status                 TransferStatus @default(SOLICITADA)
+  responsavelEnvio       String?
+  responsavelRecebimento String?
+  dataEnvio              DateTime?
+  dataRecebimento        DateTime?
+  observacao             String?
+  createdById            String
+  createdBy              User           @relation("TransferCreatedBy", fields: [createdById], references: [id])
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  items TransferItem[]
+}
+
+model TransferItem {
+  id                 String     @id @default(cuid())
+  transferId         String
+  transfer           Transfer   @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  ingredientId       String
+  ingredient         Ingredient @relation(fields: [ingredientId], references: [id])
+  unidade            String
+  quantidadeEnviada  Float
+  quantidadeRecebida Float?
+  observacao         String?
+}
+
+enum LossReason {
+  VENCIMENTO
+  ERRO_PRODUCAO
+  QUEIMA
+  QUEDA
+  CONTAMINACAO
+  ARMAZENAMENTO_INCORRETO
+  PORCIONAMENTO_INCORRETO
+  DEVOLUCAO_CLIENTE
+  SOBRA_PRODUCAO
+  PERDA_LIMPEZA
+  PRODUTO_DANIFICADO
+  FURTO
+  OUTRO
+}
+
+model Loss {
+  id            String     @id @default(cuid())
+  empresaId     String
+  empresa       Empresa    @relation(fields: [empresaId], references: [id])
+  setor         String?
+  ingredientId  String
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
+  quantidade    Float
+  unidade       String
+  valorEstimado Float      @default(0)
+  motivo        LossReason
+  responsavel   String?
+  aprovador     String?
+  fotoUrl       String?
+  observacao    String?
+  data          DateTime   @default(now())
+  createdById   String
+  createdBy     User       @relation("LossCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime   @default(now())
+
+  @@index([empresaId, data])
+}
+
+enum CountType {
+  SEMANAL
+  MENSAL
+}
+
+enum CountStatus {
+  RASCUNHO
+  EM_ANDAMENTO
+  CONCLUIDA
+  APROVADA
+  REABERTA
+}
+
+model StockCount {
+  id               String      @id @default(cuid())
+  empresaId        String
+  empresa          Empresa     @relation(fields: [empresaId], references: [id])
+  type             CountType
+  setor            String?
+  semana           Int?
+  mes              Int?
+  ano              Int
+  dataContagem     DateTime    @default(now())
+  responsavel      String?
+  horaInicio       String?
+  horaFim          String?
+  status           CountStatus @default(RASCUNHO)
+  checklistJson    String?
+  motivoReabertura String?
+  aprovadoPor      String?
+  aprovadoEm       DateTime?
+  createdById      String
+  createdBy        User        @relation("StockCountCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  items StockCountItem[]
+
+  @@index([empresaId, type, ano])
+}
+
+enum CountItemStatus {
+  PENDENTE
+  CONTADO
+  CONFERIDO
+  DIVERGENCIA
+  RECONTAGEM
+  APROVADO
+}
+
+model StockCountItem {
+  id                String          @id @default(cuid())
+  countId           String
+  count             StockCount      @relation(fields: [countId], references: [id], onDelete: Cascade)
+  ingredientId      String
+  ingredient        Ingredient      @relation(fields: [ingredientId], references: [id])
+  setor             String?
+  estoqueEsperado   Float           @default(0)
+  quantidadeContada Float?
+  diferencaQtd      Float?
+  diferencaPercent  Float?
+  diferencaReais    Float?
+  status            CountItemStatus @default(PENDENTE)
+  observacao        String?
+  fotoUrl           String?
+  justificativa     String?
+
+  @@index([countId])
+}
+
+enum ActionPlanStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDO
+  ATRASADO
+}
+
+model ActionPlan {
+  id            String           @id @default(cuid())
+  empresaId     String
+  empresa       Empresa          @relation(fields: [empresaId], references: [id])
+  problema      String
+  causaProvavel String?
+  acaoCorretiva String
+  responsavel   String?
+  prazo         DateTime?
+  status        ActionPlanStatus @default(PENDENTE)
+  evidenciaUrl  String?
+  createdById   String
+  createdBy     User             @relation("ActionPlanCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 }
 
 // ---------------------------------------------------------------------------
