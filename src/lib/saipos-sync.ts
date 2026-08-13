@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
 import { fetchSaiposSales } from "@/lib/saipos-client";
-import { toSaiposSaleData } from "@/lib/saipos-mapper";
+import { isSaiposSaleCanceled, toSaiposSaleData } from "@/lib/saipos-mapper";
 import type { Empresa } from "@prisma/client";
 
 export type SaiposSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
@@ -23,6 +23,10 @@ export async function syncEmpresaSaiposSales(
     data: { empresaId: empresa.id, status: "EM_ANDAMENTO" },
   });
 
+  // Limpa registros órfãos de uma versão anterior do mapeamento, em que o
+  // identificador da venda não era extraído corretamente.
+  await prisma.saiposSale.deleteMany({ where: { empresaId: empresa.id, saiposId: "undefined" } });
+
   const token = decryptSecret(empresa.saiposApiToken);
   const result = await fetchSaiposSales(token, range);
 
@@ -35,6 +39,7 @@ export async function syncEmpresaSaiposSales(
   }
 
   for (const record of result.sales) {
+    if (isSaiposSaleCanceled(record)) continue;
     const data = toSaiposSaleData(empresa.id, record);
     await prisma.saiposSale.upsert({
       where: { empresaId_saiposId: { empresaId: empresa.id, saiposId: data.saiposId } },

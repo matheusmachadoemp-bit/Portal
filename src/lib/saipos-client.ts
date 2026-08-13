@@ -3,12 +3,15 @@ const MAX_RANGE_DAYS = 15;
 const PAGE_LIMIT = 1000;
 
 export type SaiposSaleRecord = {
-  id: string;
+  id_sale: number;
   shift_date: string;
-  date_time: string;
-  channel?: string;
-  payment_method?: string;
-  total_value?: number;
+  created_at: string;
+  total_amount?: number;
+  canceled?: string;
+  table_order?: unknown;
+  delivery?: { delivery_by?: string | null } | null;
+  partner_sale?: { desc_partner_sale?: string | null } | null;
+  payments?: { payment_amount: number; desc_store_payment_type?: string | null }[];
   [key: string]: unknown;
 };
 
