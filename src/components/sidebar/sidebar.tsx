@@ -663,7 +663,7 @@ function CategoryFormModal({
 }) {
   const [name, setName] = useState(category?.name ?? "");
   const [icon, setIcon] = useState(category?.icon ?? "LayoutGrid");
-  const [color, setColor] = useState(category?.color ?? "#2952E3");
+  const [color, setColor] = useState(category?.color ?? "#1464F4");
 
   async function submit() {
     if (category) {
@@ -728,7 +728,7 @@ function SubcategoryFormModal({
 }) {
   const [name, setName] = useState(subcategory?.name ?? "");
   const [icon, setIcon] = useState(subcategory?.icon ?? "Folder");
-  const [color, setColor] = useState(subcategory?.color ?? "#2952E3");
+  const [color, setColor] = useState(subcategory?.color ?? "#1464F4");
 
   async function submit() {
     if (subcategory) {
