@@ -33,7 +33,8 @@ type SalesEntryDTO = {
   taxaServicoValor: number;
   metaDiaria: number;
   observacoes: string | null;
-  createdBy: { name: string };
+  source: string;
+  createdBy: { name: string } | null;
 };
 
 const emptyForm = {
@@ -344,7 +345,13 @@ export function VendasClient({
                   </td>
                   <td className="py-2 pr-4 text-nord-gray">{e.mesasAtendidas}</td>
                   <td className="py-2 pr-4 text-nord-gray">{formatCurrency(e.taxaServicoValor)}</td>
-                  <td className="py-2 pr-4 text-nord-gray">{e.createdBy?.name}</td>
+                  <td className="py-2 pr-4 text-nord-gray">
+                    {e.source === "SAIPOS" ? (
+                      <Badge tone="info">Saipos (automático)</Badge>
+                    ) : (
+                      e.createdBy?.name ?? "—"
+                    )}
+                  </td>
                   <td className="py-2 pr-4">
                     {canCreate && (
                       <div className="flex items-center gap-2 justify-end">
