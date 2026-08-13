@@ -264,25 +264,31 @@ enum PeriodType {
   MENSAL
 }
 
+enum SalesEntrySource {
+  MANUAL
+  SAIPOS
+}
+
 model SalesEntry {
-  id                  String     @id @default(cuid())
+  id                  String            @id @default(cuid())
   empresaId           String
-  empresa             Empresa    @relation(fields: [empresaId], references: [id])
+  empresa             Empresa           @relation(fields: [empresaId], references: [id])
   date                DateTime
-  periodType          PeriodType @default(DIARIO)
-  faturamentoDelivery Float      @default(0)
-  faturamentoSalao    Float      @default(0)
-  pedidosDelivery     Int        @default(0)
-  pedidosBalcao       Int        @default(0)
-  pedidosSalao        Int        @default(0)
-  mesasAtendidas      Int        @default(0)
-  taxaServicoValor    Float      @default(0)
-  metaDiaria          Float      @default(0)
+  periodType          PeriodType        @default(DIARIO)
+  source              SalesEntrySource  @default(MANUAL)
+  faturamentoDelivery Float             @default(0)
+  faturamentoSalao    Float             @default(0)
+  pedidosDelivery     Int               @default(0)
+  pedidosBalcao       Int               @default(0)
+  pedidosSalao        Int               @default(0)
+  mesasAtendidas      Int               @default(0)
+  taxaServicoValor    Float             @default(0)
+  metaDiaria          Float             @default(0)
   observacoes         String?
-  createdById         String
-  createdBy           User       @relation(fields: [createdById], references: [id])
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  createdById         String?
+  createdBy           User?             @relation(fields: [createdById], references: [id])
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   @@index([empresaId, date])
 }

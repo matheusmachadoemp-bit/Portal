@@ -43,6 +43,8 @@ export async function syncEmpresaSaiposSales(
     });
   }
 
+  await syncSalesEntriesFromSaipos(empresa.id, range);
+
   await prisma.$transaction([
     prisma.saiposSyncLog.update({
       where: { id: log.id },
@@ -52,4 +54,58 @@ export async function syncEmpresaSaiposSales(
   ]);
 
   return { ok: true, recordsSynced: result.sales.length };
+}
+
+function startOfDayUtc(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+/**
+ * Recalcula o lançamento diário (SalesEntry) de cada dia do intervalo a
+ * partir das vendas da Saipos já salvas, substituindo o lançamento manual
+ * do dia (se houver) por um lançamento com origem "SAIPOS".
+ */
+async function syncSalesEntriesFromSaipos(empresaId: string, range: { start: Date; end: Date }) {
+  const sales = await prisma.saiposSale.findMany({
+    where: { empresaId, shiftDate: { gte: startOfDayUtc(range.start), lte: range.end } },
+    select: { shiftDate: true, channel: true, valorTotal: true },
+  });
+
+  const byDay = new Map<string, typeof sales>();
+  for (const sale of sales) {
+    const key = startOfDayUtc(sale.shiftDate).toISOString();
+    const list = byDay.get(key) ?? [];
+    list.push(sale);
+    byDay.set(key, list);
+  }
+
+  for (const [dayKey, daySales] of byDay) {
+    const day = new Date(dayKey);
+    const faturamentoDelivery = daySales.filter((s) => s.channel === "DELIVERY").reduce((sum, s) => sum + s.valorTotal, 0);
+    const faturamentoSalao = daySales.filter((s) => s.channel !== "DELIVERY").reduce((sum, s) => sum + s.valorTotal, 0);
+    const pedidosDelivery = daySales.filter((s) => s.channel === "DELIVERY").length;
+    const pedidosSalao = daySales.filter((s) => s.channel === "SALAO").length;
+    const pedidosBalcao = daySales.filter((s) => s.channel === "BALCAO").length;
+
+    const data = {
+      faturamentoDelivery,
+      faturamentoSalao,
+      pedidosDelivery,
+      pedidosSalao,
+      pedidosBalcao,
+      source: "SAIPOS" as const,
+      createdById: null,
+    };
+
+    const existing = await prisma.salesEntry.findFirst({
+      where: { empresaId, date: day, periodType: "DIARIO" },
+      select: { id: true },
+    });
+
+    if (existing) {
+      await prisma.salesEntry.update({ where: { id: existing.id }, data });
+    } else {
+      await prisma.salesEntry.create({ data: { empresaId, date: day, periodType: "DIARIO", ...data } });
+    }
+  }
 }
