@@ -12,7 +12,6 @@ export default auth((req) => {
   const isPublic =
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/internal/run-saipos-migration-2") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
     pathname === "/favicon.ico";
