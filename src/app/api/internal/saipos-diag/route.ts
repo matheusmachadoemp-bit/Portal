@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       where: { empresaId: empresa.id },
       orderBy: { shiftDate: "desc" },
       take: 5,
-      select: { shiftDate: true, dateTime: true, channel: true, valorTotal: true, saiposId: true },
+      select: { shiftDate: true, dateTime: true, channel: true, valorTotal: true, saiposId: true, raw: true },
     });
     const salesEntrySaiposCount = await prisma.salesEntry.count({ where: { empresaId: empresa.id, source: "SAIPOS" } });
     const latestSalesEntries = await prisma.salesEntry.findMany({
