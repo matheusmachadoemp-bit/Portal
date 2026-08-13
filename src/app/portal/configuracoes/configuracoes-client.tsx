@@ -40,6 +40,7 @@ export function ConfiguracoesClient({
   const [saiposToken, setSaiposToken] = useState("");
   const [saiposLojaId, setSaiposLojaId] = useState(saipos?.lojaId ?? "");
   const [saiposSyncEnabled, setSaiposSyncEnabled] = useState(saipos?.syncEnabled ?? false);
+  const [saiposHasToken, setSaiposHasToken] = useState(saipos?.hasToken ?? false);
   const [saiposSaving, setSaiposSaving] = useState(false);
   const [saiposSyncing, setSaiposSyncing] = useState(false);
   const [saiposMessage, setSaiposMessage] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function ConfiguracoesClient({
     });
     const data = await res.json().catch(() => ({}));
     setSaiposSaving(false);
+    if (res.ok && saiposToken) setSaiposHasToken(true);
     setSaiposToken("");
     setSaiposMessage(res.ok ? "Configuração da Saipos salva com sucesso." : data.error ?? "Não foi possível salvar.");
   }
@@ -175,7 +177,7 @@ export function ConfiguracoesClient({
                     type="password"
                     value={saiposToken}
                     onChange={(e) => setSaiposToken(e.target.value)}
-                    placeholder={saipos.hasToken ? "•••••••• (configurado)" : "Cole o token aqui"}
+                    placeholder={saiposHasToken ? "•••••••• (configurado)" : "Cole o token aqui"}
                     className="input"
                   />
                 </label>
@@ -207,7 +209,7 @@ export function ConfiguracoesClient({
                 </button>
                 <button
                   onClick={syncSaiposNow}
-                  disabled={saiposSyncing || !saipos.hasToken}
+                  disabled={saiposSyncing || !saiposHasToken}
                   className="bg-nord-panel border border-nord-border hover:border-nord-blue disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
                 >
                   {saiposSyncing ? "Sincronizando..." : "Sincronizar agora"}
