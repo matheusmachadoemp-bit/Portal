@@ -148,6 +148,10 @@ model Empresa {
   order           Int      @default(0)
   driveFolderUrl  String?
   taxaIfoodPadrao Float    @default(30)
+  saiposApiToken    String?
+  saiposLojaId      String?
+  saiposSyncEnabled Boolean   @default(false)
+  saiposLastSyncAt  DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -190,6 +194,8 @@ model Empresa {
   vacations              Vacation[]
   uniformDeliveries      UniformDelivery[]
   employeeDocuments      EmployeeDocument[]
+  saiposSales            SaiposSale[]
+  saiposSyncLogs         SaiposSyncLog[]
 }
 
 model UserEmpresaAccess {
@@ -316,6 +322,40 @@ model Sale {
   items SaleItem[]
 
   @@index([empresaId, dateTime])
+}
+
+// ---------------------------------------------------------------------------
+// SAIPOS — vendas importadas da API de Dados da Saipos (GET /v1/search_sales)
+// ---------------------------------------------------------------------------
+
+model SaiposSale {
+  id             String        @id @default(cuid())
+  empresaId      String
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  saiposId       String
+  shiftDate      DateTime
+  dateTime       DateTime
+  channel        SaleChannel   @default(SALAO)
+  formaPagamento PaymentMethod @default(OUTRO)
+  valorTotal     Float         @default(0)
+  raw            Json?
+  createdAt      DateTime      @default(now())
+
+  @@unique([empresaId, saiposId])
+  @@index([empresaId, shiftDate])
+}
+
+model SaiposSyncLog {
+  id            String    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  status        String
+  recordsSynced Int       @default(0)
+  errorMessage  String?
+
+  @@index([empresaId, startedAt])
 }
 
 // ---------------------------------------------------------------------------
