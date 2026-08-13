@@ -16,7 +16,9 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
+
+const REFRESH_WINDOW_DAYS = 90;
 
 type SalesEntryDTO = {
   id: string;
@@ -146,7 +148,9 @@ export function VendasClient({
   }
 
   async function refresh() {
-    const res = await fetch("/api/vendas");
+    const from = subDays(new Date(), REFRESH_WINDOW_DAYS).toISOString();
+    const to = new Date().toISOString();
+    const res = await fetch(`/api/vendas?from=${from}&to=${to}`);
     const data = await res.json();
     setEntries(data.entries);
   }
