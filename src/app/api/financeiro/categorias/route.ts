@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { revalidateTag } from "next/cache";
 import { allDreCategories } from "@/lib/dre-structure";
+import { getFinancialCategories } from "@/lib/financial-categories";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const categories = await prisma.financialCategory.findMany({ orderBy: { name: "asc" } });
+  const categories = await getFinancialCategories();
   return NextResponse.json({ categories, dreOptions: allDreCategories() });
 }
 
@@ -31,5 +33,6 @@ export async function POST(req: Request) {
     },
   });
 
+  revalidateTag("financial-categories", { expire: 0 });
   return NextResponse.json({ category });
 }

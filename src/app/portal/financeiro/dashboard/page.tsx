@@ -21,6 +21,7 @@ import {
 import { FinanceCharts } from "./charts";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { getFinancialCategories } from "@/lib/financial-categories";
 
 async function getData() {
   const now = new Date();
@@ -43,7 +44,7 @@ async function getData() {
       year: subMonths(now, 1).getFullYear(),
       empresaIds,
     }),
-    prisma.financialCategory.findMany({ select: { id: true, name: true } }),
+    getFinancialCategories(),
   ]);
 
   const caixaAtual = accounts.reduce((acc, a) => acc + a.saldoAtual, 0);
