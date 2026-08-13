@@ -9,7 +9,7 @@ export function StatCard({
   delta,
   color = "#1464F4",
   hint,
-  labelClassName = "text-xs text-nord-gray",
+  labelClassName = "text-sm text-white",
 }: {
   label: string;
   value: string;
