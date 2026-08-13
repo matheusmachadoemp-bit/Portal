@@ -7,7 +7,7 @@ export function StatCard({
   value,
   icon,
   delta,
-  color = "#2952E3",
+  color = "#1464F4",
   hint,
 }: {
   label: string;
@@ -36,11 +36,11 @@ export function StatCard({
         {delta !== undefined && delta !== null && (
           <>
             {positive ? (
-              <TrendingUp size={13} className="text-emerald-400" />
+              <TrendingUp size={13} className="text-nord-success" />
             ) : (
-              <TrendingDown size={13} className="text-red-400" />
+              <TrendingDown size={13} className="text-nord-danger" />
             )}
-            <span className={`text-xs ${positive ? "text-emerald-400" : "text-red-400"}`}>
+            <span className={`text-xs ${positive ? "text-nord-success" : "text-nord-danger"}`}>
               {positive ? "+" : ""}
               {delta.toFixed(1)}%
             </span>
@@ -82,9 +82,9 @@ export function Badge({
 }) {
   const tones: Record<string, string> = {
     default: "bg-white/10 text-nord-gray",
-    success: "bg-emerald-500/15 text-emerald-400",
-    warning: "bg-amber-500/15 text-amber-400",
-    danger: "bg-red-500/15 text-red-400",
+    success: "bg-nord-success/15 text-nord-success",
+    warning: "bg-nord-warning/15 text-nord-warning",
+    danger: "bg-nord-danger/15 text-nord-danger",
     info: "bg-nord-blue/15 text-nord-blue-light",
   };
   return (
@@ -94,7 +94,7 @@ export function Badge({
   );
 }
 
-export function ProgressBar({ percent, color = "#2952E3" }: { percent: number; color?: string }) {
+export function ProgressBar({ percent, color = "#1464F4" }: { percent: number; color?: string }) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
     <div className="w-full h-2 rounded-full bg-nord-border overflow-hidden">

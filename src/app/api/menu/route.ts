@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       key: body.key ?? `custom-${Date.now()}`,
       name: body.name ?? "Nova categoria",
       icon: body.icon ?? "LayoutGrid",
-      color: body.color ?? "#2952E3",
+      color: body.color ?? "#1464F4",
       order: (maxOrder._max.order ?? 0) + 1,
       contentType: body.contentType ?? "custom",
     },
