@@ -19,14 +19,40 @@ async function getData(empresaIds: string[]) {
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
 
+  const monthEntrySelect = {
+    date: true,
+    faturamentoDelivery: true,
+    faturamentoSalao: true,
+    pedidosDelivery: true,
+    pedidosBalcao: true,
+    pedidosSalao: true,
+    metaDiaria: true,
+    taxaServicoValor: true,
+  } as const;
+
   const [thisMonth, prevMonth, today, occurrences, marketing, goals] = await Promise.all([
-    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: prevMonthStart, lte: prevMonthEnd } } }),
-    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: todayStart, lte: todayEnd } } }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: monthStart, lte: monthEnd } },
+      select: monthEntrySelect,
+    }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: prevMonthStart, lte: prevMonthEnd } },
+      select: { faturamentoDelivery: true, faturamentoSalao: true, pedidosDelivery: true, pedidosBalcao: true, pedidosSalao: true },
+    }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: todayStart, lte: todayEnd } },
+      select: { faturamentoDelivery: true, faturamentoSalao: true },
+    }),
     prisma.occurrence.findMany({
       where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: { in: empresaIds } } },
+      select: { type: true },
     }),
-    prisma.marketingEntry.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { date: "desc" }, take: 1 }),
+    prisma.marketingEntry.findMany({
+      where: { empresaId: { in: empresaIds } },
+      orderBy: { date: "desc" },
+      take: 1,
+      select: { receitaTrafego: true, investimentoTrafego: true },
+    }),
     prisma.goal.findMany({
       where: { empresaId: { in: empresaIds }, endDate: { gte: now } },
       orderBy: { endDate: "asc" },
@@ -34,7 +60,7 @@ async function getData(empresaIds: string[]) {
     }),
   ]);
 
-  const sum = (arr: typeof thisMonth, key: keyof (typeof thisMonth)[number]) =>
+  const sum = <T extends Record<string, unknown>>(arr: T[], key: keyof T) =>
     arr.reduce((acc, e) => acc + (Number(e[key]) || 0), 0);
 
   const fatMes = sum(thisMonth, "faturamentoDelivery") + sum(thisMonth, "faturamentoSalao");
@@ -73,16 +99,20 @@ async function getData(empresaIds: string[]) {
     { name: "Salão", value: fatSalao },
   ];
 
-  const monthlyEvolution = [] as { month: string; total: number }[];
-  for (let i = 5; i >= 0; i--) {
-    const start = startOfMonth(subMonths(now, i));
-    const end = endOfMonth(subMonths(now, i));
-    const entries = await prisma.salesEntry.findMany({
-      where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
-    });
-    const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
-    monthlyEvolution.push({ month: format(start, "MMM", { locale: ptBR }), total });
-  }
+  const monthlyRanges = Array.from({ length: 6 }, (_, idx) => {
+    const i = 5 - idx;
+    return { start: startOfMonth(subMonths(now, i)), end: endOfMonth(subMonths(now, i)) };
+  });
+  const monthlyEvolution = await Promise.all(
+    monthlyRanges.map(async ({ start, end }) => {
+      const entries = await prisma.salesEntry.findMany({
+        where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
+        select: { faturamentoDelivery: true, faturamentoSalao: true },
+      });
+      const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
+      return { month: format(start, "MMM", { locale: ptBR }), total };
+    })
+  );
 
   return {
     fatMes,
@@ -111,9 +141,13 @@ async function getComparisonRow(empresa: Empresa) {
   const monthEnd = endOfMonth(now);
 
   const [thisMonth, occurrences] = await Promise.all([
-    prisma.salesEntry.findMany({ where: { empresaId: empresa.id, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: empresa.id, date: { gte: monthStart, lte: monthEnd } },
+      select: { faturamentoDelivery: true, faturamentoSalao: true, pedidosDelivery: true, pedidosBalcao: true, pedidosSalao: true, metaDiaria: true },
+    }),
     prisma.occurrence.findMany({
       where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: empresa.id } },
+      select: { type: true },
     }),
   ]);
 

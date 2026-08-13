@@ -78,10 +78,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (Array.isArray(body.modules)) {
       const modules = body.modules as ModuleInput[];
       await tx.trainingModule.deleteMany({ where: { courseId: id } });
-      for (let i = 0; i < modules.length; i++) {
-        const m = modules[i];
-        await tx.trainingModule.create({
-          data: {
+      if (modules.length > 0) {
+        await tx.trainingModule.createMany({
+          data: modules.map((m, i) => ({
             courseId: id,
             title: m.title,
             type: (m.type as never) || "VIDEO",
@@ -90,7 +89,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             pdfUrl: m.pdfUrl || null,
             content: m.content || null,
             order: i,
-          },
+          })),
         });
       }
     }

@@ -21,21 +21,22 @@ import {
 import { FinanceCharts } from "./charts";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { getFinancialCategories } from "@/lib/financial-categories";
 
 async function getData() {
   const now = new Date();
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const [accounts, payablesOpen, receivablesOpen, dreThisMonth, dreLastMonth] = await Promise.all([
+  const [accounts, payablesOpen, receivablesOpen, dreThisMonth, dreLastMonth, catMap] = await Promise.all([
     prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
     prisma.payable.findMany({
       where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
-      include: { categoria: true },
+      select: { id: true, fornecedor: true, descricao: true, valor: true, dataVencimento: true },
     }),
     prisma.receivable.findMany({
       where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
-      include: { categoria: true },
+      select: { id: true, valor: true },
     }),
     computeDre({ month: now.getMonth() + 1, year: now.getFullYear(), empresaIds }),
     computeDre({
@@ -43,6 +44,7 @@ async function getData() {
       year: subMonths(now, 1).getFullYear(),
       empresaIds,
     }),
+    getFinancialCategories(),
   ]);
 
   const caixaAtual = accounts.reduce((acc, a) => acc + a.saldoAtual, 0);
@@ -54,12 +56,24 @@ async function getData() {
     ano: { from: startOfYear(now), to: endOfYear(now) },
   };
 
-  const receivablesPaid = await prisma.receivable.findMany({
-    where: { status: { in: ["PAGO", "PARCIALMENTE_PAGO"] }, dataCompetencia: { gte: subDays(now, 400) } },
-  });
-  const payablesPaid = await prisma.payable.findMany({
-    where: { status: { in: ["PAGO", "PARCIALMENTE_PAGO"] }, dataCompetencia: { gte: subDays(now, 400) } },
-  });
+  const [receivablesPaid, payablesPaid] = await Promise.all([
+    prisma.receivable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: subDays(now, 400) },
+        empresaId: { in: empresaIds },
+      },
+      select: { categoriaId: true, valor: true, dataCompetencia: true },
+    }),
+    prisma.payable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: subDays(now, 400) },
+        empresaId: { in: empresaIds },
+      },
+      select: { categoriaId: true, valor: true, dataCompetencia: true },
+    }),
+  ]);
 
   const sumInRange = (arr: { valor: number; dataCompetencia: Date }[], from: Date, to: Date) =>
     arr.filter((e) => e.dataCompetencia >= from && e.dataCompetencia <= to).reduce((a, e) => a + e.valor, 0);
@@ -113,7 +127,6 @@ async function getData() {
     (r) => r.dataCompetencia >= periods.mes.from && r.dataCompetencia <= periods.mes.to
   );
 
-  const catMap = await prisma.financialCategory.findMany();
   const catNameById = new Map(catMap.map((c) => [c.id, c.name]));
 
   function groupByCategory(entries: { categoriaId: string; valor: number }[]) {
