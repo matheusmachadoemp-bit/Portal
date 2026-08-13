@@ -33,7 +33,7 @@ export async function computeDre({
         dataCompetencia: { gte: start, lte: end },
         ...empresaFilter,
       },
-      include: { categoria: true },
+      select: { valor: true, categoria: { select: { dreKey: true } } },
     }),
     prisma.receivable.findMany({
       where: {
@@ -41,7 +41,7 @@ export async function computeDre({
         dataCompetencia: { gte: start, lte: end },
         ...empresaFilter,
       },
-      include: { categoria: true },
+      select: { valor: true, categoria: { select: { dreKey: true } } },
     }),
   ]);
 
