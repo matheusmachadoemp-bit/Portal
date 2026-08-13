@@ -195,32 +195,78 @@ export default async function InicioPage() {
           value={formatCurrency(d.fatMes)}
           icon="DollarSign"
           delta={growth(d.fatMes, d.fatMesAnterior)}
+          labelClassName="text-sm text-white"
         />
-        <StatCard label="Faturamento do dia" value={formatCurrency(d.fatHoje)} icon="Calendar" />
-        <StatCard label="Meta mensal" value={formatCurrency(d.metaMensal)} icon="Target" />
+        <StatCard
+          label="Faturamento do dia"
+          value={formatCurrency(d.fatHoje)}
+          icon="Calendar"
+          labelClassName="text-sm text-white"
+        />
+        <StatCard
+          label="Meta mensal"
+          value={formatCurrency(d.metaMensal)}
+          icon="Target"
+          labelClassName="text-sm text-white"
+        />
         <StatCard
           label="% da meta atingida"
           value={formatPercent(percentualMeta)}
           icon="TrendingUp"
           color={abaixoDaMeta ? "#ef4444" : "#22c55e"}
+          labelClassName="text-sm text-white"
         />
-        <StatCard label="Ticket médio" value={formatCurrency(d.ticketMedio)} icon="Receipt" />
+        <StatCard
+          label="Ticket médio"
+          value={formatCurrency(d.ticketMedio)}
+          icon="Receipt"
+          labelClassName="text-sm text-white"
+        />
         <StatCard
           label="Pedidos realizados"
           value={formatNumber(d.pedidosMes)}
           icon="ShoppingBag"
           delta={d.pedidosGrowth}
+          labelClassName="text-sm text-white"
         />
-        <StatCard label="Faturamento salão" value={formatCurrency(d.fatSalao)} icon="Utensils" />
-        <StatCard label="Faturamento delivery" value={formatCurrency(d.fatDelivery)} icon="Bike" />
-        <StatCard label="Taxa de serviço" value={formatPercent(d.taxaServicoPct)} icon="Percent" />
-        <StatCard label="Faltas no mês" value={formatNumber(d.faltas)} icon="UserX" color="#ef4444" />
-        <StatCard label="Atrasos no mês" value={formatNumber(d.atrasos)} icon="Clock" color="#eab308" />
+        <StatCard
+          label="Faturamento salão"
+          value={formatCurrency(d.fatSalao)}
+          icon="Utensils"
+          labelClassName="text-sm text-white"
+        />
+        <StatCard
+          label="Faturamento delivery"
+          value={formatCurrency(d.fatDelivery)}
+          icon="Bike"
+          labelClassName="text-sm text-white"
+        />
+        <StatCard
+          label="Taxa de serviço"
+          value={formatPercent(d.taxaServicoPct)}
+          icon="Percent"
+          labelClassName="text-sm text-white"
+        />
+        <StatCard
+          label="Faltas no mês"
+          value={formatNumber(d.faltas)}
+          icon="UserX"
+          color="#ef4444"
+          labelClassName="text-sm text-white"
+        />
+        <StatCard
+          label="Atrasos no mês"
+          value={formatNumber(d.atrasos)}
+          icon="Clock"
+          color="#eab308"
+          labelClassName="text-sm text-white"
+        />
         <StatCard
           label="ROAS tráfego pago"
           value={`${formatNumber(d.roas, 2)}x`}
           icon="Rocket"
           color="#a855f7"
+          labelClassName="text-sm text-white"
         />
       </div>
 

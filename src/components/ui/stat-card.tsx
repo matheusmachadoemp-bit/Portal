@@ -9,6 +9,7 @@ export function StatCard({
   delta,
   color = "#1464F4",
   hint,
+  labelClassName = "text-xs text-nord-gray",
 }: {
   label: string;
   value: string;
@@ -16,6 +17,7 @@ export function StatCard({
   delta?: number | null;
   color?: string;
   hint?: string;
+  labelClassName?: string;
 }) {
   const positive = (delta ?? 0) >= 0;
   return (
@@ -24,7 +26,7 @@ export function StatCard({
       style={{ borderTopColor: color }}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-nord-gray truncate">{label}</span>
+        <span className={`truncate ${labelClassName}`}>{label}</span>
         {icon && (
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
