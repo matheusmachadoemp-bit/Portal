@@ -194,7 +194,6 @@ export function DashboardClient({
               </div>
             </div>
           </div>
-          </div>
         </div>
 
         <div className="nord-card p-4">
