@@ -135,8 +135,8 @@ export function DashboardClient({
               const items = tasksByDay.get(key) ?? [];
               return (
                 <div key={key} className={`rounded-lg border p-2 min-h-[140px] ${isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border"}`}>
-                  <p className="text-[11px] text-nord-gray mb-1 capitalize">{format(day, "EEE dd", { locale: ptBR })}</p>
-                  <div className="space-y-1">
+                  <p className="text-sm text-white font-medium mb-1 capitalize">{format(day, "EEE dd", { locale: ptBR })}</p>
+                  <div className="space-y-1.5">
                     {items.map((t) => (
                       <button
                         key={t.id}
@@ -144,7 +144,7 @@ export function DashboardClient({
                           setEditingTask(t);
                           setShowTaskModal(true);
                         }}
-                        className="w-full text-left rounded px-1.5 py-1 text-[10px] leading-tight"
+                        className="w-full text-left rounded px-2 py-1.5 text-xs leading-snug"
                         style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
                       >
                         {t.time && <span className="opacity-70">{t.time} </span>}
