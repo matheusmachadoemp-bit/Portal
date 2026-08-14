@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { put } from "@vercel/blob";
-import crypto from "crypto";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -14,22 +13,32 @@ export async function POST(req: Request) {
     );
   }
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  if (!file) return NextResponse.json({ error: "Arquivo não informado." }, { status: 400 });
-
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const fileName = `uploads/${crypto.randomUUID()}-${safeName}`;
+  const body = (await req.json()) as HandleUploadBody;
 
   try {
-    const blob = await put(fileName, file, { access: "public" });
-    return NextResponse.json({
-      fileUrl: blob.url,
-      fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      onBeforeGenerateToken: async (pathname) => ({
+        allowedContentTypes: [
+          "image/*",
+          "video/*",
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.*",
+          "application/vnd.ms-excel",
+          "application/msword",
+          "text/*",
+        ],
+        addRandomSuffix: true,
+        maximumSizeInBytes: 200 * 1024 * 1024,
+        tokenPayload: JSON.stringify({ userId: session.user.id, pathname }),
+      }),
     });
-  } catch {
-    return NextResponse.json({ error: "Falha ao enviar o arquivo. Tente novamente." }, { status: 500 });
+    return NextResponse.json(jsonResponse);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Falha ao enviar o arquivo." },
+      { status: 400 }
+    );
   }
 }

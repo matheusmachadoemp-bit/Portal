@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 import { UniversityTabs } from "../university-tabs";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { LIBRARY_CATEGORY_OPTIONS } from "@/lib/university";
@@ -57,22 +58,16 @@ export function LibraryClient({ initialItems, isAdmin }: { initialItems: Library
     setUploadError(null);
     try {
       for (const file of Array.from(fileList)) {
-        const formData = new FormData();
-        formData.append("file", file);
-        const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-        const uploaded = await uploadRes.json();
-        if (!uploadRes.ok || !uploaded.fileUrl) {
-          throw new Error(uploaded.error ?? "Falha ao enviar o arquivo.");
-        }
+        const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
         await fetch("/api/university/library", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: uploaded.fileName ?? file.name,
+            name: file.name,
             category: uploadCategory,
-            fileUrl: uploaded.fileUrl,
-            mimeType: uploaded.mimeType,
-            sizeBytes: uploaded.sizeBytes,
+            fileUrl: blob.url,
+            mimeType: file.type,
+            sizeBytes: file.size,
           }),
         });
       }

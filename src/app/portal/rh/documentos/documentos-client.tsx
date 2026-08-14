@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Download, AlertTriangle, FileText } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber } from "@/lib/calc";
@@ -103,11 +104,7 @@ export function DocumentosClient({
     if (!file) return;
     setUploading(true);
     try {
-      const uploadData = new FormData();
-      uploadData.append("file", file);
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadData });
-      const uploaded = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploaded.error ?? "Falha no upload.");
+      const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
 
       await fetch("/api/rh/documents", {
         method: "POST",
@@ -115,8 +112,8 @@ export function DocumentosClient({
         body: JSON.stringify({
           ...form,
           nome: form.nome || file.name,
-          fileUrl: uploaded.fileUrl,
-          mimeType: uploaded.mimeType,
+          fileUrl: blob.url,
+          mimeType: file.type,
         }),
       });
       setShowForm(false);
