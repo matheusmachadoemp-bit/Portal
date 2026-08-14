@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { ProgressBar } from "@/components/ui/stat-card";
 import { Plus, Trash2, Send } from "lucide-react";
@@ -55,6 +55,27 @@ export function TaskModal({
   const [comment, setComment] = useState("");
   const [comments, setComments] = useState(task?.comments ?? []);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle(task?.title ?? "");
+    setDescription(task?.description ?? "");
+    setObjetivo(task?.objetivo ?? "");
+    setCategory(task?.category ?? "");
+    setSocialNetwork(task?.socialNetwork ?? "");
+    setFormat(task?.format ?? "");
+    setStatus(task?.status ?? "A_PRODUZIR");
+    setPriority(task?.priority ?? "MEDIA");
+    setDate(task?.date ? task.date.slice(0, 10) : defaultDate ?? "");
+    setTime(task?.time ?? "");
+    setResponsavelId(task?.responsavelId ?? "");
+    setCampaignId(task?.campaignId ?? "");
+    setTags(task?.tags ?? "");
+    setChecklist(task ? parseChecklist(task.checklist) : DEFAULT_CHECKLIST.map((t) => ({ text: t, done: false })));
+    setComment("");
+    setComments(task?.comments ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resync form fields whenever the modal opens for a (possibly different) task
+  }, [open, task?.id]);
 
   const doneCount = checklist.filter((c) => c.done).length;
   const progress = checklist.length ? Math.round((doneCount / checklist.length) * 100) : 0;
