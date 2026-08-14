@@ -17,6 +17,14 @@ type LogDTO = { id: string; action: string; entityType: string; after: string | 
 
 const DONE_STATUSES = ["PUBLICADO", "RESULTADOS"];
 const PRODUCING_STATUSES = ["A_PRODUZIR", "EM_PRODUCAO", "EM_EDICAO"];
+const CALENDAR_HOURS = [8, 10, 12, 14, 16, 18, 20];
+
+function hourRowIndex(time: string | null | undefined) {
+  if (!time) return 0;
+  const hour = Number(time.split(":")[0]);
+  if (Number.isNaN(hour)) return 0;
+  return Math.max(0, Math.min(CALENDAR_HOURS.length - 1, Math.floor((hour - CALENDAR_HOURS[0]) / 2)));
+}
 
 export function DashboardClient({
   weekTasks,
@@ -128,32 +136,64 @@ export function DashboardClient({
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-2">
-            {days.map((day) => {
-              const key = format(day, "yyyy-MM-dd");
-              const items = tasksByDay.get(key) ?? [];
-              return (
-                <div key={key} className={`rounded-lg border p-2 min-h-[140px] ${isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border"}`}>
-                  <p className="text-sm text-white font-medium mb-1 capitalize">{format(day, "EEE dd", { locale: ptBR })}</p>
-                  <div className="space-y-1.5">
-                    {items.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          setEditingTask(t);
-                          setShowTaskModal(true);
-                        }}
-                        className="w-full text-left rounded px-2 py-1.5 text-xs leading-snug"
-                        style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
-                      >
-                        {t.time && <span className="opacity-70">{t.time} </span>}
-                        <span className="text-white/90">{t.title}</span>
-                      </button>
-                    ))}
+          <div className="overflow-x-auto nord-scrollbar">
+            <div className="min-w-[820px]">
+              <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}>
+                <div />
+                {days.map((day) => (
+                  <div
+                    key={format(day, "yyyy-MM-dd")}
+                    className={`text-center rounded-lg py-1.5 ${isSameDay(day, new Date()) ? "bg-nord-blue/15" : ""}`}
+                  >
+                    <p className="text-sm text-white font-medium capitalize">{format(day, "EEEE", { locale: ptBR })}</p>
+                    <p className="text-xs text-nord-gray">{format(day, "dd")}</p>
                   </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+              <div
+                className="grid gap-2"
+                style={{ gridTemplateColumns: "56px repeat(7, 1fr)", gridTemplateRows: `repeat(${CALENDAR_HOURS.length}, minmax(76px, auto))` }}
+              >
+                {CALENDAR_HOURS.map((hour) => (
+                  <div key={hour} className="text-xs text-nord-gray text-right pr-1 pt-1">
+                    {String(hour).padStart(2, "0")}:00
+                  </div>
+                ))}
+                {days.map((day, dayIdx) => {
+                  const key = format(day, "yyyy-MM-dd");
+                  const items = tasksByDay.get(key) ?? [];
+                  const itemsByRow = new Map<number, TaskDTO[]>();
+                  for (const t of items) {
+                    const row = hourRowIndex(t.time);
+                    if (!itemsByRow.has(row)) itemsByRow.set(row, []);
+                    itemsByRow.get(row)!.push(t);
+                  }
+                  return CALENDAR_HOURS.map((hour, hourIdx) => (
+                    <div
+                      key={`${key}-${hour}`}
+                      className={`rounded-lg border p-1.5 space-y-1 ${isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border"}`}
+                      style={{ gridColumn: dayIdx + 2, gridRow: hourIdx + 1 }}
+                    >
+                      {(itemsByRow.get(hourIdx) ?? []).map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            setEditingTask(t);
+                            setShowTaskModal(true);
+                          }}
+                          className="w-full text-left rounded px-2 py-1.5 text-xs leading-snug"
+                          style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
+                        >
+                          {t.time && <span className="opacity-70">{t.time} </span>}
+                          <span className="text-white/90">{t.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ));
+                })}
+              </div>
+            </div>
+          </div>
           </div>
         </div>
 
