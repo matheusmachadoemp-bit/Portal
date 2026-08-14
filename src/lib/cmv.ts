@@ -50,3 +50,48 @@ export function cmvTeoricoPercentCatalogo(products: { totalCost: number; precoVe
   if (!totalVenda) return 0;
   return (totalCusto / totalVenda) * 100;
 }
+
+/** Diferença operacional (CMV Real − CMV Teórico), em reais e pontos percentuais. */
+export function diferencaOperacional(cmvRealValor: number, cmvTeoricoValor: number) {
+  return cmvRealValor - cmvTeoricoValor;
+}
+
+export function diferencaPontosPercentuais(cmvRealPercent: number, cmvTeoricoPercent: number) {
+  return cmvRealPercent - cmvTeoricoPercent;
+}
+
+export type MovementWithOrigin = MovementForCmv & { origin?: string | null };
+
+/**
+ * Reconstrói as linhas do CMV Real (compras, transferências, perdas, ajustes)
+ * a partir do campo `origin` das movimentações, para exibição detalhada na
+ * tela "CMV Real" (estoque inicial + compras +/- transferências − estoque
+ * final = custo consumido).
+ */
+export function breakdownMovimentacoesNoPeriodo(
+  ingredients: IngredientForCmv[],
+  movements: MovementWithOrigin[],
+  start: Date,
+  end: Date
+) {
+  const costById = new Map(ingredients.map((i) => [i.id, ingredientCostPerUnit(i)]));
+  const noPeriodo = movements.filter((m) => m.createdAt >= start && m.createdAt <= end);
+  const valorDe = (list: MovementWithOrigin[]) =>
+    list.reduce((sum, m) => sum + m.quantidade * (costById.get(m.ingredientId) ?? 0), 0);
+
+  const compras = noPeriodo.filter((m) => m.type === "ENTRADA" && (m.origin ?? "COMPRA") === "COMPRA");
+  const transferenciasRecebidas = noPeriodo.filter((m) => m.origin === "TRANSFERENCIA_RECEBIDA");
+  const transferenciasEnviadas = noPeriodo.filter((m) => m.origin === "TRANSFERENCIA_ENVIADA" || m.type === "TRANSFERENCIA");
+  const perdas = noPeriodo.filter((m) => m.type === "PERDA");
+  const ajustes = noPeriodo.filter((m) => m.type === "AJUSTE");
+  const devolucoes = noPeriodo.filter((m) => m.origin === "DEVOLUCAO_FORNECEDOR");
+
+  return {
+    compras: valorDe(compras),
+    transferenciasRecebidas: valorDe(transferenciasRecebidas),
+    transferenciasEnviadas: valorDe(transferenciasEnviadas),
+    perdas: valorDe(perdas),
+    ajustes: valorDe(ajustes),
+    devolucoes: valorDe(devolucoes),
+  };
+}
