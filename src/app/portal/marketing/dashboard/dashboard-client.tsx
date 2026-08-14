@@ -4,18 +4,13 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
 import { MarketingTabs } from "../marketing-tabs";
-import { Badge } from "@/components/ui/stat-card";
+import { Badge, StatCard } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { TaskModal } from "../task-modal";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "../marketing-types";
 import { startOfWeek, addDays, format, isToday, isTomorrow, isSameDay, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from "recharts";
 
 type FileDTO = { id: string; name: string; category: string; fileUrl: string; createdAt: string };
 type LogDTO = { id: string; action: string; entityType: string; after: string | null; createdAt: string; user: { name: string } | null };
@@ -23,56 +18,12 @@ type LogDTO = { id: string; action: string; entityType: string; after: string | 
 const DONE_STATUSES = ["PUBLICADO", "RESULTADOS"];
 const PRODUCING_STATUSES = ["A_PRODUZIR", "EM_PRODUCAO", "EM_EDICAO"];
 
-function KpiCard({
-  label,
-  value,
-  delta,
-  color,
-  sparkline,
-  icon,
-}: {
-  label: string;
-  value: number;
-  delta?: string;
-  color: string;
-  sparkline: number[];
-  icon: string;
-}) {
-  const data = sparkline.map((v, i) => ({ i, v }));
-  return (
-    <div className="nord-card p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}22` }}>
-            <DynamicIcon name={icon} size={14} style={{ color }} />
-          </div>
-          <span className="text-xs text-nord-gray">{label}</span>
-        </div>
-      </div>
-      <div className="flex items-end justify-between">
-        <div>
-          <p className="text-white text-2xl font-semibold">{value}</p>
-          {delta && <p className="text-xs mt-1" style={{ color }}>{delta}</p>}
-        </div>
-        <div className="w-20 h-10">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function DashboardClient({
   weekTasks,
   allTasks,
   activeCampaigns,
   recentFiles,
   recentLogs,
-  sparklineWeeks,
   teamMembers,
   canCreate,
 }: {
@@ -81,7 +32,6 @@ export function DashboardClient({
   activeCampaigns: number;
   recentFiles: FileDTO[];
   recentLogs: LogDTO[];
-  sparklineWeeks: { done: number; producing: number; analysis: number }[];
   teamMembers: TeamMember[];
   canCreate: boolean;
 }) {
@@ -156,11 +106,11 @@ export function DashboardClient({
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Tarefas Concluídas" value={doneCount} color="#22c55e" icon="CheckCircle2" sparkline={sparklineWeeks.map((w) => w.done)} />
-        <KpiCard label="A Produzir" value={producingCount} color="#eab308" icon="Clock" sparkline={sparklineWeeks.map((w) => w.producing)} />
-        <KpiCard label="Em Análise" value={analysisCount} color="#a855f7" icon="Eye" sparkline={sparklineWeeks.map((w) => w.analysis)} />
-        <KpiCard label="Campanhas Ativas" value={activeCampaigns} color="#3b82f6" icon="Megaphone" sparkline={[activeCampaigns, activeCampaigns, activeCampaigns, activeCampaigns, activeCampaigns, activeCampaigns]} />
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-[repeat(4,minmax(0,220px))] gap-4">
+        <StatCard label="Tarefas Concluídas" value={String(doneCount)} color="#22c55e" icon="CheckCircle2" />
+        <StatCard label="A Produzir" value={String(producingCount)} color="#eab308" icon="Clock" />
+        <StatCard label="Em Análise" value={String(analysisCount)} color="#a855f7" icon="Eye" />
+        <StatCard label="Campanhas Ativas" value={String(activeCampaigns)} color="#3b82f6" icon="Megaphone" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
