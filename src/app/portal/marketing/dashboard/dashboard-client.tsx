@@ -180,7 +180,7 @@ export function DashboardClient({
 
       <DndContext sensors={kpiSensors} collisionDetection={closestCenter} onDragEnd={handleKpiDragEnd}>
         <SortableContext items={kpiOrder} strategy={horizontalListSortingStrategy}>
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-[repeat(4,minmax(0,220px))] gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {kpiOrder.map((key) => {
               const card = kpiCards[key];
               if (!card) return null;
