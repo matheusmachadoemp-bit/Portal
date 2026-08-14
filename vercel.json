@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/integracoes/saipos/sync",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
