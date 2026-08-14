@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Section, Badge, StatCard } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 
@@ -38,12 +39,16 @@ export function FichasTecnicasClient({ rows }: { rows: Row[] }) {
         item do cardápio ao seu custo e CMV teórico calculados a partir do estoque.
       </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Itens no cardápio" value={String(rows.length)} icon="ClipboardList" />
-        <StatCard label="Sem ficha técnica" value={String(semFicha.length)} icon="ClipboardX" color={semFicha.length ? "#ef4444" : "#22c55e"} />
-        <StatCard label={`CMV acima de ${CMV_ALERTA}%`} value={String(acimaDoAlerta.length)} icon="TriangleAlert" color={acimaDoAlerta.length ? "#f59e0b" : "#22c55e"} />
-        <StatCard label="CMV médio do cardápio" value={formatPercent(filtered.length ? filtered.reduce((s, r) => s + r.cmv, 0) / filtered.length : 0)} icon="Calculator" />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-fichas-tecnicas-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "itens-cardapio", label: "Itens no cardápio", value: String(rows.length), icon: "ClipboardList" },
+          { key: "sem-ficha-tecnica", label: "Sem ficha técnica", value: String(semFicha.length), icon: "ClipboardX", color: semFicha.length ? "#ef4444" : "#22c55e" },
+          { key: "cmv-acima-alerta", label: `CMV acima de ${CMV_ALERTA}%`, value: String(acimaDoAlerta.length), icon: "TriangleAlert", color: acimaDoAlerta.length ? "#f59e0b" : "#22c55e" },
+          { key: "cmv-medio-cardapio", label: "CMV médio do cardápio", value: formatPercent(filtered.length ? filtered.reduce((s, r) => s + r.cmv, 0) / filtered.length : 0), icon: "Calculator" },
+        ]}
+      />
 
       <Section
         title="Itens do cardápio"

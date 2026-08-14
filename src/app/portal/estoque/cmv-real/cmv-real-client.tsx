@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 
 type Criterio = "TOTAL" | "SALAO" | "DELIVERY";
@@ -56,18 +57,23 @@ export function CmvRealClient({
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label={`Faturamento (${periodDays}d)`} value={formatCurrency(faturamento)} icon="DollarSign" />
-        <StatCard label="Custo consumido" value={formatCurrency(custoConsumido)} icon="Warehouse" color="#eab308" />
-        <StatCard label="CMV Real %" value={formatPercent(cmvRealPercent)} icon="Percent" color={diferenca > 0 ? "#ef4444" : "#22c55e"} />
-        <StatCard
-          label="Diferença para a meta"
-          value={`${diferenca >= 0 ? "+" : ""}${diferenca.toFixed(1)} p.p.`}
-          icon={diferenca > 0 ? "TriangleAlert" : "CheckCircle2"}
-          color={diferenca > 0 ? "#ef4444" : "#22c55e"}
-          hint={`Meta: ${formatPercent(metaCmvPercent)}`}
-        />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-cmv-real-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "faturamento-periodo", label: `Faturamento (${periodDays}d)`, value: formatCurrency(faturamento), icon: "DollarSign" },
+          { key: "custo-consumido", label: "Custo consumido", value: formatCurrency(custoConsumido), icon: "Warehouse", color: "#eab308" },
+          { key: "cmv-real-percent", label: "CMV Real %", value: formatPercent(cmvRealPercent), icon: "Percent", color: diferenca > 0 ? "#ef4444" : "#22c55e" },
+          {
+            key: "diferenca-meta",
+            label: "Diferença para a meta",
+            value: `${diferenca >= 0 ? "+" : ""}${diferenca.toFixed(1)} p.p.`,
+            icon: diferenca > 0 ? "TriangleAlert" : "CheckCircle2",
+            color: diferenca > 0 ? "#ef4444" : "#22c55e",
+            hint: `Meta: ${formatPercent(metaCmvPercent)}`,
+          },
+        ]}
+      />
 
       <Section title="Composição do CMV Real">
         <div className="space-y-2 text-sm">

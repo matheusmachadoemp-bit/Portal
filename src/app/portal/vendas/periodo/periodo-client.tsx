@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Section, StatCard } from "@/components/ui/stat-card";
+import { Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, growth } from "@/lib/calc";
 import { PERIOD_OPTIONS, type PeriodKey } from "@/lib/periods";
 
@@ -70,11 +71,15 @@ export function PeriodoClient({
       )}
 
       <Section title={loading ? "Carregando..." : "Período atual x período anterior"}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard label="Faturamento" value={formatCurrency(atual.faturamento)} icon="DollarSign" delta={growth(atual.faturamento, anterior.faturamento)} />
-          <StatCard label="Pedidos" value={String(atual.pedidos)} icon="ShoppingCart" delta={growth(atual.pedidos, anterior.pedidos)} />
-          <StatCard label="Ticket médio" value={formatCurrency(atual.ticketMedio)} icon="Receipt" delta={growth(atual.ticketMedio, anterior.ticketMedio)} />
-        </div>
+        <SortableStatCards
+          storageKey="vendas-periodo-kpi-order"
+          className="grid grid-cols-1 md:grid-cols-3 gap-4"
+          cards={[
+            { key: "faturamento", label: "Faturamento", value: formatCurrency(atual.faturamento), icon: "DollarSign", delta: growth(atual.faturamento, anterior.faturamento) },
+            { key: "pedidos", label: "Pedidos", value: String(atual.pedidos), icon: "ShoppingCart", delta: growth(atual.pedidos, anterior.pedidos) },
+            { key: "ticket-medio", label: "Ticket médio", value: formatCurrency(atual.ticketMedio), icon: "Receipt", delta: growth(atual.ticketMedio, anterior.ticketMedio) },
+          ]}
+        />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 opacity-70">
           <p className="text-xs text-nord-gray">Faturamento anterior: {formatCurrency(anterior.faturamento)}</p>
           <p className="text-xs text-nord-gray">Pedidos anterior: {anterior.pedidos}</p>

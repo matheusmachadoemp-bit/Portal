@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { StatCard, Section, Badge, ProgressBar } from "@/components/ui/stat-card";
+import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
 import { startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -189,74 +190,24 @@ export default async function InicioPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatCard
-          label="Faturamento do mês"
-          value={formatCurrency(d.fatMes)}
-          icon="DollarSign"
-          delta={growth(d.fatMes, d.fatMesAnterior)}
-        />
-        <StatCard
-          label="Faturamento do dia"
-          value={formatCurrency(d.fatHoje)}
-          icon="Calendar"
-        />
-        <StatCard
-          label="Meta mensal"
-          value={formatCurrency(d.metaMensal)}
-          icon="Target"
-        />
-        <StatCard
-          label="% da meta atingida"
-          value={formatPercent(percentualMeta)}
-          icon="TrendingUp"
-          color={abaixoDaMeta ? "#ef4444" : "#22c55e"}
-        />
-        <StatCard
-          label="Ticket médio"
-          value={formatCurrency(d.ticketMedio)}
-          icon="Receipt"
-        />
-        <StatCard
-          label="Pedidos realizados"
-          value={formatNumber(d.pedidosMes)}
-          icon="ShoppingBag"
-          delta={d.pedidosGrowth}
-        />
-        <StatCard
-          label="Faturamento salão"
-          value={formatCurrency(d.fatSalao)}
-          icon="Utensils"
-        />
-        <StatCard
-          label="Faturamento delivery"
-          value={formatCurrency(d.fatDelivery)}
-          icon="Bike"
-        />
-        <StatCard
-          label="Taxa de serviço"
-          value={formatPercent(d.taxaServicoPct)}
-          icon="Percent"
-        />
-        <StatCard
-          label="Faltas no mês"
-          value={formatNumber(d.faltas)}
-          icon="UserX"
-          color="#ef4444"
-        />
-        <StatCard
-          label="Atrasos no mês"
-          value={formatNumber(d.atrasos)}
-          icon="Clock"
-          color="#eab308"
-        />
-        <StatCard
-          label="ROAS tráfego pago"
-          value={`${formatNumber(d.roas, 2)}x`}
-          icon="Rocket"
-          color="#a855f7"
-        />
-      </div>
+      <SortableStatCards
+        storageKey="inicio-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
+        cards={[
+          { key: "faturamento-mes", label: "Faturamento do mês", value: formatCurrency(d.fatMes), icon: "DollarSign", delta: growth(d.fatMes, d.fatMesAnterior) },
+          { key: "faturamento-dia", label: "Faturamento do dia", value: formatCurrency(d.fatHoje), icon: "Calendar" },
+          { key: "meta-mensal", label: "Meta mensal", value: formatCurrency(d.metaMensal), icon: "Target" },
+          { key: "percentual-meta", label: "% da meta atingida", value: formatPercent(percentualMeta), icon: "TrendingUp", color: abaixoDaMeta ? "#ef4444" : "#22c55e" },
+          { key: "ticket-medio", label: "Ticket médio", value: formatCurrency(d.ticketMedio), icon: "Receipt" },
+          { key: "pedidos-realizados", label: "Pedidos realizados", value: formatNumber(d.pedidosMes), icon: "ShoppingBag", delta: d.pedidosGrowth },
+          { key: "faturamento-salao", label: "Faturamento salão", value: formatCurrency(d.fatSalao), icon: "Utensils" },
+          { key: "faturamento-delivery", label: "Faturamento delivery", value: formatCurrency(d.fatDelivery), icon: "Bike" },
+          { key: "taxa-servico", label: "Taxa de serviço", value: formatPercent(d.taxaServicoPct), icon: "Percent" },
+          { key: "faltas-mes", label: "Faltas no mês", value: formatNumber(d.faltas), icon: "UserX", color: "#ef4444" },
+          { key: "atrasos-mes", label: "Atrasos no mês", value: formatNumber(d.atrasos), icon: "Clock", color: "#eab308" },
+          { key: "roas-trafego", label: "ROAS tráfego pago", value: `${formatNumber(d.roas, 2)}x`, icon: "Rocket", color: "#a855f7" },
+        ]}
+      />
 
       {comparison && (
         <Section title="Comparativo entre lojas — mês atual">

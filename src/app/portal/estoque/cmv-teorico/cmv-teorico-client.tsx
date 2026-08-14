@@ -1,7 +1,8 @@
 "use client";
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 
 export function CmvTeoricoClient({
@@ -33,18 +34,23 @@ export function CmvTeoricoClient({
         venda cadastrado (aproximação por catálogo).
       </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label={`Faturamento (${periodDays}d)`} value={formatCurrency(faturamentoPeriodo)} icon="DollarSign" />
-        <StatCard label="Custo teórico total" value={formatCurrency(custoTeoricoTotal)} icon="Calculator" color="#2952E3" />
-        <StatCard label="CMV Teórico %" value={formatPercent(cmvTeoricoPercent)} icon="Percent" />
-        <StatCard
-          label="Diferença para a meta"
-          value={`${diferenca >= 0 ? "+" : ""}${diferenca.toFixed(1)} p.p.`}
-          icon={diferenca > 0 ? "TriangleAlert" : "CheckCircle2"}
-          color={diferenca > 0 ? "#ef4444" : "#22c55e"}
-          hint={`Meta: ${formatPercent(metaCmvPercent)}`}
-        />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-cmv-teorico-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "faturamento-periodo", label: `Faturamento (${periodDays}d)`, value: formatCurrency(faturamentoPeriodo), icon: "DollarSign" },
+          { key: "custo-teorico-total", label: "Custo teórico total", value: formatCurrency(custoTeoricoTotal), icon: "Calculator", color: "#2952E3" },
+          { key: "cmv-teorico-percent", label: "CMV Teórico %", value: formatPercent(cmvTeoricoPercent), icon: "Percent" },
+          {
+            key: "diferenca-meta",
+            label: "Diferença para a meta",
+            value: `${diferenca >= 0 ? "+" : ""}${diferenca.toFixed(1)} p.p.`,
+            icon: diferenca > 0 ? "TriangleAlert" : "CheckCircle2",
+            color: diferenca > 0 ? "#ef4444" : "#22c55e",
+            hint: `Meta: ${formatPercent(metaCmvPercent)}`,
+          },
+        ]}
+      />
 
       <Section title="Custo teórico por categoria">
         <ResponsiveContainer width="100%" height={Math.max(160, categoriaChart.length * 36)}>

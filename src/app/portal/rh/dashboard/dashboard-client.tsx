@@ -1,6 +1,7 @@
 "use client";
 
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatNumber, formatPercent, formatCurrency } from "@/lib/calc";
 import { RhTabs } from "../rh-tabs";
@@ -68,27 +69,32 @@ export function DashboardClient({
     <div className="space-y-6">
       <RhTabs />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
-        <StatCard label="Total colaboradores" value={formatNumber(kpis.totalColaboradores)} icon="Users" />
-        <StatCard label="Ativos" value={formatNumber(kpis.ativos)} icon="UserCheck" color="#22c55e" />
-        <StatCard label="Férias" value={formatNumber(kpis.ferias)} icon="Palmtree" color="#2952E3" />
-        <StatCard label="Afastados" value={formatNumber(kpis.afastados)} icon="UserMinus" color="#eab308" />
-        <StatCard label="Desligamentos (mês)" value={formatNumber(kpis.desligamentosMes)} icon="UserX" color="#ef4444" />
-        <StatCard label="Admissões (mês)" value={formatNumber(kpis.admissoesMes)} icon="UserPlus" color="#22c55e" />
-        <StatCard label="Turnover (mês)" value={formatPercent(kpis.turnoverMes)} icon="Repeat" color="#ef4444" />
-        <StatCard label="Faltas (mês)" value={formatNumber(kpis.faltasMes)} icon="UserX" color="#ef4444" />
-        <StatCard label="Atrasos (mês)" value={formatNumber(kpis.atrasosMes)} icon="Clock" color="#eab308" />
-        <StatCard label="Advertências (mês)" value={formatNumber(kpis.advertenciasMes)} icon="AlertTriangle" color="#f97316" />
-        <StatCard label="Suspensões (mês)" value={formatNumber(kpis.suspensoesMes)} icon="Ban" color="#ef4444" />
-        <StatCard label="Horas trabalhadas (mês)" value={`${formatNumber(kpis.horasTrabalhadasMes, 0)}h`} icon="Clock4" />
-        <StatCard
-          label="Banco de horas (mês)"
-          value={`${kpis.bancoHorasMes >= 0 ? "+" : ""}${formatNumber(kpis.bancoHorasMes, 0)}h`}
-          icon="Hourglass"
-          color={kpis.bancoHorasMes < 0 ? "#ef4444" : "#22c55e"}
-        />
-        <StatCard label="Tempo médio de empresa" value={`${formatNumber(kpis.tempoMedioAnos, 1)} anos`} icon="CalendarClock" />
-      </div>
+      <SortableStatCards
+        storageKey="rh-dashboard-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4"
+        cards={[
+          { key: "total-colaboradores", label: "Total colaboradores", value: formatNumber(kpis.totalColaboradores), icon: "Users" },
+          { key: "ativos", label: "Ativos", value: formatNumber(kpis.ativos), icon: "UserCheck", color: "#22c55e" },
+          { key: "ferias", label: "Férias", value: formatNumber(kpis.ferias), icon: "Palmtree", color: "#2952E3" },
+          { key: "afastados", label: "Afastados", value: formatNumber(kpis.afastados), icon: "UserMinus", color: "#eab308" },
+          { key: "desligamentos-mes", label: "Desligamentos (mês)", value: formatNumber(kpis.desligamentosMes), icon: "UserX", color: "#ef4444" },
+          { key: "admissoes-mes", label: "Admissões (mês)", value: formatNumber(kpis.admissoesMes), icon: "UserPlus", color: "#22c55e" },
+          { key: "turnover-mes", label: "Turnover (mês)", value: formatPercent(kpis.turnoverMes), icon: "Repeat", color: "#ef4444" },
+          { key: "faltas-mes", label: "Faltas (mês)", value: formatNumber(kpis.faltasMes), icon: "UserX", color: "#ef4444" },
+          { key: "atrasos-mes", label: "Atrasos (mês)", value: formatNumber(kpis.atrasosMes), icon: "Clock", color: "#eab308" },
+          { key: "advertencias-mes", label: "Advertências (mês)", value: formatNumber(kpis.advertenciasMes), icon: "AlertTriangle", color: "#f97316" },
+          { key: "suspensoes-mes", label: "Suspensões (mês)", value: formatNumber(kpis.suspensoesMes), icon: "Ban", color: "#ef4444" },
+          { key: "horas-trabalhadas-mes", label: "Horas trabalhadas (mês)", value: `${formatNumber(kpis.horasTrabalhadasMes, 0)}h`, icon: "Clock4" },
+          {
+            key: "banco-horas-mes",
+            label: "Banco de horas (mês)",
+            value: `${kpis.bancoHorasMes >= 0 ? "+" : ""}${formatNumber(kpis.bancoHorasMes, 0)}h`,
+            icon: "Hourglass",
+            color: kpis.bancoHorasMes < 0 ? "#ef4444" : "#22c55e",
+          },
+          { key: "tempo-medio-empresa", label: "Tempo médio de empresa", value: `${formatNumber(kpis.tempoMedioAnos, 1)} anos`, icon: "CalendarClock" },
+        ]}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Section title="Turnover mensal">

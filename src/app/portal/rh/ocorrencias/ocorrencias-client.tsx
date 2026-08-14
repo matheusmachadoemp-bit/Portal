@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
@@ -173,12 +174,16 @@ export function OcorrenciasClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Faltas" value={formatNumber(faltas)} icon="UserX" color="#ef4444" />
-        <StatCard label="Atrasos" value={formatNumber(atrasos)} icon="Clock" color="#eab308" />
-        <StatCard label="Advertências" value={formatNumber(advertencias)} icon="AlertTriangle" color="#f97316" />
-        <StatCard label="Suspensões" value={formatNumber(suspensoes)} icon="Ban" color="#ef4444" />
-      </div>
+      <SortableStatCards
+        storageKey="rh-ocorrencias-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "faltas", label: "Faltas", value: formatNumber(faltas), icon: "UserX", color: "#ef4444" },
+          { key: "atrasos", label: "Atrasos", value: formatNumber(atrasos), icon: "Clock", color: "#eab308" },
+          { key: "advertencias", label: "Advertências", value: formatNumber(advertencias), icon: "AlertTriangle", color: "#f97316" },
+          { key: "suspensoes", label: "Suspensões", value: formatNumber(suspensoes), icon: "Ban", color: "#ef4444" },
+        ]}
+      />
 
       <div className="flex items-center justify-between">
         {!fixedEmployeeId ? <RhTabs /> : <div />}

@@ -15,7 +15,8 @@ import {
   Legend,
   Cell,
 } from "recharts";
-import { Section, StatCard } from "@/components/ui/stat-card";
+import { Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatNumber, formatPercent, formatCurrency } from "@/lib/calc";
 import { CRM_PERIOD_OPTIONS, type CrmPeriodKey } from "@/lib/crm";
@@ -114,24 +115,24 @@ export function CrmDashboardClient({ initialKey, initialData }: { initialKey: Cr
       )}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        <StatCard label="Total de clientes" value={formatNumber(summary.totalClientes)} icon="Users" delta={deltas.totalClientes ?? undefined} />
-        <StatCard label="Clientes ativos" value={formatNumber(summary.clientesAtivosPeriodo)} icon="UserCheck" color="#22c55e" delta={deltas.clientesAtivosPeriodo ?? undefined} />
-        <StatCard label="Novos clientes" value={formatNumber(summary.novosClientes)} icon="UserPlus" color="#2952E3" delta={deltas.novosClientes ?? undefined} />
-        <StatCard label="Clientes recorrentes" value={formatNumber(summary.clientesRecorrentes)} icon="Repeat" delta={deltas.clientesRecorrentes ?? undefined} />
-        <StatCard label="Clientes reativados" value={formatNumber(summary.clientesReativados)} icon="Rocket" color="#a855f7" delta={deltas.clientesReativados ?? undefined} />
-        <StatCard label="Clientes inativos" value={formatNumber(summary.clientesInativos)} icon="UserX" color="#ef4444" delta={deltas.clientesInativos ? -deltas.clientesInativos : undefined} />
-        <StatCard label="Taxa de recompra" value={formatPercent(summary.taxaRecompra)} icon="RefreshCw" color="#f59e0b" delta={deltas.taxaRecompra ?? undefined} />
-        <StatCard label="Ticket médio" value={formatCurrency(summary.ticketMedio)} icon="Receipt" delta={deltas.ticketMedio ?? undefined} />
-        <StatCard
-          label="Frequência média"
-          value={summary.frequenciaMedia !== null ? `${formatNumber(summary.frequenciaMedia, 0)} dias` : "—"}
-          icon="Clock"
-        />
-        <StatCard label="LTV médio" value={formatCurrency(summary.ltvMedio)} icon="Wallet" delta={deltas.ltvMedio ?? undefined} />
-        <StatCard label="Receita da base" value={formatCurrency(summary.receitaBase)} icon="TrendingUp" color="#22c55e" delta={deltas.receitaBase ?? undefined} />
-        <StatCard label="Receita recuperada" value={formatCurrency(summary.receitaRecuperada)} icon="Sparkles" color="#a855f7" delta={deltas.receitaRecuperada ?? undefined} />
-      </div>
+      <SortableStatCards
+        storageKey="crm-dashboard-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4"
+        cards={[
+          { key: "total-clientes", label: "Total de clientes", value: formatNumber(summary.totalClientes), icon: "Users", delta: deltas.totalClientes ?? undefined },
+          { key: "clientes-ativos", label: "Clientes ativos", value: formatNumber(summary.clientesAtivosPeriodo), icon: "UserCheck", color: "#22c55e", delta: deltas.clientesAtivosPeriodo ?? undefined },
+          { key: "novos-clientes", label: "Novos clientes", value: formatNumber(summary.novosClientes), icon: "UserPlus", color: "#2952E3", delta: deltas.novosClientes ?? undefined },
+          { key: "clientes-recorrentes", label: "Clientes recorrentes", value: formatNumber(summary.clientesRecorrentes), icon: "Repeat", delta: deltas.clientesRecorrentes ?? undefined },
+          { key: "clientes-reativados", label: "Clientes reativados", value: formatNumber(summary.clientesReativados), icon: "Rocket", color: "#a855f7", delta: deltas.clientesReativados ?? undefined },
+          { key: "clientes-inativos", label: "Clientes inativos", value: formatNumber(summary.clientesInativos), icon: "UserX", color: "#ef4444", delta: deltas.clientesInativos ? -deltas.clientesInativos : undefined },
+          { key: "taxa-recompra", label: "Taxa de recompra", value: formatPercent(summary.taxaRecompra), icon: "RefreshCw", color: "#f59e0b", delta: deltas.taxaRecompra ?? undefined },
+          { key: "ticket-medio", label: "Ticket médio", value: formatCurrency(summary.ticketMedio), icon: "Receipt", delta: deltas.ticketMedio ?? undefined },
+          { key: "frequencia-media", label: "Frequência média", value: summary.frequenciaMedia !== null ? `${formatNumber(summary.frequenciaMedia, 0)} dias` : "—", icon: "Clock" },
+          { key: "ltv-medio", label: "LTV médio", value: formatCurrency(summary.ltvMedio), icon: "Wallet", delta: deltas.ltvMedio ?? undefined },
+          { key: "receita-base", label: "Receita da base", value: formatCurrency(summary.receitaBase), icon: "TrendingUp", color: "#22c55e", delta: deltas.receitaBase ?? undefined },
+          { key: "receita-recuperada", label: "Receita recuperada", value: formatCurrency(summary.receitaRecuperada), icon: "Sparkles", color: "#a855f7", delta: deltas.receitaRecuperada ?? undefined },
+        ]}
+      />
 
       {/* Inteligência CRM */}
       {insights.length > 0 && (
