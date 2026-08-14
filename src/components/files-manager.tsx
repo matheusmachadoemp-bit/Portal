@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { FolderPlus, Upload, Trash2, Copy, Download, Folder, Search } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -86,22 +87,19 @@ export function FilesManager({
     if (!file) return;
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-      const uploadData = await uploadRes.json();
+      const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
 
       await fetch("/api/admin/files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: uploadData.fileName,
+          name: file.name,
           folderType,
           parentId: currentFolder,
           isFolder: false,
-          fileUrl: uploadData.fileUrl,
-          mimeType: uploadData.mimeType,
-          sizeBytes: uploadData.sizeBytes,
+          fileUrl: blob.url,
+          mimeType: file.type,
+          sizeBytes: file.size,
         }),
       });
       refresh();
