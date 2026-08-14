@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { UniversityTabs } from "../university-tabs";
 import { Section, StatCard, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { canManageUsers } from "@/lib/permissions";
 import { subDays, differenceInDays, format } from "date-fns";
 
@@ -53,12 +54,16 @@ export default async function PainelGestorPage() {
       <div className="space-y-6">
         <UniversityTabs isAdmin />
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Concluíram" value={String(concluidos)} icon="CheckCircle2" color="#22c55e" />
-          <StatCard label="Em andamento" value={String(emAndamento)} icon="Clock" color="#eab308" />
-          <StatCard label="Atrasados" value={String(atrasados.length)} icon="AlertTriangle" color="#ef4444" />
-          <StatCard label="Não iniciaram" value={String(naoIniciados)} icon="CircleDashed" />
-        </div>
+        <SortableStatCards
+          storageKey="universidade-gestor-kpi-order"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          cards={[
+            { key: "concluiram", label: "Concluíram", value: String(concluidos), icon: "CheckCircle2", color: "#22c55e" },
+            { key: "em-andamento", label: "Em andamento", value: String(emAndamento), icon: "Clock", color: "#eab308" },
+            { key: "atrasados", label: "Atrasados", value: String(atrasados.length), icon: "AlertTriangle", color: "#ef4444" },
+            { key: "nao-iniciaram", label: "Não iniciaram", value: String(naoIniciados), icon: "CircleDashed" },
+          ]}
+        />
 
         <StatCard label="Tempo médio de treinamento (dias, início até conclusão)" value={`${tempoMedio}`} icon="Timer" />
 

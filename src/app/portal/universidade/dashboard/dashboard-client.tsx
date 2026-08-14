@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { UniversityTabs } from "../university-tabs";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatMinutes } from "@/lib/university";
 import { AlertTriangle, ClipboardCheck, Star, Trophy, ArrowRight } from "lucide-react";
 import {
@@ -69,18 +70,26 @@ export function DashboardClient({
     <div className="space-y-6">
       <UniversityTabs isAdmin={isAdmin} />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Colaboradores cadastrados" value={String(colaboradoresCadastrados)} icon="Users" />
-        <StatCard label="Colaboradores treinados" value={String(colaboradoresTreinados)} icon="GraduationCap" color="#22c55e" />
-        <StatCard label="Cursos concluídos" value={String(cursosConcluidos)} icon="CheckCircle2" color="#22c55e" />
-        <StatCard label="Cursos pendentes" value={String(cursosPendentes)} icon="Clock" color="#eab308" />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Horas de treinamento" value={formatMinutes(horasRealizadas * 60)} icon="Timer" />
-        <StatCard label="Média de conclusão" value={`${mediaConclusao}%`} icon="TrendingUp" />
-        <StatCard label="Média das avaliações" value={`${mediaAvaliacoes}%`} icon="ClipboardCheck" />
-        <StatCard label="Certificados emitidos" value={String(certificadosEmitidos)} icon="Award" color="#a855f7" />
-      </div>
+      <SortableStatCards
+        storageKey="universidade-dashboard-colaboradores-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "colaboradores-cadastrados", label: "Colaboradores cadastrados", value: String(colaboradoresCadastrados), icon: "Users" },
+          { key: "colaboradores-treinados", label: "Colaboradores treinados", value: String(colaboradoresTreinados), icon: "GraduationCap", color: "#22c55e" },
+          { key: "cursos-concluidos", label: "Cursos concluídos", value: String(cursosConcluidos), icon: "CheckCircle2", color: "#22c55e" },
+          { key: "cursos-pendentes", label: "Cursos pendentes", value: String(cursosPendentes), icon: "Clock", color: "#eab308" },
+        ]}
+      />
+      <SortableStatCards
+        storageKey="universidade-dashboard-treinamento-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "horas-treinamento", label: "Horas de treinamento", value: formatMinutes(horasRealizadas * 60), icon: "Timer" },
+          { key: "media-conclusao", label: "Média de conclusão", value: `${mediaConclusao}%`, icon: "TrendingUp" },
+          { key: "media-avaliacoes", label: "Média das avaliações", value: `${mediaAvaliacoes}%`, icon: "ClipboardCheck" },
+          { key: "certificados-emitidos", label: "Certificados emitidos", value: String(certificadosEmitidos), icon: "Award", color: "#a855f7" },
+        ]}
+      />
 
       {isAdmin && (atrasados > 0 || avaliacoesPendentes > 0 || topPerformer || mostCoursesUserName) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
