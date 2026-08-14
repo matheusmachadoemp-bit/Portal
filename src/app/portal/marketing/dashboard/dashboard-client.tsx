@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
 import { MarketingTabs } from "../marketing-tabs";
 import { Badge, StatCard } from "@/components/ui/stat-card";
+import { DynamicIcon } from "@/components/dynamic-icon";
 import { TaskModal } from "../task-modal";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "../marketing-types";
