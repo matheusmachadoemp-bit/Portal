@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { FILE_CATEGORY_OPTIONS } from "@/lib/marketing";
 
@@ -88,8 +87,6 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       <div className="flex items-center gap-3 flex-wrap justify-between">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-nord-gray" />

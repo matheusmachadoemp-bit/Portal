@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { MarketingTabs } from "../marketing-tabs";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { formatNumber, formatPercent, growth, pct } from "@/lib/calc";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -55,8 +54,6 @@ export default async function RedesSociaisPage() {
   return (
     <PageContainer title="Marketing" subtitle="Redes sociais — desempenho consolidado">
       <div className="space-y-6">
-        <MarketingTabs />
-
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
           <StatCard label="Seguidores" value={formatNumber(current?.seguidoresFim ?? 0)} icon="Users" />
           <StatCard

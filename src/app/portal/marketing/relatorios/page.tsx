@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { MarketingTabs } from "../marketing-tabs";
 import { Section } from "@/components/ui/stat-card";
 import { Download } from "lucide-react";
 
@@ -13,7 +12,6 @@ export default function RelatoriosPage() {
   return (
     <PageContainer title="Marketing" subtitle="Relatórios">
       <div className="space-y-6">
-        <MarketingTabs />
         <Section title="Exportar dados (CSV)">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {REPORTS.map((r) => (
