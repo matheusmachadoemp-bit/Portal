@@ -29,10 +29,10 @@ export function StatCard({
         <span className={`truncate ${labelClassName}`}>{label}</span>
         {icon && (
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
             style={{ backgroundColor: `${color}22` }}
           >
-            <DynamicIcon name={icon} size={17} style={{ color }} />
+            <DynamicIcon name={icon} size={20} style={{ color }} />
           </div>
         )}
       </div>
