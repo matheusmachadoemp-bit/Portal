@@ -99,6 +99,7 @@ export function ProdutosClient({
   const [lines, setLines] = useState<IngredientLine[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -167,12 +168,19 @@ export function ProdutosClient({
 
   async function handlePhotoUpload(file: File) {
     setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body: formData });
-    const data = await res.json();
-    setUploading(false);
-    if (data.fileUrl) setForm((f) => ({ ...f, photoUrl: data.fileUrl }));
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.fileUrl) throw new Error(data.error ?? "Falha ao enviar a foto.");
+      setForm((f) => ({ ...f, photoUrl: data.fileUrl }));
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Falha ao enviar a foto.");
+    } finally {
+      setUploading(false);
+    }
   }
 
   const previewCost = useMemo(() => {
@@ -320,6 +328,8 @@ export function ProdutosClient({
             />
           </label>
         </div>
+
+        {uploadError && <p className="text-xs text-red-400 mb-3">{uploadError}</p>}
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome do produto">
