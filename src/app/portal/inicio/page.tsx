@@ -19,14 +19,40 @@ async function getData(empresaIds: string[]) {
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
 
+  const monthEntrySelect = {
+    date: true,
+    faturamentoDelivery: true,
+    faturamentoSalao: true,
+    pedidosDelivery: true,
+    pedidosBalcao: true,
+    pedidosSalao: true,
+    metaDiaria: true,
+    taxaServicoValor: true,
+  } as const;
+
   const [thisMonth, prevMonth, today, occurrences, marketing, goals] = await Promise.all([
-    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: monthStart, lte: monthEnd } } }),
-    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: prevMonthStart, lte: prevMonthEnd } } }),
-    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: todayStart, lte: todayEnd } } }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: monthStart, lte: monthEnd } },
+      select: monthEntrySelect,
+    }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: prevMonthStart, lte: prevMonthEnd } },
+      select: { faturamentoDelivery: true, faturamentoSalao: true, pedidosDelivery: true, pedidosBalcao: true, pedidosSalao: true },
+    }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: todayStart, lte: todayEnd } },
+      select: { faturamentoDelivery: true, faturamentoSalao: true },
+    }),
     prisma.occurrence.findMany({
       where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: { in: empresaIds } } },
+      select: { type: true },
     }),
-    prisma.marketingEntry.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { date: "desc" }, take: 1 }),
+    prisma.marketingEntry.findMany({
+      where: { empresaId: { in: empresaIds } },
+      orderBy: { date: "desc" },
+      take: 1,
+      select: { receitaTrafego: true, investimentoTrafego: true },
+    }),
     prisma.goal.findMany({
       where: { empresaId: { in: empresaIds }, endDate: { gte: now } },
       orderBy: { endDate: "asc" },
@@ -34,7 +60,7 @@ async function getData(empresaIds: string[]) {
     }),
   ]);
 
-  const sum = (arr: typeof thisMonth, key: keyof (typeof thisMonth)[number]) =>
+  const sum = <T extends Record<string, unknown>>(arr: T[], key: keyof T) =>
     arr.reduce((acc, e) => acc + (Number(e[key]) || 0), 0);
 
   const fatMes = sum(thisMonth, "faturamentoDelivery") + sum(thisMonth, "faturamentoSalao");
@@ -73,16 +99,20 @@ async function getData(empresaIds: string[]) {
     { name: "Salão", value: fatSalao },
   ];
 
-  const monthlyEvolution = [] as { month: string; total: number }[];
-  for (let i = 5; i >= 0; i--) {
-    const start = startOfMonth(subMonths(now, i));
-    const end = endOfMonth(subMonths(now, i));
-    const entries = await prisma.salesEntry.findMany({
-      where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
-    });
-    const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
-    monthlyEvolution.push({ month: format(start, "MMM", { locale: ptBR }), total });
-  }
+  const monthlyRanges = Array.from({ length: 6 }, (_, idx) => {
+    const i = 5 - idx;
+    return { start: startOfMonth(subMonths(now, i)), end: endOfMonth(subMonths(now, i)) };
+  });
+  const monthlyEvolution = await Promise.all(
+    monthlyRanges.map(async ({ start, end }) => {
+      const entries = await prisma.salesEntry.findMany({
+        where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
+        select: { faturamentoDelivery: true, faturamentoSalao: true },
+      });
+      const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
+      return { month: format(start, "MMM", { locale: ptBR }), total };
+    })
+  );
 
   return {
     fatMes,
@@ -111,9 +141,13 @@ async function getComparisonRow(empresa: Empresa) {
   const monthEnd = endOfMonth(now);
 
   const [thisMonth, occurrences] = await Promise.all([
-    prisma.salesEntry.findMany({ where: { empresaId: empresa.id, date: { gte: monthStart, lte: monthEnd } } }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: empresa.id, date: { gte: monthStart, lte: monthEnd } },
+      select: { faturamentoDelivery: true, faturamentoSalao: true, pedidosDelivery: true, pedidosBalcao: true, pedidosSalao: true, metaDiaria: true },
+    }),
     prisma.occurrence.findMany({
       where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: empresa.id } },
+      select: { type: true },
     }),
   ]);
 
@@ -162,26 +196,60 @@ export default async function InicioPage() {
           icon="DollarSign"
           delta={growth(d.fatMes, d.fatMesAnterior)}
         />
-        <StatCard label="Faturamento do dia" value={formatCurrency(d.fatHoje)} icon="Calendar" />
-        <StatCard label="Meta mensal" value={formatCurrency(d.metaMensal)} icon="Target" />
+        <StatCard
+          label="Faturamento do dia"
+          value={formatCurrency(d.fatHoje)}
+          icon="Calendar"
+        />
+        <StatCard
+          label="Meta mensal"
+          value={formatCurrency(d.metaMensal)}
+          icon="Target"
+        />
         <StatCard
           label="% da meta atingida"
           value={formatPercent(percentualMeta)}
           icon="TrendingUp"
           color={abaixoDaMeta ? "#ef4444" : "#22c55e"}
         />
-        <StatCard label="Ticket médio" value={formatCurrency(d.ticketMedio)} icon="Receipt" />
+        <StatCard
+          label="Ticket médio"
+          value={formatCurrency(d.ticketMedio)}
+          icon="Receipt"
+        />
         <StatCard
           label="Pedidos realizados"
           value={formatNumber(d.pedidosMes)}
           icon="ShoppingBag"
           delta={d.pedidosGrowth}
         />
-        <StatCard label="Faturamento salão" value={formatCurrency(d.fatSalao)} icon="Utensils" />
-        <StatCard label="Faturamento delivery" value={formatCurrency(d.fatDelivery)} icon="Bike" />
-        <StatCard label="Taxa de serviço" value={formatPercent(d.taxaServicoPct)} icon="Percent" />
-        <StatCard label="Faltas no mês" value={formatNumber(d.faltas)} icon="UserX" color="#ef4444" />
-        <StatCard label="Atrasos no mês" value={formatNumber(d.atrasos)} icon="Clock" color="#eab308" />
+        <StatCard
+          label="Faturamento salão"
+          value={formatCurrency(d.fatSalao)}
+          icon="Utensils"
+        />
+        <StatCard
+          label="Faturamento delivery"
+          value={formatCurrency(d.fatDelivery)}
+          icon="Bike"
+        />
+        <StatCard
+          label="Taxa de serviço"
+          value={formatPercent(d.taxaServicoPct)}
+          icon="Percent"
+        />
+        <StatCard
+          label="Faltas no mês"
+          value={formatNumber(d.faltas)}
+          icon="UserX"
+          color="#ef4444"
+        />
+        <StatCard
+          label="Atrasos no mês"
+          value={formatNumber(d.atrasos)}
+          icon="Clock"
+          color="#eab308"
+        />
         <StatCard
           label="ROAS tráfego pago"
           value={`${formatNumber(d.roas, 2)}x`}

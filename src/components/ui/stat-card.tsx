@@ -7,8 +7,9 @@ export function StatCard({
   value,
   icon,
   delta,
-  color = "#2952E3",
+  color = "#1464F4",
   hint,
+  labelClassName = "text-sm text-white",
 }: {
   label: string;
   value: string;
@@ -16,36 +17,40 @@ export function StatCard({
   delta?: number | null;
   color?: string;
   hint?: string;
+  labelClassName?: string;
 }) {
   const positive = (delta ?? 0) >= 0;
   return (
-    <div className="nord-card p-4 flex flex-col gap-2 min-w-0">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-nord-gray truncate">{label}</span>
+    <div
+      className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2 transition-colors hover:border-white/20"
+      style={{ borderTopColor: color }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className={`truncate ${labelClassName}`}>{label}</span>
         {icon && (
           <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
             style={{ backgroundColor: `${color}22` }}
           >
-            <DynamicIcon name={icon} size={14} style={{ color }} />
+            <DynamicIcon name={icon} size={17} style={{ color }} />
           </div>
         )}
       </div>
-      <span className="text-white text-xl font-semibold truncate">{value}</span>
-      <div className="flex items-center gap-1 min-h-[16px]">
+      <span className="text-white text-2xl font-semibold tracking-tight truncate">{value}</span>
+      <div className="flex items-center gap-1 min-h-[20px]">
         {delta !== undefined && delta !== null && (
-          <>
-            {positive ? (
-              <TrendingUp size={13} className="text-emerald-400" />
-            ) : (
-              <TrendingDown size={13} className="text-red-400" />
-            )}
-            <span className={`text-xs ${positive ? "text-emerald-400" : "text-red-400"}`}>
-              {positive ? "+" : ""}
-              {delta.toFixed(1)}%
-            </span>
-            <span className="text-xs text-nord-gray">vs. período anterior</span>
-          </>
+          <span
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-medium ${
+              positive ? "bg-nord-success/15 text-nord-success" : "bg-nord-danger/15 text-nord-danger"
+            }`}
+          >
+            {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {positive ? "+" : ""}
+            {delta.toFixed(1)}%
+          </span>
+        )}
+        {delta !== undefined && delta !== null && (
+          <span className="text-xs text-nord-gray">vs. período anterior</span>
         )}
         {hint && !delta && <span className="text-xs text-nord-gray">{hint}</span>}
       </div>
@@ -82,9 +87,9 @@ export function Badge({
 }) {
   const tones: Record<string, string> = {
     default: "bg-white/10 text-nord-gray",
-    success: "bg-emerald-500/15 text-emerald-400",
-    warning: "bg-amber-500/15 text-amber-400",
-    danger: "bg-red-500/15 text-red-400",
+    success: "bg-nord-success/15 text-nord-success",
+    warning: "bg-nord-warning/15 text-nord-warning",
+    danger: "bg-nord-danger/15 text-nord-danger",
     info: "bg-nord-blue/15 text-nord-blue-light",
   };
   return (
@@ -94,7 +99,7 @@ export function Badge({
   );
 }
 
-export function ProgressBar({ percent, color = "#2952E3" }: { percent: number; color?: string }) {
+export function ProgressBar({ percent, color = "#1464F4" }: { percent: number; color?: string }) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
     <div className="w-full h-2 rounded-full bg-nord-border overflow-hidden">

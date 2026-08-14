@@ -1,11 +1,11 @@
-import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { FinanceTabs } from "../finance-tabs";
 import { allDreCategories } from "@/lib/dre-structure";
 import { CategoriasClient } from "./categorias-client";
+import { getFinancialCategories } from "@/lib/financial-categories";
 
 export default async function CategoriasFinanceirasPage() {
-  const categories = await prisma.financialCategory.findMany({ orderBy: { name: "asc" } });
+  const categories = await getFinancialCategories();
 
   return (
     <PageContainer title="Financeiro" subtitle="Categorias Financeiras">

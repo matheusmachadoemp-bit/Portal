@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { revalidateTag } from "next/cache";
 import { allDreCategories } from "@/lib/dre-structure";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -26,6 +27,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     },
   });
 
+  revalidateTag("financial-categories", { expire: 0 });
   return NextResponse.json({ category });
 }
 
@@ -34,5 +36,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   await prisma.financialCategory.delete({ where: { id } });
+  revalidateTag("financial-categories", { expire: 0 });
   return NextResponse.json({ ok: true });
 }

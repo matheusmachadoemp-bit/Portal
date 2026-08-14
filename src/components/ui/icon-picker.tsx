@@ -12,7 +12,7 @@ export const ICON_CHOICES = [
 ];
 
 export const COLOR_CHOICES = [
-  "#2952E3", "#4d70ff", "#22c55e", "#eab308", "#ef4444", "#a855f7", "#06b6d4", "#f97316",
+  "#1464F4", "#3B82F6", "#22C55E", "#F59E0B", "#EF4444", "#a855f7", "#06b6d4", "#f97316",
 ];
 
 export function IconPicker({

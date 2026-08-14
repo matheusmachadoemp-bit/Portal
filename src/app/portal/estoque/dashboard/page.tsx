@@ -56,14 +56,15 @@ export default async function EstoqueDashboardPage() {
   const semMovimentacao = ingredients.filter((i) => !movimentadosIds.has(i.id));
   const produtosSemFicha = products.filter((p) => p.ingredients.length === 0);
 
+  const ingredientById = new Map(ingredients.map((i) => [i.id, i]));
   const entradasPeriodo = movementsInPeriod.filter((m) => m.type === "ENTRADA");
   const saidasPeriodo = movementsInPeriod.filter((m) => m.type === "SAIDA" || m.type === "PERDA");
   const valorEntradas = entradasPeriodo.reduce((sum, m) => {
-    const ing = ingredients.find((i) => i.id === m.ingredientId);
+    const ing = ingredientById.get(m.ingredientId);
     return sum + m.quantidade * (ing ? ingredientCostPerUnit(ing) : 0);
   }, 0);
   const valorSaidas = saidasPeriodo.reduce((sum, m) => {
-    const ing = ingredients.find((i) => i.id === m.ingredientId);
+    const ing = ingredientById.get(m.ingredientId);
     return sum + m.quantidade * (ing ? ingredientCostPerUnit(ing) : 0);
   }, 0);
 

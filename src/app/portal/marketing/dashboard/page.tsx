@@ -9,44 +9,51 @@ export default async function MarketingDashboardPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();
 
-  const [tasksThisMonth, weekTasks, activeCampaigns, recentFiles, recentLogs] = await Promise.all([
-    prisma.marketingTask.findMany({
-      where: { empresaId: { in: empresaIds }, createdAt: { gte: startOfMonth(now), lte: endOfMonth(now) } },
-      select: { id: true, status: true, createdAt: true },
-    }),
-    prisma.marketingTask.findMany({
-      where: {
-        empresaId: { in: empresaIds },
-        date: { gte: startOfWeek(now, { weekStartsOn: 1 }), lte: endOfWeek(now, { weekStartsOn: 1 }) },
-      },
-      orderBy: { date: "asc" },
-      include: { responsavel: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
-    }),
-    prisma.marketingCampaign.count({
-      where: { empresaId: { in: empresaIds }, status: { in: ["EM_ANDAMENTO", "PLANEJADA"] } },
-    }),
-    prisma.marketingFile.findMany({
-      where: { empresaId: { in: empresaIds } },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-    }),
-    prisma.auditLog.findMany({
-      where: {
-        empresaId: { in: empresaIds },
-        entityType: { in: ["MarketingTask", "MarketingCampaign", "MarketingFile", "MarketingIdea"] },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      include: { user: { select: { name: true } } },
-    }),
-  ]);
-
-  const allTasksForPanel = await prisma.marketingTask.findMany({
-    where: { empresaId: { in: empresaIds } },
-    orderBy: { date: "asc" },
-    include: { responsavel: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
-    take: 200,
-  });
+  const [tasksThisMonth, weekTasks, activeCampaigns, recentFiles, recentLogs, allTasksForPanel, teamMembers] =
+    await Promise.all([
+      prisma.marketingTask.findMany({
+        where: { empresaId: { in: empresaIds }, createdAt: { gte: startOfMonth(now), lte: endOfMonth(now) } },
+        select: { id: true, status: true, createdAt: true },
+      }),
+      prisma.marketingTask.findMany({
+        where: {
+          empresaId: { in: empresaIds },
+          date: { gte: startOfWeek(now, { weekStartsOn: 1 }), lte: endOfWeek(now, { weekStartsOn: 1 }) },
+        },
+        orderBy: { date: "asc" },
+        include: { responsavel: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
+      }),
+      prisma.marketingCampaign.count({
+        where: { empresaId: { in: empresaIds }, status: { in: ["EM_ANDAMENTO", "PLANEJADA"] } },
+      }),
+      prisma.marketingFile.findMany({
+        where: { empresaId: { in: empresaIds } },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+      }),
+      prisma.auditLog.findMany({
+        where: {
+          empresaId: { in: empresaIds },
+          entityType: { in: ["MarketingTask", "MarketingCampaign", "MarketingFile", "MarketingIdea"] },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+        include: { user: { select: { name: true } } },
+      }),
+      // Painel geral de tarefas
+      prisma.marketingTask.findMany({
+        where: { empresaId: { in: empresaIds } },
+        orderBy: { date: "asc" },
+        include: { responsavel: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
+        take: 200,
+      }),
+      // Membros selecionáveis (qualquer usuário com acesso às empresas ativas)
+      prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
 
   // 6-week sparkline trend, by week, of tasks created
   const sparklineWeeks: { done: number; producing: number; analysis: number }[] = [];
@@ -60,13 +67,6 @@ export default async function MarketingDashboardPage() {
       analysis: inWeek.filter((t) => t.status === "EM_ANALISE").length,
     });
   }
-
-  // Fetch selectable team members (any user with access to the active empresas)
-  const teamMembers = await prisma.user.findMany({
-    where: { active: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
 
   function serializeTask(t: (typeof weekTasks)[number]) {
     return { ...t, date: t.date ? t.date.toISOString() : null, createdAt: t.createdAt.toISOString() };

@@ -7,7 +7,6 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { RhTabs } from "../rh-tabs";
-import { exportFinanceToPdf } from "@/lib/pdf-export";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -152,8 +151,9 @@ export function FinanceiroClient({
     refresh();
   }
 
-  function handleExportPdf() {
+  async function handleExportPdf() {
     const employeeName = fixedEmployeeId ? employees.find((e) => e.id === fixedEmployeeId)?.name : undefined;
+    const { exportFinanceToPdf } = await import("@/lib/pdf-export");
     exportFinanceToPdf(visible, TYPE_LABEL, {
       title: "RH - Financeiro",
       subtitle: employeeName ?? "Todos os colaboradores",

@@ -93,6 +93,11 @@ model User {
   trainingBadges                TrainingUserBadge[]
   trainingXpEvents              TrainingXpEvent[]
   trainingLibraryItems          TrainingLibraryItem[]
+  customerNotesAuthored         CustomerNote[]         @relation("CustomerNoteAuthor")
+  crmSegmentsCreated            CrmSegment[]           @relation("CrmSegmentCreatedBy")
+  campaignsCreated              Campaign[]             @relation("CampaignCreatedBy")
+  automationsCreated            Automation[]           @relation("AutomationCreatedBy")
+  npsResponsesAssigned          NpsResponse[]          @relation("NpsResponsavel")
 }
 
 model UserPermission {
@@ -139,19 +144,23 @@ model ModulePermission {
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id                             String   @id @default(cuid())
-  key                            String   @unique
+  id                             String     @id @default(cuid())
+  key                            String     @unique
   name                           String
   logo                           String?
-  color                          String   @default("#2952E3")
-  active                         Boolean  @default(true)
-  order                          Int      @default(0)
+  color                          String     @default("#2952E3")
+  active                         Boolean    @default(true)
+  order                          Int        @default(0)
   driveFolderUrl                 String?
-  taxaIfoodPadrao                Float    @default(30)
-  metaCmvPercent                 Float    @default(30)
-  metaDivergenciaContagemPercent Float    @default(3)
-  createdAt                      DateTime @default(now())
-  updatedAt                      DateTime @updatedAt
+  taxaIfoodPadrao                Float      @default(30)
+  metaCmvPercent                 Float      @default(30)
+  metaDivergenciaContagemPercent Float      @default(3)
+  saiposApiToken                 String?
+  saiposLojaId                   String?
+  saiposSyncEnabled              Boolean    @default(false)
+  saiposLastSyncAt               DateTime?
+  createdAt                      DateTime   @default(now())
+  updatedAt                      DateTime   @updatedAt
 
   userAccess             UserEmpresaAccess[]
   suppliers              Supplier[]
@@ -174,6 +183,14 @@ model Empresa {
   waiterSales            WaiterSaleEntry[]
   sales                  Sale[]
   clientes               Cliente[]
+  customerNotes          CustomerNote[]
+  crmSegments            CrmSegment[]
+  campaigns              Campaign[]
+  automations            Automation[]
+  loyaltyConfig          LoyaltyConfig?
+  loyaltyRewards         LoyaltyReward[]
+  loyaltyAccounts        LoyaltyAccount[]
+  npsResponses           NpsResponse[]
   products               Product[]
   ingredients            Ingredient[]
   stockMovements         StockMovement[]
@@ -192,6 +209,8 @@ model Empresa {
   vacations              Vacation[]
   uniformDeliveries      UniformDelivery[]
   employeeDocuments      EmployeeDocument[]
+  saiposSales            SaiposSale[]
+  saiposSyncLogs         SaiposSyncLog[]
 }
 
 model UserEmpresaAccess {
@@ -260,25 +279,33 @@ enum PeriodType {
   MENSAL
 }
 
+enum SalesEntrySource {
+  MANUAL
+  SAIPOS
+}
+
 model SalesEntry {
-  id                  String     @id @default(cuid())
+  id                  String            @id @default(cuid())
   empresaId           String
-  empresa             Empresa    @relation(fields: [empresaId], references: [id])
+  empresa             Empresa           @relation(fields: [empresaId], references: [id])
   date                DateTime
-  periodType          PeriodType @default(DIARIO)
-  faturamentoDelivery Float      @default(0)
-  faturamentoSalao    Float      @default(0)
-  pedidosDelivery     Int        @default(0)
-  pedidosBalcao       Int        @default(0)
-  pedidosSalao        Int        @default(0)
-  mesasAtendidas      Int        @default(0)
-  taxaServicoValor    Float      @default(0)
-  metaDiaria          Float      @default(0)
+  periodType          PeriodType        @default(DIARIO)
+  source              SalesEntrySource  @default(MANUAL)
+  faturamentoDelivery Float             @default(0)
+  faturamentoSalao    Float             @default(0)
+  pedidosDelivery     Int               @default(0)
+  pedidosBalcao       Int               @default(0)
+  pedidosSalao        Int               @default(0)
+  mesasAtendidas      Int               @default(0)
+  taxaServicoValor    Float             @default(0)
+  metaDiaria          Float             @default(0)
   observacoes         String?
-  createdById         String
-  createdBy           User       @relation(fields: [createdById], references: [id])
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  createdById         String?
+  createdBy           User?             @relation(fields: [createdById], references: [id])
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([empresaId, date])
 }
 
 // ---------------------------------------------------------------------------
@@ -319,22 +346,310 @@ model Sale {
 }
 
 // ---------------------------------------------------------------------------
+// SAIPOS — vendas importadas da API de Dados da Saipos (GET /v1/search_sales)
+// ---------------------------------------------------------------------------
+
+model SaiposSale {
+  id             String        @id @default(cuid())
+  empresaId      String
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  saiposId       String
+  shiftDate      DateTime
+  dateTime       DateTime
+  channel        SaleChannel   @default(SALAO)
+  formaPagamento PaymentMethod @default(OUTRO)
+  valorTotal     Float         @default(0)
+  raw            Json?
+  createdAt      DateTime      @default(now())
+
+  @@unique([empresaId, saiposId])
+  @@index([empresaId, shiftDate])
+}
+
+model SaiposSyncLog {
+  id            String    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  status        String
+  recordsSynced Int       @default(0)
+  errorMessage  String?
+
+  @@index([empresaId, startedAt])
+}
+
+// ---------------------------------------------------------------------------
 // CRM
 // ---------------------------------------------------------------------------
 
 model Cliente {
+  id             String       @id @default(cuid())
+  empresaId      String
+  empresa        Empresa      @relation(fields: [empresaId], references: [id])
+  nome           String
+  telefone       String?
+  whatsapp       String?
+  email          String?
+  dataNascimento DateTime?
+  endereco       String?
+  bairro         String?
+  cidade         String?
+  canalPreferido SaleChannel?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  vendas             Sale[]
+  notas              CustomerNote[]
+  campaignRecipients CampaignRecipient[]
+  npsResponses       NpsResponse[]
+  loyaltyAccount     LoyaltyAccount?
+
+  @@unique([empresaId, telefone])
+  @@index([empresaId, dataNascimento])
+}
+
+model CustomerNote {
   id        String   @id @default(cuid())
   empresaId String
   empresa   Empresa  @relation(fields: [empresaId], references: [id])
-  nome      String
-  telefone  String?
-  email     String?
+  clienteId String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  texto     String
+  authorId  String
+  author    User     @relation("CustomerNoteAuthor", fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([clienteId])
+}
+
+// ---------------------------------------------------------------------------
+// CRM — SEGMENTOS
+// ---------------------------------------------------------------------------
+
+model CrmSegment {
+  id          String   @id @default(cuid())
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  name        String
+  description String?
+  criteria    Json
+  createdById String
+  createdBy   User     @relation("CrmSegmentCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaigns Campaign[]
+
+  @@index([empresaId])
+}
+
+// ---------------------------------------------------------------------------
+// CRM — CAMPANHAS
+// ---------------------------------------------------------------------------
+
+enum CampaignAudienceType {
+  TODOS
+  SEGMENTO
+  CLIENTES
+}
+
+enum CampaignChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+  PUSH
+}
+
+enum CampaignOfferType {
+  CUPOM
+  DESCONTO_PERCENTUAL
+  DESCONTO_VALOR
+  PRODUTO_GRATIS
+  CASHBACK
+  PONTOS
+  SEM_OFERTA
+}
+
+enum CampaignStatus {
+  RASCUNHO
+  AGENDADA
+  ENVIADA
+  CONCLUIDA
+}
+
+model Campaign {
+  id               String               @id @default(cuid())
+  empresaId        String
+  empresa          Empresa              @relation(fields: [empresaId], references: [id])
+  name             String
+  status           CampaignStatus       @default(RASCUNHO)
+  audienceType     CampaignAudienceType @default(TODOS)
+  segmentId        String?
+  segment          CrmSegment?          @relation(fields: [segmentId], references: [id])
+  channel          CampaignChannel      @default(WHATSAPP)
+  offerType        CampaignOfferType    @default(SEM_OFERTA)
+  offerValue       Float?
+  offerDescription String?
+  message          String
+  scheduledAt      DateTime?
+  sentAt           DateTime?
+  createdById      String
+  createdBy        User                 @relation("CampaignCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  recipients CampaignRecipient[]
+
+  @@index([empresaId, status])
+}
+
+enum CampaignRecipientStatus {
+  PENDENTE
+  ENVIADO
+  ENTREGUE
+  VISUALIZADO
+  CLICOU
+  CONVERTEU
+}
+
+model CampaignRecipient {
+  id         String                  @id @default(cuid())
+  campaignId String
+  campaign   Campaign                @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  clienteId  String
+  cliente    Cliente                 @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  status     CampaignRecipientStatus @default(PENDENTE)
+  createdAt  DateTime                @default(now())
+
+  @@unique([campaignId, clienteId])
+  @@index([campaignId])
+}
+
+// ---------------------------------------------------------------------------
+// CRM — AUTOMAÇÕES
+// ---------------------------------------------------------------------------
+
+enum AutomationTrigger {
+  PRIMEIRA_COMPRA
+  SEGUNDA_COMPRA
+  INATIVO_30
+  INATIVO_60
+  INATIVO_90
+  ANIVERSARIO
+  CLIENTE_VIP
+  POS_VENDA
+  AVALIACAO
+  RECUPERACAO
+}
+
+enum AutomationActionType {
+  MENSAGEM
+  TAG
+  OFERTA
+}
+
+model Automation {
+  id          String               @id @default(cuid())
+  empresaId   String
+  empresa     Empresa              @relation(fields: [empresaId], references: [id])
+  name        String
+  trigger     AutomationTrigger
+  active      Boolean              @default(true)
+  waitDays    Int                  @default(0)
+  actionType  AutomationActionType @default(MENSAGEM)
+  message     String?
+  createdById String
+  createdBy   User                 @relation("AutomationCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([empresaId])
+}
+
+// ---------------------------------------------------------------------------
+// CRM — FIDELIDADE (CLUBE NORD)
+// ---------------------------------------------------------------------------
+
+model LoyaltyConfig {
+  id            String   @id @default(cuid())
+  empresaId     String   @unique
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  pontosPorReal Float    @default(1)
+  updatedAt     DateTime @updatedAt
+}
+
+model LoyaltyReward {
+  id                String   @id @default(cuid())
+  empresaId         String
+  empresa           Empresa  @relation(fields: [empresaId], references: [id])
+  name              String
+  pontosNecessarios Int
+  ativo             Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  @@index([empresaId])
+}
+
+model LoyaltyAccount {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  clienteId String   @unique
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  pontos    Int      @default(0)
+  cashback  Float    @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  vendas Sale[]
+  transacoes LoyaltyTransaction[]
 
-  @@unique([empresaId, telefone])
+  @@index([empresaId])
+}
+
+enum LoyaltyTransactionType {
+  GANHO
+  RESGATE
+}
+
+model LoyaltyTransaction {
+  id        String                 @id @default(cuid())
+  accountId String
+  account   LoyaltyAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tipo      LoyaltyTransactionType
+  pontos    Int                    @default(0)
+  cashback  Float                  @default(0)
+  descricao String?
+  createdAt DateTime               @default(now())
+
+  @@index([accountId])
+}
+
+// ---------------------------------------------------------------------------
+// CRM — SATISFAÇÃO / NPS
+// ---------------------------------------------------------------------------
+
+enum NpsStatus {
+  PENDENTE
+  EM_CONTATO
+  RESOLVIDO
+}
+
+model NpsResponse {
+  id            String    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  clienteId     String?
+  cliente       Cliente?  @relation(fields: [clienteId], references: [id])
+  saleId        String?
+  nota          Int
+  comentario    String?
+  status        NpsStatus @default(PENDENTE)
+  responsavelId String?
+  responsavel   User?     @relation("NpsResponsavel", fields: [responsavelId], references: [id])
+  createdAt     DateTime  @default(now())
+
+  @@index([empresaId, createdAt])
 }
 
 model SaleItem {
@@ -1525,6 +1840,9 @@ model Payable {
   createdBy           User               @relation(fields: [createdById], references: [id])
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+
+  @@index([empresaId, status, dataVencimento])
+  @@index([empresaId, dataCompetencia])
 }
 
 model Receivable {
@@ -1555,6 +1873,9 @@ model Receivable {
   createdBy           User               @relation(fields: [createdById], references: [id])
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+
+  @@index([empresaId, status, dataVencimento])
+  @@index([empresaId, dataCompetencia])
 }
 
 model CashMovement {

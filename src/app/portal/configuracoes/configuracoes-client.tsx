@@ -6,7 +6,6 @@ import { changePasswordAction } from "@/app/actions/account";
 import { format } from "date-fns";
 
 const INTEGRATIONS = [
-  { name: "Saipos", webhook: "/api/webhooks/saipos", status: "Aguardando configuração" },
   { name: "iFood", webhook: "/api/webhooks/ifood", status: "Aguardando configuração" },
   { name: "99Food", webhook: "/api/webhooks/99food", status: "Aguardando configuração" },
   { name: "Site próprio", webhook: "/api/webhooks/site", status: "Aguardando configuração" },
@@ -22,6 +21,7 @@ export function ConfiguracoesClient({
   auditLogs,
   taxaIfoodPadrao,
   empresaNome,
+  saipos,
 }: {
   userName: string;
   userEmail: string;
@@ -30,11 +30,46 @@ export function ConfiguracoesClient({
   auditLogs: { id: string; action: string; entityType: string; entityId: string | null; createdAt: string; userName: string }[];
   taxaIfoodPadrao: number | null;
   empresaNome: string | null;
+  saipos: { lojaId: string | null; syncEnabled: boolean; hasToken: boolean; lastSyncAt: string | null } | null;
 }) {
   const [state, formAction, pending] = useActionState(changePasswordAction, {});
   const [ifoodValue, setIfoodValue] = useState(taxaIfoodPadrao !== null ? String(taxaIfoodPadrao) : "");
   const [ifoodSaving, setIfoodSaving] = useState(false);
   const [ifoodMessage, setIfoodMessage] = useState<string | null>(null);
+
+  const [saiposToken, setSaiposToken] = useState("");
+  const [saiposLojaId, setSaiposLojaId] = useState(saipos?.lojaId ?? "");
+  const [saiposSyncEnabled, setSaiposSyncEnabled] = useState(saipos?.syncEnabled ?? false);
+  const [saiposHasToken, setSaiposHasToken] = useState(saipos?.hasToken ?? false);
+  const [saiposSaving, setSaiposSaving] = useState(false);
+  const [saiposSyncing, setSaiposSyncing] = useState(false);
+  const [saiposMessage, setSaiposMessage] = useState<string | null>(null);
+
+  async function saveSaiposConfig() {
+    setSaiposSaving(true);
+    setSaiposMessage(null);
+    const res = await fetch("/api/configuracoes/saipos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiToken: saiposToken, lojaId: saiposLojaId, syncEnabled: saiposSyncEnabled }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSaiposSaving(false);
+    if (res.ok && saiposToken) setSaiposHasToken(true);
+    setSaiposToken("");
+    setSaiposMessage(res.ok ? "Configuração da Saipos salva com sucesso." : data.error ?? "Não foi possível salvar.");
+  }
+
+  async function syncSaiposNow() {
+    setSaiposSyncing(true);
+    setSaiposMessage(null);
+    const res = await fetch("/api/integracoes/saipos/sync", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setSaiposSyncing(false);
+    setSaiposMessage(
+      res.ok ? `Sincronização concluída: ${data.recordsSynced} venda(s) importada(s).` : data.error ?? "Falha ao sincronizar."
+    );
+  }
 
   async function saveIfoodRate() {
     setIfoodSaving(true);
@@ -119,6 +154,75 @@ export function ConfiguracoesClient({
             Usada para calcular o preço sugerido no iFood em cada ficha técnica. Pode ser sobrescrita
             individualmente em cada produto.
           </p>
+        </Section>
+      )}
+
+      {isAdmin && (
+        <Section title="Integração Saipos — vendas">
+          {saipos === null ? (
+            <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+              Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+              configurar a integração com a Saipos.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-nord-gray mb-4">
+                Conecta o Portal à API de Dados da Saipos para importar vendas automaticamente
+                (endpoint <code>search_sales</code>). O token é armazenado de forma criptografada.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl">
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Token da API (Bearer)</span>
+                  <input
+                    type="password"
+                    value={saiposToken}
+                    onChange={(e) => setSaiposToken(e.target.value)}
+                    placeholder={saiposHasToken ? "•••••••• (configurado)" : "Cole o token aqui"}
+                    className="input"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">ID da loja na Saipos (opcional)</span>
+                  <input
+                    type="text"
+                    value={saiposLojaId}
+                    onChange={(e) => setSaiposLojaId(e.target.value)}
+                    className="input"
+                  />
+                </label>
+                <label className="flex items-center gap-2 mt-5">
+                  <input
+                    type="checkbox"
+                    checked={saiposSyncEnabled}
+                    onChange={(e) => setSaiposSyncEnabled(e.target.checked)}
+                  />
+                  <span className="text-xs text-nord-gray">Sincronização automática diária ativa</span>
+                </label>
+              </div>
+              <div className="flex items-center gap-3 mt-3">
+                <button
+                  onClick={saveSaiposConfig}
+                  disabled={saiposSaving}
+                  className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                >
+                  {saiposSaving ? "Salvando..." : "Salvar configuração"}
+                </button>
+                <button
+                  onClick={syncSaiposNow}
+                  disabled={saiposSyncing || !saiposHasToken}
+                  className="bg-nord-panel border border-nord-border hover:border-nord-blue disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                >
+                  {saiposSyncing ? "Sincronizando..." : "Sincronizar agora"}
+                </button>
+                {saipos.lastSyncAt && (
+                  <span className="text-xs text-nord-gray">
+                    Última sincronização: {format(new Date(saipos.lastSyncAt), "dd/MM/yyyy HH:mm")}
+                  </span>
+                )}
+              </div>
+              {saiposMessage && <p className="text-xs text-emerald-400 mt-2">{saiposMessage}</p>}
+            </>
+          )}
         </Section>
       )}
 

@@ -38,3 +38,19 @@ export function exportFinanceToPdf(
 
   doc.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
 }
+
+export function exportRowsToPdf(title: string, headers: string[], rows: (string | number)[][]) {
+  const doc = new jsPDF();
+  doc.setFontSize(14);
+  doc.text(title, 14, 16);
+
+  autoTable(doc, {
+    startY: 22,
+    head: [headers],
+    body: rows.map((r) => r.map((v) => String(v))),
+    headStyles: { fillColor: [41, 82, 227] },
+    styles: { fontSize: 9 },
+  });
+
+  doc.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+}

@@ -11,31 +11,39 @@ export default async function UniversidadeDashboardPage() {
   const session = await auth();
   const now = new Date();
 
-  const [users, enrollments, certificates, moduleProgress, attempts, courses, overdueEnrollments, xpEventsThisMonth] =
-    await Promise.all([
-      prisma.user.count({ where: { active: true } }),
-      prisma.trainingEnrollment.findMany({ include: { course: { select: { name: true } } } }),
-      prisma.trainingCertificate.count(),
-      prisma.trainingModuleProgress.findMany({ select: { watchedSeconds: true } }),
-      prisma.trainingAttempt.findMany({ select: { score: true } }),
-      prisma.trainingCourse.findMany({
-        select: { id: true, name: true, category: true, _count: { select: { enrollments: true } } },
-      }),
-      prisma.trainingEnrollment.findMany({
-        where: {
-          status: { not: "CONCLUIDO" },
-          createdAt: { lte: subDays(now, OVERDUE_DAYS) },
-          course: { mandatory: true },
-        },
-        select: { id: true },
-      }),
-      prisma.trainingXpEvent.findMany({
-        where: { createdAt: { gte: startOfMonth(now) } },
-        include: { user: { select: { name: true } } },
-      }),
-    ]);
-
-  const pendingAssessments = await prisma.trainingAttempt.count({ where: { passed: false } });
+  const [
+    users,
+    enrollments,
+    certificates,
+    moduleProgress,
+    attempts,
+    courses,
+    overdueEnrollments,
+    xpEventsThisMonth,
+    pendingAssessments,
+  ] = await Promise.all([
+    prisma.user.count({ where: { active: true } }),
+    prisma.trainingEnrollment.findMany({ include: { course: { select: { name: true } } } }),
+    prisma.trainingCertificate.count(),
+    prisma.trainingModuleProgress.findMany({ select: { watchedSeconds: true } }),
+    prisma.trainingAttempt.findMany({ select: { score: true } }),
+    prisma.trainingCourse.findMany({
+      select: { id: true, name: true, category: true, _count: { select: { enrollments: true } } },
+    }),
+    prisma.trainingEnrollment.findMany({
+      where: {
+        status: { not: "CONCLUIDO" },
+        createdAt: { lte: subDays(now, OVERDUE_DAYS) },
+        course: { mandatory: true },
+      },
+      select: { id: true },
+    }),
+    prisma.trainingXpEvent.findMany({
+      where: { createdAt: { gte: startOfMonth(now) } },
+      include: { user: { select: { name: true } } },
+    }),
+    prisma.trainingAttempt.count({ where: { passed: false } }),
+  ]);
 
   const trainedUserIds = new Set(enrollments.filter((e) => e.status === "CONCLUIDO").map((e) => e.userId));
   const concluidos = enrollments.filter((e) => e.status === "CONCLUIDO").length;

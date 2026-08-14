@@ -27,8 +27,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (Array.isArray(body.courseIds)) {
     await prisma.trainingTrackCourse.deleteMany({ where: { trackId: id } });
-    for (let i = 0; i < body.courseIds.length; i++) {
-      await prisma.trainingTrackCourse.create({ data: { trackId: id, courseId: body.courseIds[i], order: i } });
+    if (body.courseIds.length > 0) {
+      await prisma.trainingTrackCourse.createMany({
+        data: body.courseIds.map((courseId: string, i: number) => ({ trackId: id, courseId, order: i })),
+      });
     }
   }
 

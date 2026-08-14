@@ -1,83 +1,56 @@
-import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { CrmTabs } from "../crm-tabs";
-import { Section, Badge } from "@/components/ui/stat-card";
-import { formatCurrency } from "@/lib/calc";
+import { ClientesClient } from "./clientes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { computeRfv, RFV_SEGMENT_TONE } from "@/lib/rfv";
-import { differenceInCalendarDays, format } from "date-fns";
+import { loadClientesCompletos } from "@/lib/crm-data";
+import { computeClienteMetrics } from "@/lib/crm";
 
 export default async function ClientesPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const isGrupo = ctx?.mode === "grupo";
 
-  const clientes = await prisma.cliente.findMany({
-    where: { empresaId: { in: empresaIds } },
-    include: { vendas: { select: { dateTime: true, valorTotal: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const clientes = await loadClientesCompletos(empresaIds);
+  const metrics = computeClienteMetrics(clientes);
+  const metricsById = new Map(metrics.map((m) => [m.id, m]));
 
-  const now = new Date();
-  const comHistorico = clientes.filter((c) => c.vendas.length > 0);
-  const rfvInputs = comHistorico.map((c) => {
-    const ultimaCompra = c.vendas.reduce((max, s) => (s.dateTime > max ? s.dateTime : max), c.vendas[0].dateTime);
+  const rows = clientes.map((c) => {
+    const m = metricsById.get(c.id)!;
+    const produtos = Array.from(new Set(c.vendas.flatMap((v) => v.items.map((i) => i.nome))));
     return {
-      clienteId: c.id,
-      diasDesdeUltimaCompra: differenceInCalendarDays(now, ultimaCompra),
-      frequencia: c.vendas.length,
-      valor: c.vendas.reduce((sum, s) => sum + s.valorTotal, 0),
+      id: c.id,
+      nome: c.nome,
+      telefone: c.telefone,
+      whatsapp: c.whatsapp,
+      email: c.email,
+      lojaId: c.empresa.id,
+      lojaNome: c.empresa.name,
+      lojaColor: c.empresa.color,
+      bairro: c.bairro,
+      cidade: c.cidade,
+      canalPreferido: c.canalPreferido,
+      createdAt: c.createdAt.toISOString(),
+      ehNovo: m.ehNovo,
+      pedidos: m.pedidos,
+      totalGasto: m.totalGasto,
+      ticketMedio: m.ticketMedio,
+      ultimaCompra: m.ultimaCompra ? m.ultimaCompra.toISOString() : null,
+      diasDesdeUltimaCompra: m.diasDesdeUltimaCompra,
+      frequenciaMediaDias: m.frequenciaMediaDias,
+      status: m.status,
+      produtos,
     };
   });
-  const rfvById = new Map(computeRfv(rfvInputs).map((r) => [r.clienteId, r]));
+
+  const lojas = isGrupo
+    ? Array.from(new Map(clientes.map((c) => [c.empresa.id, c.empresa])).values())
+    : [];
 
   return (
     <PageContainer title="CRM" subtitle="Clientes">
       <div className="space-y-6">
         <CrmTabs />
-        <Section title={`Base de clientes (${clientes.length})`}>
-          <p className="text-xs text-nord-gray mb-4">
-            Clientes são criados automaticamente ao informar o telefone em Vendas → Lançamentos.
-          </p>
-          <div className="overflow-x-auto nord-scrollbar">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
-                  <th className="py-2 pr-4">Nome</th>
-                  <th className="py-2 pr-4">Telefone</th>
-                  <th className="py-2 pr-4">Cliente desde</th>
-                  <th className="py-2 pr-4">Compras</th>
-                  <th className="py-2 pr-4">Total gasto</th>
-                  <th className="py-2 pr-4">Segmento RFV</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clientes.map((c) => {
-                  const rfv = rfvById.get(c.id);
-                  const totalGasto = c.vendas.reduce((sum, s) => sum + s.valorTotal, 0);
-                  return (
-                    <tr key={c.id} className="border-b border-nord-border/50 hover:bg-white/5">
-                      <td className="py-2.5 pr-4 text-white">{c.nome}</td>
-                      <td className="py-2.5 pr-4 text-nord-gray">{c.telefone ?? "-"}</td>
-                      <td className="py-2.5 pr-4 text-nord-gray">{format(c.createdAt, "dd/MM/yyyy")}</td>
-                      <td className="py-2.5 pr-4 text-nord-gray">{c.vendas.length}</td>
-                      <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(totalGasto)}</td>
-                      <td className="py-2.5 pr-4">
-                        {rfv ? <Badge tone={RFV_SEGMENT_TONE[rfv.segmento]}>{rfv.segmento}</Badge> : <span className="text-nord-gray text-xs">Sem histórico</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {clientes.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-6 text-center text-nord-gray">
-                      Nenhum cliente cadastrado ainda.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Section>
+        <ClientesClient rows={rows} lojas={lojas} isGrupo={isGrupo} />
       </div>
     </PageContainer>
   );
