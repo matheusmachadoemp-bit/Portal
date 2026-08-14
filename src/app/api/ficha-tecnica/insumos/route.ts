@@ -13,7 +13,11 @@ export async function GET() {
   const ingredients = await prisma.ingredient.findMany({
     where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: { name: "asc" },
-    include: { priceHistory: { orderBy: { createdAt: "desc" }, take: 10 } },
+    include: {
+      priceHistory: { orderBy: { createdAt: "desc" }, take: 10 },
+      category: { select: { id: true, name: true, color: true } },
+      fornecedorPrincipal: { select: { id: true, nomeFantasia: true, razaoSocial: true } },
+    },
   });
   return NextResponse.json({ ingredients });
 }
@@ -45,6 +49,21 @@ export async function POST(req: Request) {
       estoqueAtual: Number(body.estoqueAtual) || 0,
       validade: body.validade ? new Date(body.validade) : null,
       lastPurchaseDate: body.lastPurchaseDate ? new Date(body.lastPurchaseDate) : null,
+      categoryId: body.categoryId || null,
+      setor: body.setor || null,
+      codigoInterno: body.codigoInterno || null,
+      codigoBarras: body.codigoBarras || null,
+      localArmazenamento: body.localArmazenamento || null,
+      unidadeCompra: body.unidadeCompra || null,
+      fatorConversao: body.fatorConversao !== undefined ? Number(body.fatorConversao) || 1 : 1,
+      pesoEmbalagem: body.pesoEmbalagem !== undefined ? Number(body.pesoEmbalagem) : null,
+      rendimentoAproveitavel: body.rendimentoAproveitavel !== undefined ? Number(body.rendimentoAproveitavel) : null,
+      estoqueMaximo: body.estoqueMaximo !== undefined ? Number(body.estoqueMaximo) : null,
+      pontoReposicao: body.pontoReposicao !== undefined ? Number(body.pontoReposicao) : null,
+      fornecedorPrincipalId: body.fornecedorPrincipalId || null,
+      perecivel: !!body.perecivel,
+      active: body.active !== undefined ? !!body.active : true,
+      fotoUrl: body.fotoUrl || null,
       priceHistory: { create: { price: Number(body.precoAtual) || 0 } },
     },
   });

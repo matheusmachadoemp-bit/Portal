@@ -65,3 +65,59 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--nord-border) var(--nord-panel);
 }
+
+.input {
+  width: 100%;
+  background: var(--nord-panel);
+  border: 1px solid var(--nord-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: white;
+  font-size: 13px;
+  outline: none;
+}
+.input:focus {
+  border-color: var(--nord-blue);
+}
+.input::placeholder {
+  color: var(--nord-gray);
+  opacity: 0.7;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--nord-blue);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.btn-primary:hover {
+  background: var(--nord-blue-light);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--nord-border);
+  color: var(--nord-gray);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+.btn-outline:hover {
+  color: white;
+  border-color: var(--nord-blue);
+}
