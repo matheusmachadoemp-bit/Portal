@@ -1,24 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2, GripVertical } from "lucide-react";
-import {
-  DndContext,
-  DragEndEvent,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Badge, StatCard } from "@/components/ui/stat-card";
+import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { TaskModal } from "../task-modal";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/marketing";
@@ -31,31 +17,6 @@ type LogDTO = { id: string; action: string; entityType: string; after: string | 
 
 const DONE_STATUSES = ["PUBLICADO", "RESULTADOS"];
 const PRODUCING_STATUSES = ["A_PRODUZIR", "EM_PRODUCAO", "EM_EDICAO"];
-
-const KPI_ORDER_STORAGE_KEY = "marketing-kpi-order";
-const DEFAULT_KPI_ORDER = ["done", "producing", "analysis", "campaigns"];
-
-function SortableKpiCard({ id, children }: { id: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-  return (
-    <div ref={setNodeRef} style={style} className="relative group">
-      <button
-        {...attributes}
-        {...listeners}
-        className="absolute top-2 right-2 z-10 text-nord-gray/0 group-hover:text-nord-gray/60 hover:!text-white cursor-grab active:cursor-grabbing transition-colors"
-        aria-label="Reordenar card"
-      >
-        <GripVertical size={14} />
-      </button>
-      {children}
-    </div>
-  );
-}
 
 export function DashboardClient({
   weekTasks,
@@ -79,45 +40,16 @@ export function DashboardClient({
   const [panelFilter, setPanelFilter] = useState<"TODAS" | "FEITAS" | "A_PRODUZIR" | "EM_ANALISE">("TODAS");
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskDTO | null>(null);
-  const [kpiOrder, setKpiOrder] = useState<string[]>(DEFAULT_KPI_ORDER);
-  const kpiSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-
-  useEffect(() => {
-    const saved = localStorage.getItem(KPI_ORDER_STORAGE_KEY);
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as string[];
-      if (Array.isArray(parsed) && DEFAULT_KPI_ORDER.every((k) => parsed.includes(k))) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- restores the user's saved card order on mount
-        setKpiOrder(parsed);
-      }
-    } catch {
-      // ignore malformed storage
-    }
-  }, []);
-
-  function handleKpiDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    setKpiOrder((prev) => {
-      const oldIndex = prev.indexOf(String(active.id));
-      const newIndex = prev.indexOf(String(over.id));
-      const next = arrayMove(prev, oldIndex, newIndex);
-      localStorage.setItem(KPI_ORDER_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }
-
   const doneCount = allTasks.filter((t) => DONE_STATUSES.includes(t.status)).length;
   const producingCount = allTasks.filter((t) => PRODUCING_STATUSES.includes(t.status)).length;
   const analysisCount = allTasks.filter((t) => t.status === "EM_ANALISE").length;
 
-  const kpiCards: Record<string, { label: string; value: string; color: string; icon: string }> = {
-    done: { label: "Tarefas Concluídas", value: String(doneCount), color: "#22c55e", icon: "CheckCircle2" },
-    producing: { label: "A Produzir", value: String(producingCount), color: "#eab308", icon: "Clock" },
-    analysis: { label: "Em Análise", value: String(analysisCount), color: "#a855f7", icon: "Eye" },
-    campaigns: { label: "Campanhas Ativas", value: String(activeCampaigns), color: "#3b82f6", icon: "Megaphone" },
-  };
+  const kpiCards = [
+    { key: "done", label: "Tarefas Concluídas", value: String(doneCount), color: "#22c55e", icon: "CheckCircle2" },
+    { key: "producing", label: "A Produzir", value: String(producingCount), color: "#eab308", icon: "Clock" },
+    { key: "analysis", label: "Em Análise", value: String(analysisCount), color: "#a855f7", icon: "Eye" },
+    { key: "campaigns", label: "Campanhas Ativas", value: String(activeCampaigns), color: "#3b82f6", icon: "Megaphone" },
+  ];
 
   const weekStart = addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -178,21 +110,7 @@ export function DashboardClient({
         </div>
       )}
 
-      <DndContext sensors={kpiSensors} collisionDetection={closestCenter} onDragEnd={handleKpiDragEnd}>
-        <SortableContext items={kpiOrder} strategy={horizontalListSortingStrategy}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {kpiOrder.map((key) => {
-              const card = kpiCards[key];
-              if (!card) return null;
-              return (
-                <SortableKpiCard key={key} id={key}>
-                  <StatCard label={card.label} value={card.value} color={card.color} icon={card.icon} />
-                </SortableKpiCard>
-              );
-            })}
-          </div>
-        </SortableContext>
-      </DndContext>
+      <SortableStatCards storageKey="marketing-kpi-order" cards={kpiCards} />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 nord-card p-4">
