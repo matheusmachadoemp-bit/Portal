@@ -597,7 +597,7 @@ function SubRow({
           active ? "text-white font-medium" : "text-nord-gray hover:text-white"
         }`}
       >
-        <DynamicIcon name={sub.icon} size={14} />
+        <DynamicIcon name={sub.icon} size={14} style={{ color: active ? "#fff" : cat.color }} />
         <span className="truncate">{sub.name}</span>
       </button>
       {isAdmin && (
