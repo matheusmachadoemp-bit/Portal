@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
-import { Section, Badge, StatCard } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
@@ -102,11 +103,15 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="Perdas no filtro" value={String(filtered.length)} icon="TriangleAlert" color="#ef4444" />
-        <StatCard label="Valor total estimado" value={formatCurrency(valorTotal)} icon="DollarSign" color="#ef4444" />
-        <StatCard label="Motivo mais recorrente" value={rankingMotivos[0]?.name ?? "—"} icon="AlertOctagon" />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-perdas-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-3 gap-4"
+        cards={[
+          { key: "perdas-filtro", label: "Perdas no filtro", value: String(filtered.length), icon: "TriangleAlert", color: "#ef4444" },
+          { key: "valor-total-estimado", label: "Valor total estimado", value: formatCurrency(valorTotal), icon: "DollarSign", color: "#ef4444" },
+          { key: "motivo-mais-recorrente", label: "Motivo mais recorrente", value: rankingMotivos[0]?.name ?? "—", icon: "AlertOctagon" },
+        ]}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Section title="Produtos com maior perda">

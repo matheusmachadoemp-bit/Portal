@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { cmvPercent, productTotalCost, PRODUCT_CATEGORY_LABEL } from "@/lib/ficha";
@@ -89,18 +90,23 @@ export default async function CmvPage() {
           ao preço atual dos insumos.
         </p>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="CMV Teórico (%)" value={formatPercent(cmvTeoricoPercent)} icon="ClipboardList" color="#2952E3" />
-          <StatCard label="CMV Real (%)" value={formatPercent(cmvRealPercent)} icon="Warehouse" color="#eab308" />
-          <StatCard label="CMV Real (R$, 30d)" value={formatCurrency(cmvRealValorPeriodo)} icon="DollarSign" />
-          <StatCard
-            label="Diferença"
-            value={`${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`}
-            icon={divergenciaAlta ? "TriangleAlert" : "CheckCircle2"}
-            color={divergenciaAlta ? "#ef4444" : "#22c55e"}
-            hint={formatCurrency(diferencaValor)}
-          />
-        </div>
+        <SortableStatCards
+          storageKey="cmv-kpi-order"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          cards={[
+            { key: "cmv-teorico", label: "CMV Teórico (%)", value: formatPercent(cmvTeoricoPercent), icon: "ClipboardList", color: "#2952E3" },
+            { key: "cmv-real", label: "CMV Real (%)", value: formatPercent(cmvRealPercent), icon: "Warehouse", color: "#eab308" },
+            { key: "cmv-real-valor", label: "CMV Real (R$, 30d)", value: formatCurrency(cmvRealValorPeriodo), icon: "DollarSign" },
+            {
+              key: "diferenca",
+              label: "Diferença",
+              value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
+              icon: divergenciaAlta ? "TriangleAlert" : "CheckCircle2",
+              color: divergenciaAlta ? "#ef4444" : "#22c55e",
+              hint: formatCurrency(diferencaValor),
+            },
+          ]}
+        />
 
         {divergenciaAlta && (
           <div className="flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/5 px-4 py-3">

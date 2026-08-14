@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { Section, Badge, StatCard } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
@@ -151,11 +152,15 @@ export function ComprasClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="Compras no filtro" value={String(filtered.length)} icon="ShoppingBasket" />
-        <StatCard label="Valor total" value={formatCurrency(valorTotalPeriodo)} icon="DollarSign" color="#22c55e" />
-        <StatCard label="Aguardando entrega" value={String(pendentes)} icon="Truck" color={pendentes ? "#f59e0b" : "#22c55e"} />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-compras-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-3 gap-4"
+        cards={[
+          { key: "compras-filtro", label: "Compras no filtro", value: String(filtered.length), icon: "ShoppingBasket" },
+          { key: "valor-total", label: "Valor total", value: formatCurrency(valorTotalPeriodo), icon: "DollarSign", color: "#22c55e" },
+          { key: "aguardando-entrega", label: "Aguardando entrega", value: String(pendentes), icon: "Truck", color: pendentes ? "#f59e0b" : "#22c55e" },
+        ]}
+      />
 
       <Section
         title="Histórico de compras"

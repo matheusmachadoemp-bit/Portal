@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatNumber, formatPercent, growth, pct } from "@/lib/calc";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { SOCIAL_NETWORK_OPTIONS } from "@/lib/marketing";
@@ -54,27 +55,36 @@ export default async function RedesSociaisPage() {
   return (
     <PageContainer title="Marketing" subtitle="Redes sociais — desempenho consolidado">
       <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          <StatCard label="Seguidores" value={formatNumber(current?.seguidoresFim ?? 0)} icon="Users" />
-          <StatCard
-            label="Novos seguidores (mês)"
-            value={formatNumber(novosSeguidores)}
-            icon="UserPlus"
-            delta={previous ? growth(novosSeguidores, previous.seguidoresFim - previous.seguidoresInicio) : null}
-          />
-          <StatCard label="Alcance" value={formatNumber(current?.alcance ?? 0)} icon="Radar" />
-          <StatCard label="Impressões" value={formatNumber(current?.impressoes ?? 0)} icon="Eye" />
-          <StatCard label="Engajamento" value={formatPercent(engajamento)} icon="Heart" />
-          <StatCard label="Compartilhamentos" value={formatNumber(current?.compartilhamentos ?? 0)} icon="Share2" />
-        </div>
+        <SortableStatCards
+          storageKey="marketing-redes-sociais-kpi-order"
+          className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
+          cards={[
+            { key: "seguidores", label: "Seguidores", value: formatNumber(current?.seguidoresFim ?? 0), icon: "Users" },
+            {
+              key: "novos-seguidores-mes",
+              label: "Novos seguidores (mês)",
+              value: formatNumber(novosSeguidores),
+              icon: "UserPlus",
+              delta: previous ? growth(novosSeguidores, previous.seguidoresFim - previous.seguidoresInicio) : null,
+            },
+            { key: "alcance", label: "Alcance", value: formatNumber(current?.alcance ?? 0), icon: "Radar" },
+            { key: "impressoes", label: "Impressões", value: formatNumber(current?.impressoes ?? 0), icon: "Eye" },
+            { key: "engajamento", label: "Engajamento", value: formatPercent(engajamento), icon: "Heart" },
+            { key: "compartilhamentos", label: "Compartilhamentos", value: formatNumber(current?.compartilhamentos ?? 0), icon: "Share2" },
+          ]}
+        />
 
         <Section title="Interações do último período">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Curtidas" value={formatNumber(current?.curtidas ?? 0)} icon="Heart" color="#ef4444" />
-            <StatCard label="Comentários" value={formatNumber(current?.comentarios ?? 0)} icon="MessageCircle" color="#3b82f6" />
-            <StatCard label="Compartilhamentos" value={formatNumber(current?.compartilhamentos ?? 0)} icon="Share2" color="#22c55e" />
-            <StatCard label="Salvamentos" value={formatNumber(current?.salvamentos ?? 0)} icon="Bookmark" color="#eab308" />
-          </div>
+          <SortableStatCards
+            storageKey="marketing-redes-sociais-engajamento-kpi-order"
+            className="grid grid-cols-2 md:grid-cols-4 gap-4"
+            cards={[
+              { key: "curtidas", label: "Curtidas", value: formatNumber(current?.curtidas ?? 0), icon: "Heart", color: "#ef4444" },
+              { key: "comentarios", label: "Comentários", value: formatNumber(current?.comentarios ?? 0), icon: "MessageCircle", color: "#3b82f6" },
+              { key: "compartilhamentos-interacoes", label: "Compartilhamentos", value: formatNumber(current?.compartilhamentos ?? 0), icon: "Share2", color: "#22c55e" },
+              { key: "salvamentos", label: "Salvamentos", value: formatNumber(current?.salvamentos ?? 0), icon: "Bookmark", color: "#eab308" },
+            ]}
+          />
           <p className="text-xs text-nord-gray mt-3">
             Dados agregados a partir dos lançamentos mensais em Tráfego Pago. Para métricas nativas em tempo real,
             conecte as contas via Meta Business Suite / TikTok Ads (integração externa, fora do escopo atual).

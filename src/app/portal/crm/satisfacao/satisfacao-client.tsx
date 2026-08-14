@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Section, StatCard, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatNumber, formatPercent } from "@/lib/calc";
 
 type Distribuicao = { promotores: number; neutros: number; detratores: number };
@@ -54,12 +55,16 @@ export function SatisfacaoClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="NPS Geral" value={formatNumber(npsGeral, 0)} icon="Smile" color={npsGeral >= 50 ? "#22c55e" : npsGeral >= 0 ? "#f59e0b" : "#ef4444"} />
-        <StatCard label="Total de respostas" value={formatNumber(totalRespostas)} icon="MessageSquare" />
-        <StatCard label="Promotores" value={formatNumber(distribuicaoGeral.promotores)} icon="ThumbsUp" color="#22c55e" />
-        <StatCard label="Detratores" value={formatNumber(distribuicaoGeral.detratores)} icon="ThumbsDown" color="#ef4444" />
-      </div>
+      <SortableStatCards
+        storageKey="crm-satisfacao-kpi-order"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+        cards={[
+          { key: "nps-geral", label: "NPS Geral", value: formatNumber(npsGeral, 0), icon: "Smile", color: npsGeral >= 50 ? "#22c55e" : npsGeral >= 0 ? "#f59e0b" : "#ef4444" },
+          { key: "total-respostas", label: "Total de respostas", value: formatNumber(totalRespostas), icon: "MessageSquare" },
+          { key: "promotores", label: "Promotores", value: formatNumber(distribuicaoGeral.promotores), icon: "ThumbsUp", color: "#22c55e" },
+          { key: "detratores", label: "Detratores", value: formatNumber(distribuicaoGeral.detratores), icon: "ThumbsDown", color: "#ef4444" },
+        ]}
+      />
 
       {isGrupo && porLoja.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
