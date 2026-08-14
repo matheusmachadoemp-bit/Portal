@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Download, FileText } from "lucide-react";
 import { PERIOD_OPTIONS, resolvePeriod, type PeriodKey } from "@/lib/periods";
 import { formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
@@ -19,6 +19,7 @@ import {
 import { format, subDays } from "date-fns";
 
 const REFRESH_WINDOW_DAYS = 90;
+const AUTO_REFRESH_INTERVAL_MS = 60_000;
 
 type SalesEntryDTO = {
   id: string;
@@ -155,6 +156,13 @@ export function VendasClient({
     const data = await res.json();
     setEntries(data.entries);
   }
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, AUTO_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   async function submit() {
     const payload = { ...form };
