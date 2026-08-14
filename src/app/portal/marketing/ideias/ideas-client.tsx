@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Plus, Trash2, Sparkles } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/stat-card";
 import { IDEA_STATUS_OPTIONS, CATEGORY_OPTIONS } from "@/lib/marketing";
@@ -76,8 +75,6 @@ export function IdeasClient({ initialIdeas, canCreate }: { initialIdeas: Idea[];
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       {canCreate && (
         <div className="flex justify-end">
           <button
