@@ -3,6 +3,7 @@ import { PageContainer } from "@/components/page-container";
 import { FinanceTabs } from "../finance-tabs";
 import { ConciliacaoClient } from "./conciliacao-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { resolveMatchLabels } from "@/lib/bank-reconciliation";
 
 export default async function ConciliacaoBancariaPage() {
   const ctx = await getActiveEmpresaContext();
@@ -21,6 +22,8 @@ export default async function ConciliacaoBancariaPage() {
     }),
   ]);
 
+  const matchLabels = await resolveMatchLabels(transactions);
+
   const serializedAccounts = accounts.map((a) => ({ id: a.id, name: a.name, bank: a.bank }));
   const serializedTransactions = transactions.map((t) => ({
     id: t.id,
@@ -32,6 +35,7 @@ export default async function ConciliacaoBancariaPage() {
     observacoes: t.observacoes,
     bankAccountName: t.bankAccount.name,
     importFileName: t.import.fileName,
+    matchedLabel: t.matchedType && t.matchedId ? matchLabels.get(`${t.matchedType}:${t.matchedId}`) ?? null : null,
   }));
 
   return (

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { resolveMatchLabels } from "@/lib/bank-reconciliation";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -51,5 +52,11 @@ export async function GET(req: Request) {
     else if (t.status === "PENDENTE") summary.pendentes += t._count._all;
   }
 
-  return NextResponse.json({ transactions, summary });
+  const matchLabels = await resolveMatchLabels(transactions);
+  const withLabels = transactions.map((t) => ({
+    ...t,
+    matchedLabel: t.matchedType && t.matchedId ? matchLabels.get(`${t.matchedType}:${t.matchedId}`) ?? null : null,
+  }));
+
+  return NextResponse.json({ transactions: withLabels, summary });
 }

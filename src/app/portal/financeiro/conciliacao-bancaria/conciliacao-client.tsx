@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
-import { CheckCircle2, Circle, EyeOff, Upload, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { CheckCircle2, Circle, EyeOff, Upload, ArrowDownCircle, ArrowUpCircle, Wand2, Link2 } from "lucide-react";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { Modal, FormError } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -19,6 +19,7 @@ type TransactionDTO = {
   observacoes: string | null;
   bankAccountName: string;
   importFileName: string;
+  matchedLabel: string | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -51,6 +52,8 @@ export function ConciliacaoClient({
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
+  const [matching, setMatching] = useState(false);
+  const [matchInfo, setMatchInfo] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(
@@ -77,7 +80,7 @@ export function ConciliacaoClient({
     const res = await fetch(`/api/financeiro/conciliacao?${params.toString()}`);
     const data = await res.json();
     setTransactions(
-      (data.transactions ?? []).map((t: { id: string; date: string; descricao: string; direction: string; valor: number; status: string; observacoes: string | null; bankAccount: { name: string }; import: { fileName: string } }) => ({
+      (data.transactions ?? []).map((t: { id: string; date: string; descricao: string; direction: string; valor: number; status: string; observacoes: string | null; bankAccount: { name: string }; import: { fileName: string }; matchedLabel: string | null }) => ({
         id: t.id,
         date: t.date,
         descricao: t.descricao,
@@ -87,6 +90,7 @@ export function ConciliacaoClient({
         observacoes: t.observacoes,
         bankAccountName: t.bankAccount.name,
         importFileName: t.import.fileName,
+        matchedLabel: t.matchedLabel,
       }))
     );
   }
@@ -98,6 +102,26 @@ export function ConciliacaoClient({
       setRowError(result.error);
       return;
     }
+    refresh();
+  }
+
+  async function autoMatch() {
+    setRowError(null);
+    setMatchInfo(null);
+    setMatching(true);
+    const result = await apiRequest<{ matched: number; pending: number }>("/api/financeiro/conciliacao/auto-match", "POST", {
+      bankAccountId: filterAccount || undefined,
+    });
+    setMatching(false);
+    if (!result.ok) {
+      setRowError(result.error);
+      return;
+    }
+    setMatchInfo(
+      result.data.matched > 0
+        ? `${result.data.matched} de ${result.data.pending} lançamento(s) pendente(s) foram conciliados automaticamente com contas a pagar/receber.`
+        : "Nenhuma correspondência automática encontrada entre o extrato e as contas a pagar/receber em aberto."
+    );
     refresh();
   }
 
@@ -175,6 +199,11 @@ export function ConciliacaoClient({
                   <option value="CONCILIADO">Conciliado</option>
                   <option value="IGNORADO">Ignorado</option>
                 </select>
+                {canImport && (
+                  <button onClick={autoMatch} disabled={matching} className="btn-outline">
+                    <Wand2 size={13} /> {matching ? "Conciliando..." : "Conciliar automaticamente"}
+                  </button>
+                )}
               </>
             }
             exportFilename="conciliacao-bancaria"
@@ -187,6 +216,7 @@ export function ConciliacaoClient({
                 Tipo: t.direction === "ENTRADA" ? "Entrada" : "Saída",
                 Valor: t.valor,
                 Status: STATUS_LABEL[t.status],
+                Vínculo: t.matchedLabel ?? "",
               }))
             }
             onRefresh={refresh}
@@ -202,6 +232,11 @@ export function ConciliacaoClient({
           </p>
         )}
         <FormError message={rowError} />
+        {matchInfo && (
+          <p className="mb-4 text-xs text-nord-blue-light bg-nord-blue/10 border border-nord-blue/30 rounded-lg px-3 py-2">
+            {matchInfo}
+          </p>
+        )}
 
         {filtered.length === 0 ? (
           <p className="text-sm text-nord-gray py-8 text-center">
@@ -217,6 +252,7 @@ export function ConciliacaoClient({
                   <th className="py-2 pr-4 font-medium">Conta</th>
                   <th className="py-2 pr-4 font-medium text-right">Valor</th>
                   <th className="py-2 pr-4 font-medium">Status</th>
+                  <th className="py-2 pr-4 font-medium">Vínculo</th>
                   <th className="py-2 pr-4 font-medium text-right">Ações</th>
                 </tr>
               </thead>
@@ -240,6 +276,16 @@ export function ConciliacaoClient({
                     </td>
                     <td className="py-2.5 pr-4">
                       <Badge tone={STATUS_TONE[t.status]}>{STATUS_LABEL[t.status]}</Badge>
+                    </td>
+                    <td className="py-2.5 pr-4 max-w-[220px]">
+                      {t.matchedLabel ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-nord-blue-light truncate">
+                          <Link2 size={11} className="shrink-0" />
+                          <span className="truncate">{t.matchedLabel}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-nord-gray">—</span>
+                      )}
                     </td>
                     <td className="py-2.5 pr-4">
                       <div className="flex items-center justify-end gap-1.5">

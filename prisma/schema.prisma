@@ -1995,12 +1995,15 @@ model BankTransaction {
   direction     BankTransactionDirection
   valor         Float
   status        BankTransactionStatus     @default(PENDENTE)
+  matchedType   String? // PAYABLE | RECEIVABLE
+  matchedId     String?
   observacoes   String?
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
 
   @@index([empresaId, bankAccountId, date])
   @@index([importId])
+  @@index([matchedType, matchedId])
 }
 
 // ---------------------------------------------------------------------------
