@@ -49,6 +49,18 @@ export default async function ConfiguracoesPage() {
               }
             : null
         }
+        metaAds={
+          ctx?.mode === "single"
+            ? {
+                adAccountId: ctx.empresa.metaAdsAdAccountId,
+                adAccountName: ctx.empresa.metaAdsAdAccountName,
+                graphVersion: ctx.empresa.metaAdsGraphVersion,
+                syncEnabled: ctx.empresa.metaAdsSyncEnabled,
+                hasToken: !!ctx.empresa.metaAdsAccessToken,
+                lastSyncAt: ctx.empresa.metaAdsLastSyncAt?.toISOString() ?? null,
+              }
+            : null
+        }
       />
     </PageContainer>
   );

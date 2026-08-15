@@ -159,6 +159,12 @@ model Empresa {
   saiposLojaId                   String?
   saiposSyncEnabled              Boolean    @default(false)
   saiposLastSyncAt               DateTime?
+  metaAdsAccessToken             String?
+  metaAdsAdAccountId             String?
+  metaAdsAdAccountName           String?
+  metaAdsGraphVersion            String     @default("v21.0")
+  metaAdsSyncEnabled             Boolean    @default(false)
+  metaAdsLastSyncAt              DateTime?
   createdAt                      DateTime   @default(now())
   updatedAt                      DateTime   @updatedAt
 
@@ -211,6 +217,8 @@ model Empresa {
   employeeDocuments      EmployeeDocument[]
   saiposSales            SaiposSale[]
   saiposSyncLogs         SaiposSyncLog[]
+  metaAdsInsights        MetaAdsInsight[]
+  metaAdsSyncLogs        MetaAdsSyncLog[]
 }
 
 model UserEmpresaAccess {
@@ -367,6 +375,44 @@ model SaiposSale {
 }
 
 model SaiposSyncLog {
+  id            String    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  status        String
+  recordsSynced Int       @default(0)
+  errorMessage  String?
+
+  @@index([empresaId, startedAt])
+}
+
+model MetaAdsInsight {
+  id                String   @id @default(cuid())
+  empresaId         String
+  empresa           Empresa  @relation(fields: [empresaId], references: [id])
+  dateStart         DateTime
+  dateStop          DateTime
+  campaignId        String
+  campaignName      String
+  publisherPlatform String   @default("")
+  platformPosition  String   @default("")
+  spend             Float    @default(0)
+  impressions       Int      @default(0)
+  reach             Int      @default(0)
+  clicks            Int      @default(0)
+  linkClicks        Int      @default(0)
+  landingPageViews  Int      @default(0)
+  purchases         Int      @default(0)
+  purchaseValue     Float    @default(0)
+  raw               Json?
+  createdAt         DateTime @default(now())
+
+  @@unique([empresaId, dateStart, dateStop, campaignId, publisherPlatform, platformPosition])
+  @@index([empresaId, dateStart])
+}
+
+model MetaAdsSyncLog {
   id            String    @id @default(cuid())
   empresaId     String
   empresa       Empresa   @relation(fields: [empresaId], references: [id])
@@ -671,11 +717,17 @@ model SaleItem {
 // MARKETING
 // ---------------------------------------------------------------------------
 
+enum MarketingEntrySource {
+  MANUAL
+  META_ADS
+}
+
 model MarketingEntry {
-  id                  String   @id @default(cuid())
+  id                  String               @id @default(cuid())
   empresaId           String
-  empresa             Empresa  @relation(fields: [empresaId], references: [id])
+  empresa             Empresa              @relation(fields: [empresaId], references: [id])
   date                DateTime
+  source              MarketingEntrySource @default(MANUAL)
   investimentoTrafego Float    @default(0)
   receitaTrafego      Float    @default(0)
   pedidosCampanha     Int      @default(0)
@@ -691,8 +743,8 @@ model MarketingEntry {
   impressoes          Int      @default(0)
   observacoes         String?
   planoDeAcao         String?
-  createdById         String
-  createdBy           User     @relation(fields: [createdById], references: [id])
+  createdById         String?
+  createdBy           User?    @relation(fields: [createdById], references: [id])
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

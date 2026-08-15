@@ -35,7 +35,7 @@ type MarketingEntryDTO = {
   impressoes: number;
   observacoes: string | null;
   planoDeAcao: string | null;
-  createdBy: { name: string };
+  createdBy: { name: string } | null;
 };
 
 const emptyForm = {
