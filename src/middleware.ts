@@ -13,6 +13,7 @@ export default auth((req) => {
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/internal/saipos-diag2") ||
+    pathname.startsWith("/api/internal/run-saipos-migration-3") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
     pathname === "/favicon.ico";
