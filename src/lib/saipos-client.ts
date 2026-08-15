@@ -7,7 +7,7 @@ export type SaiposSaleRecord = {
   shift_date: string;
   created_at: string;
   total_amount?: number;
-  canceled?: string;
+  canceled?: string | boolean;
   table_order?: unknown;
   delivery?: { delivery_by?: string | null; district?: string | null; city?: string | null } | null;
   partner_sale?: { desc_partner_sale?: string | null } | null;
@@ -73,6 +73,13 @@ export async function fetchSaiposSales(
   return { ok: true, sales: allSales };
 }
 
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Formata um instante como data/hora local de Brasília (UTC-3, sem horário de
+ * verão desde 2019), sem indicador de fuso — como a API da Saipos espera,
+ * já que "shift_date" representa o turno da loja no horário local.
+ */
 function formatSaiposDate(date: Date): string {
-  return date.toISOString().slice(0, 19);
+  return new Date(date.getTime() - BRT_OFFSET_MS).toISOString().slice(0, 19);
 }

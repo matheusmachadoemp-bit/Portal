@@ -39,8 +39,11 @@ export function mapSaiposPaymentMethod(record: SaiposSaleRecord): PaymentMethod 
   return "OUTRO";
 }
 
+const CANCELED_VALUES = new Set(["y", "s", "sim", "yes", "true", "1", "canceled", "cancelado", "cancelada"]);
+
 export function isSaiposSaleCanceled(record: SaiposSaleRecord): boolean {
-  return normalize(record.canceled) === "y" || normalize(record.canceled) === "s";
+  if (record.canceled === true) return true;
+  return CANCELED_VALUES.has(normalize(String(record.canceled ?? "")));
 }
 
 export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {

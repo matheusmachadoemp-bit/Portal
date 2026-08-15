@@ -394,6 +394,12 @@ export function VendasClient({
         onClose={() => setShowForm(false)}
         title={editing ? "Editar lançamento" : "Novo lançamento de vendas"}
       >
+        {editing?.source === "SAIPOS" && (
+          <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2 mb-3">
+            Este lançamento foi gerado automaticamente pela integração com a Saipos. Qualquer edição aqui será
+            sobrescrita na próxima sincronização.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Data">
             <input

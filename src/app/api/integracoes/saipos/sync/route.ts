@@ -46,11 +46,16 @@ export async function GET(req: Request) {
   });
 
   const range = defaultRange();
-  const results = await Promise.all(
+  const settled = await Promise.allSettled(
     empresas.map(async (empresa) => ({
       empresaId: empresa.id,
       result: await syncEmpresaSaiposSales(empresa, range),
     }))
+  );
+  const results = settled.map((s, i) =>
+    s.status === "fulfilled"
+      ? s.value
+      : { empresaId: empresas[i].id, result: { ok: false as const, error: String(s.reason) } }
   );
 
   return NextResponse.json({ synced: results.length, results });

@@ -1,15 +1,20 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
-import { fetchSaiposSales } from "@/lib/saipos-client";
+import { fetchSaiposSales, type SaiposSaleRecord } from "@/lib/saipos-client";
 import { isSaiposSaleCanceled, toSaiposSaleData, toSaleData } from "@/lib/saipos-mapper";
+import { mapLimit } from "@/lib/concurrency";
 import type { Empresa } from "@prisma/client";
 
 export type SaiposSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
 
+const UPSERT_CONCURRENCY = 10;
+
 /**
  * Sincroniza as vendas da Saipos de uma empresa para um intervalo de datas
  * (máx. 15 dias, conforme limite da API). Faz upsert por `saiposId` para
- * ser seguro re-executar sobre o mesmo período.
+ * ser seguro re-executar sobre o mesmo período. Qualquer falha inesperada é
+ * capturada e registrada no log, para nunca deixar uma sincronização "presa"
+ * em EM_ANDAMENTO.
  */
 export async function syncEmpresaSaiposSales(
   empresa: Pick<Empresa, "id" | "saiposApiToken">,
@@ -23,50 +28,80 @@ export async function syncEmpresaSaiposSales(
     data: { empresaId: empresa.id, status: "EM_ANDAMENTO" },
   });
 
-  // Limpa registros órfãos de uma versão anterior do mapeamento, em que o
-  // identificador da venda não era extraído corretamente.
-  await prisma.saiposSale.deleteMany({ where: { empresaId: empresa.id, saiposId: "undefined" } });
+  try {
+    // Limpa registros órfãos de uma versão anterior do mapeamento, em que o
+    // identificador da venda não era extraído corretamente.
+    await prisma.saiposSale.deleteMany({ where: { empresaId: empresa.id, saiposId: "undefined" } });
 
-  const token = decryptSecret(empresa.saiposApiToken);
-  const result = await fetchSaiposSales(token, range);
+    const token = decryptSecret(empresa.saiposApiToken);
+    const result = await fetchSaiposSales(token, range);
 
-  if (!result.ok) {
+    if (!result.ok) {
+      await prisma.saiposSyncLog.update({
+        where: { id: log.id },
+        data: { status: "ERRO", errorMessage: result.error, finishedAt: new Date() },
+      });
+      return { ok: false, error: result.error };
+    }
+
+    const canceled = result.sales.filter(isSaiposSaleCanceled);
+    const active = result.sales.filter((r) => !isSaiposSaleCanceled(r));
+
+    await removeCanceledSales(empresa.id, canceled);
+    await mapLimit(active, UPSERT_CONCURRENCY, (record) => upsertSale(empresa.id, record));
+
+    await syncSalesEntriesFromSaipos(empresa.id, range);
+
+    await prisma.$transaction([
+      prisma.saiposSyncLog.update({
+        where: { id: log.id },
+        data: { status: "SUCESSO", recordsSynced: result.sales.length, finishedAt: new Date() },
+      }),
+      prisma.empresa.update({ where: { id: empresa.id }, data: { saiposLastSyncAt: new Date() } }),
+    ]);
+
+    return { ok: true, recordsSynced: result.sales.length };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     await prisma.saiposSyncLog.update({
       where: { id: log.id },
-      data: { status: "ERRO", errorMessage: result.error, finishedAt: new Date() },
+      data: { status: "ERRO", errorMessage: message, finishedAt: new Date() },
     });
-    return { ok: false, error: result.error };
+    return { ok: false, error: message };
   }
+}
 
-  for (const record of result.sales) {
-    if (isSaiposSaleCanceled(record)) continue;
+async function upsertSale(empresaId: string, record: SaiposSaleRecord) {
+  const data = toSaiposSaleData(empresaId, record);
+  const saleData = toSaleData(empresaId, record);
 
-    const data = toSaiposSaleData(empresa.id, record);
-    await prisma.saiposSale.upsert({
-      where: { empresaId_saiposId: { empresaId: empresa.id, saiposId: data.saiposId } },
+  await Promise.all([
+    prisma.saiposSale.upsert({
+      where: { empresaId_saiposId: { empresaId, saiposId: data.saiposId } },
       create: data,
       update: data,
-    });
-
-    const saleData = toSaleData(empresa.id, record);
-    await prisma.sale.upsert({
-      where: { empresaId_saiposSaleId: { empresaId: empresa.id, saiposSaleId: saleData.saiposSaleId } },
+    }),
+    prisma.sale.upsert({
+      where: { empresaId_saiposSaleId: { empresaId, saiposSaleId: saleData.saiposSaleId } },
       create: saleData,
       update: saleData,
-    });
-  }
+    }),
+  ]);
+}
 
-  await syncSalesEntriesFromSaipos(empresa.id, range);
+/**
+ * Remove vendas que já haviam sido sincronizadas anteriormente mas foram
+ * canceladas na Saipos depois — sem isso, o faturamento ficaria inflado com
+ * vendas que não existem mais.
+ */
+async function removeCanceledSales(empresaId: string, canceledRecords: SaiposSaleRecord[]) {
+  if (canceledRecords.length === 0) return;
+  const saiposIds = canceledRecords.map((r) => String(r.id_sale));
 
   await prisma.$transaction([
-    prisma.saiposSyncLog.update({
-      where: { id: log.id },
-      data: { status: "SUCESSO", recordsSynced: result.sales.length, finishedAt: new Date() },
-    }),
-    prisma.empresa.update({ where: { id: empresa.id }, data: { saiposLastSyncAt: new Date() } }),
+    prisma.saiposSale.deleteMany({ where: { empresaId, saiposId: { in: saiposIds } } }),
+    prisma.sale.deleteMany({ where: { empresaId, saiposSaleId: { in: saiposIds } } }),
   ]);
-
-  return { ok: true, recordsSynced: result.sales.length };
 }
 
 function startOfDayUtc(date: Date): Date {
@@ -92,7 +127,7 @@ async function syncSalesEntriesFromSaipos(empresaId: string, range: { start: Dat
     byDay.set(key, list);
   }
 
-  for (const [dayKey, daySales] of byDay) {
+  await mapLimit([...byDay.entries()], UPSERT_CONCURRENCY, async ([dayKey, daySales]) => {
     const day = new Date(dayKey);
     const faturamentoDelivery = daySales.filter((s) => s.channel === "DELIVERY").reduce((sum, s) => sum + s.valorTotal, 0);
     const faturamentoSalao = daySales.filter((s) => s.channel !== "DELIVERY").reduce((sum, s) => sum + s.valorTotal, 0);
@@ -120,5 +155,5 @@ async function syncSalesEntriesFromSaipos(empresaId: string, range: { start: Dat
     } else {
       await prisma.salesEntry.create({ data: { empresaId, date: day, periodType: "DIARIO", ...data } });
     }
-  }
+  });
 }
