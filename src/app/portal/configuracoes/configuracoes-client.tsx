@@ -9,7 +9,6 @@ const INTEGRATIONS = [
   { name: "iFood", webhook: "/api/webhooks/ifood", status: "Aguardando configuração" },
   { name: "99Food", webhook: "/api/webhooks/99food", status: "Aguardando configuração" },
   { name: "Site próprio", webhook: "/api/webhooks/site", status: "Aguardando configuração" },
-  { name: "Meta Ads", webhook: "/api/webhooks/meta-ads", status: "Aguardando configuração" },
   { name: "Google Ads", webhook: "/api/webhooks/google-ads", status: "Aguardando configuração" },
 ];
 
@@ -22,6 +21,7 @@ export function ConfiguracoesClient({
   taxaIfoodPadrao,
   empresaNome,
   saipos,
+  metaAds,
 }: {
   userName: string;
   userEmail: string;
@@ -31,6 +31,14 @@ export function ConfiguracoesClient({
   taxaIfoodPadrao: number | null;
   empresaNome: string | null;
   saipos: { lojaId: string | null; syncEnabled: boolean; hasToken: boolean; lastSyncAt: string | null } | null;
+  metaAds: {
+    adAccountId: string | null;
+    adAccountName: string | null;
+    graphVersion: string;
+    syncEnabled: boolean;
+    hasToken: boolean;
+    lastSyncAt: string | null;
+  } | null;
 }) {
   const [state, formAction, pending] = useActionState(changePasswordAction, {});
   const [ifoodValue, setIfoodValue] = useState(taxaIfoodPadrao !== null ? String(taxaIfoodPadrao) : "");
@@ -68,6 +76,50 @@ export function ConfiguracoesClient({
     setSaiposSyncing(false);
     setSaiposMessage(
       res.ok ? `Sincronização concluída: ${data.recordsSynced} venda(s) importada(s).` : data.error ?? "Falha ao sincronizar."
+    );
+  }
+
+  const [metaToken, setMetaToken] = useState("");
+  const [metaAdAccountId, setMetaAdAccountId] = useState(metaAds?.adAccountId ?? "");
+  const [metaGraphVersion, setMetaGraphVersion] = useState(metaAds?.graphVersion ?? "v21.0");
+  const [metaSyncEnabled, setMetaSyncEnabled] = useState(metaAds?.syncEnabled ?? false);
+  const [metaHasToken, setMetaHasToken] = useState(metaAds?.hasToken ?? false);
+  const [metaAdAccountName, setMetaAdAccountName] = useState(metaAds?.adAccountName ?? "");
+  const [metaSaving, setMetaSaving] = useState(false);
+  const [metaSyncing, setMetaSyncing] = useState(false);
+  const [metaMessage, setMetaMessage] = useState<string | null>(null);
+
+  async function saveMetaAdsConfig() {
+    setMetaSaving(true);
+    setMetaMessage(null);
+    const res = await fetch("/api/configuracoes/meta-ads", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessToken: metaToken,
+        adAccountId: metaAdAccountId,
+        graphVersion: metaGraphVersion,
+        syncEnabled: metaSyncEnabled,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setMetaSaving(false);
+    if (res.ok) {
+      if (metaToken) setMetaHasToken(true);
+      if (data.adAccountName) setMetaAdAccountName(data.adAccountName);
+    }
+    setMetaToken("");
+    setMetaMessage(res.ok ? "Configuração do Meta Ads salva com sucesso." : data.error ?? "Não foi possível salvar.");
+  }
+
+  async function syncMetaAdsNow() {
+    setMetaSyncing(true);
+    setMetaMessage(null);
+    const res = await fetch("/api/integracoes/meta-ads/sync", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setMetaSyncing(false);
+    setMetaMessage(
+      res.ok ? `Sincronização concluída: ${data.recordsSynced} registro(s) importado(s).` : data.error ?? "Falha ao sincronizar."
     );
   }
 
@@ -221,6 +273,93 @@ export function ConfiguracoesClient({
                 )}
               </div>
               {saiposMessage && <p className="text-xs text-emerald-400 mt-2">{saiposMessage}</p>}
+            </>
+          )}
+        </Section>
+      )}
+
+      {isAdmin && (
+        <Section title="Integração Meta Ads — tráfego pago">
+          {metaAds === null ? (
+            <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+              Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+              configurar a integração com o Meta Ads.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-nord-gray mb-4">
+                Conecta o Portal à Graph API da Meta para importar investimento, alcance, impressões e
+                resultados de campanhas automaticamente, preenchendo o lançamento mensal de{" "}
+                <strong>Tráfego Pago</strong>. O token é armazenado de forma criptografada e precisa da
+                permissão <code>ads_read</code>.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 max-w-4xl">
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Token de acesso (Graph API)</span>
+                  <input
+                    type="password"
+                    value={metaToken}
+                    onChange={(e) => setMetaToken(e.target.value)}
+                    placeholder={metaHasToken ? "•••••••• (configurado)" : "Cole o token aqui"}
+                    className="input"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">ID da conta de anúncios</span>
+                  <input
+                    type="text"
+                    value={metaAdAccountId}
+                    onChange={(e) => setMetaAdAccountId(e.target.value)}
+                    placeholder="Ex: 3975948865839697"
+                    className="input"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Versão da Graph API</span>
+                  <input
+                    type="text"
+                    value={metaGraphVersion}
+                    onChange={(e) => setMetaGraphVersion(e.target.value)}
+                    placeholder="v21.0"
+                    className="input"
+                  />
+                </label>
+                <label className="flex items-center gap-2 mt-5">
+                  <input
+                    type="checkbox"
+                    checked={metaSyncEnabled}
+                    onChange={(e) => setMetaSyncEnabled(e.target.checked)}
+                  />
+                  <span className="text-xs text-nord-gray">Sincronização automática diária ativa</span>
+                </label>
+              </div>
+              {metaAdAccountName && (
+                <p className="text-xs text-nord-gray mt-2">
+                  Conta conectada: <span className="text-white">{metaAdAccountName}</span>
+                </p>
+              )}
+              <div className="flex items-center gap-3 mt-3">
+                <button
+                  onClick={saveMetaAdsConfig}
+                  disabled={metaSaving}
+                  className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                >
+                  {metaSaving ? "Salvando..." : "Salvar configuração"}
+                </button>
+                <button
+                  onClick={syncMetaAdsNow}
+                  disabled={metaSyncing || !metaHasToken}
+                  className="bg-nord-panel border border-nord-border hover:border-nord-blue disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                >
+                  {metaSyncing ? "Sincronizando..." : "Sincronizar agora"}
+                </button>
+                {metaAds.lastSyncAt && (
+                  <span className="text-xs text-nord-gray">
+                    Última sincronização: {format(new Date(metaAds.lastSyncAt), "dd/MM/yyyy HH:mm")}
+                  </span>
+                )}
+              </div>
+              {metaMessage && <p className="text-xs text-emerald-400 mt-2">{metaMessage}</p>}
             </>
           )}
         </Section>
