@@ -322,26 +322,29 @@ enum SaleChannel {
 }
 
 model Sale {
-  id             String        @id @default(cuid())
+  id             String            @id @default(cuid())
   empresaId      String
-  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  empresa        Empresa           @relation(fields: [empresaId], references: [id])
   dateTime       DateTime
-  channel        SaleChannel   @default(SALAO)
-  formaPagamento PaymentMethod @default(OUTRO)
+  channel        SaleChannel       @default(SALAO)
+  formaPagamento PaymentMethod     @default(OUTRO)
   garcomId       String?
-  garcom         Employee?     @relation(fields: [garcomId], references: [id])
+  garcom         Employee?         @relation(fields: [garcomId], references: [id])
   clienteId      String?
-  cliente        Cliente?      @relation(fields: [clienteId], references: [id])
+  cliente        Cliente?          @relation(fields: [clienteId], references: [id])
   mesaNumero     String?
   bairro         String?
   regiao         String?
-  valorTotal     Float         @default(0)
-  createdById    String
-  createdBy      User          @relation("SaleCreatedBy", fields: [createdById], references: [id])
-  createdAt      DateTime      @default(now())
+  valorTotal     Float             @default(0)
+  source         SalesEntrySource  @default(MANUAL)
+  saiposSaleId   String?
+  createdById    String?
+  createdBy      User?             @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime          @default(now())
 
   items SaleItem[]
 
+  @@unique([empresaId, saiposSaleId])
   @@index([empresaId, dateTime])
 }
 

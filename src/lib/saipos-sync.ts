@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
 import { fetchSaiposSales } from "@/lib/saipos-client";
-import { isSaiposSaleCanceled, toSaiposSaleData } from "@/lib/saipos-mapper";
+import { isSaiposSaleCanceled, toSaiposSaleData, toSaleData } from "@/lib/saipos-mapper";
 import type { Empresa } from "@prisma/client";
 
 export type SaiposSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
@@ -40,11 +40,19 @@ export async function syncEmpresaSaiposSales(
 
   for (const record of result.sales) {
     if (isSaiposSaleCanceled(record)) continue;
+
     const data = toSaiposSaleData(empresa.id, record);
     await prisma.saiposSale.upsert({
       where: { empresaId_saiposId: { empresaId: empresa.id, saiposId: data.saiposId } },
       create: data,
       update: data,
+    });
+
+    const saleData = toSaleData(empresa.id, record);
+    await prisma.sale.upsert({
+      where: { empresaId_saiposSaleId: { empresaId: empresa.id, saiposSaleId: saleData.saiposSaleId } },
+      create: saleData,
+      update: saleData,
     });
   }
 

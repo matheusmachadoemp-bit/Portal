@@ -55,3 +55,22 @@ export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {
     raw: record as object,
   };
 }
+
+/**
+ * Registro de venda individual (Sale), usado pelas telas de detalhe
+ * (Entrega, Pagamento, Por hora, Lançamentos). Não inclui itens — o
+ * endpoint search_sales da Saipos não retorna o detalhamento por item.
+ */
+export function toSaleData(empresaId: string, record: SaiposSaleRecord) {
+  return {
+    empresaId,
+    saiposSaleId: String(record.id_sale),
+    dateTime: new Date(record.created_at ?? record.shift_date),
+    channel: mapSaiposChannel(record),
+    formaPagamento: mapSaiposPaymentMethod(record),
+    bairro: record.delivery?.district ?? null,
+    valorTotal: Number(record.total_amount ?? 0),
+    source: "SAIPOS" as const,
+    createdById: null,
+  };
+}

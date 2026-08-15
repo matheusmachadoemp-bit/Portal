@@ -9,7 +9,7 @@ export type SaiposSaleRecord = {
   total_amount?: number;
   canceled?: string;
   table_order?: unknown;
-  delivery?: { delivery_by?: string | null } | null;
+  delivery?: { delivery_by?: string | null; district?: string | null; city?: string | null } | null;
   partner_sale?: { desc_partner_sale?: string | null } | null;
   payments?: { payment_amount: number; desc_store_payment_type?: string | null }[];
   [key: string]: unknown;
