@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/calc";
 import { format } from "date-fns";
@@ -72,25 +73,34 @@ export function EstoqueDashboardClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="CMV Real do período" value={formatPercent(cmvRealPercent)} icon="Warehouse" color={dentroDaMeta ? "#22c55e" : "#ef4444"} />
-        <StatCard label="Meta de CMV" value={formatPercent(metaCmvPercent)} icon="Target" />
-        <StatCard label="CMV Teórico" value={formatPercent(cmvTeoricoPercent)} icon="Calculator" color="#2952E3" />
-        <StatCard
-          label="Diferença Real x Teórico"
-          value={`${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`}
-          icon={Math.abs(diferencaPP) > 3 ? "TriangleAlert" : "CheckCircle2"}
-          color={Math.abs(diferencaPP) > 3 ? "#ef4444" : "#22c55e"}
-          hint={formatCurrency(diferencaFinanceira)}
-        />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-dashboard-cmv-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "cmv-real-periodo", label: "CMV Real do período", value: formatPercent(cmvRealPercent), icon: "Warehouse", color: dentroDaMeta ? "#22c55e" : "#ef4444" },
+          { key: "meta-cmv", label: "Meta de CMV", value: formatPercent(metaCmvPercent), icon: "Target" },
+          { key: "cmv-teorico", label: "CMV Teórico", value: formatPercent(cmvTeoricoPercent), icon: "Calculator", color: "#2952E3" },
+          {
+            key: "diferenca-real-teorico",
+            label: "Diferença Real x Teórico",
+            value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
+            icon: Math.abs(diferencaPP) > 3 ? "TriangleAlert" : "CheckCircle2",
+            color: Math.abs(diferencaPP) > 3 ? "#ef4444" : "#22c55e",
+            hint: formatCurrency(diferencaFinanceira),
+          },
+        ]}
+      />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Valor atual do estoque" value={formatCurrency(valorTotalEstoque)} icon="Boxes" />
-        <StatCard label={`Compras (${periodDays}d)`} value={formatCurrency(valorCompras)} icon="ShoppingBasket" color="#22c55e" />
-        <StatCard label={`Perdas registradas (${periodDays}d)`} value={formatCurrency(valorPerdas)} icon="TriangleAlert" color="#ef4444" />
-        <StatCard label="Produtos cadastrados" value={String(totalProdutos)} icon="Package" />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-dashboard-estoque-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "valor-atual-estoque", label: "Valor atual do estoque", value: formatCurrency(valorTotalEstoque), icon: "Boxes" },
+          { key: "compras-periodo", label: `Compras (${periodDays}d)`, value: formatCurrency(valorCompras), icon: "ShoppingBasket", color: "#22c55e" },
+          { key: "perdas-registradas-periodo", label: `Perdas registradas (${periodDays}d)`, value: formatCurrency(valorPerdas), icon: "TriangleAlert", color: "#ef4444" },
+          { key: "produtos-cadastrados", label: "Produtos cadastrados", value: String(totalProdutos), icon: "Package" },
+        ]}
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <button onClick={() => setOpenAlert("critico")} className="text-left">
@@ -146,10 +156,14 @@ export function EstoqueDashboardClient({
         </Section>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label={`Entradas (${periodDays}d)`} value={String(entradasCount)} icon="ArrowDownToLine" color="#22c55e" hint={formatCurrency(valorEntradas)} />
-        <StatCard label={`Saídas (${periodDays}d)`} value={String(saidasCount)} icon="ArrowUpFromLine" color="#f59e0b" hint={formatCurrency(valorSaidas)} />
-      </div>
+      <SortableStatCards
+        storageKey="estoque-dashboard-movimentacoes-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "entradas-periodo", label: `Entradas (${periodDays}d)`, value: String(entradasCount), icon: "ArrowDownToLine", color: "#22c55e", hint: formatCurrency(valorEntradas) },
+          { key: "saidas-periodo", label: `Saídas (${periodDays}d)`, value: String(saidasCount), icon: "ArrowUpFromLine", color: "#f59e0b", hint: formatCurrency(valorSaidas) },
+        ]}
+      />
 
       <Section title={`Movimentações por tipo (últimos ${periodDays} dias)`}>
         <ResponsiveContainer width="100%" height={220}>

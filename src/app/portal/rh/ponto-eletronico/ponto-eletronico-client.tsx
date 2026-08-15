@@ -2,7 +2,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Upload, AlertTriangle } from "lucide-react";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber } from "@/lib/calc";
 import { pontoAlerts, type TimeEntryLike } from "@/lib/rh-helpers";
@@ -173,17 +174,22 @@ export function PontoEletronicoClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Horas trabalhadas" value={`${formatNumber(totals.horas, 1)}h`} icon="Clock" />
-        <StatCard label="Atrasos" value={formatNumber(totals.atrasos)} icon="AlarmClockOff" color="#eab308" />
-        <StatCard label="Faltas" value={formatNumber(totals.faltas)} icon="UserX" color="#ef4444" />
-        <StatCard
-          label="Banco de horas"
-          value={`${totals.bancoMinutos >= 0 ? "+" : ""}${Math.round(totals.bancoMinutos / 60)}h`}
-          icon="Hourglass"
-          color={totals.bancoMinutos < 0 ? "#ef4444" : "#22c55e"}
-        />
-      </div>
+      <SortableStatCards
+        storageKey="rh-ponto-eletronico-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "horas-trabalhadas", label: "Horas trabalhadas", value: `${formatNumber(totals.horas, 1)}h`, icon: "Clock" },
+          { key: "atrasos", label: "Atrasos", value: formatNumber(totals.atrasos), icon: "AlarmClockOff", color: "#eab308" },
+          { key: "faltas", label: "Faltas", value: formatNumber(totals.faltas), icon: "UserX", color: "#ef4444" },
+          {
+            key: "banco-horas",
+            label: "Banco de horas",
+            value: `${totals.bancoMinutos >= 0 ? "+" : ""}${Math.round(totals.bancoMinutos / 60)}h`,
+            icon: "Hourglass",
+            color: totals.bancoMinutos < 0 ? "#ef4444" : "#22c55e",
+          },
+        ]}
+      />
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         {!fixedEmployeeId ? <RhTabs /> : <div />}

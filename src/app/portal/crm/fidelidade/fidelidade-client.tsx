@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Gift, Sparkles } from "lucide-react";
-import { Section, StatCard } from "@/components/ui/stat-card";
+import { Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 
@@ -115,16 +116,20 @@ export function FidelidadeClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Clientes participantes" value={formatNumber(kpis.participantes)} icon="Users" />
-        <StatCard label="Pontos emitidos" value={formatNumber(kpis.pontosEmitidos)} icon="Star" color="#f59e0b" />
-        <StatCard label="Pontos utilizados" value={formatNumber(kpis.pontosUtilizados)} icon="Gift" />
-        <StatCard label="Cashback emitido" value={formatCurrency(kpis.cashbackEmitido)} icon="Wallet" color="#22c55e" />
-        <StatCard label="Cashback utilizado" value={formatCurrency(kpis.cashbackUtilizado)} icon="Wallet" />
-        <StatCard label="Receita dos membros" value={formatCurrency(kpis.receitaMembros)} icon="TrendingUp" color="#22c55e" />
-        <StatCard label="Ticket médio dos membros" value={formatCurrency(kpis.ticketMedioMembros)} icon="Receipt" />
-        <StatCard label="Frequência dos membros" value={kpis.frequenciaMedia !== null ? `${formatNumber(kpis.frequenciaMedia, 0)} dias` : "—"} icon="Clock" />
-      </div>
+      <SortableStatCards
+        storageKey="crm-fidelidade-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "clientes-participantes", label: "Clientes participantes", value: formatNumber(kpis.participantes), icon: "Users" },
+          { key: "pontos-emitidos", label: "Pontos emitidos", value: formatNumber(kpis.pontosEmitidos), icon: "Star", color: "#f59e0b" },
+          { key: "pontos-utilizados", label: "Pontos utilizados", value: formatNumber(kpis.pontosUtilizados), icon: "Gift" },
+          { key: "cashback-emitido", label: "Cashback emitido", value: formatCurrency(kpis.cashbackEmitido), icon: "Wallet", color: "#22c55e" },
+          { key: "cashback-utilizado", label: "Cashback utilizado", value: formatCurrency(kpis.cashbackUtilizado), icon: "Wallet" },
+          { key: "receita-membros", label: "Receita dos membros", value: formatCurrency(kpis.receitaMembros), icon: "TrendingUp", color: "#22c55e" },
+          { key: "ticket-medio-membros", label: "Ticket médio dos membros", value: formatCurrency(kpis.ticketMedioMembros), icon: "Receipt" },
+          { key: "frequencia-membros", label: "Frequência dos membros", value: kpis.frequenciaMedia !== null ? `${formatNumber(kpis.frequenciaMedia, 0)} dias` : "—", icon: "Clock" },
+        ]}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">

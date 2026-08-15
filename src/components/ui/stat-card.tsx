@@ -25,8 +25,7 @@ export function StatCard({
       className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2 transition-colors hover:border-white/20"
       style={{ borderTopColor: color }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className={`truncate ${labelClassName}`}>{label}</span>
+      <div className="flex items-center gap-2">
         {icon && (
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
@@ -35,6 +34,7 @@ export function StatCard({
             <DynamicIcon name={icon} size={20} style={{ color }} />
           </div>
         )}
+        <span className={`truncate ${labelClassName}`}>{label}</span>
       </div>
       <span className="text-white text-2xl font-semibold tracking-tight truncate">{value}</span>
       <div className="flex items-center gap-1 min-h-[20px]">

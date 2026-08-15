@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatPercent } from "@/lib/calc";
@@ -97,9 +98,24 @@ export function ComparativoClient({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="CMV Real" value={formatPercent(cmvRealPercent)} icon="Warehouse" hint={formatCurrency(custoConsumido)} />
-        <StatCard label="CMV Teórico" value={formatPercent(cmvTeoricoPercent)} icon="Calculator" hint={formatCurrency(cmvTeoricoValor)} />
-        <StatCard label="Diferença" value={`${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`} icon={diferencaPP > 0 ? "TriangleAlert" : "CheckCircle2"} color={diferencaPP > 0 ? "#ef4444" : "#22c55e"} hint={formatCurrency(diferencaValor)} />
+        <div className="col-span-2 md:col-span-3">
+          <SortableStatCards
+            storageKey="estoque-comparativo-kpi-order"
+            className="grid grid-cols-2 md:grid-cols-3 gap-4"
+            cards={[
+              { key: "cmv-real", label: "CMV Real", value: formatPercent(cmvRealPercent), icon: "Warehouse", hint: formatCurrency(custoConsumido) },
+              { key: "cmv-teorico", label: "CMV Teórico", value: formatPercent(cmvTeoricoPercent), icon: "Calculator", hint: formatCurrency(cmvTeoricoValor) },
+              {
+                key: "diferenca",
+                label: "Diferença",
+                value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
+                icon: diferencaPP > 0 ? "TriangleAlert" : "CheckCircle2",
+                color: diferencaPP > 0 ? "#ef4444" : "#22c55e",
+                hint: formatCurrency(diferencaValor),
+              },
+            ]}
+          />
+        </div>
         <div className="nord-card p-4 flex flex-col justify-center items-start gap-2">
           <span className="text-xs text-nord-gray">Classificação do resultado</span>
           <Badge tone={classificacao.tone}>{classificacao.label}</Badge>

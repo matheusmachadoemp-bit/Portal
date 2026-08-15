@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { VendasTabs } from "../vendas-tabs";
-import { Section, StatCard } from "@/components/ui/stat-card";
+import { Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { PorHoraChart } from "./chart";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { formatCurrency } from "@/lib/calc";
@@ -31,15 +32,14 @@ export default async function VendasPorHoraPage() {
     <PageContainer title="Vendas" subtitle="Vendas por Hora">
       <div className="space-y-6">
         <VendasTabs />
-        <div className="grid grid-cols-2 gap-4">
-          <StatCard label="Horário de pico" value={pico ? `${pico.label} (${formatCurrency(pico.faturamento)})` : "—"} icon="TrendingUp" color="#22c55e" />
-          <StatCard
-            label="Horário de menor movimento"
-            value={menorMovimento ? `${menorMovimento.label} (${formatCurrency(menorMovimento.faturamento)})` : "—"}
-            icon="TrendingDown"
-            color="#ef4444"
-          />
-        </div>
+        <SortableStatCards
+          storageKey="vendas-por-hora-kpi-order"
+          className="grid grid-cols-2 gap-4"
+          cards={[
+            { key: "horario-pico", label: "Horário de pico", value: pico ? `${pico.label} (${formatCurrency(pico.faturamento)})` : "—", icon: "TrendingUp", color: "#22c55e" },
+            { key: "horario-menor-movimento", label: "Horário de menor movimento", value: menorMovimento ? `${menorMovimento.label} (${formatCurrency(menorMovimento.faturamento)})` : "—", icon: "TrendingDown", color: "#ef4444" },
+          ]}
+        />
         <Section title="Faturamento por horário (últimos 30 dias)">
           <PorHoraChart data={byHour} />
         </Section>

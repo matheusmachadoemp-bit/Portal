@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Section, StatCard } from "@/components/ui/stat-card";
+import { Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency } from "@/lib/calc";
 import { format, startOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -101,12 +102,16 @@ export function FluxoCaixaClient({
         </select>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Saldo Inicial" value={formatCurrency(data.saldoInicial)} icon="Wallet" />
-        <StatCard label="Entradas" value={formatCurrency(entradas)} icon="ArrowDownCircle" color="#22c55e" />
-        <StatCard label="Saídas" value={formatCurrency(saidas)} icon="ArrowUpCircle" color="#ef4444" />
-        <StatCard label="Saldo Final" value={formatCurrency(saldoFinal)} icon="PiggyBank" />
-      </div>
+      <SortableStatCards
+        storageKey="financeiro-fluxo-de-caixa-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "saldo-inicial", label: "Saldo Inicial", value: formatCurrency(data.saldoInicial), icon: "Wallet" },
+          { key: "entradas", label: "Entradas", value: formatCurrency(entradas), icon: "ArrowDownCircle", color: "#22c55e" },
+          { key: "saidas", label: "Saídas", value: formatCurrency(saidas), icon: "ArrowUpCircle", color: "#ef4444" },
+          { key: "saldo-final", label: "Saldo Final", value: formatCurrency(saldoFinal), icon: "PiggyBank" },
+        ]}
+      />
 
       <Section title={`Fluxo de caixa (${granularidade})`}>
         <ResponsiveContainer width="100%" height={300}>

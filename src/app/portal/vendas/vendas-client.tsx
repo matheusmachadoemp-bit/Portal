@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Download, FileText } from "lucide-react";
 import { PERIOD_OPTIONS, resolvePeriod, type PeriodKey } from "@/lib/periods";
 import { formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import {
   ResponsiveContainer,
@@ -277,20 +278,24 @@ export function VendasClient({
         </p>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        <StatCard label="Faturamento total" value={formatCurrency(fatTotal)} icon="DollarSign" delta={growth(fatTotal, prevFatTotal)} />
-        <StatCard label="Faturamento delivery" value={formatCurrency(fatDelivery)} icon="Bike" />
-        <StatCard label="Faturamento salão" value={formatCurrency(fatSalao)} icon="Utensils" />
-        <StatCard label="Ticket médio geral" value={formatCurrency(ticketGeral)} icon="Receipt" />
-        <StatCard label="Ticket médio delivery" value={formatCurrency(ticketDelivery)} icon="Receipt" />
-        <StatCard label="Ticket médio salão" value={formatCurrency(ticketSalao)} icon="Receipt" />
-        <StatCard label="Pedidos delivery" value={formatNumber(pedidosDelivery)} icon="Package" />
-        <StatCard label="Pedidos balcão" value={formatNumber(pedidosBalcao)} icon="Store" />
-        <StatCard label="Pedidos salão" value={formatNumber(pedidosSalao)} icon="Utensils" />
-        <StatCard label="Mesas atendidas" value={formatNumber(mesas)} icon="Users" />
-        <StatCard label="Taxa de serviço" value={formatPercent(taxaServicoPct)} icon="Percent" />
-        <StatCard label="Total de pedidos" value={formatNumber(totalPedidos)} icon="ShoppingBag" delta={growth(totalPedidos, prevPedidos)} />
-      </div>
+      <SortableStatCards
+        storageKey="vendas-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4"
+        cards={[
+          { key: "faturamento-total", label: "Faturamento total", value: formatCurrency(fatTotal), icon: "DollarSign", delta: growth(fatTotal, prevFatTotal) },
+          { key: "faturamento-delivery", label: "Faturamento delivery", value: formatCurrency(fatDelivery), icon: "Bike" },
+          { key: "faturamento-salao", label: "Faturamento salão", value: formatCurrency(fatSalao), icon: "Utensils" },
+          { key: "ticket-medio-geral", label: "Ticket médio geral", value: formatCurrency(ticketGeral), icon: "Receipt" },
+          { key: "ticket-medio-delivery", label: "Ticket médio delivery", value: formatCurrency(ticketDelivery), icon: "Receipt" },
+          { key: "ticket-medio-salao", label: "Ticket médio salão", value: formatCurrency(ticketSalao), icon: "Receipt" },
+          { key: "pedidos-delivery", label: "Pedidos delivery", value: formatNumber(pedidosDelivery), icon: "Package" },
+          { key: "pedidos-balcao", label: "Pedidos balcão", value: formatNumber(pedidosBalcao), icon: "Store" },
+          { key: "pedidos-salao", label: "Pedidos salão", value: formatNumber(pedidosSalao), icon: "Utensils" },
+          { key: "mesas-atendidas", label: "Mesas atendidas", value: formatNumber(mesas), icon: "Users" },
+          { key: "taxa-servico", label: "Taxa de serviço", value: formatPercent(taxaServicoPct), icon: "Percent" },
+          { key: "total-pedidos", label: "Total de pedidos", value: formatNumber(totalPedidos), icon: "ShoppingBag", delta: growth(totalPedidos, prevPedidos) },
+        ]}
+      />
 
       <Section title="Evolução do faturamento no período">
         <ResponsiveContainer width="100%" height={260}>

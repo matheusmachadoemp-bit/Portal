@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Award, ChevronRight, Trophy } from "lucide-react";
-import { StatCard, Section, Badge, ProgressBar } from "@/components/ui/stat-card";
+import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { pct } from "@/lib/calc";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, GOAL_STATUS_LABEL, GOAL_STATUS_TONE, type GoalCategoryKey } from "@/lib/goals";
 
@@ -91,13 +92,17 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
         <ChevronRight size={16} className="text-nord-gray" />
       </Link>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <StatCard label="Total de metas" value={String(total)} icon="Target" />
-        <StatCard label="Concluídas" value={String(concluidas)} icon="CheckCircle2" color="#22c55e" />
-        <StatCard label="Em andamento" value={String(emAndamento)} icon="Clock" color="#2952E3" />
-        <StatCard label="Não atingidas" value={String(naoAtingidas)} icon="XCircle" color="#ef4444" />
-        <StatCard label="% geral concluído" value={`${percentGeral.toFixed(0)}%`} icon="TrendingUp" color="#f59e0b" />
-      </div>
+      <SortableStatCards
+        storageKey="metas-overview-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-5 gap-4"
+        cards={[
+          { key: "total-metas", label: "Total de metas", value: String(total), icon: "Target" },
+          { key: "concluidas", label: "Concluídas", value: String(concluidas), icon: "CheckCircle2", color: "#22c55e" },
+          { key: "em-andamento", label: "Em andamento", value: String(emAndamento), icon: "Clock", color: "#2952E3" },
+          { key: "nao-atingidas", label: "Não atingidas", value: String(naoAtingidas), icon: "XCircle", color: "#ef4444" },
+          { key: "percent-geral-concluido", label: "% geral concluído", value: `${percentGeral.toFixed(0)}%`, icon: "TrendingUp", color: "#f59e0b" },
+        ]}
+      />
 
       <Section title="Filtros">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
