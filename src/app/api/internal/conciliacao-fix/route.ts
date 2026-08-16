@@ -64,6 +64,9 @@ const SQL_STATEMENTS = [
   `DO $$ BEGIN
      ALTER TABLE "BankTransaction" ADD CONSTRAINT "BankTransaction_importId_fkey" FOREIGN KEY ("importId") REFERENCES "BankReconciliationImport"("id") ON DELETE CASCADE ON UPDATE CASCADE;
    EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+  `ALTER TABLE "BankTransaction" ADD COLUMN IF NOT EXISTS "matchedType" TEXT`,
+  `ALTER TABLE "BankTransaction" ADD COLUMN IF NOT EXISTS "matchedId" TEXT`,
+  `CREATE INDEX IF NOT EXISTS "BankTransaction_matchedType_matchedId_idx" ON "BankTransaction"("matchedType", "matchedId")`,
 ];
 
 // Matches the "financeiro" category's `subs` list in prisma/seed.ts exactly,
