@@ -86,6 +86,7 @@ model User {
   receivables                   Receivable[]
   cashMovements                 CashMovement[]
   recurringTemplates            RecurringTemplate[]
+  bankReconciliationImports     BankReconciliationImport[]
   trainingCoursesCreated        TrainingCourse[]
   trainingEnrollments           TrainingEnrollment[]
   trainingAttempts              TrainingAttempt[]
@@ -205,6 +206,8 @@ model Empresa {
   receivables            Receivable[]
   cashMovements          CashMovement[]
   recurringTemplates     RecurringTemplate[]
+  bankTransactions       BankTransaction[]
+  reconciliationImports  BankReconciliationImport[]
   auditLogs              AuditLog[]
   trainingTracks         TrainingTrack[]
   trainingCourses        TrainingCourse[]
@@ -1789,6 +1792,17 @@ enum CashMovementType {
   RETIRADA_SOCIO
 }
 
+enum BankTransactionDirection {
+  ENTRADA
+  SAIDA
+}
+
+enum BankTransactionStatus {
+  PENDENTE
+  CONCILIADO
+  IGNORADO
+}
+
 model BankAccount {
   id           String   @id @default(cuid())
   empresaId    String
@@ -1806,11 +1820,13 @@ model BankAccount {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  payables             Payable[]
-  receivables          Receivable[]
-  cashMovements        CashMovement[]      @relation("CashMovementAccount")
-  cashMovementsDestino CashMovement[]      @relation("CashMovementDestino")
-  recurringTemplates   RecurringTemplate[]
+  payables               Payable[]
+  receivables            Receivable[]
+  cashMovements          CashMovement[]              @relation("CashMovementAccount")
+  cashMovementsDestino   CashMovement[]              @relation("CashMovementDestino")
+  recurringTemplates     RecurringTemplate[]
+  bankTransactions       BankTransaction[]
+  reconciliationImports  BankReconciliationImport[]
 }
 
 model FinancialCategory {
@@ -1945,6 +1961,49 @@ model CashMovement {
   createdById   String
   createdBy     User             @relation(fields: [createdById], references: [id])
   createdAt     DateTime         @default(now())
+}
+
+model BankReconciliationImport {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  bankAccountId String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  fileName      String
+  totalEntradas Float    @default(0)
+  totalSaidas   Float    @default(0)
+  totalLinhas   Int      @default(0)
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+
+  transactions BankTransaction[]
+
+  @@index([empresaId, bankAccountId])
+}
+
+model BankTransaction {
+  id            String                    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa                   @relation(fields: [empresaId], references: [id])
+  bankAccountId String
+  bankAccount   BankAccount               @relation(fields: [bankAccountId], references: [id])
+  importId      String
+  import        BankReconciliationImport  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  date          DateTime
+  descricao     String
+  direction     BankTransactionDirection
+  valor         Float
+  status        BankTransactionStatus     @default(PENDENTE)
+  matchedType   String? // PAYABLE | RECEIVABLE
+  matchedId     String?
+  observacoes   String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@index([empresaId, bankAccountId, date])
+  @@index([importId])
+  @@index([matchedType, matchedId])
 }
 
 // ---------------------------------------------------------------------------

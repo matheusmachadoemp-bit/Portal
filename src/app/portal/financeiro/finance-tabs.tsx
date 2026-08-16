@@ -12,6 +12,7 @@ const TABS = [
   { href: "/portal/financeiro/dre", label: "DRE" },
   { href: "/portal/financeiro/categorias-financeiras", label: "Categorias" },
   { href: "/portal/financeiro/contas-bancarias", label: "Contas Bancárias" },
+  { href: "/portal/financeiro/conciliacao-bancaria", label: "Conciliação Bancária" },
   { href: "/portal/financeiro/relatorios", label: "Relatórios" },
 ];
 
