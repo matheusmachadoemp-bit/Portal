@@ -17,3 +17,14 @@ trabalho começou (`git fetch` + comparar com a branch de produção atual).
 Se houver, traga essas mudanças para a branch de trabalho (merge) antes de
 publicar, para que nenhuma atualização anterior fique perdida ou
 desatualizada. Nunca publique sem antes fazer essa checagem.
+
+# Subcategorias
+
+Sempre que o usuário pedir uma "subcategoria" nova, ela deve ser criada no
+**menu lateral** (o menu de categorias/subcategorias do sidebar, model
+`Category`/`Subcategory` no `prisma/schema.prisma`, seed em
+`prisma/seed.ts`, renderizado em `src/components/sidebar/sidebar.tsx`) —
+e não no menu de abas superior de cada módulo (ex.: `finance-tabs.tsx` do
+Financeiro, ou equivalentes de outros módulos). O menu de abas superior é
+só uma navegação interna de cada módulo; "subcategoria" se refere
+especificamente ao item do menu lateral.
