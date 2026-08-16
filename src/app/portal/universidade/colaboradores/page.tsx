@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
-import { UniversityTabs } from "../university-tabs";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
 import { levelForXp, nextLevelForXp } from "@/lib/university";
 import { canManageUsers } from "@/lib/permissions";
@@ -46,8 +45,6 @@ export default async function ColaboradoresPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Colaboradores">
       <div className="space-y-6">
-        <UniversityTabs isAdmin={isAdmin} />
-
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {profiles.map((p) => (
             <div key={p.id} className="nord-card p-4">

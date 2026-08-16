@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
-import { UniversityTabs } from "../university-tabs";
 import { Section, StatCard, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { canManageUsers } from "@/lib/permissions";
@@ -52,8 +51,6 @@ export default async function PainelGestorPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Painel do Gestor">
       <div className="space-y-6">
-        <UniversityTabs isAdmin />
-
         <SortableStatCards
           storageKey="universidade-gestor-kpi-order"
           className="grid grid-cols-2 md:grid-cols-4 gap-4"
