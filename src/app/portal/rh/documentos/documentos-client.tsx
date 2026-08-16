@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Download, AlertTriangle, FileText } from "lucide-react";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { upload } from "@vercel/blob/client";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber } from "@/lib/calc";
 import { documentStatus, documentosAlerts } from "@/lib/rh-helpers";
@@ -103,11 +105,7 @@ export function DocumentosClient({
     if (!file) return;
     setUploading(true);
     try {
-      const uploadData = new FormData();
-      uploadData.append("file", file);
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: uploadData });
-      const uploaded = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploaded.error ?? "Falha no upload.");
+      const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
 
       await fetch("/api/rh/documents", {
         method: "POST",
@@ -115,8 +113,8 @@ export function DocumentosClient({
         body: JSON.stringify({
           ...form,
           nome: form.nome || file.name,
-          fileUrl: uploaded.fileUrl,
-          mimeType: uploaded.mimeType,
+          fileUrl: blob.url,
+          mimeType: file.type,
         }),
       });
       setShowForm(false);
@@ -135,11 +133,15 @@ export function DocumentosClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="Documentos cadastrados" value={formatNumber(totals.total)} icon="FileText" />
-        <StatCard label="Vencendo em 30 dias" value={formatNumber(totals.vencendo)} icon="AlertTriangle" color="#eab308" />
-        <StatCard label="Vencidos" value={formatNumber(totals.vencidos)} icon="AlertOctagon" color="#ef4444" />
-      </div>
+      <SortableStatCards
+        storageKey="rh-documentos-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-3 gap-4"
+        cards={[
+          { key: "documentos-cadastrados", label: "Documentos cadastrados", value: formatNumber(totals.total), icon: "FileText" },
+          { key: "vencendo-30-dias", label: "Vencendo em 30 dias", value: formatNumber(totals.vencendo), icon: "AlertTriangle", color: "#eab308" },
+          { key: "vencidos", label: "Vencidos", value: formatNumber(totals.vencidos), icon: "AlertOctagon", color: "#ef4444" },
+        ]}
+      />
 
       <div className="flex items-center justify-between">
         {!fixedEmployeeId ? <RhTabs /> : <div />}

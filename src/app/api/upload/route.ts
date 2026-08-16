@@ -1,28 +1,44 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-import crypto from "crypto";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  if (!file) return NextResponse.json({ error: "Arquivo não informado" }, { status: 400 });
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json(
+      { error: "Armazenamento de arquivos não configurado (BLOB_READ_WRITE_TOKEN ausente)." },
+      { status: 500 }
+    );
+  }
 
-  const bytes = Buffer.from(await file.arrayBuffer());
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const fileName = `${crypto.randomUUID()}-${safeName}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, fileName), bytes);
+  const body = (await req.json()) as HandleUploadBody;
 
-  return NextResponse.json({
-    fileUrl: `/uploads/${fileName}`,
-    fileName: file.name,
-    mimeType: file.type,
-    sizeBytes: file.size,
-  });
+  try {
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      onBeforeGenerateToken: async (pathname) => ({
+        allowedContentTypes: [
+          "image/*",
+          "video/*",
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.*",
+          "application/vnd.ms-excel",
+          "application/msword",
+          "text/*",
+        ],
+        addRandomSuffix: true,
+        maximumSizeInBytes: 200 * 1024 * 1024,
+        tokenPayload: JSON.stringify({ userId: session.user.id, pathname }),
+      }),
+    });
+    return NextResponse.json(jsonResponse);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Falha ao enviar o arquivo." },
+      { status: 400 }
+    );
+  }
 }

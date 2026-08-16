@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
+import { upload } from "@vercel/blob/client";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { FILE_CATEGORY_OPTIONS } from "@/lib/marketing";
 
@@ -26,6 +26,7 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadCategory, setUploadCategory] = useState(FILE_CATEGORY_OPTIONS[0]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,27 +57,29 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
   async function handleUpload(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
     setUploading(true);
-    for (const file of Array.from(fileList)) {
-      const formData = new FormData();
-      formData.append("file", file);
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-      const uploaded = await uploadRes.json();
-      if (!uploaded.fileUrl) continue;
-      await fetch("/api/marketing/files", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: uploaded.fileName ?? file.name,
-          category: uploadCategory,
-          fileUrl: uploaded.fileUrl,
-          mimeType: uploaded.mimeType,
-          sizeBytes: uploaded.sizeBytes,
-        }),
-      });
+    setUploadError(null);
+    try {
+      for (const file of Array.from(fileList)) {
+        const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
+        await fetch("/api/marketing/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            category: uploadCategory,
+            fileUrl: blob.url,
+            mimeType: file.type,
+            sizeBytes: file.size,
+          }),
+        });
+      }
+      refresh();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Falha ao enviar o arquivo.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
     }
-    setUploading(false);
-    if (inputRef.current) inputRef.current.value = "";
-    refresh();
   }
 
   async function doDelete() {
@@ -88,8 +91,6 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       <div className="flex items-center gap-3 flex-wrap justify-between">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-nord-gray" />
@@ -118,6 +119,8 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
           </div>
         )}
       </div>
+
+      {uploadError && <p className="text-xs text-red-400">{uploadError}</p>}
 
       <div className="flex gap-1.5 flex-wrap">
         <button

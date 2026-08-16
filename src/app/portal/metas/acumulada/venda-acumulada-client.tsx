@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Trophy, Award } from "lucide-react";
-import { Section, StatCard, ProgressBar, Badge } from "@/components/ui/stat-card";
+import { Section, ProgressBar, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
@@ -81,12 +82,16 @@ export function VendaAcumuladaClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total vendido acumulado" value={formatCurrency(totalGeral)} icon="Trophy" color="#f59e0b" />
-        <StatCard label="Garçons participantes" value={String(waiters.length)} icon="Users" />
-        <StatCard label="Faixas conquistadas" value={String(totalConquistas)} icon="Award" color="#22c55e" />
-        <StatCard label="Líder do ranking" value={waiters[0]?.name ?? "—"} icon="Crown" color="#f59e0b" />
-      </div>
+      <SortableStatCards
+        storageKey="metas-acumulada-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "total-vendido-acumulado", label: "Total vendido acumulado", value: formatCurrency(totalGeral), icon: "Trophy", color: "#f59e0b" },
+          { key: "garcons-participantes", label: "Garçons participantes", value: String(waiters.length), icon: "Users" },
+          { key: "faixas-conquistadas", label: "Faixas conquistadas", value: String(totalConquistas), icon: "Award", color: "#22c55e" },
+          { key: "lider-ranking", label: "Líder do ranking", value: waiters[0]?.name ?? "—", icon: "Crown", color: "#f59e0b" },
+        ]}
+      />
 
       {!canCreate && (
         <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">

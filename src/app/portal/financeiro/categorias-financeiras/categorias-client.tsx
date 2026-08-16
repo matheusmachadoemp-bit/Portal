@@ -105,6 +105,11 @@ export function CategoriasClient({
     refresh();
   }
 
+  async function toggleActive(c: CategoryDTO) {
+    await apiRequest(`/api/financeiro/categorias/${c.id}`, "PATCH", { active: !c.active });
+    refresh();
+  }
+
   return (
     <Section
       title="Categorias Financeiras"
@@ -140,23 +145,29 @@ export function CategoriasClient({
               <th className="py-2 pr-4">Nome</th>
               <th className="py-2 pr-4">Tipo</th>
               <th className="py-2 pr-4">Linha da DRE</th>
+              <th className="py-2 pr-4">Status</th>
               <th className="py-2 pr-4"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((c) => (
               <tr key={c.id} className="border-b border-nord-border/50 hover:bg-white/5">
-                <td className="py-2 pr-4 text-white">{c.name}</td>
+                <td className={`py-2 pr-4 ${c.active ? "text-white" : "text-nord-gray"}`}>{c.name}</td>
                 <td className="py-2 pr-4">
                   <Badge tone={TYPE_TONE[c.type]}>{TYPE_LABEL[c.type]}</Badge>
                 </td>
                 <td className="py-2 pr-4 text-nord-gray">{dreNameByKey.get(c.dreKey) ?? c.dreKey}</td>
                 <td className="py-2 pr-4">
+                  <button onClick={() => toggleActive(c)}>
+                    <Badge tone={c.active ? "success" : "default"}>{c.active ? "Ativo" : "Inativo"}</Badge>
+                  </button>
+                </td>
+                <td className="py-2 pr-4">
                   <div className="flex items-center gap-2 justify-end">
                     <button onClick={() => openEdit(c)} className="text-nord-gray hover:text-white">
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => setConfirmDeleteId(c.id)} className="text-nord-gray hover:text-red-400">
+                    <button onClick={() => setConfirmDeleteId(c.id)} className="text-nord-gray hover:text-nord-danger">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -195,13 +206,21 @@ export function CategoriasClient({
             </select>
           </label>
         </div>
-        <button
-          onClick={submit}
-          disabled={saving}
-          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
-        >
-          {saving ? "Salvando..." : "Salvar"}
-        </button>
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => setShowForm(false)}
+            className="flex-1 border border-nord-border text-nord-gray hover:text-white hover:border-white/30 text-sm font-medium rounded-lg py-2.5"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            {saving ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
       </Modal>
 
       <ConfirmDialog

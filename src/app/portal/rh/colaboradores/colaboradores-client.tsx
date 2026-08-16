@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Eye } from "lucide-react";
 import Link from "next/link";
-import { StatCard, Badge } from "@/components/ui/stat-card";
+import { Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber, formatPercent } from "@/lib/calc";
 import { tempoDeEmpresa } from "@/lib/rh-helpers";
@@ -197,13 +198,17 @@ export function ColaboradoresClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <StatCard label="Colaboradores ativos" value={formatNumber(employees.filter((e) => e.status === "ATIVO").length)} icon="Users" />
-        <StatCard label="Turnover (mês)" value={formatPercent(turnover)} icon="Repeat" color="#ef4444" />
-        <StatCard label="Quadro médio" value={formatNumber(quadroMedio, 1)} icon="UsersRound" />
-        <StatCard label="Desligamentos (mês)" value={formatNumber(desligamentos)} icon="UserX" color="#ef4444" />
-        <StatCard label="Ocorrências no mês" value={formatNumber(totalOcorrencias)} icon="AlertTriangle" color="#eab308" />
-      </div>
+      <SortableStatCards
+        storageKey="rh-colaboradores-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-5 gap-4"
+        cards={[
+          { key: "colaboradores-ativos", label: "Colaboradores ativos", value: formatNumber(employees.filter((e) => e.status === "ATIVO").length), icon: "Users" },
+          { key: "turnover-mes", label: "Turnover (mês)", value: formatPercent(turnover), icon: "Repeat", color: "#ef4444" },
+          { key: "quadro-medio", label: "Quadro médio", value: formatNumber(quadroMedio, 1), icon: "UsersRound" },
+          { key: "desligamentos-mes", label: "Desligamentos (mês)", value: formatNumber(desligamentos), icon: "UserX", color: "#ef4444" },
+          { key: "ocorrencias-mes", label: "Ocorrências no mês", value: formatNumber(totalOcorrencias), icon: "AlertTriangle", color: "#eab308" },
+        ]}
+      />
 
       <div className="flex items-center justify-between">
         <RhTabs />

@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber } from "@/lib/calc";
 import { feriasAlerts } from "@/lib/rh-helpers";
@@ -173,12 +174,16 @@ export function FeriasClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Períodos aquisitivos" value={formatNumber(totals.periodos)} icon="CalendarRange" />
-        <StatCard label="Dias disponíveis" value={formatNumber(totals.diasDisponiveis)} icon="Palmtree" color="#22c55e" />
-        <StatCard label="Férias tiradas" value={formatNumber(totals.diasTirados)} icon="CheckCircle2" />
-        <StatCard label="Férias vencidas" value={formatNumber(totals.vencidas)} icon="AlertTriangle" color="#ef4444" />
-      </div>
+      <SortableStatCards
+        storageKey="rh-ferias-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "periodos-aquisitivos", label: "Períodos aquisitivos", value: formatNumber(totals.periodos), icon: "CalendarRange" },
+          { key: "dias-disponiveis", label: "Dias disponíveis", value: formatNumber(totals.diasDisponiveis), icon: "Palmtree", color: "#22c55e" },
+          { key: "ferias-tiradas", label: "Férias tiradas", value: formatNumber(totals.diasTirados), icon: "CheckCircle2" },
+          { key: "ferias-vencidas", label: "Férias vencidas", value: formatNumber(totals.vencidas), icon: "AlertTriangle", color: "#ef4444" },
+        ]}
+      />
 
       <div className="flex items-center justify-between">
         {!fixedEmployeeId ? <RhTabs /> : <div />}

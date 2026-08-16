@@ -32,7 +32,19 @@ const CATEGORIES = [
     icon: "Megaphone",
     order: 2,
     contentType: "marketing",
-    subs: [],
+    subs: [
+      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
+      { key: "calendario", name: "Calendário de Conteúdo", icon: "Calendar" },
+      { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
+      { key: "campanhas", name: "Campanhas", icon: "Megaphone" },
+      { key: "biblioteca", name: "Biblioteca de Arquivos", icon: "FolderOpen" },
+      { key: "drive", name: "Google Drive", icon: "HardDrive" },
+      { key: "ideias", name: "Banco de Ideias", icon: "Lightbulb" },
+      { key: "trafego-pago", name: "Tráfego Pago", icon: "TrendingUp" },
+      { key: "redes-sociais", name: "Redes Sociais", icon: "Share2" },
+      { key: "equipe", name: "Equipe", icon: "Users" },
+      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
+    ],
   },
   {
     key: "universidade",
@@ -123,6 +135,7 @@ const CATEGORIES = [
       { key: "dre", name: "DRE", icon: "FileBarChart" },
       { key: "categorias-financeiras", name: "Categorias Financeiras", icon: "Tags" },
       { key: "contas-bancarias", name: "Contas Bancárias", icon: "Landmark" },
+      { key: "conciliacao-bancaria", name: "Conciliação Bancária", icon: "ListChecks" },
       { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
     ],
   },
@@ -142,8 +155,24 @@ const CATEGORIES = [
     order: 11,
     contentType: "estoque",
     subs: [
-      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
+      { key: "dashboard", name: "Visão Geral", icon: "LayoutDashboard" },
+      { key: "contagem-semanal", name: "Contagem Semanal", icon: "ClipboardCheck" },
+      { key: "contagem-mensal", name: "Contagem Mensal", icon: "CalendarCheck2" },
+      { key: "historico-contagens", name: "Histórico de Contagens", icon: "History" },
+      { key: "produtos", name: "Produtos", icon: "Package" },
+      { key: "categorias", name: "Categorias", icon: "Tags" },
+      { key: "compras", name: "Compras", icon: "ShoppingBasket" },
+      { key: "fornecedores", name: "Fornecedores", icon: "Truck" },
+      { key: "recebimento", name: "Recebimento de Mercadorias", icon: "PackageCheck" },
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
+      { key: "transferencias", name: "Transferências", icon: "Shuffle" },
+      { key: "perdas", name: "Perdas e Desperdícios", icon: "TriangleAlert" },
+      { key: "fichas-tecnicas", name: "Fichas Técnicas", icon: "ClipboardList" },
+      { key: "cmv-teorico", name: "CMV Teórico", icon: "Calculator" },
+      { key: "cmv-real", name: "CMV Real", icon: "Warehouse" },
+      { key: "comparativo", name: "Comparativo Real x Teórico", icon: "GitCompareArrows" },
+      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
+      { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
   { key: "cmv", name: "CMV", icon: "Percent", order: 12, contentType: "cmv", subs: [] },
@@ -175,20 +204,20 @@ async function main() {
   // --- Empresas (Grupo Nord > Nord Pizza, Zarki Sushi) ---
   const nordPizza = await prisma.empresa.upsert({
     where: { key: "nord-pizza" },
-    update: {},
-    create: { key: "nord-pizza", name: "Nord Pizza & Burger", color: "#2952E3", order: 0 },
+    update: { metaCmvPercent: 30 },
+    create: { key: "nord-pizza", name: "Nord Pizza & Burger", color: "#2952E3", order: 0, metaCmvPercent: 30 },
   });
   const zarkiSushi = await prisma.empresa.upsert({
     where: { key: "zarki-sushi" },
-    update: {},
-    create: { key: "zarki-sushi", name: "Zarki Sushi", color: "#e91e63", order: 1 },
+    update: { metaCmvPercent: 37 },
+    create: { key: "zarki-sushi", name: "Zarki Sushi", color: "#e91e63", order: 1, metaCmvPercent: 37 },
   });
 
   const passwordHash = await bcrypt.hash("Nord@2026", 10);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@nordpizza.com" },
-    update: { canViewGrupoNord: true, defaultEmpresaId: nordPizza.id },
+    update: { passwordHash, canViewGrupoNord: true, defaultEmpresaId: nordPizza.id },
     create: {
       name: "Administrador Nord",
       email: "admin@nordpizza.com",
@@ -202,7 +231,7 @@ async function main() {
   const gerentePass = await bcrypt.hash("Gerente@2026", 10);
   const gerente = await prisma.user.upsert({
     where: { email: "gerente@nordpizza.com" },
-    update: { defaultEmpresaId: nordPizza.id },
+    update: { passwordHash: gerentePass, defaultEmpresaId: nordPizza.id },
     create: {
       name: "Gerente Nord",
       email: "gerente@nordpizza.com",
@@ -597,9 +626,42 @@ async function main() {
     });
   }
 
-  // --- Ficha técnica: insumos + produto exemplo (Nord Pizza) ---
+  // --- Estoque: categorias de produto (compartilhadas entre lojas) ---
+  const STOCK_CATEGORIES = [
+    { key: "carnes", name: "Carnes", color: "#ef4444", icon: "Beef", setor: "Câmara fria", metaPerdaPercent: 2, periodicidadeContagem: "SEMANAL" },
+    { key: "pescados", name: "Pescados", color: "#0ea5e9", icon: "Fish", setor: "Sushibar", metaPerdaPercent: 3, periodicidadeContagem: "SEMANAL" },
+    { key: "frios", name: "Frios", color: "#f97316", icon: "Sandwich", setor: "Câmara fria", metaPerdaPercent: 2, periodicidadeContagem: "SEMANAL" },
+    { key: "laticinios", name: "Laticínios", color: "#eab308", icon: "Milk", setor: "Câmara fria", metaPerdaPercent: 2, periodicidadeContagem: "SEMANAL" },
+    { key: "hortifruti", name: "Hortifruti", color: "#22c55e", icon: "Carrot", setor: "Câmara fria", metaPerdaPercent: 4, periodicidadeContagem: "SEMANAL" },
+    { key: "congelados", name: "Congelados", color: "#38bdf8", icon: "Snowflake", setor: "Freezer", metaPerdaPercent: 1.5, periodicidadeContagem: "SEMANAL" },
+    { key: "massas-graos", name: "Massas e Grãos", color: "#f59e0b", icon: "Wheat", setor: "Estoque seco", metaPerdaPercent: 1, periodicidadeContagem: "MENSAL" },
+    { key: "molhos-temperos", name: "Molhos e Temperos", color: "#dc2626", icon: "Soup", setor: "Estoque seco", metaPerdaPercent: 1.5, periodicidadeContagem: "MENSAL" },
+    { key: "orientais", name: "Insumos Orientais", color: "#a855f7", icon: "UtensilsCrossed", setor: "Sushibar", metaPerdaPercent: 2, periodicidadeContagem: "SEMANAL" },
+    { key: "bebidas", name: "Bebidas", color: "#2952E3", icon: "CupSoda", setor: "Bar e bebidas", metaPerdaPercent: 1, periodicidadeContagem: "MENSAL" },
+    { key: "embalagens", name: "Embalagens", color: "#64748b", icon: "Package", setor: "Delivery e embalagens", metaPerdaPercent: 1, periodicidadeContagem: "MENSAL" },
+    { key: "limpeza", name: "Produtos de Limpeza", color: "#06b6d4", icon: "SprayCan", setor: "Estoque seco", metaPerdaPercent: 1, periodicidadeContagem: "MENSAL" },
+  ];
+  const stockCategoryByKey = new Map<string, Awaited<ReturnType<typeof prisma.stockCategory.upsert>>>();
+  for (const [idx, cat] of STOCK_CATEGORIES.entries()) {
+    const record = await prisma.stockCategory.upsert({
+      where: { key: cat.key },
+      update: { name: cat.name, color: cat.color, icon: cat.icon, setor: cat.setor, metaPerdaPercent: cat.metaPerdaPercent, periodicidadeContagem: cat.periodicidadeContagem, order: idx },
+      create: { ...cat, order: idx },
+    });
+    stockCategoryByKey.set(cat.key, record);
+  }
+
+  // --- Ficha técnica + Estoque: insumos, fornecedores, produto exemplo (Nord Pizza) ---
   const existingIngredients = await prisma.ingredient.count();
   if (existingIngredients === 0) {
+    const [moinhoSul, laticiniosNord, hortifrutiCentral, distribuidoraBebidas, embalagensExpress] = await Promise.all([
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Moinho Sul Alimentos Ltda", nomeFantasia: "Moinho Sul", cnpj: "12.345.678/0001-90", telefone: "(11) 4002-8900", whatsapp: "(11) 94002-8900", email: "vendas@moinhosul.com.br", endereco: "Rod. Anhanguera, km 32 — Cajamar/SP", prazoPagamentoDias: 30, prazoEntregaDias: 2, pedidoMinimo: 500, avaliacao: 4.5 } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Laticínios Nord Distribuidora Ltda", nomeFantasia: "Laticínios Nord", cnpj: "23.456.789/0001-01", telefone: "(11) 3345-7700", whatsapp: "(11) 93345-7700", email: "comercial@laticiniosnord.com.br", endereco: "Av. dos Laticínios, 450 — São Paulo/SP", prazoPagamentoDias: 15, prazoEntregaDias: 1, pedidoMinimo: 300, avaliacao: 4.2 } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Hortifruti Central Comércio Ltda", nomeFantasia: "Hortifruti Central", cnpj: "34.567.890/0001-12", telefone: "(11) 3221-5500", email: "pedidos@hortifruticentral.com.br", endereco: "CEAGESP, Box 112 — São Paulo/SP", prazoPagamentoDias: 7, prazoEntregaDias: 1, pedidoMinimo: 150, avaliacao: 3.8 } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Distribuidora de Bebidas SP Ltda", nomeFantasia: "Bebidas SP", cnpj: "45.678.901/0001-23", telefone: "(11) 3556-9900", email: "vendas@bebidassp.com.br", endereco: "Rua das Bebidas, 780 — São Paulo/SP", prazoPagamentoDias: 30, prazoEntregaDias: 3, pedidoMinimo: 800, avaliacao: 4.6 } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Embalagens Express Ltda", nomeFantasia: "Embalagens Express", cnpj: "56.789.012/0001-34", telefone: "(11) 3778-4400", email: "comercial@embalagensexpress.com.br", endereco: "Distrito Industrial, 220 — Guarulhos/SP", prazoPagamentoDias: 30, prazoEntregaDias: 5, pedidoMinimo: 400, avaliacao: 4.0 } }),
+    ]);
+
     const massa = await prisma.ingredient.create({
       data: {
         empresaId: nordPizza.id,
@@ -610,6 +672,19 @@ async function main() {
         quantidadeEmbalagem: 25,
         estoqueMinimo: 20,
         estoqueAtual: 80,
+        categoryId: stockCategoryByKey.get("massas-graos")!.id,
+        setor: "Estoque seco",
+        codigoInterno: "ND-001",
+        codigoBarras: "7891000100103",
+        localArmazenamento: "Prateleira A1",
+        unidadeCompra: "Saco 25kg",
+        fatorConversao: 25,
+        pesoEmbalagem: 25,
+        rendimentoAproveitavel: 100,
+        estoqueMaximo: 200,
+        pontoReposicao: 40,
+        fornecedorPrincipalId: moinhoSul.id,
+        perecivel: false,
       },
     });
     const mussarela = await prisma.ingredient.create({
@@ -622,6 +697,20 @@ async function main() {
         quantidadeEmbalagem: 5,
         estoqueMinimo: 10,
         estoqueAtual: 18,
+        categoryId: stockCategoryByKey.get("laticinios")!.id,
+        setor: "Câmara fria",
+        codigoInterno: "ND-002",
+        codigoBarras: "7891000100202",
+        localArmazenamento: "Câmara 1 — Prateleira B2",
+        unidadeCompra: "Peça 5kg",
+        fatorConversao: 5,
+        pesoEmbalagem: 5,
+        rendimentoAproveitavel: 97,
+        estoqueMaximo: 60,
+        pontoReposicao: 15,
+        fornecedorPrincipalId: laticiniosNord.id,
+        perecivel: true,
+        validade: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 5),
       },
     });
     const molho = await prisma.ingredient.create({
@@ -634,6 +723,148 @@ async function main() {
         quantidadeEmbalagem: 5,
         estoqueMinimo: 8,
         estoqueAtual: 15,
+        categoryId: stockCategoryByKey.get("molhos-temperos")!.id,
+        setor: "Estoque seco",
+        codigoInterno: "ND-003",
+        localArmazenamento: "Prateleira A3",
+        unidadeCompra: "Balde 5kg",
+        fatorConversao: 5,
+        estoqueMaximo: 60,
+        pontoReposicao: 12,
+        fornecedorPrincipalId: hortifrutiCentral.id,
+        perecivel: true,
+      },
+    });
+    const presunto = await prisma.ingredient.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Presunto Fatiado",
+        fornecedor: "Laticínios Nord",
+        unidade: "kg",
+        precoAtual: 24.5,
+        quantidadeEmbalagem: 3,
+        estoqueMinimo: 6,
+        estoqueAtual: 9,
+        categoryId: stockCategoryByKey.get("frios")!.id,
+        setor: "Câmara fria",
+        codigoInterno: "ND-004",
+        localArmazenamento: "Câmara 1 — Prateleira B3",
+        unidadeCompra: "Peça 3kg",
+        fatorConversao: 3,
+        estoqueMaximo: 30,
+        pontoReposicao: 8,
+        fornecedorPrincipalId: laticiniosNord.id,
+        perecivel: true,
+      },
+    });
+    const carneHamburguer = await prisma.ingredient.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Carne para Hambúrguer 160g",
+        fornecedor: "Moinho Sul",
+        unidade: "un",
+        precoAtual: 6.8,
+        quantidadeEmbalagem: 20,
+        estoqueMinimo: 60,
+        estoqueAtual: 32,
+        categoryId: stockCategoryByKey.get("carnes")!.id,
+        setor: "Freezer",
+        codigoInterno: "ND-005",
+        localArmazenamento: "Freezer 2 — Gaveta 1",
+        unidadeCompra: "Caixa 20un",
+        fatorConversao: 20,
+        estoqueMaximo: 200,
+        pontoReposicao: 80,
+        fornecedorPrincipalId: moinhoSul.id,
+        perecivel: true,
+      },
+    });
+    const paoHamburguer = await prisma.ingredient.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Pão de Hambúrguer",
+        fornecedor: "Moinho Sul",
+        unidade: "un",
+        precoAtual: 1.9,
+        quantidadeEmbalagem: 12,
+        estoqueMinimo: 48,
+        estoqueAtual: 96,
+        categoryId: stockCategoryByKey.get("massas-graos")!.id,
+        setor: "Estoque seco",
+        codigoInterno: "ND-006",
+        localArmazenamento: "Prateleira A2",
+        unidadeCompra: "Pacote 12un",
+        fatorConversao: 12,
+        estoqueMaximo: 240,
+        pontoReposicao: 60,
+        fornecedorPrincipalId: moinhoSul.id,
+        perecivel: true,
+      },
+    });
+    const batataCongelada = await prisma.ingredient.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Batata Congelada Pré-Frita",
+        fornecedor: "Hortifruti Central",
+        unidade: "kg",
+        precoAtual: 9.9,
+        quantidadeEmbalagem: 2.5,
+        estoqueMinimo: 15,
+        estoqueAtual: 22,
+        categoryId: stockCategoryByKey.get("congelados")!.id,
+        setor: "Freezer",
+        codigoInterno: "ND-007",
+        localArmazenamento: "Freezer 1 — Gaveta 3",
+        unidadeCompra: "Pacote 2,5kg",
+        fatorConversao: 2.5,
+        estoqueMaximo: 80,
+        pontoReposicao: 20,
+        fornecedorPrincipalId: hortifrutiCentral.id,
+        perecivel: true,
+      },
+    });
+    const refrigerante = await prisma.ingredient.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Refrigerante Lata 350ml",
+        fornecedor: "Bebidas SP",
+        unidade: "un",
+        precoAtual: 3.4,
+        quantidadeEmbalagem: 24,
+        estoqueMinimo: 96,
+        estoqueAtual: 240,
+        categoryId: stockCategoryByKey.get("bebidas")!.id,
+        setor: "Bar e bebidas",
+        codigoInterno: "ND-008",
+        localArmazenamento: "Estoque de bebidas — Prateleira C1",
+        unidadeCompra: "Fardo 24un",
+        fatorConversao: 24,
+        estoqueMaximo: 480,
+        pontoReposicao: 120,
+        fornecedorPrincipalId: distribuidoraBebidas.id,
+        perecivel: false,
+      },
+    });
+    const caixaPizza = await prisma.ingredient.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Caixa de Pizza G (35cm)",
+        fornecedor: "Embalagens Express",
+        unidade: "un",
+        precoAtual: 1.6,
+        quantidadeEmbalagem: 50,
+        estoqueMinimo: 150,
+        estoqueAtual: 400,
+        categoryId: stockCategoryByKey.get("embalagens")!.id,
+        setor: "Delivery e embalagens",
+        codigoInterno: "ND-009",
+        localArmazenamento: "Depósito de embalagens",
+        unidadeCompra: "Fardo 50un",
+        fatorConversao: 50,
+        estoqueMaximo: 1000,
+        pontoReposicao: 200,
+        fornecedorPrincipalId: embalagensExpress.id,
+        perecivel: false,
       },
     });
 
@@ -658,8 +889,34 @@ async function main() {
         },
       },
     });
+    await prisma.product.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Burger Clássico Nord",
+        code: "BG-001",
+        category: "BURGER",
+        rendimento: "1 unidade",
+        precoVenda: 32,
+        tempoPreparo: 15,
+        responsavel: "Chef de Cozinha",
+        createdById: admin.id,
+        ingredients: {
+          create: [
+            { ingredientId: carneHamburguer.id, quantidadeUsada: 1, percentualPerda: 2 },
+            { ingredientId: paoHamburguer.id, quantidadeUsada: 1, percentualPerda: 1 },
+            { ingredientId: presunto.id, quantidadeUsada: 0.05, percentualPerda: 2 },
+          ],
+        },
+      },
+    });
 
-    // --- Ficha técnica: insumos + produto exemplo (Zarki Sushi) ---
+    // --- Ficha técnica + Estoque: insumos, fornecedores, produto exemplo (Zarki Sushi) ---
+    const [salmaoBrasil, distribuidoraOriental, embalagensOrientais] = await Promise.all([
+      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Salmão Brasil Importadora Ltda", nomeFantasia: "Salmão Brasil", cnpj: "67.890.123/0001-45", telefone: "(11) 3667-2200", whatsapp: "(11) 93667-2200", email: "vendas@salmaobrasil.com.br", endereco: "Terminal Frigorificado, Box 8 — Guarulhos/SP", prazoPagamentoDias: 15, prazoEntregaDias: 2, pedidoMinimo: 600, avaliacao: 4.7 } }),
+      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Distribuidora Oriental Alimentos Ltda", nomeFantasia: "Distribuidora Oriental", cnpj: "78.901.234/0001-56", telefone: "(11) 3229-8800", email: "comercial@distoriental.com.br", endereco: "Rua da Liberdade, 900 — São Paulo/SP", prazoPagamentoDias: 21, prazoEntregaDias: 2, pedidoMinimo: 350, avaliacao: 4.3 } }),
+      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Embalagens Orientais Design Ltda", nomeFantasia: "Embalagens Orientais", cnpj: "89.012.345/0001-67", telefone: "(11) 3990-1100", email: "pedidos@embalagensorientais.com.br", endereco: "Av. Industrial, 340 — São Paulo/SP", prazoPagamentoDias: 30, prazoEntregaDias: 4, pedidoMinimo: 300, avaliacao: 3.9 } }),
+    ]);
+
     const salmao = await prisma.ingredient.create({
       data: {
         empresaId: zarkiSushi.id,
@@ -670,6 +927,19 @@ async function main() {
         quantidadeEmbalagem: 1,
         estoqueMinimo: 5,
         estoqueAtual: 12,
+        categoryId: stockCategoryByKey.get("pescados")!.id,
+        setor: "Sushibar",
+        codigoInterno: "ZK-001",
+        codigoBarras: "7892000200101",
+        localArmazenamento: "Câmara fria — Prateleira 1",
+        unidadeCompra: "kg",
+        fatorConversao: 1,
+        rendimentoAproveitavel: 85,
+        estoqueMaximo: 40,
+        pontoReposicao: 8,
+        fornecedorPrincipalId: salmaoBrasil.id,
+        perecivel: true,
+        validade: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3),
       },
     });
     const arroz = await prisma.ingredient.create({
@@ -682,6 +952,16 @@ async function main() {
         quantidadeEmbalagem: 5,
         estoqueMinimo: 10,
         estoqueAtual: 25,
+        categoryId: stockCategoryByKey.get("massas-graos")!.id,
+        setor: "Estoque seco",
+        codigoInterno: "ZK-002",
+        localArmazenamento: "Estoque seco — Prateleira 2",
+        unidadeCompra: "Saco 5kg",
+        fatorConversao: 5,
+        estoqueMaximo: 80,
+        pontoReposicao: 15,
+        fornecedorPrincipalId: distribuidoraOriental.id,
+        perecivel: false,
       },
     });
     const nori = await prisma.ingredient.create({
@@ -694,6 +974,82 @@ async function main() {
         quantidadeEmbalagem: 50,
         estoqueMinimo: 30,
         estoqueAtual: 90,
+        categoryId: stockCategoryByKey.get("orientais")!.id,
+        setor: "Sushibar",
+        codigoInterno: "ZK-003",
+        localArmazenamento: "Estoque seco — Prateleira 3",
+        unidadeCompra: "Pacote 50un",
+        fatorConversao: 50,
+        estoqueMaximo: 300,
+        pontoReposicao: 60,
+        fornecedorPrincipalId: distribuidoraOriental.id,
+        perecivel: false,
+      },
+    });
+    const creamCheese = await prisma.ingredient.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Cream Cheese",
+        fornecedor: "Distribuidora Oriental",
+        unidade: "kg",
+        precoAtual: 28,
+        quantidadeEmbalagem: 2,
+        estoqueMinimo: 6,
+        estoqueAtual: 4,
+        categoryId: stockCategoryByKey.get("laticinios")!.id,
+        setor: "Câmara fria",
+        codigoInterno: "ZK-004",
+        localArmazenamento: "Câmara fria — Prateleira 2",
+        unidadeCompra: "Balde 2kg",
+        fatorConversao: 2,
+        estoqueMaximo: 30,
+        pontoReposicao: 8,
+        fornecedorPrincipalId: distribuidoraOriental.id,
+        perecivel: true,
+      },
+    });
+    const shoyu = await prisma.ingredient.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Molho Shoyu",
+        fornecedor: "Distribuidora Oriental",
+        unidade: "l",
+        precoAtual: 14,
+        quantidadeEmbalagem: 5,
+        estoqueMinimo: 8,
+        estoqueAtual: 18,
+        categoryId: stockCategoryByKey.get("orientais")!.id,
+        setor: "Estoque seco",
+        codigoInterno: "ZK-005",
+        localArmazenamento: "Estoque seco — Prateleira 3",
+        unidadeCompra: "Galão 5L",
+        fatorConversao: 5,
+        estoqueMaximo: 60,
+        pontoReposicao: 12,
+        fornecedorPrincipalId: distribuidoraOriental.id,
+        perecivel: false,
+      },
+    });
+    const embalagemSushi = await prisma.ingredient.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Embalagem Delivery Sushi",
+        fornecedor: "Embalagens Orientais",
+        unidade: "un",
+        precoAtual: 2.1,
+        quantidadeEmbalagem: 50,
+        estoqueMinimo: 100,
+        estoqueAtual: 320,
+        categoryId: stockCategoryByKey.get("embalagens")!.id,
+        setor: "Delivery e embalagens",
+        codigoInterno: "ZK-006",
+        localArmazenamento: "Depósito de embalagens",
+        unidadeCompra: "Fardo 50un",
+        fatorConversao: 50,
+        estoqueMaximo: 600,
+        pontoReposicao: 150,
+        fornecedorPrincipalId: embalagensOrientais.id,
+        perecivel: false,
       },
     });
 
@@ -715,6 +1071,337 @@ async function main() {
             { ingredientId: nori.id, quantidadeUsada: 10, percentualPerda: 0 },
           ],
         },
+      },
+    });
+    await prisma.product.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        name: "Uramaki Cream Cheese 8 peças",
+        code: "SK-002",
+        category: "COMBO",
+        rendimento: "8 peças",
+        precoVenda: 34,
+        tempoPreparo: 12,
+        responsavel: "Chef Zarki",
+        createdById: admin.id,
+        ingredients: {
+          create: [
+            { ingredientId: salmao.id, quantidadeUsada: 0.08, percentualPerda: 5 },
+            { ingredientId: arroz.id, quantidadeUsada: 0.15, percentualPerda: 2 },
+            { ingredientId: creamCheese.id, quantidadeUsada: 0.05, percentualPerda: 1 },
+            { ingredientId: nori.id, quantidadeUsada: 2, percentualPerda: 0 },
+          ],
+        },
+      },
+    });
+
+    // --- Estoque: histórico de compras + recebimento (últimas semanas) ---
+    async function registrarCompraRecebida(opts: {
+      empresaId: string;
+      supplierId: string;
+      numeroNota: string;
+      diasAtras: number;
+      itens: { ingredientId: string; quantidade: number; unidade: string; valorUnitario: number }[];
+      frete?: number;
+      responsavel: string;
+    }) {
+      const data = new Date(today);
+      data.setDate(data.getDate() - opts.diasAtras);
+      const purchase = await prisma.purchase.create({
+        data: {
+          empresaId: opts.empresaId,
+          supplierId: opts.supplierId,
+          numeroNota: opts.numeroNota,
+          data,
+          compradorResponsavel: opts.responsavel,
+          formaPagamento: "PIX",
+          dataVencimento: new Date(data.getTime() + 15 * 86400000),
+          frete: opts.frete ?? 0,
+          status: "RECEBIDO",
+          createdById: admin.id,
+          items: {
+            create: opts.itens.map((it) => ({
+              ingredientId: it.ingredientId,
+              quantidade: it.quantidade,
+              unidade: it.unidade,
+              valorUnitario: it.valorUnitario,
+              valorTotal: it.quantidade * it.valorUnitario,
+            })),
+          },
+        },
+      });
+      await prisma.receiving.create({
+        data: {
+          purchaseId: purchase.id,
+          empresaId: opts.empresaId,
+          dataHora: data,
+          responsavel: opts.responsavel,
+          status: "APROVADO",
+          observacao: "Mercadoria conferida sem divergências.",
+        },
+      });
+      for (const it of opts.itens) {
+        await prisma.stockMovement.create({
+          data: {
+            ingredientId: it.ingredientId,
+            empresaId: opts.empresaId,
+            type: "ENTRADA",
+            quantidade: it.quantidade,
+            estoqueApos: it.quantidade,
+            motivo: `Compra NF ${opts.numeroNota}`,
+            origin: "COMPRA",
+            origem: opts.numeroNota,
+            createdById: admin.id,
+            createdAt: data,
+          },
+        });
+      }
+      return purchase;
+    }
+
+    await registrarCompraRecebida({
+      empresaId: nordPizza.id,
+      supplierId: moinhoSul.id,
+      numeroNota: "NF-88231",
+      diasAtras: 6,
+      responsavel: "Gerente Nord",
+      itens: [
+        { ingredientId: massa.id, quantidade: 50, unidade: "kg", valorUnitario: 5.2 },
+        { ingredientId: paoHamburguer.id, quantidade: 96, unidade: "un", valorUnitario: 1.9 },
+      ],
+    });
+    await registrarCompraRecebida({
+      empresaId: nordPizza.id,
+      supplierId: laticiniosNord.id,
+      numeroNota: "NF-77120",
+      diasAtras: 3,
+      responsavel: "Gerente Nord",
+      itens: [
+        { ingredientId: mussarela.id, quantidade: 15, unidade: "kg", valorUnitario: 33.5 },
+        { ingredientId: presunto.id, quantidade: 6, unidade: "kg", valorUnitario: 24.9 },
+      ],
+    });
+    await registrarCompraRecebida({
+      empresaId: nordPizza.id,
+      supplierId: distribuidoraBebidas.id,
+      numeroNota: "NF-56410",
+      diasAtras: 10,
+      responsavel: "Coordenador Delivery",
+      itens: [{ ingredientId: refrigerante.id, quantidade: 120, unidade: "un", valorUnitario: 3.4 }],
+    });
+    await registrarCompraRecebida({
+      empresaId: zarkiSushi.id,
+      supplierId: salmaoBrasil.id,
+      numeroNota: "NF-33012",
+      diasAtras: 2,
+      responsavel: "Gerente Zarki",
+      itens: [{ ingredientId: salmao.id, quantidade: 20, unidade: "kg", valorUnitario: 69.9 }],
+    });
+    await registrarCompraRecebida({
+      empresaId: zarkiSushi.id,
+      supplierId: distribuidoraOriental.id,
+      numeroNota: "NF-33099",
+      diasAtras: 7,
+      responsavel: "Chef Zarki",
+      itens: [
+        { ingredientId: arroz.id, quantidade: 25, unidade: "kg", valorUnitario: 12 },
+        { ingredientId: shoyu.id, quantidade: 15, unidade: "l", valorUnitario: 14 },
+      ],
+    });
+
+    // um pedido ainda em aberto, para aparecer nas telas de Compras/Recebimento
+    await prisma.purchase.create({
+      data: {
+        empresaId: nordPizza.id,
+        supplierId: hortifrutiCentral.id,
+        numeroNota: "NF-91004",
+        data: new Date(today.getTime() - 1 * 86400000),
+        compradorResponsavel: "Gerente Nord",
+        formaPagamento: "PIX",
+        status: "AGUARDANDO_ENTREGA",
+        createdById: admin.id,
+        items: {
+          create: [
+            { ingredientId: batataCongelada.id, quantidade: 30, unidade: "kg", valorUnitario: 9.9, valorTotal: 297 },
+            { ingredientId: molho.id, quantidade: 20, unidade: "kg", valorUnitario: 8.9, valorTotal: 178 },
+          ],
+        },
+      },
+    });
+
+    // --- Estoque: perdas e desperdícios ---
+    const lossData: { empresaId: string; setor: string; ingredientId: string; quantidade: number; unidade: string; valorEstimado: number; motivo: import("@prisma/client").LossReason; responsavel: string; diasAtras: number }[] = [
+      { empresaId: nordPizza.id, setor: "Câmara fria", ingredientId: mussarela.id, quantidade: 1.2, unidade: "kg", valorEstimado: 39.5, motivo: "VENCIMENTO", responsavel: "Chef de Cozinha", diasAtras: 4 },
+      { empresaId: nordPizza.id, setor: "Pizzaria", ingredientId: massa.id, quantidade: 2, unidade: "kg", valorEstimado: 10.4, motivo: "ERRO_PRODUCAO", responsavel: "Auxiliar de Cozinha", diasAtras: 2 },
+      { empresaId: nordPizza.id, setor: "Chapa", ingredientId: carneHamburguer.id, quantidade: 4, unidade: "un", valorEstimado: 27.2, motivo: "QUEIMA", responsavel: "Chapeiro", diasAtras: 9 },
+      { empresaId: zarkiSushi.id, setor: "Sushibar", ingredientId: salmao.id, quantidade: 0.6, unidade: "kg", valorEstimado: 40.8, motivo: "PERDA_LIMPEZA", responsavel: "Chef Zarki", diasAtras: 3 },
+      { empresaId: zarkiSushi.id, setor: "Sushibar", ingredientId: nori.id, quantidade: 8, unidade: "un", valorEstimado: 14.4, motivo: "PRODUTO_DANIFICADO", responsavel: "Sushiman", diasAtras: 6 },
+    ];
+    for (const l of lossData) {
+      const data = new Date(today);
+      data.setDate(data.getDate() - l.diasAtras);
+      await prisma.loss.create({
+        data: {
+          empresaId: l.empresaId,
+          setor: l.setor,
+          ingredientId: l.ingredientId,
+          quantidade: l.quantidade,
+          unidade: l.unidade,
+          valorEstimado: l.valorEstimado,
+          motivo: l.motivo,
+          responsavel: l.responsavel,
+          aprovador: "Gerente",
+          data,
+          createdById: admin.id,
+          createdAt: data,
+        },
+      });
+      await prisma.stockMovement.create({
+        data: {
+          ingredientId: l.ingredientId,
+          empresaId: l.empresaId,
+          type: "PERDA",
+          quantidade: l.quantidade,
+          estoqueApos: 0,
+          motivo: `Perda — ${l.motivo}`,
+          origin: "PERDA",
+          createdById: admin.id,
+          createdAt: data,
+        },
+      });
+    }
+
+    // --- Estoque: transferência entre lojas (embalagens emprestadas) ---
+    const transferData = new Date(today);
+    transferData.setDate(transferData.getDate() - 5);
+    await prisma.transfer.create({
+      data: {
+        origemEmpresaId: nordPizza.id,
+        destinoEmpresaId: zarkiSushi.id,
+        status: "RECEBIDA",
+        responsavelEnvio: "Gerente Nord",
+        responsavelRecebimento: "Gerente Zarki",
+        dataEnvio: transferData,
+        dataRecebimento: transferData,
+        observacao: "Empréstimo de embalagens para pico de delivery.",
+        createdById: admin.id,
+        createdAt: transferData,
+        items: {
+          create: [{ ingredientId: caixaPizza.id, unidade: "un", quantidadeEnviada: 40, quantidadeRecebida: 40 }],
+        },
+      },
+    });
+    await prisma.stockMovement.create({
+      data: {
+        ingredientId: caixaPizza.id,
+        empresaId: nordPizza.id,
+        type: "TRANSFERENCIA",
+        quantidade: 40,
+        estoqueApos: caixaPizza.estoqueAtual - 40,
+        motivo: "Transferência enviada para Zarki Sushi",
+        origin: "TRANSFERENCIA_ENVIADA",
+        destino: "Zarki Sushi",
+        createdById: admin.id,
+        createdAt: transferData,
+      },
+    });
+
+    // --- Estoque: contagem semanal (concluída, com pequena divergência) e mensal (aprovada) ---
+    function isoWeek(d: Date) {
+      const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNum = date.getUTCDay() || 7;
+      date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+      return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    }
+
+    const weeklyDate = new Date(today);
+    weeklyDate.setDate(weeklyDate.getDate() - 2);
+    const weeklyCount = await prisma.stockCount.create({
+      data: {
+        empresaId: nordPizza.id,
+        type: "SEMANAL",
+        setor: "Câmara fria",
+        semana: isoWeek(weeklyDate),
+        ano: weeklyDate.getFullYear(),
+        dataContagem: weeklyDate,
+        responsavel: "Chef de Cozinha",
+        horaInicio: "07:30",
+        horaFim: "08:10",
+        status: "CONCLUIDA",
+        createdById: admin.id,
+        createdAt: weeklyDate,
+        items: {
+          create: [
+            { ingredientId: mussarela.id, setor: "Câmara fria", estoqueEsperado: 19.2, quantidadeContada: 18, diferencaQtd: -1.2, diferencaPercent: -6.25, diferencaReais: -39.5, status: "DIVERGENCIA", justificativa: "Perda por vencimento já lançada no sistema." },
+            { ingredientId: presunto.id, setor: "Câmara fria", estoqueEsperado: 9, quantidadeContada: 9, diferencaQtd: 0, diferencaPercent: 0, diferencaReais: 0, status: "APROVADO" },
+          ],
+        },
+      },
+    });
+    await prisma.stockCount.update({ where: { id: weeklyCount.id }, data: { aprovadoPor: "Gerente Nord", aprovadoEm: weeklyDate } });
+
+    const monthlyDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthlyCount = await prisma.stockCount.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        type: "MENSAL",
+        mes: monthlyDate.getMonth() + 1,
+        ano: monthlyDate.getFullYear(),
+        dataContagem: monthlyDate,
+        responsavel: "Chef Zarki",
+        horaInicio: "06:00",
+        horaFim: "09:40",
+        status: "APROVADA",
+        checklistJson: JSON.stringify({
+          setoresContados: true,
+          comprasLancadas: true,
+          notasConferidas: true,
+          transferenciasRegistradas: true,
+          perdasLancadas: true,
+          cortesiasRegistradas: true,
+          consumoInternoRegistrado: true,
+          produtosSemCustoCorrigidos: true,
+          divergenciasJustificadas: true,
+        }),
+        aprovadoPor: "Administrador Nord",
+        aprovadoEm: monthlyDate,
+        createdById: admin.id,
+        createdAt: monthlyDate,
+        items: {
+          create: [
+            { ingredientId: salmao.id, estoqueEsperado: 12, quantidadeContada: 11.4, diferencaQtd: -0.6, diferencaPercent: -5, diferencaReais: -40.8, status: "APROVADO", justificativa: "Perda por limpeza já lançada." },
+            { ingredientId: arroz.id, estoqueEsperado: 25, quantidadeContada: 25, diferencaQtd: 0, diferencaPercent: 0, diferencaReais: 0, status: "APROVADO" },
+            { ingredientId: nori.id, estoqueEsperado: 90, quantidadeContada: 82, diferencaQtd: -8, diferencaPercent: -8.9, diferencaReais: -14.4, status: "APROVADO", justificativa: "Produto danificado no transporte." },
+          ],
+        },
+      },
+    });
+    void monthlyCount;
+
+    // --- Estoque: plano de ação a partir do comparativo Real x Teórico ---
+    await prisma.actionPlan.create({
+      data: {
+        empresaId: zarkiSushi.id,
+        problema: "CMV Real acima do Teórico em Pescados",
+        causaProvavel: "Porcionamento de salmão acima da ficha técnica no Sushibar",
+        acaoCorretiva: "Retreinar equipe de corte com balança e recontar semanalmente por 4 semanas",
+        responsavel: "Chef Zarki",
+        prazo: new Date(today.getFullYear(), today.getMonth() + 1, 5),
+        status: "EM_ANDAMENTO",
+        createdById: admin.id,
+      },
+    });
+    await prisma.actionPlan.create({
+      data: {
+        empresaId: nordPizza.id,
+        problema: "Divergência recorrente de Mussarela na contagem semanal",
+        causaProvavel: "Validade curta sem rotação adequada (FIFO)",
+        acaoCorretiva: "Implementar etiquetas de data de abertura e checklist diário de rotação",
+        responsavel: "Gerente Nord",
+        prazo: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 10),
+        status: "PENDENTE",
+        createdById: admin.id,
       },
     });
   }

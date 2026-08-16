@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { TaskModal } from "../task-modal";
 import { STATUS_COLOR } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "../marketing-types";
@@ -84,8 +83,6 @@ export function CalendarClient({
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button onClick={() => setCursor(new Date())} className="px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white">
@@ -128,10 +125,10 @@ export function CalendarClient({
         <div className="nord-card p-3">
           <div className="grid grid-cols-7 gap-1 mb-1">
             {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d) => (
-              <div key={d} className="text-center text-[11px] text-nord-gray py-1">{d}</div>
+              <div key={d} className="text-center text-sm font-medium text-white py-1.5">{d}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1.5">
             {monthDays.map((day) => {
               const key = format(day, "yyyy-MM-dd");
               const items = tasksByDay.get(key) ?? [];
@@ -140,12 +137,12 @@ export function CalendarClient({
                 <div
                   key={key}
                   onClick={() => canCreate && openNew(day)}
-                  className={`rounded-lg border min-h-[90px] p-1.5 cursor-pointer ${
+                  className={`rounded-lg border min-h-[130px] p-2 cursor-pointer ${
                     isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border/60"
                   } ${inMonth ? "" : "opacity-40"} hover:border-nord-blue/60`}
                 >
-                  <p className="text-[11px] text-nord-gray mb-1">{format(day, "d")}</p>
-                  <div className="space-y-0.5">
+                  <p className="text-sm font-medium text-white mb-1.5">{format(day, "d")}</p>
+                  <div className="space-y-1">
                     {items.slice(0, 3).map((t) => (
                       <div
                         key={t.id}
@@ -153,14 +150,14 @@ export function CalendarClient({
                           e.stopPropagation();
                           openTask(t);
                         }}
-                        className="text-[10px] rounded px-1 py-0.5 truncate"
+                        className="rounded-lg px-2 py-1.5 text-xs leading-snug truncate"
                         style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
                       >
                         {t.time && <span className="opacity-70">{t.time} </span>}
-                        {t.title}
+                        <span className="text-white/90">{t.title}</span>
                       </div>
                     ))}
-                    {items.length > 3 && <p className="text-[10px] text-nord-gray">+{items.length - 3} mais</p>}
+                    {items.length > 3 && <p className="text-xs text-nord-gray">+{items.length - 3} mais</p>}
                   </div>
                 </div>
               );
@@ -175,22 +172,22 @@ export function CalendarClient({
             const key = format(day, "yyyy-MM-dd");
             const items = (tasksByDay.get(key) ?? []).sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
             return (
-              <div key={key} className={`rounded-lg border p-2 min-h-[200px] ${isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border"}`}>
-                <p className="text-[11px] text-nord-gray mb-1.5 capitalize">{format(day, "EEE dd", { locale: ptBR })}</p>
-                <div className="space-y-1">
+              <div key={key} className={`rounded-lg border p-2 min-h-[220px] ${isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border"}`}>
+                <p className="text-sm font-medium text-white mb-2 capitalize">{format(day, "EEE dd", { locale: ptBR })}</p>
+                <div className="space-y-1.5">
                   {items.map((t) => (
                     <button
                       key={t.id}
                       onClick={() => openTask(t)}
-                      className="w-full text-left rounded px-1.5 py-1 text-[11px]"
+                      className="w-full text-left rounded-lg px-2 py-1.5 text-xs leading-snug"
                       style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
                     >
                       {t.time && <span className="opacity-70">{t.time} </span>}
                       <span className="text-white/90">{t.title}</span>
-                      {t.socialNetwork && <p className="text-[10px] opacity-70">{t.socialNetwork} · {t.format}</p>}
+                      {t.socialNetwork && <p className="text-[11px] opacity-70">{t.socialNetwork} · {t.format}</p>}
                     </button>
                   ))}
-                  {items.length === 0 && <p className="text-[11px] text-nord-gray">—</p>}
+                  {items.length === 0 && <p className="text-xs text-nord-gray">—</p>}
                 </div>
               </div>
             );
@@ -203,24 +200,24 @@ export function CalendarClient({
           {dayTasks.length === 0 ? (
             <p className="text-sm text-nord-gray text-center py-8">Nenhum conteúdo agendado para este dia.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {dayTasks.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => openTask(t)}
-                  className="w-full flex items-center justify-between gap-3 text-left nord-card p-3 hover:border-nord-blue/50"
+                  className="w-full flex items-center justify-between gap-3 text-left nord-card p-4 hover:border-nord-blue/50"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs text-nord-gray w-12 shrink-0">{t.time ?? "—"}</span>
+                  <div className="flex items-center gap-4 min-w-0">
+                    <span className="text-sm font-medium text-white w-14 shrink-0">{t.time ?? "—"}</span>
                     <div className="min-w-0">
-                      <p className="text-white text-sm truncate">{t.title}</p>
-                      <p className="text-xs text-nord-gray">
+                      <p className="text-white text-base font-medium truncate">{t.title}</p>
+                      <p className="text-xs text-nord-gray mt-0.5">
                         {t.socialNetwork ?? "—"} · {t.format ?? "—"} · {t.responsavel?.name ?? "Sem responsável"} · {t.empresa.name}
                       </p>
                     </div>
                   </div>
                   <span
-                    className="text-[11px] px-2 py-0.5 rounded-full shrink-0"
+                    className="text-xs px-2.5 py-1 rounded-full shrink-0"
                     style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
                   >
                     {t.status}

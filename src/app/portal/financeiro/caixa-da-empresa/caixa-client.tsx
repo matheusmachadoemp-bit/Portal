@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { Section, Badge, StatCard } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
@@ -87,12 +88,14 @@ export function CaixaClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Caixa total" value={formatCurrency(totalCaixa)} icon="Vault" />
-        {accounts.slice(0, 3).map((a) => (
-          <StatCard key={a.id} label={a.name} value={formatCurrency(a.saldoAtual)} icon="Landmark" />
-        ))}
-      </div>
+      <SortableStatCards
+        storageKey="financeiro-caixa-da-empresa-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "caixa-total", label: "Caixa total", value: formatCurrency(totalCaixa), icon: "Vault" },
+          ...accounts.slice(0, 3).map((a) => ({ key: `conta-${a.id}`, label: a.name, value: formatCurrency(a.saldoAtual), icon: "Landmark" })),
+        ]}
+      />
 
       <Section
         title="Movimentações do caixa"

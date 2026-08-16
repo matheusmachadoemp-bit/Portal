@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/integracoes/saipos/sync",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/integracoes/meta-ads/sync",
+      "schedule": "0 7 * * *"
+    }
+  ]
+}

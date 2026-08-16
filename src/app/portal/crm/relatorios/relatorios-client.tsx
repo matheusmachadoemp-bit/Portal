@@ -2,8 +2,12 @@
 
 import { FileText, FileSpreadsheet, FileDown } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
-import { exportRowsToPdf } from "@/lib/pdf-export";
 import type { ReportDef } from "./page";
+
+async function exportPdf(report: ReportDef) {
+  const { exportRowsToPdf } = await import("@/lib/pdf-export");
+  exportRowsToPdf(report.title, report.headers, report.rows);
+}
 
 function exportCsv(report: ReportDef) {
   const lines = [report.headers, ...report.rows].map((row) =>
@@ -37,7 +41,7 @@ export function RelatoriosClient({ reports }: { reports: ReportDef[] }) {
             <p className="text-xs text-nord-gray">{r.rows.length} registros</p>
             <div className="flex items-center gap-2 pt-1">
               <button
-                onClick={() => exportRowsToPdf(r.title, r.headers, r.rows)}
+                onClick={() => exportPdf(r)}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border border-nord-border text-nord-gray hover:text-white"
               >
                 <FileText size={12} /> PDF

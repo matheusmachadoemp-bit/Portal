@@ -3,67 +3,27 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
-import { MarketingTabs } from "../marketing-tabs";
 import { Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { TaskModal } from "../task-modal";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "../marketing-types";
 import { startOfWeek, addDays, format, isToday, isTomorrow, isSameDay, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from "recharts";
 
 type FileDTO = { id: string; name: string; category: string; fileUrl: string; createdAt: string };
 type LogDTO = { id: string; action: string; entityType: string; after: string | null; createdAt: string; user: { name: string } | null };
 
 const DONE_STATUSES = ["PUBLICADO", "RESULTADOS"];
 const PRODUCING_STATUSES = ["A_PRODUZIR", "EM_PRODUCAO", "EM_EDICAO"];
+const CALENDAR_HOURS = [8, 10, 12, 14, 16, 18, 20];
 
-function KpiCard({
-  label,
-  value,
-  delta,
-  color,
-  sparkline,
-  icon,
-}: {
-  label: string;
-  value: number;
-  delta?: string;
-  color: string;
-  sparkline: number[];
-  icon: string;
-}) {
-  const data = sparkline.map((v, i) => ({ i, v }));
-  return (
-    <div className="nord-card p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}22` }}>
-            <DynamicIcon name={icon} size={14} style={{ color }} />
-          </div>
-          <span className="text-xs text-nord-gray">{label}</span>
-        </div>
-      </div>
-      <div className="flex items-end justify-between">
-        <div>
-          <p className="text-white text-2xl font-semibold">{value}</p>
-          {delta && <p className="text-xs mt-1" style={{ color }}>{delta}</p>}
-        </div>
-        <div className="w-20 h-10">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
+function hourRowIndex(time: string | null | undefined) {
+  if (!time) return 0;
+  const hour = Number(time.split(":")[0]);
+  if (Number.isNaN(hour)) return 0;
+  return Math.max(0, Math.min(CALENDAR_HOURS.length - 1, Math.floor((hour - CALENDAR_HOURS[0]) / 2)));
 }
 
 export function DashboardClient({
@@ -72,7 +32,6 @@ export function DashboardClient({
   activeCampaigns,
   recentFiles,
   recentLogs,
-  sparklineWeeks,
   teamMembers,
   canCreate,
 }: {
@@ -81,7 +40,6 @@ export function DashboardClient({
   activeCampaigns: number;
   recentFiles: FileDTO[];
   recentLogs: LogDTO[];
-  sparklineWeeks: { done: number; producing: number; analysis: number }[];
   teamMembers: TeamMember[];
   canCreate: boolean;
 }) {
@@ -90,10 +48,16 @@ export function DashboardClient({
   const [panelFilter, setPanelFilter] = useState<"TODAS" | "FEITAS" | "A_PRODUZIR" | "EM_ANALISE">("TODAS");
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskDTO | null>(null);
-
   const doneCount = allTasks.filter((t) => DONE_STATUSES.includes(t.status)).length;
   const producingCount = allTasks.filter((t) => PRODUCING_STATUSES.includes(t.status)).length;
   const analysisCount = allTasks.filter((t) => t.status === "EM_ANALISE").length;
+
+  const kpiCards = [
+    { key: "done", label: "Tarefas Concluídas", value: String(doneCount), color: "#22c55e", icon: "CheckCircle2" },
+    { key: "producing", label: "A Produzir", value: String(producingCount), color: "#eab308", icon: "Clock" },
+    { key: "analysis", label: "Em Análise", value: String(analysisCount), color: "#a855f7", icon: "Eye" },
+    { key: "campaigns", label: "Campanhas Ativas", value: String(activeCampaigns), color: "#3b82f6", icon: "Megaphone" },
+  ];
 
   const weekStart = addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -140,14 +104,7 @@ export function DashboardClient({
 
   return (
     <div className="space-y-6">
-      <MarketingTabs />
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Tarefas Concluídas" value={doneCount} color="#22c55e" icon="CheckCircle2" sparkline={sparklineWeeks.map((w) => w.done)} />
-        <KpiCard label="A Produzir" value={producingCount} color="#eab308" icon="Clock" sparkline={sparklineWeeks.map((w) => w.producing)} />
-        <KpiCard label="Em Análise" value={analysisCount} color="#a855f7" icon="Eye" sparkline={sparklineWeeks.map((w) => w.analysis)} />
-        <KpiCard label="Campanhas Ativas" value={activeCampaigns} color="#3b82f6" icon="Megaphone" sparkline={[activeCampaigns, activeCampaigns, activeCampaigns, activeCampaigns, activeCampaigns, activeCampaigns]} />
-      </div>
+      <SortableStatCards storageKey="marketing-kpi-order" cards={kpiCards} />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 nord-card p-4">
@@ -165,32 +122,63 @@ export function DashboardClient({
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-2">
-            {days.map((day) => {
-              const key = format(day, "yyyy-MM-dd");
-              const items = tasksByDay.get(key) ?? [];
-              return (
-                <div key={key} className={`rounded-lg border p-2 min-h-[140px] ${isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border"}`}>
-                  <p className="text-[11px] text-nord-gray mb-1 capitalize">{format(day, "EEE dd", { locale: ptBR })}</p>
-                  <div className="space-y-1">
-                    {items.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          setEditingTask(t);
-                          setShowTaskModal(true);
-                        }}
-                        className="w-full text-left rounded px-1.5 py-1 text-[10px] leading-tight"
-                        style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
-                      >
-                        {t.time && <span className="opacity-70">{t.time} </span>}
-                        <span className="text-white/90">{t.title}</span>
-                      </button>
-                    ))}
+          <div className="overflow-x-auto nord-scrollbar">
+            <div className="min-w-[820px]">
+              <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: "56px repeat(7, 1fr)" }}>
+                <div />
+                {days.map((day) => (
+                  <div
+                    key={format(day, "yyyy-MM-dd")}
+                    className={`text-center rounded-lg py-1.5 ${isSameDay(day, new Date()) ? "bg-nord-blue/15" : ""}`}
+                  >
+                    <p className="text-sm text-white font-medium capitalize">{format(day, "EEEE", { locale: ptBR })}</p>
+                    <p className="text-xs text-nord-gray">{format(day, "dd")}</p>
                   </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+              <div
+                className="grid gap-2"
+                style={{ gridTemplateColumns: "56px repeat(7, 1fr)", gridTemplateRows: `repeat(${CALENDAR_HOURS.length}, minmax(76px, auto))` }}
+              >
+                {CALENDAR_HOURS.map((hour) => (
+                  <div key={hour} className="text-xs text-nord-gray text-right pr-1 pt-1">
+                    {String(hour).padStart(2, "0")}:00
+                  </div>
+                ))}
+                {days.map((day, dayIdx) => {
+                  const key = format(day, "yyyy-MM-dd");
+                  const items = tasksByDay.get(key) ?? [];
+                  const itemsByRow = new Map<number, TaskDTO[]>();
+                  for (const t of items) {
+                    const row = hourRowIndex(t.time);
+                    if (!itemsByRow.has(row)) itemsByRow.set(row, []);
+                    itemsByRow.get(row)!.push(t);
+                  }
+                  return CALENDAR_HOURS.map((hour, hourIdx) => (
+                    <div
+                      key={`${key}-${hour}`}
+                      className={`rounded-lg border p-1.5 space-y-1 ${isSameDay(day, new Date()) ? "border-nord-blue bg-nord-blue/5" : "border-nord-border"}`}
+                      style={{ gridColumn: dayIdx + 2, gridRow: hourIdx + 1 }}
+                    >
+                      {(itemsByRow.get(hourIdx) ?? []).map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            setEditingTask(t);
+                            setShowTaskModal(true);
+                          }}
+                          className="w-full text-left rounded px-2 py-1.5 text-xs leading-snug"
+                          style={{ backgroundColor: `${STATUS_COLOR[t.status] ?? "#2952E3"}22`, color: STATUS_COLOR[t.status] ?? "#fff" }}
+                        >
+                          {t.time && <span className="opacity-70">{t.time} </span>}
+                          <span className="text-white/90">{t.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ));
+                })}
+              </div>
+            </div>
           </div>
         </div>
 

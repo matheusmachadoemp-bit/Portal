@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Download } from "lucide-react";
-import { StatCard, Section } from "@/components/ui/stat-card";
+import { Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { RhTabs } from "../rh-tabs";
-import { exportFinanceToPdf } from "@/lib/pdf-export";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -152,8 +152,9 @@ export function FinanceiroClient({
     refresh();
   }
 
-  function handleExportPdf() {
+  async function handleExportPdf() {
     const employeeName = fixedEmployeeId ? employees.find((e) => e.id === fixedEmployeeId)?.name : undefined;
+    const { exportFinanceToPdf } = await import("@/lib/pdf-export");
     exportFinanceToPdf(visible, TYPE_LABEL, {
       title: "RH - Financeiro",
       subtitle: employeeName ?? "Todos os colaboradores",
@@ -162,15 +163,19 @@ export function FinanceiroClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total recebido" value={formatCurrency(totals.totalRecebido)} icon="Wallet" color="#22c55e" />
-        <StatCard label="Salário" value={formatCurrency(totals.salario)} icon="DollarSign" />
-        <StatCard label="Comissões" value={formatCurrency(totals.comissao)} icon="TrendingUp" />
-        <StatCard label="Bonificações" value={formatCurrency(totals.bonificacao)} icon="Gift" />
-        <StatCard label="Descontos" value={formatCurrency(totals.desconto)} icon="TrendingDown" color="#ef4444" />
-        <StatCard label="Vale Transporte" value={formatCurrency(totals.vt)} icon="Bus" />
-        <StatCard label="Vale Alimentação" value={formatCurrency(totals.va)} icon="UtensilsCrossed" />
-      </div>
+      <SortableStatCards
+        storageKey="rh-financeiro-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "total-recebido", label: "Total recebido", value: formatCurrency(totals.totalRecebido), icon: "Wallet", color: "#22c55e" },
+          { key: "salario", label: "Salário", value: formatCurrency(totals.salario), icon: "DollarSign" },
+          { key: "comissoes", label: "Comissões", value: formatCurrency(totals.comissao), icon: "TrendingUp" },
+          { key: "bonificacoes", label: "Bonificações", value: formatCurrency(totals.bonificacao), icon: "Gift" },
+          { key: "descontos", label: "Descontos", value: formatCurrency(totals.desconto), icon: "TrendingDown", color: "#ef4444" },
+          { key: "vale-transporte", label: "Vale Transporte", value: formatCurrency(totals.vt), icon: "Bus" },
+          { key: "vale-alimentacao", label: "Vale Alimentação", value: formatCurrency(totals.va), icon: "UtensilsCrossed" },
+        ]}
+      />
 
       {!fixedEmployeeId && (
         <div className="flex items-center justify-between">

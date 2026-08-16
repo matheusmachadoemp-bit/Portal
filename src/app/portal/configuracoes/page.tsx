@@ -39,6 +39,28 @@ export default async function ConfiguracoesPage() {
         auditLogs={serializedLogs}
         taxaIfoodPadrao={ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : null}
         empresaNome={ctx?.mode === "single" ? ctx.empresa.name : null}
+        saipos={
+          ctx?.mode === "single"
+            ? {
+                lojaId: ctx.empresa.saiposLojaId,
+                syncEnabled: ctx.empresa.saiposSyncEnabled,
+                hasToken: !!ctx.empresa.saiposApiToken,
+                lastSyncAt: ctx.empresa.saiposLastSyncAt?.toISOString() ?? null,
+              }
+            : null
+        }
+        metaAds={
+          ctx?.mode === "single"
+            ? {
+                adAccountId: ctx.empresa.metaAdsAdAccountId,
+                adAccountName: ctx.empresa.metaAdsAdAccountName,
+                graphVersion: ctx.empresa.metaAdsGraphVersion,
+                syncEnabled: ctx.empresa.metaAdsSyncEnabled,
+                hasToken: !!ctx.empresa.metaAdsAccessToken,
+                lastSyncAt: ctx.empresa.metaAdsLastSyncAt?.toISOString() ?? null,
+              }
+            : null
+        }
       />
     </PageContainer>
   );

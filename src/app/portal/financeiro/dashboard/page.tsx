@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatNumber, formatPercent, growth, pct } from "@/lib/calc";
 import { computeDre } from "@/lib/dre";
 import {
@@ -20,21 +21,22 @@ import {
 import { FinanceCharts } from "./charts";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { getFinancialCategories } from "@/lib/financial-categories";
 
 async function getData() {
   const now = new Date();
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const [accounts, payablesOpen, receivablesOpen, dreThisMonth, dreLastMonth] = await Promise.all([
+  const [accounts, payablesOpen, receivablesOpen, dreThisMonth, dreLastMonth, catMap] = await Promise.all([
     prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
     prisma.payable.findMany({
       where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
-      include: { categoria: true },
+      select: { id: true, fornecedor: true, descricao: true, valor: true, dataVencimento: true },
     }),
     prisma.receivable.findMany({
       where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
-      include: { categoria: true },
+      select: { id: true, valor: true },
     }),
     computeDre({ month: now.getMonth() + 1, year: now.getFullYear(), empresaIds }),
     computeDre({
@@ -42,6 +44,7 @@ async function getData() {
       year: subMonths(now, 1).getFullYear(),
       empresaIds,
     }),
+    getFinancialCategories(),
   ]);
 
   const caixaAtual = accounts.reduce((acc, a) => acc + a.saldoAtual, 0);
@@ -53,12 +56,24 @@ async function getData() {
     ano: { from: startOfYear(now), to: endOfYear(now) },
   };
 
-  const receivablesPaid = await prisma.receivable.findMany({
-    where: { status: { in: ["PAGO", "PARCIALMENTE_PAGO"] }, dataCompetencia: { gte: subDays(now, 400) } },
-  });
-  const payablesPaid = await prisma.payable.findMany({
-    where: { status: { in: ["PAGO", "PARCIALMENTE_PAGO"] }, dataCompetencia: { gte: subDays(now, 400) } },
-  });
+  const [receivablesPaid, payablesPaid] = await Promise.all([
+    prisma.receivable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: subDays(now, 400) },
+        empresaId: { in: empresaIds },
+      },
+      select: { categoriaId: true, valor: true, dataCompetencia: true },
+    }),
+    prisma.payable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: subDays(now, 400) },
+        empresaId: { in: empresaIds },
+      },
+      select: { categoriaId: true, valor: true, dataCompetencia: true },
+    }),
+  ]);
 
   const sumInRange = (arr: { valor: number; dataCompetencia: Date }[], from: Date, to: Date) =>
     arr.filter((e) => e.dataCompetencia >= from && e.dataCompetencia <= to).reduce((a, e) => a + e.valor, 0);
@@ -112,7 +127,6 @@ async function getData() {
     (r) => r.dataCompetencia >= periods.mes.from && r.dataCompetencia <= periods.mes.to
   );
 
-  const catMap = await prisma.financialCategory.findMany();
   const catNameById = new Map(catMap.map((c) => [c.id, c.name]));
 
   function groupByCategory(entries: { categoriaId: string; valor: number }[]) {
@@ -164,17 +178,16 @@ export default async function FinanceiroDashboardPage() {
     <PageContainer title="Financeiro" subtitle="Dashboard financeiro">
       <div className="space-y-6">
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Caixa atual" value={formatCurrency(d.caixaAtual)} icon="Wallet" />
-          <StatCard label="Faturamento do dia" value={formatCurrency(d.faturamentoHoje)} icon="Calendar" />
-          <StatCard label="Faturamento da semana" value={formatCurrency(d.faturamentoSemana)} icon="CalendarDays" />
-          <StatCard
-            label="Faturamento do mês"
-            value={formatCurrency(d.faturamentoMes)}
-            icon="TrendingUp"
-            delta={d.faturamentoGrowth}
-          />
-        </div>
+        <SortableStatCards
+          storageKey="financeiro-dashboard-kpi-order"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          cards={[
+            { key: "caixa-atual", label: "Caixa atual", value: formatCurrency(d.caixaAtual), icon: "Wallet" },
+            { key: "faturamento-dia", label: "Faturamento do dia", value: formatCurrency(d.faturamentoHoje), icon: "Calendar" },
+            { key: "faturamento-semana", label: "Faturamento da semana", value: formatCurrency(d.faturamentoSemana), icon: "CalendarDays" },
+            { key: "faturamento-mes", label: "Faturamento do mês", value: formatCurrency(d.faturamentoMes), icon: "TrendingUp", delta: d.faturamentoGrowth },
+          ]}
+        />
 
         <Section title="Caixa por conta bancária">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -195,51 +208,38 @@ export default async function FinanceiroDashboardPage() {
           </div>
         </Section>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          <StatCard label="Faturamento do ano" value={formatCurrency(d.faturamentoAno)} icon="DollarSign" />
-          <StatCard
-            label="Margem de Contribuição"
-            value={formatCurrency(d.margemLine?.value ?? 0)}
-            hint={formatPercent(d.margemLine?.percent ?? 0)}
-            icon="PieChart"
-          />
-          <StatCard
-            label="Lucro Operacional"
-            value={formatCurrency(d.lucroOperacional?.value ?? 0)}
-            hint={formatPercent(d.lucroOperacional?.percent ?? 0)}
-            icon="TrendingUp"
-          />
-          <StatCard
-            label="Lucro Líquido"
-            value={formatCurrency(d.lucroLiquido?.value ?? 0)}
-            delta={growth(d.lucroLiquido?.value ?? 0, d.lucroLiquidoAnterior?.value ?? 0)}
-            icon="BadgeDollarSign"
-          />
-          <StatCard
-            label="CMV"
-            value={formatCurrency(d.cmv?.value ?? 0)}
-            hint={formatPercent(Math.abs(d.cmv?.percent ?? 0))}
-            icon="Package"
-            color="#eab308"
-          />
-          <StatCard
-            label="Gastos Fixos"
-            value={formatCurrency(d.gastosFixos?.value ?? 0)}
-            hint={formatPercent(Math.abs(d.gastosFixos?.percent ?? 0))}
-            icon="Building2"
-            color="#ef4444"
-          />
-        </div>
+        <SortableStatCards
+          storageKey="financeiro-dashboard-dre-kpi-order"
+          className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
+          cards={[
+            { key: "faturamento-ano", label: "Faturamento do ano", value: formatCurrency(d.faturamentoAno), icon: "DollarSign" },
+            { key: "margem-contribuicao", label: "Margem de Contribuição", value: formatCurrency(d.margemLine?.value ?? 0), hint: formatPercent(d.margemLine?.percent ?? 0), icon: "PieChart" },
+            { key: "lucro-operacional", label: "Lucro Operacional", value: formatCurrency(d.lucroOperacional?.value ?? 0), hint: formatPercent(d.lucroOperacional?.percent ?? 0), icon: "TrendingUp" },
+            {
+              key: "lucro-liquido",
+              label: "Lucro Líquido",
+              value: formatCurrency(d.lucroLiquido?.value ?? 0),
+              delta: growth(d.lucroLiquido?.value ?? 0, d.lucroLiquidoAnterior?.value ?? 0),
+              icon: "BadgeDollarSign",
+            },
+            { key: "cmv", label: "CMV", value: formatCurrency(d.cmv?.value ?? 0), hint: formatPercent(Math.abs(d.cmv?.percent ?? 0)), icon: "Package", color: "#eab308" },
+            { key: "gastos-fixos", label: "Gastos Fixos", value: formatCurrency(d.gastosFixos?.value ?? 0), hint: formatPercent(Math.abs(d.gastosFixos?.percent ?? 0)), icon: "Building2", color: "#ef4444" },
+          ]}
+        />
 
         <Section title="Painel de contas">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <StatCard label="Contas vencidas" value={formatNumber(d.vencidas.length)} icon="AlertTriangle" color="#ef4444" />
-            <StatCard label="Vencendo hoje" value={formatNumber(d.vencendoHoje.length)} icon="Clock" color="#eab308" />
-            <StatCard label="Vencendo amanhã" value={formatNumber(d.vencendoAmanha.length)} icon="Clock" />
-            <StatCard label="Vencendo na semana" value={formatNumber(d.vencendoSemana.length)} icon="CalendarClock" />
-            <StatCard label="Total a pagar" value={formatCurrency(d.totalAPagar)} icon="ArrowUpCircle" color="#ef4444" />
-            <StatCard label="Total a receber" value={formatCurrency(d.totalAReceber)} icon="ArrowDownCircle" color="#22c55e" />
-          </div>
+          <SortableStatCards
+            storageKey="financeiro-dashboard-painel-contas-kpi-order"
+            className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
+            cards={[
+              { key: "contas-vencidas", label: "Contas vencidas", value: formatNumber(d.vencidas.length), icon: "AlertTriangle", color: "#ef4444" },
+              { key: "vencendo-hoje", label: "Vencendo hoje", value: formatNumber(d.vencendoHoje.length), icon: "Clock", color: "#eab308" },
+              { key: "vencendo-amanha", label: "Vencendo amanhã", value: formatNumber(d.vencendoAmanha.length), icon: "Clock" },
+              { key: "vencendo-semana", label: "Vencendo na semana", value: formatNumber(d.vencendoSemana.length), icon: "CalendarClock" },
+              { key: "total-a-pagar", label: "Total a pagar", value: formatCurrency(d.totalAPagar), icon: "ArrowUpCircle", color: "#ef4444" },
+              { key: "total-a-receber", label: "Total a receber", value: formatCurrency(d.totalAReceber), icon: "ArrowDownCircle", color: "#22c55e" },
+            ]}
+          />
         </Section>
 
         <FinanceCharts

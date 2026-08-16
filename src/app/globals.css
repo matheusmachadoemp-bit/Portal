@@ -1,15 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0b;
-  --foreground: #f5f5f7;
-  --nord-black: #0a0a0b;
-  --nord-panel: #141416;
-  --nord-card: #1a1a1d;
-  --nord-border: #2a2a2e;
-  --nord-blue: #2952e3;
-  --nord-blue-light: #4d70ff;
-  --nord-gray: #9a9aa2;
+  --background: #05070a;
+  --foreground: #f7f9fc;
+  --nord-black: #05070a;
+  --nord-panel: #0e1117;
+  --nord-card: #151a23;
+  --nord-border: #232a37;
+  --nord-blue: #1464f4;
+  --nord-blue-light: #3b82f6;
+  --nord-gray: #9aa4b2;
+  --nord-white: #f7f9fc;
+  --nord-success: #22c55e;
+  --nord-warning: #f59e0b;
+  --nord-danger: #ef4444;
 }
 
 @theme inline {
@@ -22,7 +26,11 @@
   --color-nord-blue: var(--nord-blue);
   --color-nord-blue-light: var(--nord-blue-light);
   --color-nord-gray: var(--nord-gray);
-  --font-sans: var(--font-geist-sans);
+  --color-nord-white: var(--nord-white);
+  --color-nord-success: var(--nord-success);
+  --color-nord-warning: var(--nord-warning);
+  --color-nord-danger: var(--nord-danger);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -56,4 +64,60 @@ body {
 .nord-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: var(--nord-border) var(--nord-panel);
+}
+
+.input {
+  width: 100%;
+  background: var(--nord-panel);
+  border: 1px solid var(--nord-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: white;
+  font-size: 13px;
+  outline: none;
+}
+.input:focus {
+  border-color: var(--nord-blue);
+}
+.input::placeholder {
+  color: var(--nord-gray);
+  opacity: 0.7;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--nord-blue);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.btn-primary:hover {
+  background: var(--nord-blue-light);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--nord-border);
+  color: var(--nord-gray);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+.btn-outline:hover {
+  color: white;
+  border-color: var(--nord-blue);
 }

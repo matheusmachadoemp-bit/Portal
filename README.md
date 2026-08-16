@@ -15,7 +15,7 @@ usuário e menu lateral reorganizável por arrastar e soltar.
 
 ## Configuração local
 
-1. Configure `DATABASE_URL`, `AUTH_SECRET` e `VAULT_SECRET` em `.env` (veja `.env` como referência).
+1. Configure `DATABASE_URL`, `AUTH_SECRET`, `VAULT_SECRET` e `CRON_SECRET` (autentica os crons de sincronização Saipos e Meta Ads) em `.env` (veja `.env` como referência).
 2. Instale as dependências: `npm install`
 3. Aplique as migrações: `npx prisma migrate deploy` (ou `npx prisma migrate dev` em desenvolvimento)
 4. Popule o banco com dados iniciais: `npm run db:seed`
@@ -39,7 +39,28 @@ usuário e menu lateral reorganizável por arrastar e soltar.
 - `src/lib/*` — cálculos de KPIs (ticket médio, ROAS, CMV, turnover etc.),
   períodos de filtro, criptografia do cofre de senhas e permissões.
 
-## Integrações futuras
+## Integrações
 
-A página **Configurações** lista os endpoints de webhook reservados para as
-integrações futuras com Saipos, iFood, 99Food, site próprio, Meta Ads e Google Ads.
+- **Saipos** (implementada): o Portal consome a API de Dados da Saipos
+  (`GET https://data.saipos.io/v1/search_sales`) para importar vendas.
+  Configure o token da loja em **Configurações → Integração Saipos**
+  (armazenado criptografado via `src/lib/vault.ts`). A sincronização pode ser
+  disparada manualmente ("Sincronizar agora") ou automaticamente por um cron
+  diário (`vercel.json` → `/api/integracoes/saipos/sync`, autenticado com o
+  header `Authorization: Bearer $CRON_SECRET`). Ver `src/lib/saipos-client.ts`,
+  `src/lib/saipos-sync.ts` e `src/lib/saipos-mapper.ts`.
+- **Meta Ads** (implementada): o Portal consulta a Graph API da Meta
+  (`GET https://graph.facebook.com/{versão}/act_{id}/insights`, nível campanha,
+  breakdown por `publisher_platform`/`platform_position`) para importar
+  investimento, alcance, impressões e resultados de campanhas. Configure o
+  token (permissão `ads_read`) e o ID da conta de anúncios em
+  **Configurações → Integração Meta Ads** (token armazenado criptografado via
+  `src/lib/vault.ts`). Os dados brutos por campanha ficam em `MetaAdsInsight`
+  e os totais do mês corrente alimentam automaticamente o lançamento de
+  Tráfego Pago (`MarketingEntry`, `source = META_ADS`) em
+  `/portal/marketing/trafego-pago`. Sincronização manual ("Sincronizar agora")
+  ou cron diário (`vercel.json` → `/api/integracoes/meta-ads/sync`, mesmo
+  `CRON_SECRET`). Ver `src/lib/meta-ads-client.ts`, `src/lib/meta-ads-sync.ts`
+  e `src/lib/meta-ads-mapper.ts`.
+- A página **Configurações** também lista os endpoints de webhook reservados
+  para futuras integrações com iFood, 99Food, site próprio e Google Ads.

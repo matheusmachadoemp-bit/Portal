@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { MarketingTabs } from "../marketing-tabs";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -34,7 +33,6 @@ export default async function EquipePage() {
   return (
     <PageContainer title="Marketing" subtitle="Equipe">
       <div className="space-y-6">
-        <MarketingTabs />
         <Section title="Carga de trabalho por responsável">
           {members.length === 0 ? (
             <p className="text-sm text-nord-gray text-center py-8">Nenhuma tarefa atribuída a membros da equipe ainda.</p>

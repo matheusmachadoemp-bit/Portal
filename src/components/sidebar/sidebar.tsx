@@ -470,8 +470,10 @@ function CategoryRow({
   return (
     <li ref={setNodeRef} style={style}>
       <div
-        className={`group flex items-center gap-1 rounded-lg px-1.5 py-1.5 ${
-          active ? "bg-nord-blue/15" : "hover:bg-white/5"
+        className={`group flex items-center gap-1 rounded-lg px-1.5 py-1.5 border ${
+          active
+            ? "bg-nord-blue border-nord-blue"
+            : "border-transparent hover:bg-white/5"
         }`}
       >
         {isAdmin && !collapsed && (
@@ -488,11 +490,14 @@ function CategoryRow({
             active ? "text-white font-medium" : "text-nord-gray hover:text-white"
           }`}
         >
-          <DynamicIcon name={cat.icon} size={17} style={{ color: active ? cat.color : undefined }} />
+          <DynamicIcon name={cat.icon} size={17} style={{ color: active ? "#fff" : cat.color }} />
           {!collapsed && <span className="truncate">{cat.name}</span>}
         </button>
         {!collapsed && hasSubs && (
-          <button onClick={onToggleExpand} className="text-nord-gray/60 hover:text-white shrink-0">
+          <button
+            onClick={onToggleExpand}
+            className={`shrink-0 ${active ? "text-white/80 hover:text-white" : "text-nord-gray/60 hover:text-white"}`}
+          >
             <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
           </button>
         )}
@@ -500,7 +505,7 @@ function CategoryRow({
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="text-nord-gray/60 hover:text-white opacity-0 group-hover:opacity-100"
+              className={`opacity-0 group-hover:opacity-100 ${active ? "text-white/80 hover:text-white" : "text-nord-gray/60 hover:text-white"}`}
             >
               <MoreVertical size={14} />
             </button>
@@ -592,7 +597,7 @@ function SubRow({
           active ? "text-white font-medium" : "text-nord-gray hover:text-white"
         }`}
       >
-        <DynamicIcon name={sub.icon} size={14} />
+        <DynamicIcon name={sub.icon} size={14} style={{ color: active ? "#fff" : cat.color }} />
         <span className="truncate">{sub.name}</span>
       </button>
       {isAdmin && (
@@ -663,7 +668,7 @@ function CategoryFormModal({
 }) {
   const [name, setName] = useState(category?.name ?? "");
   const [icon, setIcon] = useState(category?.icon ?? "LayoutGrid");
-  const [color, setColor] = useState(category?.color ?? "#2952E3");
+  const [color, setColor] = useState(category?.color ?? "#1464F4");
 
   async function submit() {
     if (category) {
@@ -701,13 +706,21 @@ function CategoryFormModal({
           <label className="block text-xs text-nord-gray mb-1.5">Cor</label>
           <ColorPicker value={color} onChange={setColor} />
         </div>
-        <button
-          onClick={submit}
-          disabled={!name.trim()}
-          className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
-        >
-          Salvar
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-nord-border text-nord-gray hover:text-white hover:border-white/30 text-sm font-medium rounded-lg py-2.5"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={!name.trim()}
+            className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            Salvar
+          </button>
+        </div>
       </div>
     </Modal>
   );
@@ -728,7 +741,7 @@ function SubcategoryFormModal({
 }) {
   const [name, setName] = useState(subcategory?.name ?? "");
   const [icon, setIcon] = useState(subcategory?.icon ?? "Folder");
-  const [color, setColor] = useState(subcategory?.color ?? "#2952E3");
+  const [color, setColor] = useState(subcategory?.color ?? "#1464F4");
 
   async function submit() {
     if (subcategory) {
@@ -766,13 +779,21 @@ function SubcategoryFormModal({
           <label className="block text-xs text-nord-gray mb-1.5">Cor</label>
           <ColorPicker value={color} onChange={setColor} />
         </div>
-        <button
-          onClick={submit}
-          disabled={!name.trim()}
-          className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
-        >
-          Salvar
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-nord-border text-nord-gray hover:text-white hover:border-white/30 text-sm font-medium rounded-lg py-2.5"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={!name.trim()}
+            className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            Salvar
+          </button>
+        </div>
       </div>
     </Modal>
   );

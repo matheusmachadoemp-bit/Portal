@@ -49,12 +49,10 @@ export async function POST(req: Request) {
     },
   });
 
-  if (Array.isArray(body.courseIds)) {
-    for (let i = 0; i < body.courseIds.length; i++) {
-      await prisma.trainingTrackCourse.create({
-        data: { trackId: track.id, courseId: body.courseIds[i], order: i },
-      });
-    }
+  if (Array.isArray(body.courseIds) && body.courseIds.length > 0) {
+    await prisma.trainingTrackCourse.createMany({
+      data: body.courseIds.map((courseId: string, i: number) => ({ trackId: track.id, courseId, order: i })),
+    });
   }
 
   return NextResponse.json({ track });

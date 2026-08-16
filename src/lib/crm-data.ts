@@ -57,7 +57,7 @@ export async function resolveAudience(
     }
 
     if (opts.segmentId) {
-      const segmento = await prisma.crmSegment.findUnique({ where: { id: opts.segmentId } });
+      const segmento = await prisma.crmSegment.findFirst({ where: { id: opts.segmentId, empresaId } });
       if (!segmento) return [];
       return metrics
         .filter((m) => matchesCriteria(m, segmento.criteria as never, produtosPorCliente.get(m.id)))
