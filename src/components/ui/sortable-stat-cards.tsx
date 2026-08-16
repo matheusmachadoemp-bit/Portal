@@ -52,20 +52,20 @@ function SortableCard({ id, children }: { id: string; children: React.ReactNode 
 }
 
 /**
- * Renders a grid of StatCards the user can drag into any order; the chosen
- * order is saved to localStorage under `storageKey` and restored on future
- * visits. Pass a stable, page-unique storageKey.
+ * Renders a grid of arbitrary card content the user can drag into any order;
+ * the chosen order is saved to localStorage under `storageKey` and restored
+ * on future visits. Pass a stable, page-unique storageKey.
  */
-export function SortableStatCards({
+export function SortableCardGrid({
   storageKey,
-  cards,
+  items,
   className = "grid grid-cols-2 md:grid-cols-4 gap-4",
 }: {
   storageKey: string;
-  cards: SortableStatCardConfig[];
+  items: { key: string; content: React.ReactNode }[];
   className?: string;
 }) {
-  const defaultOrder = cards.map((c) => c.key);
+  const defaultOrder = items.map((c) => c.key);
   const [order, setOrder] = useState<string[]>(defaultOrder);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -97,32 +97,53 @@ export function SortableStatCards({
     });
   }
 
-  const byKey = new Map(cards.map((c) => [c.key, c]));
+  const byKey = new Map(items.map((c) => [c.key, c]));
   const orderedKeys = order.filter((k) => byKey.has(k));
-  for (const c of cards) if (!orderedKeys.includes(c.key)) orderedKeys.push(c.key);
+  for (const c of items) if (!orderedKeys.includes(c.key)) orderedKeys.push(c.key);
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={orderedKeys} strategy={rectSortingStrategy}>
         <div className={className}>
           {orderedKeys.map((key) => {
-            const card = byKey.get(key);
-            if (!card) return null;
+            const item = byKey.get(key);
+            if (!item) return null;
             return (
               <SortableCard key={key} id={key}>
-                <StatCard
-                  label={card.label}
-                  value={card.value}
-                  icon={card.icon}
-                  delta={card.delta}
-                  color={card.color}
-                  hint={card.hint}
-                />
+                {item.content}
               </SortableCard>
             );
           })}
         </div>
       </SortableContext>
     </DndContext>
+  );
+}
+
+/**
+ * Renders a grid of StatCards the user can drag into any order; the chosen
+ * order is saved to localStorage under `storageKey` and restored on future
+ * visits. Pass a stable, page-unique storageKey.
+ */
+export function SortableStatCards({
+  storageKey,
+  cards,
+  className = "grid grid-cols-2 md:grid-cols-4 gap-4",
+}: {
+  storageKey: string;
+  cards: SortableStatCardConfig[];
+  className?: string;
+}) {
+  return (
+    <SortableCardGrid
+      storageKey={storageKey}
+      className={className}
+      items={cards.map((card) => ({
+        key: card.key,
+        content: (
+          <StatCard label={card.label} value={card.value} icon={card.icon} delta={card.delta} color={card.color} hint={card.hint} />
+        ),
+      }))}
+    />
   );
 }

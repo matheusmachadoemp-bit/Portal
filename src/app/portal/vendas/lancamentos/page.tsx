@@ -24,6 +24,7 @@ export default async function LancamentosPage() {
     id: s.id,
     dateTime: s.dateTime.toISOString(),
     channel: s.channel,
+    platform: s.platform,
     formaPagamento: s.formaPagamento,
     garcomId: s.garcomId,
     garcomName: s.garcom?.name ?? null,
@@ -31,6 +32,7 @@ export default async function LancamentosPage() {
     bairro: s.bairro,
     regiao: s.regiao,
     valorTotal: s.valorTotal,
+    cancelado: s.cancelado,
     items: s.items.map((i) => ({ id: i.id, nome: i.nome, quantidade: i.quantidade, precoUnitario: i.precoUnitario, faturamento: i.faturamento })),
   }));
 
