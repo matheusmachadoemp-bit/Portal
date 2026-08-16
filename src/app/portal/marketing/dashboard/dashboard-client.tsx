@@ -142,20 +142,6 @@ export function DashboardClient({
     <div className="space-y-6">
       <MarketingTabs />
 
-      {canCreate && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => {
-              setEditingTask(null);
-              setShowTaskModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-          >
-            <Plus size={13} /> Novo conteúdo/tarefa
-          </button>
-        </div>
-      )}
-
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Tarefas Concluídas" value={doneCount} color="#22c55e" icon="CheckCircle2" sparkline={sparklineWeeks.map((w) => w.done)} />
         <KpiCard label="A Produzir" value={producingCount} color="#eab308" icon="Clock" sparkline={sparklineWeeks.map((w) => w.producing)} />
