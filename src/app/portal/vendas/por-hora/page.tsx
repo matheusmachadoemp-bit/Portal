@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { Section, StatCard } from "@/components/ui/stat-card";
 import { PorHoraChart } from "./chart";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -30,7 +29,6 @@ export default async function VendasPorHoraPage() {
   return (
     <PageContainer title="Vendas" subtitle="Vendas por Hora">
       <div className="space-y-6">
-        <VendasTabs />
         <div className="grid grid-cols-2 gap-4">
           <StatCard label="Horário de pico" value={pico ? `${pico.label} (${formatCurrency(pico.faturamento)})` : "—"} icon="TrendingUp" color="#22c55e" />
           <StatCard

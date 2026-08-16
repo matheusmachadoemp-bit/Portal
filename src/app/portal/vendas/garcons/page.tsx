@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -55,7 +54,6 @@ export default async function GarconsDesempenhoPage() {
   return (
     <PageContainer title="Vendas" subtitle="Desempenho por Garçom">
       <div className="space-y-6">
-        <VendasTabs />
         <Section title="Ranking (últimos 30 dias)">
           <div className="space-y-2">
             {ranking.map((g, idx) => (

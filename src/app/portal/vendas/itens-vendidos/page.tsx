@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { ItensVendidosClient } from "./itens-vendidos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { productTotalCost } from "@/lib/ficha";
@@ -45,7 +44,6 @@ export default async function ItensVendidosPage() {
   return (
     <PageContainer title="Vendas" subtitle="Itens Vendidos — Curva ABC">
       <div className="space-y-6">
-        <VendasTabs />
         <ItensVendidosClient rows={rows} />
       </div>
     </PageContainer>

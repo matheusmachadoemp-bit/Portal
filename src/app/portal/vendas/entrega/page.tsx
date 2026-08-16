@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { Section } from "@/components/ui/stat-card";
 import { EntregaChart } from "./chart";
 import { formatCurrency, formatNumber } from "@/lib/calc";
@@ -35,7 +34,6 @@ export default async function VendasPorAreaEntregaPage() {
   return (
     <PageContainer title="Vendas" subtitle="Área de Entrega">
       <div className="space-y-6">
-        <VendasTabs />
         <Section title={`Pedidos delivery por bairro (últimos ${PERIOD_DAYS} dias)`}>
           <EntregaChart data={rows.slice(0, 12).map((r) => ({ name: r.bairro, value: Math.round(r.faturamento) }))} />
         </Section>
