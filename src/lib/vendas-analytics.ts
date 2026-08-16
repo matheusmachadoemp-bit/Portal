@@ -19,6 +19,33 @@ export const SALE_CHANNEL_LABEL: Record<string, string> = {
   BALCAO: "Balcão",
 };
 
+export const SALE_PLATFORM_LABEL: Record<string, string> = {
+  SITE_PROPRIO: "Site próprio",
+  IFOOD: "iFood",
+  FOOD99: "99Food",
+};
+
+export const SALE_PLATFORMS = ["SITE_PROPRIO", "IFOOD", "FOOD99"] as const;
+
+export type Turno = "ALMOCO" | "JANTAR";
+
+export const TURNO_LABEL: Record<Turno, string> = { ALMOCO: "Almoço", JANTAR: "Jantar" };
+
+/** Turno calculado a partir do horário da venda: até 17h = Almoço, depois = Jantar. */
+export function getTurno(dateTime: Date): Turno {
+  return dateTime.getHours() < 17 ? "ALMOCO" : "JANTAR";
+}
+
+export const SALE_TYPE_ORDER = ["ENTREGA", "BALCAO", "SALAO", "CANCELADO"] as const;
+export type SaleType = (typeof SALE_TYPE_ORDER)[number];
+
+export const SALE_TYPE_LABEL: Record<SaleType, string> = {
+  ENTREGA: "Entrega",
+  BALCAO: "Balcão",
+  SALAO: "Salão",
+  CANCELADO: "Cancelado",
+};
+
 export type AbcClass = "A" | "B" | "C";
 
 export function classifyAbc(cumulativeShare: number): AbcClass {
