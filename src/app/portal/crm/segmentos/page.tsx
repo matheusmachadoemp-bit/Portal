@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { SegmentosClient } from "./segmentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
@@ -64,7 +63,6 @@ export default async function SegmentosPage() {
   return (
     <PageContainer title="CRM" subtitle="Segmentos">
       <div className="space-y-6">
-        <CrmTabs />
         <SegmentosClient
           autoSegments={autoSegments}
           customSegments={customSegments}

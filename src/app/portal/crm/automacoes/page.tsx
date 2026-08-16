@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { AutomacoesClient } from "./automacoes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
@@ -38,7 +37,6 @@ export default async function AutomacoesPage() {
   return (
     <PageContainer title="CRM" subtitle="Automações">
       <div className="space-y-6">
-        <CrmTabs />
         <AutomacoesClient templates={templates} custom={custom} canCreate={ctx?.mode === "single"} />
       </div>
     </PageContainer>

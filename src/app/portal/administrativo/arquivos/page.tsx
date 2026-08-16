@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { AdminTabs } from "../admin-tabs";
 import { FilesManager } from "@/components/files-manager";
 
 export default async function ArquivosPage() {
@@ -14,7 +13,6 @@ export default async function ArquivosPage() {
   return (
     <PageContainer title="Administrativo" subtitle="Gerenciador de arquivos">
       <div className="space-y-6">
-        <AdminTabs />
         <FilesManager folderType="ARQUIVO" initialFiles={serialized} />
       </div>
     </PageContainer>

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { EstoqueTabs } from "../estoque-tabs";
 import { MovimentacoesClient } from "./movimentacoes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -37,7 +36,6 @@ export default async function MovimentacoesPage() {
   return (
     <PageContainer title="Estoque" subtitle="Movimentações">
       <div className="space-y-6">
-        <EstoqueTabs />
         <MovimentacoesClient initialMovements={serializedMovements} ingredients={serializedIngredients} canCreate={canCreate} />
       </div>
     </PageContainer>

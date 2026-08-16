@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { SatisfacaoClient } from "./satisfacao-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { startOfMonth, subMonths, format } from "date-fns";
@@ -67,7 +66,6 @@ export default async function SatisfacaoPage() {
   return (
     <PageContainer title="CRM" subtitle="Satisfação / NPS">
       <div className="space-y-6">
-        <CrmTabs />
         <SatisfacaoClient
           npsGeral={npsScore(geral.promotores, geral.neutros, geral.detratores)}
           distribuicaoGeral={geral}

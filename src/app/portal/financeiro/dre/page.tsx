@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { computeDre } from "@/lib/dre";
 import { DreClient } from "./dre-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -45,7 +44,6 @@ export default async function DrePage() {
   return (
     <PageContainer title="Financeiro" subtitle="DRE — Demonstração do Resultado do Exercício">
       <div className="space-y-6">
-        <FinanceTabs />
         <DreClient
           initialRows={rows}
           initialMonth={now.getMonth() + 1}

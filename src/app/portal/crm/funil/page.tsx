@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { FunilClient } from "./funil-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
@@ -16,7 +15,6 @@ export default async function FunilPage() {
   return (
     <PageContainer title="CRM" subtitle="Funil de Clientes">
       <div className="space-y-6">
-        <CrmTabs />
         <FunilClient funil={funil} />
       </div>
     </PageContainer>

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { allDreCategories } from "@/lib/dre-structure";
 import { CategoriasClient } from "./categorias-client";
 
@@ -10,7 +9,6 @@ export default async function CategoriasFinanceirasPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Categorias Financeiras">
       <div className="space-y-6">
-        <FinanceTabs />
         <CategoriasClient initialCategories={categories} dreOptions={allDreCategories()} />
       </div>
     </PageContainer>

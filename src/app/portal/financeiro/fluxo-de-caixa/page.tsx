@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { FluxoCaixaClient } from "./fluxo-client";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -61,7 +60,6 @@ export default async function FluxoDeCaixaPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Fluxo de Caixa">
       <div className="space-y-6">
-        <FinanceTabs />
         <FluxoCaixaClient data={serialized} />
       </div>
     </PageContainer>

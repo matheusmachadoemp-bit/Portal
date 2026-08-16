@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { FidelidadeClient } from "./fidelidade-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeClienteMetrics } from "@/lib/crm";
@@ -69,7 +68,6 @@ export default async function FidelidadePage() {
   return (
     <PageContainer title="CRM" subtitle="Fidelidade — Clube Nord">
       <div className="space-y-6">
-        <CrmTabs />
         <FidelidadeClient
           kpis={{
             participantes: accounts.length,

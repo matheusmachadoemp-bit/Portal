@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { AdminTabs } from "../admin-tabs";
 import { FilesManager } from "@/components/files-manager";
 
 export default async function LogoPage() {
@@ -14,7 +13,6 @@ export default async function LogoPage() {
   return (
     <PageContainer title="Administrativo" subtitle="Biblioteca de identidade visual da Nord">
       <div className="space-y-6">
-        <AdminTabs />
         <FilesManager folderType="LOGO" initialFiles={serialized} />
       </div>
     </PageContainer>

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { formatCurrency, formatNumber, formatPercent, growth, pct } from "@/lib/calc";
 import { computeDre } from "@/lib/dre";
@@ -164,7 +163,6 @@ export default async function FinanceiroDashboardPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Dashboard financeiro">
       <div className="space-y-6">
-        <FinanceTabs />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Caixa atual" value={formatCurrency(d.caixaAtual)} icon="Wallet" />

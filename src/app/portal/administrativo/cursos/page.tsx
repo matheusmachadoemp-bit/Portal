@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { AdminTabs } from "../admin-tabs";
 import { CursosClient } from "./cursos-client";
 
 export default async function CursosPage() {
@@ -14,7 +13,6 @@ export default async function CursosPage() {
   return (
     <PageContainer title="Administrativo" subtitle="Cursos e capacitações">
       <div className="space-y-6">
-        <AdminTabs />
         <CursosClient initialCourses={serialized} />
       </div>
     </PageContainer>

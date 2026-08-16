@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { CrmDashboardClient } from "./dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getCrmDashboardData } from "@/lib/crm-dashboard";
@@ -12,7 +11,6 @@ export default async function CrmDashboardPage() {
   return (
     <PageContainer title="CRM" subtitle="Visão Geral">
       <div className="space-y-6">
-        <CrmTabs />
         <CrmDashboardClient initialKey="mes" initialData={data} />
       </div>
     </PageContainer>

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { AdminTabs } from "../admin-tabs";
 import { SenhasClient } from "./senhas-client";
 
 export default async function SenhasPage() {
@@ -24,7 +23,6 @@ export default async function SenhasPage() {
   return (
     <PageContainer title="Administrativo" subtitle="Cofre de senhas — acesso restrito e criptografado">
       <div className="space-y-6">
-        <AdminTabs />
         <SenhasClient initialEntries={serialized} />
       </div>
     </PageContainer>

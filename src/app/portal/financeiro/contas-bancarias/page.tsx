@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { ContasBancariasClient } from "./contas-bancarias-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -21,7 +20,6 @@ export default async function ContasBancariasPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Contas Bancárias">
       <div className="space-y-6">
-        <FinanceTabs />
         <ContasBancariasClient initialAccounts={serialized} canCreate={ctx?.mode === "single"} />
       </div>
     </PageContainer>

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { CampanhasClient } from "./campanhas-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -32,7 +31,6 @@ export default async function CampanhasPage() {
   return (
     <PageContainer title="CRM" subtitle="Campanhas">
       <div className="space-y-6">
-        <CrmTabs />
         <CampanhasClient rows={rows} canCreate={ctx?.mode === "single"} />
       </div>
     </PageContainer>

@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { AniversariantesClient } from "./aniversariantes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
@@ -38,7 +37,6 @@ export default async function AniversariantesPage() {
   return (
     <PageContainer title="CRM" subtitle="Aniversariantes">
       <div className="space-y-6">
-        <CrmTabs />
         <AniversariantesClient rows={rows} isGrupo={isGrupo} />
       </div>
     </PageContainer>

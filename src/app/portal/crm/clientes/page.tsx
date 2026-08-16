@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { ClientesClient } from "./clientes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
@@ -49,7 +48,6 @@ export default async function ClientesPage() {
   return (
     <PageContainer title="CRM" subtitle="Clientes">
       <div className="space-y-6">
-        <CrmTabs />
         <ClientesClient rows={rows} lojas={lojas} isGrupo={isGrupo} />
       </div>
     </PageContainer>

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { RelatoriosClient } from "./relatorios-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
@@ -228,7 +227,6 @@ export default async function RelatoriosPage() {
   return (
     <PageContainer title="CRM" subtitle="Relatórios">
       <div className="space-y-6">
-        <CrmTabs />
         <RelatoriosClient reports={reports} />
       </div>
     </PageContainer>

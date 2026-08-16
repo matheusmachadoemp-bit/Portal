@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { CaixaClient } from "./caixa-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -27,7 +26,6 @@ export default async function CaixaDaEmpresaPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Caixa da Empresa">
       <div className="space-y-6">
-        <FinanceTabs />
         <CaixaClient initialMovements={serialized} accounts={accounts} canCreate={ctx?.mode === "single"} />
       </div>
     </PageContainer>

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { ContasPagarClient } from "./contas-pagar-client";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -29,7 +28,6 @@ export default async function ContasAPagarPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Contas a Pagar">
       <div className="space-y-6">
-        <FinanceTabs />
         <ContasPagarClient
           initialPayables={serialized}
           categorias={categorias}

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { FinanceTabs } from "../finance-tabs";
 import { ContasReceberClient } from "./contas-receber-client";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -29,7 +28,6 @@ export default async function ContasAReceberPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Contas a Receber">
       <div className="space-y-6">
-        <FinanceTabs />
         <ContasReceberClient
           initialReceivables={serialized}
           categorias={categorias}

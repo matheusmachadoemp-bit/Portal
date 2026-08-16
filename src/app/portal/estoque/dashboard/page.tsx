@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { EstoqueTabs } from "../estoque-tabs";
 import { EstoqueDashboardClient } from "./dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { ingredientCostPerUnit } from "@/lib/estoque";
@@ -63,7 +62,6 @@ export default async function EstoqueDashboardPage() {
   return (
     <PageContainer title="Estoque" subtitle="Dashboard">
       <div className="space-y-6">
-        <EstoqueTabs />
         <EstoqueDashboardClient
           valorTotalEstoque={valorTotalEstoque}
           totalProdutos={ingredients.length}

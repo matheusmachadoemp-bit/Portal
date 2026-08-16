@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { CrmTabs } from "../crm-tabs";
 import { InteligenciaClient } from "./inteligencia-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
@@ -151,7 +150,6 @@ export default async function InteligenciaPage() {
   return (
     <PageContainer title="CRM" subtitle="Inteligência de Cliente">
       <div className="space-y-6">
-        <CrmTabs />
         <InteligenciaClient
           topProdutos={topProdutos}
           produtosRecompra={produtosRecompra}
