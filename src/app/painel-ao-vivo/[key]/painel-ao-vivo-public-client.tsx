@@ -269,20 +269,6 @@ export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaK
         </div>
       </div>
 
-      <div className="nord-card p-4">
-        <h3 className="text-white font-medium text-sm mb-4">Vendas por canal (hoje)</h3>
-        {data && data.porCanal.length === 0 && <p className="text-sm text-nord-gray">Nenhum pedido registrado hoje ainda.</p>}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {data?.porCanal.map((c) => (
-            <div key={c.channel} className="rounded-lg border border-nord-border p-3">
-              <p className="text-xs text-nord-gray mb-1">{c.label}</p>
-              <p className="text-lg font-semibold text-white">{formatNumber(c.pedidos)} pedidos</p>
-              <p className="text-xs text-nord-gray">{formatCurrency(c.valor)}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <footer className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-nord-gray">
         <span className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-nord-success inline-block" /> Atualização automática a cada 15 segundos
