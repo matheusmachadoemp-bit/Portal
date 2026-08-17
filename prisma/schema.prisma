@@ -332,12 +332,19 @@ enum SaleChannel {
   BALCAO
 }
 
+enum SalePlatform {
+  SITE_PROPRIO
+  IFOOD
+  FOOD99
+}
+
 model Sale {
   id             String        @id @default(cuid())
   empresaId      String
   empresa        Empresa       @relation(fields: [empresaId], references: [id])
   dateTime       DateTime
   channel        SaleChannel   @default(SALAO)
+  platform       SalePlatform  @default(SITE_PROPRIO)
   formaPagamento PaymentMethod @default(OUTRO)
   garcomId       String?
   garcom         Employee?     @relation(fields: [garcomId], references: [id])
@@ -347,6 +354,7 @@ model Sale {
   bairro         String?
   regiao         String?
   valorTotal     Float         @default(0)
+  cancelado      Boolean       @default(false)
   createdById    String
   createdBy      User          @relation("SaleCreatedBy", fields: [createdById], references: [id])
   createdAt      DateTime      @default(now())
@@ -368,8 +376,10 @@ model SaiposSale {
   shiftDate      DateTime
   dateTime       DateTime
   channel        SaleChannel   @default(SALAO)
+  platform       SalePlatform  @default(SITE_PROPRIO)
   formaPagamento PaymentMethod @default(OUTRO)
   valorTotal     Float         @default(0)
+  cancelado      Boolean       @default(false)
   raw            Json?
   createdAt      DateTime      @default(now())
 

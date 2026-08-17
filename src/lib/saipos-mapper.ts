@@ -1,5 +1,11 @@
-import type { PaymentMethod, SaleChannel } from "@prisma/client";
+import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
 import type { SaiposSaleRecord } from "@/lib/saipos-client";
+
+const PLATFORM_KEYWORDS: [string, SalePlatform][] = [
+  ["ifood", "IFOOD"],
+  ["99food", "FOOD99"],
+  ["99", "FOOD99"],
+];
 
 const PAYMENT_KEYWORDS: [string, PaymentMethod][] = [
   ["pix", "PIX"],
@@ -28,6 +34,16 @@ export function mapSaiposChannel(record: SaiposSaleRecord): SaleChannel {
   return "BALCAO";
 }
 
+/** Deduz a plataforma (site próprio/iFood/99Food) a partir do nome do parceiro retornado pela Saipos. */
+export function mapSaiposPlatform(record: SaiposSaleRecord): SalePlatform {
+  const desc = normalize(record.partner_sale?.desc_partner_sale);
+  if (!desc) return "SITE_PROPRIO";
+  for (const [keyword, platform] of PLATFORM_KEYWORDS) {
+    if (desc.includes(keyword)) return platform;
+  }
+  return "SITE_PROPRIO";
+}
+
 export function mapSaiposPaymentMethod(record: SaiposSaleRecord): PaymentMethod {
   const payments = Array.isArray(record.payments) ? record.payments : [];
   if (!payments.length) return "OUTRO";
@@ -50,8 +66,10 @@ export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {
     shiftDate: new Date(record.shift_date),
     dateTime: new Date(record.created_at ?? record.shift_date),
     channel: mapSaiposChannel(record),
+    platform: mapSaiposPlatform(record),
     formaPagamento: mapSaiposPaymentMethod(record),
     valorTotal: Number(record.total_amount ?? 0),
+    cancelado: isSaiposSaleCanceled(record),
     raw: record as object,
   };
 }

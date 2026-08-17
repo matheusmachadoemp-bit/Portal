@@ -93,3 +93,45 @@ export const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
   { key: "mes-anterior", label: "Mês anterior" },
   { key: "personalizado", label: "Personalizado" },
 ];
+
+// Filtro de período "rolling" (últimos N dias), usado nos mini-filtros de
+// cada card (Vendas por Hora, Forma de Pagamento, Área de Entrega).
+export type RollingPeriodKey = "hoje" | "ontem" | "7dias" | "30dias" | "personalizado";
+
+export function resolveRollingPeriod(key: RollingPeriodKey, custom?: { from?: string; to?: string }): { from: Date; to: Date } {
+  const now = new Date();
+  switch (key) {
+    case "hoje":
+      return { from: startOfDay(now), to: endOfDay(now) };
+    case "ontem":
+      return { from: startOfDay(subDays(now, 1)), to: endOfDay(subDays(now, 1)) };
+    case "7dias":
+      return { from: startOfDay(subDays(now, 6)), to: endOfDay(now) };
+    case "personalizado":
+      if (custom?.from && custom?.to) {
+        return { from: startOfDay(new Date(custom.from)), to: endOfDay(new Date(custom.to)) };
+      }
+      case "30dias":
+    default:
+      return { from: startOfDay(subDays(now, 29)), to: endOfDay(now) };
+  }
+}
+
+export const ROLLING_PERIOD_OPTIONS: { key: RollingPeriodKey; label: string }[] = [
+  { key: "hoje", label: "Hoje" },
+  { key: "ontem", label: "Ontem" },
+  { key: "7dias", label: "7 dias" },
+  { key: "30dias", label: "30 dias" },
+  { key: "personalizado", label: "Personalizado" },
+];
+
+/** Alinha a comparação por dia da semana: desloca em múltiplos de 7 dias em vez do diff exato. */
+export function resolveSameWeekdayComparison(from: Date, to: Date): { prevFrom: Date; prevTo: Date } {
+  const diffDays = Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const weeks = Math.max(1, Math.round(diffDays / 7));
+  const offsetDays = weeks * 7;
+  return {
+    prevFrom: new Date(from.getTime() - offsetDays * 24 * 60 * 60 * 1000),
+    prevTo: new Date(to.getTime() - offsetDays * 24 * 60 * 60 * 1000),
+  };
+}

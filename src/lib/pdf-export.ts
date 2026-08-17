@@ -39,6 +39,35 @@ export function exportFinanceToPdf(
   doc.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
 }
 
+/** Relatório em PDF organizado por seções de pares rótulo/valor (KPIs), sem tabela tabular. */
+export function exportKpiReportToPdf(
+  title: string,
+  subtitle: string,
+  sections: { title: string; rows: [string, string][] }[]
+) {
+  const doc = new jsPDF();
+  doc.setFontSize(14);
+  doc.text(title, 14, 16);
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text(subtitle, 14, 22);
+
+  let startY = 30;
+  for (const section of sections) {
+    autoTable(doc, {
+      startY,
+      head: [[section.title, ""]],
+      body: section.rows,
+      headStyles: { fillColor: [41, 82, 227] },
+      styles: { fontSize: 9 },
+      columnStyles: { 1: { halign: "right" } },
+    });
+    startY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  }
+
+  doc.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+}
+
 export function exportRowsToPdf(title: string, headers: string[], rows: (string | number)[][]) {
   const doc = new jsPDF();
   doc.setFontSize(14);
