@@ -23,6 +23,9 @@ export type PainelAoVivoPayload = {
   porCanal: { channel: string; label: string; pedidos: number; valor: number }[];
   recentes: {
     id: string;
+    saleNumber: number | null;
+    customerName: string | null;
+    district: string | null;
     dateTime: string;
     valorTotal: number;
     channel: string;
@@ -63,7 +66,17 @@ export async function computePainelAoVivo(empresaIds: string[]): Promise<PainelA
     prisma.saiposSale.findMany({
       where: { empresaId: { in: empresaIds }, shiftDate: { gte: hojeInicio }, cancelado: false },
       orderBy: { dateTime: "desc" },
-      select: { id: true, dateTime: true, valorTotal: true, channel: true, platform: true, formaPagamento: true },
+      select: {
+        id: true,
+        saleNumber: true,
+        customerName: true,
+        district: true,
+        dateTime: true,
+        valorTotal: true,
+        channel: true,
+        platform: true,
+        formaPagamento: true,
+      },
     }),
     prisma.salesEntry.findMany({
       where: { empresaId: { in: empresaIds }, periodType: "DIARIO" },
@@ -100,16 +113,25 @@ export async function computePainelAoVivo(empresaIds: string[]): Promise<PainelA
     .map(([channel, acc]) => ({ channel, label: SALE_CHANNEL_LABEL[channel] ?? channel, ...acc }))
     .sort((a, b) => b.pedidos - a.pedidos);
 
-  const recentes = vendasHoje.slice(0, 30).map((v) => ({
-    id: v.id,
-    dateTime: v.dateTime.toISOString(),
-    valorTotal: v.valorTotal,
-    channel: v.channel,
-    channelLabel: SALE_CHANNEL_LABEL[v.channel] ?? v.channel,
-    platform: v.platform,
-    platformLabel: SALE_PLATFORM_LABEL[v.platform] ?? v.platform,
-    formaPagamento: v.formaPagamento,
-  }));
+  // A coluna "Pedido" do painel público é ordenada só pelo número do pedido
+  // (saleNumber), não por horário — pedidos sem número (ex.: sincronizados
+  // antes desse campo existir) vão para o final.
+  const recentes = [...vendasHoje]
+    .sort((a, b) => (b.saleNumber ?? -1) - (a.saleNumber ?? -1))
+    .slice(0, 30)
+    .map((v) => ({
+      id: v.id,
+      saleNumber: v.saleNumber,
+      customerName: v.customerName,
+      district: v.district,
+      dateTime: v.dateTime.toISOString(),
+      valorTotal: v.valorTotal,
+      channel: v.channel,
+      channelLabel: SALE_CHANNEL_LABEL[v.channel] ?? v.channel,
+      platform: v.platform,
+      platformLabel: SALE_PLATFORM_LABEL[v.platform] ?? v.platform,
+      formaPagamento: v.formaPagamento,
+    }));
 
   return {
     syncedAt: now.toISOString(),
