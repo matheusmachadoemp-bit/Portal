@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { href: "/portal/vendas", label: "Visão geral" },
+  { href: "/portal/vendas/painel-ao-vivo", label: "Painel ao Vivo" },
   { href: "/portal/vendas/lancamentos", label: "Lançamentos" },
   { href: "/portal/vendas/itens-vendidos", label: "Curva ABC" },
   { href: "/portal/vendas/garcons", label: "Desempenho por Garçom" },

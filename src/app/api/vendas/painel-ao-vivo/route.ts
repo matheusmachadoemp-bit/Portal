@@ -1,0 +1,114 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { syncEmpresaSaiposSales } from "@/lib/saipos-sync";
+import { SALE_CHANNEL_LABEL, SALE_PLATFORM_LABEL } from "@/lib/vendas-analytics";
+import type { SaleChannel } from "@prisma/client";
+
+// Não vale a pena reconsultar a API da Saipos a cada poll do navegador (a
+// tela atualiza a cada 15s); resincroniza no máximo 1x por minuto por loja.
+const MIN_RESYNC_INTERVAL_MS = 60_000;
+
+function startOfDayLocal(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+
+  const empresaIds = empresaIdsForContext(ctx);
+  const empresas = await prisma.empresa.findMany({
+    where: { id: { in: empresaIds } },
+    select: { id: true, saiposApiToken: true, saiposSyncEnabled: true, saiposLastSyncAt: true },
+  });
+
+  const integradas = empresas.filter((e) => e.saiposApiToken && e.saiposSyncEnabled);
+
+  // Resincroniza (em segundo plano, sem travar a resposta em caso de erro) as
+  // vendas do dia para as lojas com integração Saipos ativa e que não foram
+  // sincronizadas nos últimos 60s.
+  const now = new Date();
+  await Promise.all(
+    integradas
+      .filter((e) => !e.saiposLastSyncAt || now.getTime() - e.saiposLastSyncAt.getTime() > MIN_RESYNC_INTERVAL_MS)
+      .map((e) =>
+        syncEmpresaSaiposSales(
+          { id: e.id, saiposApiToken: e.saiposApiToken },
+          { start: startOfDayLocal(now), end: now }
+        ).catch(() => null)
+      )
+  );
+
+  const hojeInicio = startOfDayLocal(now);
+
+  const [vendasHoje, entriesRecentes] = await Promise.all([
+    prisma.saiposSale.findMany({
+      where: { empresaId: { in: empresaIds }, shiftDate: { gte: hojeInicio }, cancelado: false },
+      orderBy: { dateTime: "desc" },
+      select: { id: true, dateTime: true, valorTotal: true, channel: true, platform: true, formaPagamento: true },
+    }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, periodType: "DIARIO" },
+      select: { date: true, pedidosDelivery: true, pedidosSalao: true, pedidosBalcao: true },
+    }),
+  ]);
+
+  const pedidosHoje = vendasHoje.length;
+  const faturamentoHoje = vendasHoje.reduce((sum, v) => sum + v.valorTotal, 0);
+  const ticketMedioHoje = pedidosHoje ? faturamentoHoje / pedidosHoje : 0;
+
+  const porDia = new Map<string, number>();
+  for (const entry of entriesRecentes) {
+    const key = entry.date.toISOString().slice(0, 10);
+    const total = entry.pedidosDelivery + entry.pedidosSalao + entry.pedidosBalcao;
+    porDia.set(key, (porDia.get(key) ?? 0) + total);
+  }
+  // O dia de hoje ainda não fechou no SalesEntry; usa a contagem ao vivo em vez do valor agregado.
+  porDia.set(hojeInicio.toISOString().slice(0, 10), pedidosHoje);
+
+  let recorde: { pedidos: number; date: string } | null = null;
+  for (const [date, pedidos] of porDia) {
+    if (!recorde || pedidos > recorde.pedidos) recorde = { pedidos, date };
+  }
+
+  const porCanalMap = new Map<SaleChannel, { pedidos: number; valor: number }>();
+  for (const v of vendasHoje) {
+    const acc = porCanalMap.get(v.channel) ?? { pedidos: 0, valor: 0 };
+    acc.pedidos += 1;
+    acc.valor += v.valorTotal;
+    porCanalMap.set(v.channel, acc);
+  }
+  const porCanal = Array.from(porCanalMap.entries())
+    .map(([channel, acc]) => ({ channel, label: SALE_CHANNEL_LABEL[channel] ?? channel, ...acc }))
+    .sort((a, b) => b.pedidos - a.pedidos);
+
+  const recentes = vendasHoje.slice(0, 30).map((v) => ({
+    id: v.id,
+    dateTime: v.dateTime.toISOString(),
+    valorTotal: v.valorTotal,
+    channel: v.channel,
+    channelLabel: SALE_CHANNEL_LABEL[v.channel] ?? v.channel,
+    platform: v.platform,
+    platformLabel: SALE_PLATFORM_LABEL[v.platform] ?? v.platform,
+    formaPagamento: v.formaPagamento,
+  }));
+
+  return NextResponse.json({
+    syncedAt: now.toISOString(),
+    integrado: integradas.length > 0,
+    pedidosHoje,
+    faturamentoHoje,
+    ticketMedioHoje,
+    recorde,
+    porCanal,
+    recentes,
+    producaoDisponivel: false,
+  });
+}

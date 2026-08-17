@@ -1,0 +1,218 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { RefreshCw, ShoppingBag, Trophy, Receipt, Wallet, Lock } from "lucide-react";
+import { formatCurrency, formatNumber } from "@/lib/calc";
+import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
+
+const POLL_MS = 15_000;
+
+type Recente = {
+  id: string;
+  dateTime: string;
+  valorTotal: number;
+  channel: string;
+  channelLabel: string;
+  platform: string;
+  platformLabel: string;
+  formaPagamento: string;
+};
+
+type Payload = {
+  syncedAt: string;
+  integrado: boolean;
+  pedidosHoje: number;
+  faturamentoHoje: number;
+  ticketMedioHoje: number;
+  recorde: { pedidos: number; date: string } | null;
+  porCanal: { channel: string; label: string; pedidos: number; valor: number }[];
+  recentes: Recente[];
+  producaoDisponivel: boolean;
+};
+
+function formatHora(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+}
+
+function formatDataCurta(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function KpiCard({
+  icon,
+  label,
+  value,
+  hint,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  color: string;
+}) {
+  return (
+    <div className="nord-card p-4 flex flex-col gap-3 border-t-2" style={{ borderTopColor: color }}>
+      <div className="flex items-center gap-2">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22`, color }}>
+          {icon}
+        </div>
+        <span className="text-sm text-white truncate">{label}</span>
+      </div>
+      <span className="text-2xl font-semibold text-white tracking-tight">{value}</span>
+      {hint && <span className="text-xs text-nord-gray">{hint}</span>}
+    </div>
+  );
+}
+
+export function PainelAoVivoClient() {
+  const [data, setData] = useState<Payload | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const inFlight = useRef(false);
+
+  const load = useCallback(async (manual = false) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    if (manual) setRefreshing(true);
+    try {
+      const res = await fetch("/api/vendas/painel-ao-vivo", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Não foi possível atualizar o painel.");
+      setData(json);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Falha ao atualizar.");
+    } finally {
+      inFlight.current = false;
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const initial = setTimeout(() => load(), 0);
+    const interval = setInterval(() => load(), POLL_MS);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
+  }, [load]);
+
+  return (
+    <div className="space-y-6">
+      <div className="nord-card p-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-nord-success opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-nord-success" />
+          </span>
+          <span className="text-sm font-medium text-white">Ao vivo</span>
+          <span className="text-xs text-nord-gray">
+            {loading ? "carregando..." : data ? `Última atualização às ${formatHora(data.syncedAt)}` : ""}
+          </span>
+        </div>
+        <button
+          onClick={() => load(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+        >
+          <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} /> Atualizar agora
+        </button>
+      </div>
+
+      {error && (
+        <div className="nord-card p-4 border border-nord-danger/40 text-sm text-nord-danger">{error}</div>
+      )}
+
+      {data && !data.integrado && (
+        <div className="nord-card p-4 text-sm text-nord-gray">
+          Nenhuma loja com integração Saipos ativa no momento — os números abaixo refletem a última sincronização
+          disponível. Configure em <span className="text-white">Configurações → Integração Saipos</span>.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard icon={<ShoppingBag size={20} />} label="Pedidos hoje" value={data ? formatNumber(data.pedidosHoje) : "—"} color="#1464F4" />
+        <KpiCard
+          icon={<Trophy size={20} />}
+          label="Recorde de pedidos"
+          value={data?.recorde ? formatNumber(data.recorde.pedidos) : "—"}
+          hint={data?.recorde ? `em ${formatDataCurta(data.recorde.date)}` : undefined}
+          color="#f59e0b"
+        />
+        <KpiCard icon={<Receipt size={20} />} label="Ticket médio hoje" value={data ? formatCurrency(data.ticketMedioHoje) : "—"} color="#22c55e" />
+        <KpiCard icon={<Wallet size={20} />} label="Faturamento hoje" value={data ? formatCurrency(data.faturamentoHoje) : "—"} color="#a855f7" />
+      </div>
+
+      <div className="nord-card p-4 border border-dashed border-nord-border">
+        <div className="flex items-center gap-2 mb-1">
+          <Lock size={14} className="text-nord-gray" />
+          <h3 className="text-sm font-medium text-white">Em produção · Atrasados · Tempo médio de preparo</h3>
+        </div>
+        <p className="text-xs text-nord-gray">
+          Esses indicadores dependem do status de cozinha (KDS) da Saipos, que ainda não está integrado ao Portal —
+          o token atual só traz vendas já fechadas. Assim que a integração de status de pedido for liberada pela
+          Saipos, esses cards passam a mostrar dados reais aqui.
+        </p>
+      </div>
+
+      <div className="nord-card p-4">
+        <h3 className="text-white font-medium text-sm mb-4">Vendas por canal (hoje)</h3>
+        {data && data.porCanal.length === 0 && <p className="text-sm text-nord-gray">Nenhum pedido registrado hoje ainda.</p>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {data?.porCanal.map((c) => (
+            <div key={c.channel} className="rounded-lg border border-nord-border p-3">
+              <p className="text-xs text-nord-gray mb-1">{c.label}</p>
+              <p className="text-lg font-semibold text-white">{formatNumber(c.pedidos)} pedidos</p>
+              <p className="text-xs text-nord-gray">{formatCurrency(c.valor)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="nord-card p-4">
+        <h3 className="text-white font-medium text-sm mb-4">Pedidos recentes (hoje)</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                <th className="pb-2 pr-4">Horário</th>
+                <th className="pb-2 pr-4">Canal</th>
+                <th className="pb-2 pr-4">Plataforma</th>
+                <th className="pb-2 pr-4">Pagamento</th>
+                <th className="pb-2 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data?.recentes.map((r) => (
+                <tr key={r.id} className="border-b border-nord-border/50">
+                  <td className="py-2 pr-4 text-white">{formatHora(r.dateTime)}</td>
+                  <td className="py-2 pr-4 text-nord-gray">{r.channelLabel}</td>
+                  <td className="py-2 pr-4 text-nord-gray">{r.platformLabel}</td>
+                  <td className="py-2 pr-4 text-nord-gray">{PAYMENT_METHOD_LABEL[r.formaPagamento] ?? r.formaPagamento}</td>
+                  <td className="py-2 text-right text-white">{formatCurrency(r.valorTotal)}</td>
+                </tr>
+              ))}
+              {data && data.recentes.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-nord-gray">
+                    Nenhum pedido registrado hoje ainda.
+                  </td>
+                </tr>
+              )}
+              {!data && !error && (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-nord-gray">
+                    Carregando...
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
