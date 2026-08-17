@@ -7,10 +7,13 @@ import type { SaleChannel } from "@prisma/client";
 // tela atualiza a cada 15s); resincroniza no máximo 1x por minuto por loja.
 const MIN_RESYNC_INTERVAL_MS = 60_000;
 
-function startOfDayLocal(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+// O servidor roda em UTC, mas o "dia" da loja segue o horário de Brasília
+// (America/Sao_Paulo, UTC-3) — usar meia-noite em UTC como início do dia
+// exclui pedidos do turno da noite (que já viraram "amanhã" em UTC a partir
+// das 21h de Brasília, mas ainda são "hoje" para a Saipos/loja).
+function hojeShiftDateBoundary(date: Date): Date {
+  const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(date);
+  return new Date(`${ymd}T00:00:00.000Z`);
 }
 
 export type PainelAoVivoPayload = {
@@ -55,12 +58,12 @@ export async function computePainelAoVivo(empresaIds: string[]): Promise<PainelA
       .map((e) =>
         syncEmpresaSaiposSales(
           { id: e.id, saiposApiToken: e.saiposApiToken },
-          { start: startOfDayLocal(now), end: now }
+          { start: hojeShiftDateBoundary(now), end: now }
         ).catch(() => null)
       )
   );
 
-  const hojeInicio = startOfDayLocal(now);
+  const hojeInicio = hojeShiftDateBoundary(now);
 
   const [vendasHoje, entriesRecentes] = await Promise.all([
     prisma.saiposSale.findMany({
