@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
 
 const DEFAULT_ORDER = [
   "inicio",
@@ -63,5 +65,6 @@ export async function POST() {
     }
   }
 
+  revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ ok: true });
 }

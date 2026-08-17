@@ -4,16 +4,14 @@ import { Sidebar } from "@/components/sidebar/sidebar";
 import { redirect } from "next/navigation";
 import { getActiveEmpresaContext } from "@/lib/empresa";
 import { visibleModuleKeys } from "@/lib/permissions";
+import { getMenuCategories } from "@/lib/menu-categories";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const [allCategories, empresaContext, dbUser] = await Promise.all([
-    prisma.category.findMany({
-      orderBy: { order: "asc" },
-      include: { subcategories: { orderBy: { order: "asc" } } },
-    }),
+    getMenuCategories(),
     getActiveEmpresaContext(),
     prisma.user.findUnique({
       where: { id: session.user.id },

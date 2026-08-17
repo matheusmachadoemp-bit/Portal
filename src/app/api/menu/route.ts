@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
 
 export async function GET() {
   const session = await auth();
@@ -45,5 +47,6 @@ export async function POST(req: Request) {
     },
   });
 
+  revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ category });
 }

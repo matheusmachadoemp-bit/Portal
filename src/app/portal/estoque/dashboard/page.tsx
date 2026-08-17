@@ -24,10 +24,16 @@ export default async function EstoqueDashboardPage() {
         ? ctx.empresas.reduce((s, e) => s + e.metaCmvPercent, 0) / ctx.empresas.length
         : 30;
 
-  const [ingredients, movements, products, losses, purchases, pendingCounts, divergenciasAbertas] = await Promise.all([
+  // valorEstoqueEm() só olha até WEEKS_SERIE semanas atrás (a mais antiga
+  // usada na série do gráfico); antes disso ela já cai no fallback de usar
+  // o estoque atual do ingrediente. Não precisamos buscar o histórico
+  // completo de movimentações, só essa janela (com folga).
+  const movementsSince = subDays(now, WEEKS_SERIE * 7 + 7);
+
+  const [ingredients, movements, products, losses, purchases, pendingCounts, divergenciasAbertas, salesEntries] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
     prisma.stockMovement.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, createdAt: { gte: movementsSince } },
       include: { ingredient: { select: { id: true, name: true, unidade: true, estoqueMinimo: true } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -39,6 +45,9 @@ export default async function EstoqueDashboardPage() {
     prisma.purchase.findMany({ where: { empresaId: { in: empresaIds }, data: { gte: since } }, include: { items: true } }),
     prisma.stockCount.count({ where: { empresaId: { in: empresaIds }, status: { in: ["RASCUNHO", "EM_ANDAMENTO"] } } }),
     prisma.stockCountItem.count({ where: { status: "DIVERGENCIA", justificativa: null, count: { empresaId: { in: empresaIds } } } }),
+    prisma.salesEntry.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: startOfWeek(subWeeks(now, WEEKS_SERIE), { weekStartsOn: 1 }) } },
+    }),
   ]);
 
   const movementsInPeriod = movements.filter((m) => m.createdAt >= since);
@@ -84,9 +93,9 @@ export default async function EstoqueDashboardPage() {
   // --- CMV: teórico (catálogo blended) x real (estoque inicial + compras - estoque final) x meta ---
   const productsWithCost = products.map((p) => ({ ...p, totalCost: productTotalCost(p.ingredients) }));
   const cmvTeoricoPercent = cmvTeoricoPercentCatalogo(productsWithCost);
-  const faturamentoNoPeriodo = await prisma.salesEntry
-    .findMany({ where: { empresaId: { in: empresaIds }, date: { gte: since } } })
-    .then((rows) => rows.reduce((sum, r) => sum + r.faturamentoDelivery + r.faturamentoSalao, 0));
+  const faturamentoNoPeriodo = salesEntries
+    .filter((r) => r.date >= since)
+    .reduce((sum, r) => sum + r.faturamentoDelivery + r.faturamentoSalao, 0);
 
   const estoqueInicial = valorEstoqueEm(ingredients, movements, since);
   const estoqueFinal = valorEstoqueEm(ingredients, movements, now);
@@ -100,9 +109,6 @@ export default async function EstoqueDashboardPage() {
   const valorCompras = purchases.reduce((sum, p) => sum + p.items.reduce((s, it) => s + it.valorTotal, 0), 0);
 
   // faturamento por semana (aproximado a partir das vendas diárias agregadas)
-  const salesEntries = await prisma.salesEntry.findMany({
-    where: { empresaId: { in: empresaIds }, date: { gte: startOfWeek(subWeeks(now, WEEKS_SERIE), { weekStartsOn: 1 }) } },
-  });
   const evolucaoCmv = Array.from({ length: WEEKS_SERIE }).map((_, idx) => {
     const weekStart = startOfWeek(subWeeks(now, WEEKS_SERIE - 1 - idx), { weekStartsOn: 1 });
     const weekEnd = idx === WEEKS_SERIE - 1 ? now : startOfWeek(subWeeks(now, WEEKS_SERIE - 2 - idx), { weekStartsOn: 1 });

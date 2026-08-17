@@ -38,22 +38,49 @@ export async function syncEmpresaMetaAdsInsights(
     return { ok: false, error: result.error };
   }
 
-  for (const row of result.rows) {
-    const data = toMetaAdsInsightData(empresa.id, row);
-    await prisma.metaAdsInsight.upsert({
-      where: {
-        empresaId_dateStart_dateStop_campaignId_publisherPlatform_platformPosition: {
-          empresaId: data.empresaId,
-          dateStart: data.dateStart,
-          dateStop: data.dateStop,
-          campaignId: data.campaignId,
-          publisherPlatform: data.publisherPlatform ?? "",
-          platformPosition: data.platformPosition ?? "",
-        },
-      },
-      create: data,
-      update: data,
+  const insightsData = result.rows.map((row) => toMetaAdsInsightData(empresa.id, row));
+
+  if (insightsData.length > 0) {
+    const compositeKey = (d: (typeof insightsData)[number]) =>
+      [new Date(d.dateStart).getTime(), new Date(d.dateStop).getTime(), d.campaignId, d.publisherPlatform ?? "", d.platformPosition ?? ""].join(
+        "|"
+      );
+
+    const existing = await prisma.metaAdsInsight.findMany({
+      where: { empresaId: empresa.id, dateStart: { gte: range.start, lte: range.end } },
+      select: { dateStart: true, dateStop: true, campaignId: true, publisherPlatform: true, platformPosition: true },
     });
+    const existingKeys = new Set(
+      existing.map((e) =>
+        [e.dateStart.getTime(), e.dateStop.getTime(), e.campaignId, e.publisherPlatform ?? "", e.platformPosition ?? ""].join("|")
+      )
+    );
+
+    const toCreate = insightsData.filter((d) => !existingKeys.has(compositeKey(d)));
+    const toUpdate = insightsData.filter((d) => existingKeys.has(compositeKey(d)));
+
+    if (toCreate.length > 0) {
+      await prisma.metaAdsInsight.createMany({ data: toCreate, skipDuplicates: true });
+    }
+    if (toUpdate.length > 0) {
+      await prisma.$transaction(
+        toUpdate.map((data) =>
+          prisma.metaAdsInsight.update({
+            where: {
+              empresaId_dateStart_dateStop_campaignId_publisherPlatform_platformPosition: {
+                empresaId: data.empresaId,
+                dateStart: data.dateStart,
+                dateStop: data.dateStop,
+                campaignId: data.campaignId,
+                publisherPlatform: data.publisherPlatform ?? "",
+                platformPosition: data.platformPosition ?? "",
+              },
+            },
+            data,
+          })
+        )
+      );
+    }
   }
 
   await syncMarketingEntryFromMetaAds(empresa.id, range);

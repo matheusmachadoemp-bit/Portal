@@ -38,14 +38,30 @@ export async function syncEmpresaSaiposSales(
     return { ok: false, error: result.error };
   }
 
-  for (const record of result.sales) {
-    if (isSaiposSaleCanceled(record)) continue;
-    const data = toSaiposSaleData(empresa.id, record);
-    await prisma.saiposSale.upsert({
-      where: { empresaId_saiposId: { empresaId: empresa.id, saiposId: data.saiposId } },
-      create: data,
-      update: data,
+  const salesData = result.sales.filter((r) => !isSaiposSaleCanceled(r)).map((r) => toSaiposSaleData(empresa.id, r));
+
+  if (salesData.length > 0) {
+    const existing = await prisma.saiposSale.findMany({
+      where: { empresaId: empresa.id, saiposId: { in: salesData.map((d) => d.saiposId) } },
+      select: { saiposId: true },
     });
+    const existingIds = new Set(existing.map((e) => e.saiposId));
+    const toCreate = salesData.filter((d) => !existingIds.has(d.saiposId));
+    const toUpdate = salesData.filter((d) => existingIds.has(d.saiposId));
+
+    if (toCreate.length > 0) {
+      await prisma.saiposSale.createMany({ data: toCreate, skipDuplicates: true });
+    }
+    if (toUpdate.length > 0) {
+      await prisma.$transaction(
+        toUpdate.map((data) =>
+          prisma.saiposSale.update({
+            where: { empresaId_saiposId: { empresaId: empresa.id, saiposId: data.saiposId } },
+            data,
+          })
+        )
+      );
+    }
   }
 
   await syncSalesEntriesFromSaipos(empresa.id, range);

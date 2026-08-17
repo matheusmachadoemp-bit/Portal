@@ -1,35 +1,51 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { isReativacao } from "@/lib/crm";
 
-export async function loadClientesCompletos(empresaIds: string[]) {
-  return prisma.cliente.findMany({
-    where: { empresaId: { in: empresaIds } },
-    select: {
-      id: true,
-      empresaId: true,
-      nome: true,
-      telefone: true,
-      whatsapp: true,
-      email: true,
-      dataNascimento: true,
-      endereco: true,
-      bairro: true,
-      cidade: true,
-      canalPreferido: true,
-      createdAt: true,
-      empresa: { select: { id: true, name: true, color: true } },
-      vendas: {
-        select: {
-          id: true,
-          dateTime: true,
-          valorTotal: true,
-          channel: true,
-          items: { select: { nome: true, categoria: true, quantidade: true } },
+// Consultada em ~8 telas do CRM (clientes, funil, segmentos, aniversariantes,
+// inteligência, relatórios, automações, nova campanha). Traz o histórico
+// completo de vendas de cada cliente (necessário: VIP, frequência média e
+// categoria favorita são métricas de vida inteira do cliente, não podem ser
+// cortadas por período). Cacheada por 60s para evitar recalcular a cada troca
+// de aba dentro do módulo — não usa tag/invalidação manual porque uma venda
+// nova em qualquer lugar do sistema deixaria a lógica de invalidação frágil;
+// uma janela curta de staleness é aceitável para essas métricas analíticas.
+const loadClientesCompletosCached = unstable_cache(
+  async (empresaIds: string[]) =>
+    prisma.cliente.findMany({
+      where: { empresaId: { in: empresaIds } },
+      select: {
+        id: true,
+        empresaId: true,
+        nome: true,
+        telefone: true,
+        whatsapp: true,
+        email: true,
+        dataNascimento: true,
+        endereco: true,
+        bairro: true,
+        cidade: true,
+        canalPreferido: true,
+        createdAt: true,
+        empresa: { select: { id: true, name: true, color: true } },
+        vendas: {
+          select: {
+            id: true,
+            dateTime: true,
+            valorTotal: true,
+            channel: true,
+            items: { select: { nome: true, categoria: true, quantidade: true } },
+          },
         },
       },
-    },
-    orderBy: { nome: "asc" },
-  });
+      orderBy: { nome: "asc" },
+    }),
+  ["crm-clientes-completos"],
+  { revalidate: 60 }
+);
+
+export async function loadClientesCompletos(empresaIds: string[]) {
+  return loadClientesCompletosCached([...empresaIds].sort());
 }
 
 export type ClienteCompleto = Awaited<ReturnType<typeof loadClientesCompletos>>[number];

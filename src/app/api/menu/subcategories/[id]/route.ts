@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
 
 async function checkAdmin() {
   const session = await auth();
@@ -25,6 +27,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     },
   });
 
+  revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ subcategory });
 }
 
@@ -42,5 +45,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.subcategory.delete({ where: { id } });
+  revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ ok: true });
 }
