@@ -53,44 +53,47 @@ function KpiCard({
   color: string;
 }) {
   return (
-    <div className="nord-card p-4 flex flex-col gap-3 border-t-2" style={{ borderTopColor: color }}>
+    <div className="nord-card p-5 flex flex-col gap-3 border-t-2" style={{ borderTopColor: color }}>
       <div className="flex items-center gap-2">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22`, color }}>
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22`, color }}>
           {icon}
         </div>
         <span className="text-sm text-white truncate">{label}</span>
       </div>
-      <span className="text-2xl font-semibold text-white tracking-tight">{value}</span>
+      <span className="text-3xl font-semibold text-white tracking-tight">{value}</span>
       {hint && <span className="text-xs text-nord-gray">{hint}</span>}
     </div>
   );
 }
 
-export function PainelAoVivoClient() {
+export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaKey: string; empresaName: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const inFlight = useRef(false);
 
-  const load = useCallback(async (manual = false) => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    if (manual) setRefreshing(true);
-    try {
-      const res = await fetch("/api/vendas/painel-ao-vivo", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Não foi possível atualizar o painel.");
-      setData(json);
-      setError("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Falha ao atualizar.");
-    } finally {
-      inFlight.current = false;
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (manual = false) => {
+      if (inFlight.current) return;
+      inFlight.current = true;
+      if (manual) setRefreshing(true);
+      try {
+        const res = await fetch(`/api/publico/painel-ao-vivo/${empresaKey}`, { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Não foi possível atualizar o painel.");
+        setData(json);
+        setError("");
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Falha ao atualizar.");
+      } finally {
+        inFlight.current = false;
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [empresaKey]
+  );
 
   useEffect(() => {
     const initial = setTimeout(() => load(), 0);
@@ -102,17 +105,19 @@ export function PainelAoVivoClient() {
   }, [load]);
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-nord-black p-6 space-y-6">
       <div className="nord-card p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
+        <div className="flex items-center gap-3">
+          <span className="relative flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-nord-success opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-nord-success" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-nord-success" />
           </span>
-          <span className="text-sm font-medium text-white">Ao vivo</span>
-          <span className="text-xs text-nord-gray">
-            {loading ? "carregando..." : data ? `Última atualização às ${formatHora(data.syncedAt)}` : ""}
-          </span>
+          <div>
+            <p className="text-sm font-semibold text-white">{empresaName} · Painel ao Vivo</p>
+            <p className="text-xs text-nord-gray">
+              {loading ? "carregando..." : data ? `Última atualização às ${formatHora(data.syncedAt)}` : ""}
+            </p>
+          </div>
         </div>
         <button
           onClick={() => load(true)}
@@ -122,28 +127,25 @@ export function PainelAoVivoClient() {
         </button>
       </div>
 
-      {error && (
-        <div className="nord-card p-4 border border-nord-danger/40 text-sm text-nord-danger">{error}</div>
-      )}
+      {error && <div className="nord-card p-4 border border-nord-danger/40 text-sm text-nord-danger">{error}</div>}
 
       {data && !data.integrado && (
         <div className="nord-card p-4 text-sm text-nord-gray">
-          Nenhuma loja com integração Saipos ativa no momento — os números abaixo refletem a última sincronização
-          disponível. Configure em <span className="text-white">Configurações → Integração Saipos</span>.
+          Nenhuma integração Saipos ativa no momento — os números abaixo refletem a última sincronização disponível.
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard icon={<ShoppingBag size={20} />} label="Pedidos hoje" value={data ? formatNumber(data.pedidosHoje) : "—"} color="#1464F4" />
+        <KpiCard icon={<ShoppingBag size={22} />} label="Pedidos hoje" value={data ? formatNumber(data.pedidosHoje) : "—"} color="#1464F4" />
         <KpiCard
-          icon={<Trophy size={20} />}
+          icon={<Trophy size={22} />}
           label="Recorde de pedidos"
           value={data?.recorde ? formatNumber(data.recorde.pedidos) : "—"}
           hint={data?.recorde ? `em ${formatDataCurta(data.recorde.date)}` : undefined}
           color="#f59e0b"
         />
-        <KpiCard icon={<Receipt size={20} />} label="Ticket médio hoje" value={data ? formatCurrency(data.ticketMedioHoje) : "—"} color="#22c55e" />
-        <KpiCard icon={<Wallet size={20} />} label="Faturamento hoje" value={data ? formatCurrency(data.faturamentoHoje) : "—"} color="#a855f7" />
+        <KpiCard icon={<Receipt size={22} />} label="Ticket médio hoje" value={data ? formatCurrency(data.ticketMedioHoje) : "—"} color="#22c55e" />
+        <KpiCard icon={<Wallet size={22} />} label="Faturamento hoje" value={data ? formatCurrency(data.faturamentoHoje) : "—"} color="#a855f7" />
       </div>
 
       <div className="nord-card p-4 border border-dashed border-nord-border">
@@ -152,9 +154,7 @@ export function PainelAoVivoClient() {
           <h3 className="text-sm font-medium text-white">Em produção · Atrasados · Tempo médio de preparo</h3>
         </div>
         <p className="text-xs text-nord-gray">
-          Esses indicadores dependem do status de cozinha (KDS) da Saipos, que ainda não está integrado ao Portal —
-          o token atual só traz vendas já fechadas. Assim que a integração de status de pedido for liberada pela
-          Saipos, esses cards passam a mostrar dados reais aqui.
+          Esses indicadores dependem do status de cozinha (KDS) da Saipos, ainda não integrado.
         </p>
       </div>
 

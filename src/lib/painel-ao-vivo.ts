@@ -1,7 +1,4 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { syncEmpresaSaiposSales } from "@/lib/saipos-sync";
 import { SALE_CHANNEL_LABEL, SALE_PLATFORM_LABEL } from "@/lib/vendas-analytics";
 import type { SaleChannel } from "@prisma/client";
@@ -16,14 +13,28 @@ function startOfDayLocal(date: Date): Date {
   return d;
 }
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export type PainelAoVivoPayload = {
+  syncedAt: string;
+  integrado: boolean;
+  pedidosHoje: number;
+  faturamentoHoje: number;
+  ticketMedioHoje: number;
+  recorde: { pedidos: number; date: string } | null;
+  porCanal: { channel: string; label: string; pedidos: number; valor: number }[];
+  recentes: {
+    id: string;
+    dateTime: string;
+    valorTotal: number;
+    channel: string;
+    channelLabel: string;
+    platform: string;
+    platformLabel: string;
+    formaPagamento: string;
+  }[];
+  producaoDisponivel: boolean;
+};
 
-  const ctx = await getActiveEmpresaContext();
-  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
-
-  const empresaIds = empresaIdsForContext(ctx);
+export async function computePainelAoVivo(empresaIds: string[]): Promise<PainelAoVivoPayload> {
   const empresas = await prisma.empresa.findMany({
     where: { id: { in: empresaIds } },
     select: { id: true, saiposApiToken: true, saiposSyncEnabled: true, saiposLastSyncAt: true },
@@ -100,7 +111,7 @@ export async function GET() {
     formaPagamento: v.formaPagamento,
   }));
 
-  return NextResponse.json({
+  return {
     syncedAt: now.toISOString(),
     integrado: integradas.length > 0,
     pedidosHoje,
@@ -110,5 +121,5 @@ export async function GET() {
     porCanal,
     recentes,
     producaoDisponivel: false,
-  });
+  };
 }
