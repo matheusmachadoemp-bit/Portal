@@ -7,13 +7,26 @@
 const BASE_URL = "https://integracao.cardapioweb.com/api/open_delivery";
 
 const TOKEN_PATH_CANDIDATES = [
-  "/v1/oauth/token",
   "/oauth/token",
+  "/v1/oauth/token",
   "/v1.5/authentication/v1.0/token",
   "/authentication/v1.0/token",
 ];
 
-const EVENTS_PATH_CANDIDATES = ["/v1/orders/events:polling", "/order/v1.5/events:polling", "/v1.5/events:polling", "/events:polling"];
+// O endpoint de token não usa prefixo de versão nesta conta, então a API de
+// pedidos provavelmente também não usa — tenta variações plausíveis (com/sem
+// "v1"/"v1.5", "order" no singular e plural) até achar a que responde certo.
+const EVENTS_PATH_CANDIDATES = [
+  "/orders/events:polling",
+  "/order/events:polling",
+  "/v1/order/events:polling",
+  "/v1.5/order/events:polling",
+  "/v1.5/orders/events:polling",
+  "/v1/orders/events:polling",
+  "/order/v1.5/events:polling",
+  "/v1.5/events:polling",
+  "/events:polling",
+];
 
 export type DiagnosticAttempt = { url: string; status: number | null; ok: boolean; bodySnippet: string; error?: string };
 
@@ -75,7 +88,9 @@ export async function diagnoseCardapioWebConnection(establishmentId: string, sec
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       eventsAttempts.push(attempt);
-      if (attempt.ok) break;
+      // Um 200 com HTML (ex.: a SPA pública caindo no fallback de rota) não
+      // conta como sucesso — só um corpo JSON de fato indica o endpoint certo.
+      if (attempt.ok && /^[[{]/.test(attempt.bodySnippet.trim())) break;
     }
   }
 
