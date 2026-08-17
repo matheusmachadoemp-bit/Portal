@@ -23,7 +23,11 @@ export async function GET(req: Request) {
       ...(from && to ? { dataVencimento: { gte: new Date(from), lte: new Date(to) } } : {}),
     },
     orderBy: { dataVencimento: "asc" },
-    include: { categoria: true, bankAccount: true, createdBy: { select: { name: true } }, empresa: true },
+    include: {
+      categoria: { select: { name: true } },
+      createdBy: { select: { name: true } },
+      empresa: { select: { name: true } },
+    },
   });
 
   return NextResponse.json({ payables });
@@ -53,10 +57,12 @@ export async function POST(req: Request) {
   const valor = Number(body.valor) || 0;
 
   const payable = await prisma.$transaction(async (tx) => {
-    const count = await tx.payable.count();
-    const created = await tx.payable.create({
+    // number vem do id sequencial autoincrementado pelo Postgres (sequence),
+    // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo
+    // número (condição de corrida real com o COUNT(*) anterior).
+    let created = await tx.payable.create({
       data: {
-        number: body.number || `CP-${String(count + 1).padStart(5, "0")}`,
+        number: body.number || "",
         fornecedor: body.fornecedor,
         descricao: body.descricao,
         categoriaId: body.categoriaId,
@@ -76,6 +82,13 @@ export async function POST(req: Request) {
         createdById: session.user.id,
       },
     });
+
+    if (!body.number) {
+      created = await tx.payable.update({
+        where: { id: created.id },
+        data: { number: `CP-${String(created.sequence).padStart(5, "0")}` },
+      });
+    }
 
     const delta = balanceDelta(-1, status, valor);
     if (delta && created.bankAccountId) {

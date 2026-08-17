@@ -1049,6 +1049,8 @@ model Occurrence {
   createdById      String
   createdBy        User             @relation("OccurrenceCreatedBy", fields: [createdById], references: [id])
   createdAt        DateTime         @default(now())
+
+  @@index([employeeId, date])
 }
 
 // ---------------------------------------------------------------------------
@@ -1081,6 +1083,7 @@ model EmployeeFinanceEntry {
   createdAt   DateTime      @default(now())
 
   @@index([employeeId])
+  @@index([empresaId, date])
 }
 
 // ---------------------------------------------------------------------------
@@ -1137,6 +1140,7 @@ model Vacation {
   createdAt               DateTime       @default(now())
 
   @@index([employeeId])
+  @@index([empresaId, periodoAquisitivoInicio])
 }
 
 // ---------------------------------------------------------------------------
@@ -1179,6 +1183,7 @@ model UniformDelivery {
   createdAt   DateTime        @default(now())
 
   @@index([employeeId])
+  @@index([empresaId, dataEntrega])
 }
 
 // ---------------------------------------------------------------------------
@@ -1219,6 +1224,7 @@ model EmployeeDocument {
   createdAt   DateTime         @default(now())
 
   @@index([employeeId])
+  @@index([empresaId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -1882,6 +1888,7 @@ model RecurringTemplate {
 
 model Payable {
   id                  String             @id @default(cuid())
+  sequence            Int                @default(autoincrement())
   number              String
   fornecedor          String
   descricao           String
@@ -1915,6 +1922,7 @@ model Payable {
 
 model Receivable {
   id                  String             @id @default(cuid())
+  sequence            Int                @default(autoincrement())
   number              String
   cliente             String
   descricao           String

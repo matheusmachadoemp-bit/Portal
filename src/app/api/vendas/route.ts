@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { subDays } from "date-fns";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -14,10 +15,15 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
+  // Sem período informado, limita aos últimos 90 dias em vez de trazer o
+  // histórico inteiro (mesmo padrão usado na carga inicial da página).
+  const dateFilter =
+    from && to ? { gte: new Date(from), lte: new Date(to) } : { gte: subDays(new Date(), 90) };
+
   const entries = await prisma.salesEntry.findMany({
     where: {
       empresaId: { in: empresaIdsForContext(ctx) },
-      ...(from && to ? { date: { gte: new Date(from), lte: new Date(to) } } : {}),
+      date: dateFilter,
     },
     orderBy: { date: "desc" },
     include: { createdBy: { select: { name: true } }, empresa: { select: { name: true, color: true } } },

@@ -105,8 +105,18 @@ export async function POST(req: Request) {
   const employees = await prisma.employee.findMany({ where: { empresaId: empresa.id } });
   const byName = new Map(employees.map((e) => [e.name.trim().toLowerCase(), e]));
 
-  let imported = 0;
   const errors: string[] = [];
+  const validEntries: {
+    employeeId: string;
+    date: Date;
+    entrada: string | null;
+    saidaAlmoco: string | null;
+    retornoAlmoco: string | null;
+    saida: string | null;
+    horasTrabalhadas: number;
+    atrasoMinutos: number;
+    falta: boolean;
+  }[] = [];
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -153,31 +163,56 @@ export async function POST(req: Request) {
       if (real !== null && real > padrao) atrasoMinutos = real - padrao;
     }
 
-    await prisma.timeEntry.upsert({
-      where: { employeeId_date: { employeeId, date } },
-      create: {
-        employeeId,
-        empresaId: empresa.id,
-        date,
-        entrada,
-        saidaAlmoco,
-        retornoAlmoco,
-        saida,
-        horasTrabalhadas,
-        atrasoMinutos,
-        falta: !entrada,
-      },
-      update: {
-        entrada,
-        saidaAlmoco,
-        retornoAlmoco,
-        saida,
-        horasTrabalhadas,
-        atrasoMinutos,
-        falta: !entrada,
-      },
+    validEntries.push({
+      employeeId,
+      date,
+      entrada,
+      saidaAlmoco,
+      retornoAlmoco,
+      saida,
+      horasTrabalhadas,
+      atrasoMinutos,
+      falta: !entrada,
     });
-    imported++;
+  }
+
+  let imported = 0;
+  if (validEntries.length > 0) {
+    const existing = await prisma.timeEntry.findMany({
+      where: { OR: validEntries.map((e) => ({ employeeId: e.employeeId, date: e.date })) },
+      select: { employeeId: true, date: true },
+    });
+    const existingKeys = new Set(existing.map((e) => `${e.employeeId}|${e.date.getTime()}`));
+    const keyOf = (e: (typeof validEntries)[number]) => `${e.employeeId}|${e.date.getTime()}`;
+
+    const toCreate = validEntries.filter((e) => !existingKeys.has(keyOf(e)));
+    const toUpdate = validEntries.filter((e) => existingKeys.has(keyOf(e)));
+
+    if (toCreate.length > 0) {
+      await prisma.timeEntry.createMany({
+        data: toCreate.map((e) => ({ ...e, empresaId: empresa.id })),
+        skipDuplicates: true,
+      });
+    }
+    if (toUpdate.length > 0) {
+      await prisma.$transaction(
+        toUpdate.map((e) =>
+          prisma.timeEntry.update({
+            where: { employeeId_date: { employeeId: e.employeeId, date: e.date } },
+            data: {
+              entrada: e.entrada,
+              saidaAlmoco: e.saidaAlmoco,
+              retornoAlmoco: e.retornoAlmoco,
+              saida: e.saida,
+              horasTrabalhadas: e.horasTrabalhadas,
+              atrasoMinutos: e.atrasoMinutos,
+              falta: e.falta,
+            },
+          })
+        )
+      );
+    }
+    imported = validEntries.length;
   }
 
   return NextResponse.json({ imported, errors });

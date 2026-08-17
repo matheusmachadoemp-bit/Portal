@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     prisma.bankTransaction.findMany({
       where,
       orderBy: { date: "desc" },
-      include: { bankAccount: true, import: { select: { fileName: true } } },
+      include: { bankAccount: { select: { name: true } }, import: { select: { fileName: true } } },
     }),
     prisma.bankTransaction.groupBy({
       by: ["direction", "status"],
