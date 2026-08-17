@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2, ArrowUp, ArrowDown, X } from "lucide-react";
-import { UniversityTabs } from "../university-tabs";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatMinutes } from "@/lib/university";
@@ -113,8 +112,6 @@ export function TracksClient({
 
   return (
     <div className="space-y-6">
-      <UniversityTabs isAdmin={isAdmin} />
-
       {isAdmin && (
         <div className="flex justify-end">
           <button

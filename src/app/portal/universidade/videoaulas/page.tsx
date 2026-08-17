@@ -2,17 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
-import { UniversityTabs } from "../university-tabs";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { PlayCircle } from "lucide-react";
 import Link from "next/link";
 import { ENROLLMENT_STATUS_OPTIONS } from "@/lib/university";
-import { canManageUsers } from "@/lib/permissions";
 
 export default async function VideoaulasPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const isAdmin = canManageUsers(session.user.role);
 
   const enrollments = await prisma.trainingEnrollment.findMany({
     where: { userId: session.user.id },
@@ -27,8 +24,6 @@ export default async function VideoaulasPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Videoaulas">
       <div className="space-y-6">
-        <UniversityTabs isAdmin={isAdmin} />
-
         <Section title="Continuar assistindo">
           {emAndamento.length === 0 ? (
             <p className="text-sm text-nord-gray text-center py-6">

@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
 import { upload } from "@vercel/blob/client";
-import { UniversityTabs } from "../university-tabs";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { LIBRARY_CATEGORY_OPTIONS } from "@/lib/university";
 
@@ -19,7 +18,7 @@ type LibraryItem = {
 
 const isImage = (url: string) => /\.(png|jpe?g|webp|gif)$/i.test(url);
 
-export function LibraryClient({ initialItems, isAdmin }: { initialItems: LibraryItem[]; isAdmin: boolean }) {
+export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] }) {
   const [items, setItems] = useState(initialItems);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -89,8 +88,6 @@ export function LibraryClient({ initialItems, isAdmin }: { initialItems: Library
 
   return (
     <div className="space-y-6">
-      <UniversityTabs isAdmin={isAdmin} />
-
       <div className="flex items-center gap-3 flex-wrap justify-between">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-nord-gray" />

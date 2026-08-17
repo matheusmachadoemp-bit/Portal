@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2, PlayCircle, Clock, Award } from "lucide-react";
-import { UniversityTabs } from "../university-tabs";
 import { CourseBuilderModal } from "../course-builder-modal";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
@@ -76,8 +75,6 @@ export function CoursesClient({
 
   return (
     <div className="space-y-6">
-      <UniversityTabs isAdmin={isAdmin} />
-
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <input

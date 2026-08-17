@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
-import { UniversityTabs } from "../university-tabs";
 import { Award } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -23,8 +22,6 @@ export default async function CertificadosPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Certificados">
       <div className="space-y-6">
-        <UniversityTabs isAdmin={isAdmin} />
-
         {certificates.length === 0 ? (
           <p className="text-sm text-nord-gray text-center py-8">Nenhum certificado emitido ainda.</p>
         ) : (

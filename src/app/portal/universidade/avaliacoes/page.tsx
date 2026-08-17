@@ -2,16 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
-import { UniversityTabs } from "../university-tabs";
 import { Section, Badge } from "@/components/ui/stat-card";
 import Link from "next/link";
 import { format } from "date-fns";
-import { canManageUsers } from "@/lib/permissions";
 
 export default async function AvaliacoesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const isAdmin = canManageUsers(session.user.role);
 
   const [attempts, pendingEnrollments] = await Promise.all([
     prisma.trainingAttempt.findMany({
@@ -34,8 +31,6 @@ export default async function AvaliacoesPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Avaliações">
       <div className="space-y-6">
-        <UniversityTabs isAdmin={isAdmin} />
-
         {pendingQuizzes.length > 0 && (
           <Section title="Avaliações pendentes">
             <div className="space-y-2">
