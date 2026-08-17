@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { RefreshCw, FileText, Lock } from "lucide-react";
+import { RefreshCw, ClipboardList, ChefHat, Clock3, Timer, Trophy } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 
 const POLL_MS = 15_000;
+const SLA_STORAGE_KEY = "nord-painel-sla";
 
 type Recente = {
   id: string;
@@ -44,13 +45,32 @@ function formatDataHora(iso: string): string {
     .replace(",", " ·");
 }
 
-function KpiCard({ label, value, hint, color }: { label: string; value: string; hint?: string; color: string }) {
+function MetricCard({
+  icon,
+  label,
+  value,
+  hint,
+  color,
+  locked,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  color: string;
+  locked?: boolean;
+}) {
   return (
-    <div className="nord-card p-4 flex flex-col gap-2 border-t-2" style={{ borderTopColor: color }}>
-      <span className="text-[11px] font-semibold tracking-wide text-nord-gray uppercase">{label}</span>
-      <span className="text-3xl font-bold text-white tracking-tight">{value}</span>
-      {hint && <span className="text-xs text-nord-gray">{hint}</span>}
-    </div>
+    <article className={`nord-card p-4 flex items-center gap-3 ${locked ? "opacity-60" : ""}`}>
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22`, color }}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <span className="block text-[10px] font-semibold tracking-wide text-nord-gray uppercase truncate">{label}</span>
+        <strong className="block text-2xl font-bold text-white tracking-tight leading-tight">{value}</strong>
+        {hint && <span className="block text-[11px] text-nord-gray truncate">{hint}</span>}
+      </div>
+    </article>
   );
 }
 
@@ -59,6 +79,7 @@ export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaK
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [sla, setSla] = useState(20);
   const inFlight = useRef(false);
 
   const load = useCallback(
@@ -84,7 +105,11 @@ export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaK
   );
 
   useEffect(() => {
-    const initial = setTimeout(() => load(), 0);
+    const initial = setTimeout(() => {
+      const saved = Number(localStorage.getItem(SLA_STORAGE_KEY));
+      if (saved >= 5 && saved <= 180) setSla(saved);
+      load();
+    }, 0);
     const interval = setInterval(() => load(), POLL_MS);
     return () => {
       clearTimeout(initial);
@@ -92,34 +117,77 @@ export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaK
     };
   }, [load]);
 
+  function saveSla(value: number) {
+    const safe = Math.min(180, Math.max(5, value || 20));
+    setSla(safe);
+    localStorage.setItem(SLA_STORAGE_KEY, String(safe));
+  }
+
   return (
-    <div className="min-h-screen bg-nord-black p-5 space-y-5">
-      <header className="nord-card px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div className="min-h-screen bg-nord-black p-5 flex flex-col gap-5">
+      <header className="nord-card px-5 py-3 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Image src="/logo-nord.svg" alt="" width={110} height={30} />
-          <div className="w-px h-8 bg-nord-border" />
+          <Image src="/logo-nord.svg" alt="" width={100} height={28} />
+          <div className="w-px h-9 bg-nord-border hidden sm:block" />
           <div>
-            <p className="text-sm font-semibold text-white">{empresaName} · Painel ao Vivo</p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-nord-success opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-nord-success" />
+            <div className="flex items-center gap-2">
+              <strong className="text-white text-sm">Painel de Operação</strong>
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-nord-success/15 text-nord-success text-[10px] font-semibold">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-nord-success opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-nord-success" />
+                </span>
+                AO VIVO
               </span>
-              <span className="text-[11px] text-nord-success font-medium">AO VIVO</span>
-              <span className="text-[11px] text-nord-gray">
-                · {data?.integrado ? "Saipos conectada" : "aguardando integração Saipos"}
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                  data?.integrado ? "bg-nord-success/15 text-nord-success" : "bg-nord-warning/15 text-nord-warning"
+                }`}
+              >
+                {data?.integrado ? "Saipos conectada" : "Saipos desconectada"}
               </span>
             </div>
+            <p className="text-[11px] text-nord-gray mt-0.5">{empresaName}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
+        <div className="flex items-center gap-4">
+          <label className="flex flex-col items-start">
+            <span className="text-[10px] text-nord-gray uppercase tracking-wide mb-1">Meta SLA</span>
+            <div className="flex items-center gap-1 bg-nord-panel border border-nord-border rounded-lg px-1">
+              <button
+                type="button"
+                onClick={() => saveSla(sla - 1)}
+                className="w-6 h-6 flex items-center justify-center text-nord-gray hover:text-white"
+                aria-label="Diminuir meta"
+              >
+                −
+              </button>
+              <input
+                type="number"
+                min={5}
+                max={180}
+                value={sla}
+                onChange={(e) => saveSla(Number(e.target.value))}
+                className="w-10 bg-transparent text-center text-sm text-white outline-none"
+              />
+              <span className="text-[11px] text-nord-gray pr-1">min</span>
+              <button
+                type="button"
+                onClick={() => saveSla(sla + 1)}
+                className="w-6 h-6 flex items-center justify-center text-nord-gray hover:text-white"
+                aria-label="Aumentar meta"
+              >
+                +
+              </button>
+            </div>
+          </label>
+          <div>
             <p className="text-[10px] text-nord-gray uppercase tracking-wide">Última atualização</p>
             <p className="text-sm text-white font-medium">{loading ? "carregando..." : data ? formatDataHora(data.syncedAt) : "—"}</p>
           </div>
           <button
             onClick={() => load(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-nord-blue hover:bg-nord-blue-light text-white"
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-nord-blue hover:bg-nord-blue-light text-white shrink-0"
             aria-label="Atualizar agora"
           >
             <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
@@ -129,45 +197,35 @@ export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaK
 
       {error && <div className="nord-card p-4 border border-nord-danger/40 text-sm text-nord-danger">{error}</div>}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <KpiCard label="Pedidos hoje" value={data ? formatNumber(data.pedidosHoje) : "—"} color="#1464F4" />
-        <KpiCard label="Ticket médio" value={data ? formatCurrency(data.ticketMedioHoje) : "—"} color="#22c55e" />
-        <KpiCard label="Faturamento hoje" value={data ? formatCurrency(data.faturamentoHoje) : "—"} color="#a855f7" />
-        <KpiCard
-          label="Recorde de pedidos"
-          value={data?.recorde ? formatNumber(data.recorde.pedidos) : "—"}
-          hint={data?.recorde ? `maior volume registrado` : undefined}
-          color="#f59e0b"
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <MetricCard
+          icon={<ClipboardList size={20} />}
+          label="Pedidos hoje"
+          value={data ? formatNumber(data.pedidosHoje) : "—"}
+          hint={`${empresaName.split(" ")[0]} · turno atual`}
+          color="#1464F4"
         />
-        <div className="nord-card p-4 flex flex-col gap-2 border-t-2 border-dashed border-t-nord-border opacity-70">
-          <span className="text-[11px] font-semibold tracking-wide text-nord-gray uppercase flex items-center gap-1">
-            <Lock size={11} /> Em produção
-          </span>
-          <span className="text-lg font-medium text-nord-gray">Aguardando Saipos</span>
-        </div>
-      </div>
-
-      <div className="nord-card p-4 border border-dashed border-nord-border">
-        <div className="flex items-center gap-2 mb-1">
-          <Lock size={14} className="text-nord-gray" />
-          <h3 className="text-sm font-medium text-white">Em produção · Atrasados · Tempo médio de preparo</h3>
-        </div>
-        <p className="text-xs text-nord-gray">
-          Esses indicadores dependem do status de cozinha (KDS) da Saipos, que ainda não está liberado para este
-          Portal — assim que o acesso for concedido, esses cards passam a mostrar dados reais.
-        </p>
+        <MetricCard icon={<ChefHat size={20} />} label="Em produção" value="—" hint="aguardando Saipos" color="#22d3ee" locked />
+        <MetricCard icon={<Clock3 size={20} />} label="Atrasados" value="—" hint={`acima de ${sla} min`} color="#ef4444" locked />
+        <MetricCard icon={<Timer size={20} />} label="Tempo médio" value="—" hint="aguardando Saipos" color="#a855f7" locked />
+        <MetricCard
+          icon={<Trophy size={20} />}
+          label="Recorde pedidos"
+          value={data?.recorde ? formatNumber(data.recorde.pedidos) : "—"}
+          hint="maior volume registrado"
+          color="#22c55e"
+        />
       </div>
 
       <div className="nord-card p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <FileText size={15} className="text-nord-gray" />
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-white font-medium text-sm">Pedidos de hoje</h3>
-          <span className="text-xs text-nord-gray">(ordenado por número do pedido)</span>
+          <span className="text-[11px] text-nord-gray">ordenado por número do pedido</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-nord-gray border-b border-nord-border uppercase tracking-wide">
+              <tr className="text-left text-[11px] text-nord-gray border-b border-nord-border uppercase tracking-wide">
                 <th className="pb-2 pr-4">Pedido</th>
                 <th className="pb-2 pr-4">Horário</th>
                 <th className="pb-2 pr-4">Cliente</th>
@@ -182,6 +240,7 @@ export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaK
                 <tr key={r.id} className="border-b border-nord-border/50">
                   <td className="py-2.5 pr-4">
                     <strong className="text-white">{r.saleNumber ? `#${r.saleNumber}` : "—"}</strong>
+                    <span className="block text-[10px] text-nord-gray">ID {r.id.slice(-6)}</span>
                   </td>
                   <td className="py-2.5 pr-4 text-white">{formatHora(r.dateTime)}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{r.customerName || "Consumidor não identificado"}</td>
@@ -224,7 +283,24 @@ export function PainelAoVivoPublicClient({ empresaKey, empresaName }: { empresaK
         </div>
       </div>
 
-      <p className="text-center text-[11px] text-nord-gray">Atualização automática a cada 15 segundos · Portal Nord</p>
+      <footer className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-nord-gray">
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-nord-success inline-block" /> Atualização automática a cada 15 segundos
+        </span>
+        <span className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-nord-success inline-block" /> Normal
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-nord-warning inline-block" /> Atenção
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-nord-danger inline-block" /> Atrasado
+          </span>
+          <span className="text-nord-gray/60">(ativa quando a integração de status chegar)</span>
+        </span>
+        <span>Portal Nord · Painel de Operação</span>
+      </footer>
     </div>
   );
 }
