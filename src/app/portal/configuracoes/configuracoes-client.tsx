@@ -170,6 +170,12 @@ export function ConfiguracoesClient({
                 Conecta o Portal à API de Dados da Saipos para importar vendas automaticamente
                 (endpoint <code>search_sales</code>). O token é armazenado de forma criptografada.
               </p>
+              <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2 mb-4">
+                A própria Saipos informa que a API de Dados pode ter atraso de até 1 dia (D+1) na
+                consolidação das vendas em horários de pico — os números podem não refletir o minuto a
+                minuto. &ldquo;Itens vendidos&rdquo; e &ldquo;Desempenho por garçom&rdquo; não são alimentados pela Saipos: essa
+                API não retorna o detalhamento por item nem o vínculo com o garçom da venda.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl">
                 <label className="block">
                   <span className="block text-xs text-nord-gray mb-1">Token da API (Bearer)</span>

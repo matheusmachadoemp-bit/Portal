@@ -49,5 +49,14 @@ usuário e menu lateral reorganizável por arrastar e soltar.
   diário (`vercel.json` → `/api/integracoes/saipos/sync`, autenticado com o
   header `Authorization: Bearer $CRON_SECRET`). Ver `src/lib/saipos-client.ts`,
   `src/lib/saipos-sync.ts` e `src/lib/saipos-mapper.ts`.
+  - Cada venda gera um `Sale` (alimenta Vendas, Entrega, Pagamento, Por hora,
+    Lançamentos) e o total do dia é agregado em `SalesEntry`.
+  - **Limitações confirmadas com o suporte da Saipos**: a API de Dados pode
+    ter delay de até D+1 na consolidação (não é tempo real); o endpoint
+    `search_sales` não retorna itens por venda nem o garçom responsável, então
+    "Itens vendidos" e "Desempenho por garçom" não são alimentados pela
+    Saipos. A API de Pedidos (`order-api.saipos.com`) não resolve isso — ela
+    serve para uma aplicação própria *enviar* pedidos ao ecossistema Saipos,
+    não para ler pedidos já existentes na loja (iFood, PDV, etc.).
 - A página **Configurações** também lista os endpoints de webhook reservados
   para futuras integrações com iFood, 99Food, site próprio, Meta Ads e Google Ads.
