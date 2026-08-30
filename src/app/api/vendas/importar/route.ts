@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import * as XLSX from "xlsx";
-import type { SaleChannel } from "@prisma/client";
+import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
+
+const SALE_INSERT_CHUNK_SIZE = 1000;
+
+const PAYMENT_KEYWORDS: [string, PaymentMethod][] = [
+  ["pix", "PIX"],
+  ["dinheiro", "DINHEIRO"],
+  ["debito", "CARTAO_DEBITO"],
+  ["credito", "CARTAO_CREDITO"],
+  ["vale", "VOUCHER"],
+  ["voucher", "VOUCHER"],
+  ["transferencia", "TRANSFERENCIA"],
+  ["cheque", "CHEQUE"],
+];
 
 // Duas planilhas são aceitas:
 // 1) O relatório "Vendas por período" exportado direto do Saipos (uma linha
@@ -65,6 +79,21 @@ function mapTipoPedidoToChannel(tipo: string): SaleChannel {
   return "BALCAO";
 }
 
+function mapCanalToPlatform(canal: string): SalePlatform {
+  const c = normalizeText(canal);
+  if (c.includes("ifood")) return "IFOOD";
+  if (c.includes("99")) return "FOOD99";
+  return "SITE_PROPRIO";
+}
+
+function mapPagamento(raw: string): PaymentMethod {
+  const first = normalizeText(String(raw).split(",")[0]);
+  for (const [keyword, method] of PAYMENT_KEYWORDS) {
+    if (first.includes(keyword)) return method;
+  }
+  return "OUTRO";
+}
+
 function parseDateFlexible(raw: string | number): Date | null {
   if (typeof raw === "number") {
     const parsed = XLSX.SSF.parse_date_code(raw);
@@ -92,6 +121,22 @@ function parseOrderDate(raw: string | number): Date | null {
     return new Date(Date.UTC(year, Number(br[2]) - 1, Number(br[1])));
   }
   return parseDateFlexible(raw);
+}
+
+/** Extrai data e hora completas de "Data da venda" (dd/mm/aaaa HH:MM) — usada no registro de cada venda. */
+function parseOrderDateTime(raw: string | number): Date | null {
+  if (typeof raw === "number") {
+    const parsed = XLSX.SSF.parse_date_code(raw);
+    if (!parsed) return null;
+    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H ?? 0, parsed.M ?? 0, parsed.S ?? 0));
+  }
+  const s = String(raw).trim();
+  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(s);
+  if (br) {
+    const year = br[3].length === 2 ? Number(`20${br[3]}`) : Number(br[3]);
+    return new Date(Date.UTC(year, Number(br[2]) - 1, Number(br[1]), Number(br[4]), Number(br[5]), Number(br[6] ?? 0)));
+  }
+  return parseOrderDate(raw);
 }
 
 function parseNumber(raw: string | number): number {
@@ -197,6 +242,26 @@ export async function POST(req: Request) {
   let canceladosIgnorados = 0;
   let linhasValidas = 0;
 
+  type SaleInsert = {
+    id: string;
+    empresaId: string;
+    dateTime: Date;
+    channel: SaleChannel;
+    platform: SalePlatform;
+    formaPagamento: PaymentMethod;
+    bairro: string | null;
+    valorTotal: number;
+    cancelado: boolean;
+    source: "IMPORTADO";
+    createdById: null;
+  };
+  type SaleItemInsert = { id: string; saleId: string; nome: string; quantidade: number; precoUnitario: number; faturamento: number };
+
+  const saleRows: SaleInsert[] = [];
+  const itemRows: SaleItemInsert[] = [];
+  let minDate: Date | null = null;
+  let maxDate: Date | null = null;
+
   function dayOf(date: Date): DayAggregate {
     const key = date.toISOString();
     const existing = byDay.get(key);
@@ -217,6 +282,8 @@ export async function POST(req: Request) {
         errors.push(`Linha ${i + 1}: data inválida ("${rawDate}").`);
         continue;
       }
+      if (!minDate || date < minDate) minDate = date;
+      if (!maxDate || date > maxDate) maxDate = date;
 
       const cancelado = columnMap.cancelado !== undefined && normalizeText(String(row[columnMap.cancelado])) === "s";
       if (cancelado) {
@@ -243,6 +310,34 @@ export async function POST(req: Request) {
       }
       agg.taxaServicoValor += taxaServico;
       linhasValidas++;
+
+      const dateTime = parseOrderDateTime(rawDate) ?? date;
+      const platform = columnMap.canalVenda !== undefined ? mapCanalToPlatform(String(row[columnMap.canalVenda] ?? "")) : "SITE_PROPRIO";
+      const formaPagamento = columnMap.pagamento !== undefined ? mapPagamento(String(row[columnMap.pagamento] ?? "")) : "OUTRO";
+      const bairro = channel === "DELIVERY" && columnMap.bairro !== undefined ? String(row[columnMap.bairro] ?? "").trim() || null : null;
+
+      const saleId = randomUUID();
+      saleRows.push({
+        id: saleId,
+        empresaId: empresa.id,
+        dateTime,
+        channel,
+        platform,
+        formaPagamento,
+        bairro,
+        valorTotal,
+        cancelado: false,
+        source: "IMPORTADO",
+        createdById: null,
+      });
+      itemRows.push({
+        id: randomUUID(),
+        saleId,
+        nome: "Venda importada (arquivo)",
+        quantidade: 1,
+        precoUnitario: valorTotal,
+        faturamento: valorTotal,
+      });
     }
   } else {
     for (let i = 1; i < rows.length; i++) {
@@ -310,6 +405,32 @@ export async function POST(req: Request) {
     }
   }
 
+  let vendasImportadas = 0;
+
+  if (isPerOrderFormat && saleRows.length > 0 && minDate && maxDate) {
+    const rangeStart = minDate;
+    const rangeEnd = new Date(maxDate.getTime() + 24 * 60 * 60 * 1000);
+
+    // Substitui as vendas detalhadas importadas anteriormente para o mesmo
+    // período (mesma lógica de "substituir" já usada no resumo diário acima).
+    // Só apaga vendas com origem "IMPORTADO" — lançamentos manuais não são
+    // tocados.
+    await prisma.sale.deleteMany({
+      where: { empresaId: empresa.id, source: "IMPORTADO", dateTime: { gte: rangeStart, lt: rangeEnd } },
+    });
+
+    for (let i = 0; i < saleRows.length; i += SALE_INSERT_CHUNK_SIZE) {
+      const saleChunk = saleRows.slice(i, i + SALE_INSERT_CHUNK_SIZE);
+      const saleIds = new Set(saleChunk.map((s) => s.id));
+      const itemChunk = itemRows.filter((it) => saleIds.has(it.saleId));
+      await prisma.$transaction(
+        [prisma.sale.createMany({ data: saleChunk }), prisma.saleItem.createMany({ data: itemChunk })],
+        { timeout: 30000 }
+      );
+    }
+    vendasImportadas = saleRows.length;
+  }
+
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,
@@ -317,11 +438,12 @@ export async function POST(req: Request) {
       action: "IMPORT",
       entityType: "SalesEntry",
       entityId: file.name,
-      after: JSON.stringify({ fileName: file.name, created, updated, linhasValidas, errors: errors.length }),
+      after: JSON.stringify({ fileName: file.name, created, updated, vendasImportadas, linhasValidas, errors: errors.length }),
     },
   });
 
   return NextResponse.json({
+    vendasImportadas,
     created,
     updated,
     errors,

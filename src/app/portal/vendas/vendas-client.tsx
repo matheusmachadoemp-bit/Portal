@@ -79,6 +79,7 @@ export function VendasClient({
     updated: number;
     errors: string[];
     canceladosIgnorados: number;
+    vendasImportadas: number;
   } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -225,6 +226,7 @@ export function VendasClient({
         updated: data.updated,
         errors: data.errors ?? [],
         canceladosIgnorados: data.canceladosIgnorados ?? 0,
+        vendasImportadas: data.vendasImportadas ?? 0,
       });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
@@ -576,13 +578,20 @@ export function VendasClient({
               da mesma loja.
             </p>
             <p>
-              O sistema soma o faturamento e os pedidos de cada dia a partir das colunas &quot;Tipo do
-              pedido&quot;, &quot;Data da venda&quot;, &quot;Total&quot; e &quot;Total taxa de serviço&quot;.
-              Vendas cancelas são ignoradas.
+              Além do resumo diário (faturamento, pedidos), cada venda do arquivo também é gravada individualmente
+              — por isso as telas de Formas de Pagamento, Área de Entrega, Vendas por Período, Vendas por Hora e
+              Acompanhamento de Vendas também passam a mostrar esses dados. Vendas canceladas são ignoradas.
             </p>
             <p>
-              Se já existir um lançamento salvo para um dia que está no arquivo, ele será{" "}
-              <span className="text-white">substituído</span> pelos dados importados.
+              <span className="text-amber-300">Limitação:</span> o relatório do Saipos não traz os itens de cada
+              venda (produtos e quantidades), só o valor total — por isso a tela de Itens Vendidos/Curva ABC vai
+              mostrar cada venda importada como um item genérico &quot;Venda importada (arquivo)&quot;, sem o
+              produto real.
+            </p>
+            <p>
+              Se já existir um dia ou vendas importadas anteriormente no mesmo período, eles serão{" "}
+              <span className="text-white">substituídos</span> pelos dados do novo arquivo (lançamentos feitos
+              manualmente não são afetados).
             </p>
           </div>
           <label className="block">
@@ -600,7 +609,7 @@ export function VendasClient({
             <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
               <p>
                 Importação concluída: {importResult.created} dia(s) criado(s) e {importResult.updated} dia(s)
-                atualizado(s).
+                atualizado(s), com {importResult.vendasImportadas} venda(s) detalhada(s) gravada(s).
               </p>
               {importResult.canceladosIgnorados > 0 && (
                 <p className="text-nord-gray">{importResult.canceladosIgnorados} venda(s) cancelada(s) no arquivo foram ignoradas.</p>
