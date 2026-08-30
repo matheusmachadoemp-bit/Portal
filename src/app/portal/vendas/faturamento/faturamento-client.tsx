@@ -103,6 +103,30 @@ export function FaturamentoClient({
       .finally(() => setLoading(false));
   }, [periodKey, customFrom, customTo, channel, platform, compareMode, compareOverride]);
 
+  // Atualiza os KPIs periodicamente para refletir novas vendas sincronizadas
+  // da Saipos sem exigir que o usuário recarregue a página.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (periodKey === "personalizado" && (!customFrom || !customTo)) return;
+      const params = new URLSearchParams({ key: periodKey, compareMode });
+      if (periodKey === "personalizado") {
+        params.set("from", customFrom);
+        params.set("to", customTo);
+      }
+      if (channel) params.set("channel", channel);
+      if (platform) params.set("platform", platform);
+      if (compareOverride) {
+        params.set("compareFrom", compareOverride.from);
+        params.set("compareTo", compareOverride.to);
+      }
+      fetch(`/api/vendas/faturamento?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data) => setSummary(data))
+        .catch(() => {});
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [periodKey, customFrom, customTo, channel, platform, compareMode, compareOverride]);
+
   function applyCompareOverride() {
     if (!compareFromInput || !compareToInput) return;
     setCompareOverride({ from: compareFromInput, to: compareToInput });

@@ -46,12 +46,16 @@ export async function GET(req: Request) {
   });
 
   const range = defaultRange();
-  const results = await Promise.all(
-    empresas.map(async (empresa) => ({
-      empresaId: empresa.id,
-      result: await syncEmpresaSaiposSales(empresa, range),
-    }))
+  const settled = await Promise.allSettled(
+    empresas.map((empresa) => syncEmpresaSaiposSales(empresa, range))
   );
+  const results = settled.map((outcome, i) => ({
+    empresaId: empresas[i].id,
+    result:
+      outcome.status === "fulfilled"
+        ? outcome.value
+        : { ok: false as const, error: outcome.reason instanceof Error ? outcome.reason.message : "Erro desconhecido." },
+  }));
 
   return NextResponse.json({ synced: results.length, results });
 }

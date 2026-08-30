@@ -55,8 +55,11 @@ export function mapSaiposPaymentMethod(record: SaiposSaleRecord): PaymentMethod 
   return "OUTRO";
 }
 
+const CANCELED_VALUES = new Set(["y", "s", "sim", "yes", "true", "1", "cancelado", "canceled", "cancelled"]);
+
 export function isSaiposSaleCanceled(record: SaiposSaleRecord): boolean {
-  return normalize(record.canceled) === "y" || normalize(record.canceled) === "s";
+  if (typeof record.canceled === "boolean") return record.canceled;
+  return CANCELED_VALUES.has(normalize(record.canceled));
 }
 
 export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {
@@ -71,5 +74,27 @@ export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {
     valorTotal: Number(record.total_amount ?? 0),
     cancelado: isSaiposSaleCanceled(record),
     raw: record as object,
+  };
+}
+
+/**
+ * Constrói os dados de um registro granular `Sale` a partir de uma venda da
+ * Saipos, para alimentar as telas de Entrega/Pagamento/Por-hora/Faturamento
+ * e Acompanhamento de Vendas, que leem da tabela `Sale` (não do agregado
+ * diário `SalesEntry`).
+ */
+export function toSaleData(empresaId: string, record: SaiposSaleRecord) {
+  return {
+    empresaId,
+    saiposSaleId: String(record.id_sale),
+    dateTime: new Date(record.created_at ?? record.shift_date),
+    channel: mapSaiposChannel(record),
+    platform: mapSaiposPlatform(record),
+    formaPagamento: mapSaiposPaymentMethod(record),
+    bairro: record.delivery?.district ?? null,
+    valorTotal: Number(record.total_amount ?? 0),
+    cancelado: isSaiposSaleCanceled(record),
+    source: "SAIPOS" as const,
+    createdById: null,
   };
 }
