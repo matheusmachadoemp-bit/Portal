@@ -55,9 +55,11 @@ const emptyForm = {
 export function VendasClient({
   initialEntries,
   canCreate = true,
+  empresaName,
 }: {
   initialEntries: SalesEntryDTO[];
   canCreate?: boolean;
+  empresaName?: string;
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [periodKey, setPeriodKey] = useState<PeriodKey>("mes");
@@ -72,7 +74,14 @@ export function VendasClient({
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    updated: number;
+    errors: string[];
+    canceladosIgnorados: number;
+    outraLojaIgnorados: number;
+    otherLojaNames: string[];
+  } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const { from, to, prevFrom, prevTo } = resolvePeriod(periodKey, {
@@ -213,7 +222,14 @@ export function VendasClient({
         setImportError(data.error ?? "Não foi possível importar o arquivo.");
         return;
       }
-      setImportResult({ created: data.created, updated: data.updated, errors: data.errors ?? [] });
+      setImportResult({
+        created: data.created,
+        updated: data.updated,
+        errors: data.errors ?? [],
+        canceladosIgnorados: data.canceladosIgnorados ?? 0,
+        outraLojaIgnorados: data.outraLojaIgnorados ?? 0,
+        otherLojaNames: data.otherLojaNames ?? [],
+      });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
       refresh();
@@ -551,20 +567,29 @@ export function VendasClient({
       >
         <div className="space-y-3 text-sm text-nord-gray">
           <p>
-            Use esta opção enquanto a sincronização automática com a Saipos não está disponível. Envie uma
-            planilha (.xlsx ou .csv) com o resumo de vendas por dia — o mesmo formato do botão{" "}
-            <span className="text-white">&quot;Excel/CSV&quot;</span> desta página.
+            Use esta opção enquanto a sincronização automática com a Saipos não está disponível. No Saipos, gere o
+            relatório <span className="text-white">&quot;Vendas por período&quot;</span> (uma linha por
+            pedido/comanda) e envie o arquivo aqui (.xlsx ou .csv).
           </p>
-          <div className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-xs">
-            <p className="text-white font-medium mb-1">Colunas que a planilha deve ter (a primeira linha é o cabeçalho):</p>
-            <ul className="list-disc list-inside space-y-0.5">
-              <li><span className="text-white">Data</span> (obrigatória) — formato dd/mm/aaaa</li>
-              <li>Faturamento Delivery e/ou Faturamento Salão</li>
-              <li>Pedidos Delivery, Pedidos Balcão e/ou Pedidos Salão</li>
-              <li>Mesas, Taxa Serviço, Meta e Observações (opcionais)</li>
-            </ul>
-            <p className="mt-1">
-              Se já existir um lançamento salvo para uma data que está no arquivo, ele será{" "}
+          <div className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-xs space-y-1.5">
+            <p className="text-white font-medium">Antes de exportar no Saipos:</p>
+            <p>
+              Filtre o relatório para <span className="text-white">esta loja</span> ({empresaName ?? "a loja selecionada no menu lateral"}) e para o
+              período que deseja importar — isso é importante: o Saipos só identifica a loja de cada venda quando
+              ela vem de um parceiro online (iFood, Cardápio Web, 99Food). Vendas de mesa e comanda feitas direto
+              no caixa <span className="text-white">não trazem o nome da loja no arquivo</span>, então o sistema
+              não tem como saber de qual loja são — ele assume que todas pertencem à loja selecionada aqui. Se o
+              arquivo tiver vendas de mais de uma loja misturadas, o faturamento de mesa/comanda pode ficar
+              somado na loja errada. Para vendas por parceiro (delivery/balcão), o sistema consegue identificar e
+              ignora automaticamente as de outra loja.
+            </p>
+            <p>
+              O sistema soma o faturamento e os pedidos de cada dia a partir das colunas &quot;Tipo do
+              pedido&quot;, &quot;Data da venda&quot;, &quot;Total&quot; e &quot;Total taxa de serviço&quot;.
+              Vendas cancelas são ignoradas.
+            </p>
+            <p>
+              Se já existir um lançamento salvo para um dia que está no arquivo, ele será{" "}
               <span className="text-white">substituído</span> pelos dados importados.
             </p>
           </div>
@@ -582,8 +607,25 @@ export function VendasClient({
           {importResult && (
             <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
               <p>
-                Importação concluída: {importResult.created} lançamento(s) criado(s) e {importResult.updated} atualizado(s).
+                Importação concluída: {importResult.created} dia(s) criado(s) e {importResult.updated} dia(s)
+                atualizado(s).
               </p>
+              {importResult.canceladosIgnorados > 0 && (
+                <p className="text-nord-gray">{importResult.canceladosIgnorados} venda(s) cancelada(s) no arquivo foram ignoradas.</p>
+              )}
+              {importResult.outraLojaIgnorados > 0 && (
+                <div className="text-amber-300">
+                  <p>
+                    {importResult.outraLojaIgnorados} venda(s) de delivery/balcão do arquivo eram de outra(s) loja(s) e
+                    foram ignoradas{importResult.otherLojaNames.length > 0 ? `: ${importResult.otherLojaNames.join(", ")}.` : "."}
+                  </p>
+                  <p className="mt-1">
+                    Como o arquivo tem mais de uma loja misturada, as vendas de mesa/comanda (que não trazem o
+                    nome da loja) podem ter incluído vendas de outra loja nesta importação. Se possível, refaça
+                    a exportação no Saipos filtrando só por esta loja e importe de novo para corrigir.
+                  </p>
+                </div>
+              )}
               {importResult.errors.length > 0 && (
                 <div className="text-amber-300">
                   <p>{importResult.errors.length} linha(s) ignorada(s):</p>
