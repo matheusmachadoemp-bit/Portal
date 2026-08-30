@@ -189,6 +189,7 @@ model Empresa {
   employees              Employee[]
   waiterSales            WaiterSaleEntry[]
   sales                  Sale[]
+  importedSaleItems      ImportedSaleItem[]
   clientes               Cliente[]
   customerNotes          CustomerNote[]
   crmSegments            CrmSegment[]
@@ -727,6 +728,31 @@ model SaleItem {
   faturamento   Float
 
   @@index([saleId])
+}
+
+// ---------------------------------------------------------------------------
+// ITENS VENDIDOS IMPORTADOS — relatório de produtos/sabores do Saipos
+// ("Itens e Opções") só traz um resumo agregado do período (sem hora, sem
+// pedido, sem forma de pagamento), então não faz sentido virar um SaleItem
+// preso a uma venda de verdade. Fica numa tabela própria, usada só pela tela
+// de Itens Vendidos / Curva ABC — não conta em nenhuma outra análise de
+// vendas (faturamento, pagamento, entrega, por hora, etc.).
+// ---------------------------------------------------------------------------
+
+model ImportedSaleItem {
+  id          String   @id @default(cuid())
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  nome        String
+  quantidade  Float
+  faturamento Float
+  periodFrom  DateTime
+  periodTo    DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([empresaId, periodFrom, periodTo])
 }
 
 // ---------------------------------------------------------------------------
@@ -1449,8 +1475,9 @@ model Product {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  ingredients ProductIngredient[]
-  saleItems   SaleItem[]
+  ingredients       ProductIngredient[]
+  saleItems         SaleItem[]
+  importedSaleItems ImportedSaleItem[]
 }
 
 model ProductIngredient {
