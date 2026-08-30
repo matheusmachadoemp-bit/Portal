@@ -10,9 +10,13 @@ export default async function ItensVendidosPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const since = subDays(new Date(), 30);
 
-  const [items, products] = await Promise.all([
+  const [items, importedItems, products] = await Promise.all([
     prisma.saleItem.findMany({
       where: { sale: { empresaId: { in: empresaIds }, dateTime: { gte: since } } },
+      select: { productId: true, nome: true, quantidade: true, faturamento: true },
+    }),
+    prisma.importedSaleItem.findMany({
+      where: { empresaId: { in: empresaIds }, periodTo: { gte: since } },
       select: { productId: true, nome: true, quantidade: true, faturamento: true },
     }),
     prisma.product.findMany({
@@ -24,7 +28,7 @@ export default async function ItensVendidosPage() {
   const costByProduct = new Map(products.map((p) => [p.id, productTotalCost(p.ingredients)]));
 
   const byKey = new Map<string, { nome: string; quantidade: number; faturamento: number; custo: number }>();
-  for (const item of items) {
+  for (const item of [...items, ...importedItems]) {
     const key = item.productId ?? item.nome;
     const custoUnitario = item.productId ? (costByProduct.get(item.productId) ?? 0) : 0;
     const cur = byKey.get(key) ?? { nome: item.nome, quantidade: 0, faturamento: 0, custo: 0 };
@@ -44,7 +48,7 @@ export default async function ItensVendidosPage() {
   return (
     <PageContainer title="Vendas" subtitle="Itens Vendidos — Curva ABC">
       <div className="space-y-6">
-        <ItensVendidosClient rows={rows} />
+        <ItensVendidosClient rows={rows} canCreate={ctx?.mode === "single"} />
       </div>
     </PageContainer>
   );
