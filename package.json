@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "DATABASE_URL=\"${DIRECT_URL:-$DATABASE_URL}\" prisma migrate deploy && next build",
+    "build": "bash scripts/migrate-deploy.sh && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
