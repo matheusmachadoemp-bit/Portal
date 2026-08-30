@@ -1,5 +1,4 @@
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { AcompanhamentoClient } from "./acompanhamento-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeAcompanhamento } from "@/lib/acompanhamento-analytics";
@@ -23,7 +22,6 @@ export default async function AcompanhamentoVendasPage() {
   return (
     <PageContainer title="Vendas" subtitle="Acompanhamento de Vendas">
       <div className="space-y-6">
-        <VendasTabs />
         <AcompanhamentoClient initialResult={result} initialFilters={{ fromA, toA, fromB, toB, turno: "", platform: "" }} />
       </div>
     </PageContainer>

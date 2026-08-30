@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { VendasTabs } from "../vendas-tabs";
 import { FaturamentoClient } from "./faturamento-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { buildHalfHourBuckets, computeFaturamentoSummary } from "@/lib/faturamento-analytics";
@@ -35,7 +34,6 @@ export default async function FaturamentoPage() {
   return (
     <PageContainer title="Vendas" subtitle="Faturamento">
       <div className="space-y-6">
-        <VendasTabs />
         <FaturamentoClient
           initialSummary={summary}
           initialPorHora={{ byHour, pico: [...byHour].sort((a, b) => b.faturamento - a.faturamento)[0] ?? null }}
