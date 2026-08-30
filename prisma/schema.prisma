@@ -356,8 +356,10 @@ model Sale {
   regiao         String?
   valorTotal     Float         @default(0)
   cancelado      Boolean       @default(false)
-  createdById    String
-  createdBy      User          @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  source         SalesEntrySource @default(MANUAL)
+  saiposSaleId   String?
+  createdById    String?
+  createdBy      User?         @relation("SaleCreatedBy", fields: [createdById], references: [id])
   createdAt      DateTime      @default(now())
 
   items SaleItem[]
