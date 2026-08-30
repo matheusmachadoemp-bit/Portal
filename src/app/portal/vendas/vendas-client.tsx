@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Download, FileText } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Plus, Pencil, Trash2, Download, FileText, Upload } from "lucide-react";
 import { PERIOD_OPTIONS, resolvePeriod, type PeriodKey } from "@/lib/periods";
 import { formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
 import { Section, Badge } from "@/components/ui/stat-card";
@@ -68,6 +68,12 @@ export function VendasClient({
   const [editing, setEditing] = useState<SalesEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const { from, to, prevFrom, prevTo } = resolvePeriod(periodKey, {
     from: customFrom,
@@ -183,6 +189,41 @@ export function VendasClient({
     refresh();
   }
 
+  function openImport() {
+    setImportFile(null);
+    setImportError(null);
+    setImportResult(null);
+    setShowImport(true);
+  }
+
+  async function submitImport() {
+    if (!importFile) {
+      setImportError("Selecione um arquivo .xlsx ou .csv antes de importar.");
+      return;
+    }
+    setImportLoading(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", importFile);
+      const res = await fetch("/api/vendas/importar", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportError(data.error ?? "Não foi possível importar o arquivo.");
+        return;
+      }
+      setImportResult({ created: data.created, updated: data.updated, errors: data.errors ?? [] });
+      setImportFile(null);
+      if (importInputRef.current) importInputRef.current.value = "";
+      refresh();
+    } catch {
+      setImportError("Falha ao enviar o arquivo. Verifique sua conexão e tente novamente.");
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
   function exportCsv() {
     const header = [
       "Data",
@@ -261,6 +302,14 @@ export function VendasClient({
           >
             <FileText size={13} /> PDF
           </button>
+          {canCreate && (
+            <button
+              onClick={openImport}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white"
+            >
+              <Upload size={13} /> Importar arquivo
+            </button>
+          )}
           {canCreate && (
             <button
               onClick={openNew}
@@ -353,6 +402,8 @@ export function VendasClient({
                   <td className="py-2 pr-4 text-nord-gray">
                     {e.source === "SAIPOS" ? (
                       <Badge tone="info">Saipos (automático)</Badge>
+                    ) : e.source === "IMPORTADO" ? (
+                      <Badge tone="info">Importado (arquivo)</Badge>
                     ) : (
                       e.createdBy?.name ?? "—"
                     )}
@@ -490,6 +541,68 @@ export function VendasClient({
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5"
         >
           Salvar lançamento
+        </button>
+      </Modal>
+
+      <Modal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        title="Importar arquivo de vendas"
+      >
+        <div className="space-y-3 text-sm text-nord-gray">
+          <p>
+            Use esta opção enquanto a sincronização automática com a Saipos não está disponível. Envie uma
+            planilha (.xlsx ou .csv) com o resumo de vendas por dia — o mesmo formato do botão{" "}
+            <span className="text-white">&quot;Excel/CSV&quot;</span> desta página.
+          </p>
+          <div className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-xs">
+            <p className="text-white font-medium mb-1">Colunas que a planilha deve ter (a primeira linha é o cabeçalho):</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li><span className="text-white">Data</span> (obrigatória) — formato dd/mm/aaaa</li>
+              <li>Faturamento Delivery e/ou Faturamento Salão</li>
+              <li>Pedidos Delivery, Pedidos Balcão e/ou Pedidos Salão</li>
+              <li>Mesas, Taxa Serviço, Meta e Observações (opcionais)</li>
+            </ul>
+            <p className="mt-1">
+              Se já existir um lançamento salvo para uma data que está no arquivo, ele será{" "}
+              <span className="text-white">substituído</span> pelos dados importados.
+            </p>
+          </div>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Arquivo (.xlsx ou .csv)</span>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+              className="input"
+            />
+          </label>
+          {importError && <p className="text-xs text-red-400">{importError}</p>}
+          {importResult && (
+            <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
+              <p>
+                Importação concluída: {importResult.created} lançamento(s) criado(s) e {importResult.updated} atualizado(s).
+              </p>
+              {importResult.errors.length > 0 && (
+                <div className="text-amber-300">
+                  <p>{importResult.errors.length} linha(s) ignorada(s):</p>
+                  <ul className="list-disc list-inside">
+                    {importResult.errors.slice(0, 5).map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={submitImport}
+          disabled={importLoading || !importFile}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {importLoading ? "Importando..." : "Importar"}
         </button>
       </Modal>
 
