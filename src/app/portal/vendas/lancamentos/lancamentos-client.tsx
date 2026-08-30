@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, Ban, RotateCcw } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
-import { PAYMENT_METHOD_LABEL, SALE_CHANNEL_LABEL, SALE_PAYMENT_METHODS } from "@/lib/vendas-analytics";
+import { PAYMENT_METHOD_LABEL, SALE_CHANNEL_LABEL, SALE_PAYMENT_METHODS, SALE_PLATFORM_LABEL } from "@/lib/vendas-analytics";
 
 type ProductOption = { id: string; name: string; category: string; precoVenda: number };
 type EmployeeOption = { id: string; name: string };
@@ -15,6 +15,7 @@ type SaleDTO = {
   id: string;
   dateTime: string;
   channel: string;
+  platform: string;
   formaPagamento: string;
   garcomId: string | null;
   garcomName: string | null;
@@ -22,6 +23,7 @@ type SaleDTO = {
   bairro: string | null;
   regiao: string | null;
   valorTotal: number;
+  cancelado: boolean;
   items: SaleItemDTO[];
 };
 
@@ -34,6 +36,7 @@ function newKey() {
 const emptyForm = {
   dateTime: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
   channel: "SALAO",
+  platform: "SITE_PROPRIO",
   formaPagamento: "PIX",
   garcomId: "",
   mesaNumero: "",
@@ -41,6 +44,7 @@ const emptyForm = {
   regiao: "",
   clienteNome: "",
   clienteTelefone: "",
+  cancelado: false,
 };
 
 export function LancamentosClient({
@@ -65,10 +69,11 @@ export function LancamentosClient({
     const res = await fetch("/api/vendas/lancamentos");
     const data = await res.json();
     setSales(
-      data.sales.map((s: { id: string; dateTime: string; channel: string; formaPagamento: string; garcomId: string | null; garcom: { name: string } | null; mesaNumero: string | null; bairro: string | null; regiao: string | null; valorTotal: number; items: SaleItemDTO[] }) => ({
+      data.sales.map((s: { id: string; dateTime: string; channel: string; platform: string; formaPagamento: string; garcomId: string | null; garcom: { name: string } | null; mesaNumero: string | null; bairro: string | null; regiao: string | null; valorTotal: number; cancelado: boolean; items: SaleItemDTO[] }) => ({
         id: s.id,
         dateTime: s.dateTime,
         channel: s.channel,
+        platform: s.platform,
         formaPagamento: s.formaPagamento,
         garcomId: s.garcomId,
         garcomName: s.garcom?.name ?? null,
@@ -76,9 +81,19 @@ export function LancamentosClient({
         bairro: s.bairro,
         regiao: s.regiao,
         valorTotal: s.valorTotal,
+        cancelado: s.cancelado,
         items: s.items,
       }))
     );
+  }
+
+  async function toggleCancelado(sale: SaleDTO) {
+    await fetch(`/api/vendas/lancamentos/${sale.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cancelado: !sale.cancelado }),
+    });
+    refresh();
   }
 
   function openNew() {
@@ -164,32 +179,50 @@ export function LancamentosClient({
               <th className="py-2 pr-4">Garçom</th>
               <th className="py-2 pr-4">Itens</th>
               <th className="py-2 pr-4">Total</th>
+              <th className="py-2 pr-4">Status</th>
               <th className="py-2 pr-4"></th>
             </tr>
           </thead>
           <tbody>
             {sales.map((s) => (
-              <tr key={s.id} className="border-b border-nord-border/50 hover:bg-white/5">
+              <tr key={s.id} className={`border-b border-nord-border/50 hover:bg-white/5 ${s.cancelado ? "opacity-60" : ""}`}>
                 <td className="py-2.5 pr-4 text-nord-gray">{format(new Date(s.dateTime), "dd/MM/yyyy HH:mm")}</td>
                 <td className="py-2.5 pr-4">
                   <Badge>{SALE_CHANNEL_LABEL[s.channel]}</Badge>
+                  {s.platform !== "SITE_PROPRIO" && (
+                    <span className="ml-1">
+                      <Badge tone="info">{SALE_PLATFORM_LABEL[s.platform]}</Badge>
+                    </span>
+                  )}
                 </td>
                 <td className="py-2.5 pr-4 text-nord-gray">{PAYMENT_METHOD_LABEL[s.formaPagamento]}</td>
                 <td className="py-2.5 pr-4 text-nord-gray">{s.garcomName ?? "-"}</td>
                 <td className="py-2.5 pr-4 text-nord-gray">{s.items.length}</td>
                 <td className="py-2.5 pr-4 text-white font-medium">{formatCurrency(s.valorTotal)}</td>
                 <td className="py-2.5 pr-4">
+                  <Badge tone={s.cancelado ? "danger" : "success"}>{s.cancelado ? "Cancelado" : "Concluída"}</Badge>
+                </td>
+                <td className="py-2.5 pr-4">
                   {canCreate && (
-                    <button onClick={() => setConfirmDeleteId(s.id)} className="text-nord-gray hover:text-red-400">
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleCancelado(s)}
+                        title={s.cancelado ? "Reativar venda" : "Marcar como cancelado"}
+                        className="text-nord-gray hover:text-white"
+                      >
+                        {s.cancelado ? <RotateCcw size={14} /> : <Ban size={14} />}
+                      </button>
+                      <button onClick={() => setConfirmDeleteId(s.id)} className="text-nord-gray hover:text-red-400">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>
             ))}
             {sales.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-nord-gray">
+                <td colSpan={8} className="py-6 text-center text-nord-gray">
                   Nenhuma venda lançada ainda.
                 </td>
               </tr>
@@ -223,6 +256,20 @@ export function LancamentosClient({
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Plataforma</span>
+            <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })} className="input">
+              {Object.entries(SALE_PLATFORM_LABEL).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 mt-1">
+            <input type="checkbox" checked={form.cancelado} onChange={(e) => setForm({ ...form, cancelado: e.target.checked })} />
+            <span className="text-xs text-nord-gray">Lançar já como cancelado</span>
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Garçom (opcional)</span>

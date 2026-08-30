@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { UniversityTabs } from "../university-tabs";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatMinutes } from "@/lib/university";
@@ -68,8 +67,6 @@ export function DashboardClient({
 
   return (
     <div className="space-y-6">
-      <UniversityTabs isAdmin={isAdmin} />
-
       <SortableStatCards
         storageKey="universidade-dashboard-colaboradores-kpi-order"
         className="grid grid-cols-2 md:grid-cols-4 gap-4"

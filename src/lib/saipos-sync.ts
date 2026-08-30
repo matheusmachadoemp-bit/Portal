@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
 import { fetchSaiposSales } from "@/lib/saipos-client";
-import { isSaiposSaleCanceled, toSaiposSaleData } from "@/lib/saipos-mapper";
+import { toSaiposSaleData } from "@/lib/saipos-mapper";
 import type { Empresa } from "@prisma/client";
 
 export type SaiposSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
@@ -38,7 +38,10 @@ export async function syncEmpresaSaiposSales(
     return { ok: false, error: result.error };
   }
 
-  const salesData = result.sales.filter((r) => !isSaiposSaleCanceled(r)).map((r) => toSaiposSaleData(empresa.id, r));
+  // Vendas canceladas são gravadas (não descartadas) para alimentar as
+  // telas de Acompanhamento de Vendas; ficam de fora dos agregados de
+  // faturamento em syncSalesEntriesFromSaipos abaixo.
+  const salesData = result.sales.map((r) => toSaiposSaleData(empresa.id, r));
 
   if (salesData.length > 0) {
     const existing = await prisma.saiposSale.findMany({
@@ -88,7 +91,7 @@ function startOfDayUtc(date: Date): Date {
  */
 async function syncSalesEntriesFromSaipos(empresaId: string, range: { start: Date; end: Date }) {
   const sales = await prisma.saiposSale.findMany({
-    where: { empresaId, shiftDate: { gte: startOfDayUtc(range.start), lte: range.end } },
+    where: { empresaId, shiftDate: { gte: startOfDayUtc(range.start), lte: range.end }, cancelado: false },
     select: { shiftDate: true, channel: true, valorTotal: true },
   });
 

@@ -1,15 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
 import { PageContainer } from "@/components/page-container";
-import { UniversityTabs } from "../university-tabs";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { levelForXp } from "@/lib/university";
-import { canManageUsers } from "@/lib/permissions";
 import { Trophy, Medal } from "lucide-react";
 
 export default async function RankingPage() {
-  const session = await auth();
-  const isAdmin = session ? canManageUsers(session.user.role) : false;
   const [xpByUser, certificatesByUser, hoursByUser] = await Promise.all([
     prisma.trainingXpEvent.groupBy({ by: ["userId"], _sum: { amount: true } }),
     prisma.trainingCertificate.groupBy({ by: ["userId"], _count: { id: true } }),
@@ -51,8 +46,6 @@ export default async function RankingPage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Ranking">
       <div className="space-y-6">
-        <UniversityTabs isAdmin={isAdmin} />
-
         {top3.length > 0 && (
           <Section title="Pódio do mês">
             <div className="flex items-end justify-center gap-4 pt-4">
