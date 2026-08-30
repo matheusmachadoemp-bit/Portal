@@ -7,9 +7,9 @@ export type SaiposSaleRecord = {
   shift_date: string;
   created_at: string;
   total_amount?: number;
-  canceled?: string;
+  canceled?: string | boolean;
   table_order?: unknown;
-  delivery?: { delivery_by?: string | null } | null;
+  delivery?: { delivery_by?: string | null; district?: string | null } | null;
   partner_sale?: { desc_partner_sale?: string | null } | null;
   payments?: { payment_amount: number; desc_store_payment_type?: string | null }[];
   [key: string]: unknown;
@@ -73,6 +73,13 @@ export async function fetchSaiposSales(
   return { ok: true, sales: allSales };
 }
 
+const BRASILIA_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * A Saipos espera as datas no horário local da loja (Brasília, UTC-3, sem
+ * horário de verão desde 2019), não em UTC — por isso o offset abaixo antes
+ * de formatar.
+ */
 function formatSaiposDate(date: Date): string {
-  return date.toISOString().slice(0, 19);
+  return new Date(date.getTime() - BRASILIA_OFFSET_MS).toISOString().slice(0, 19);
 }

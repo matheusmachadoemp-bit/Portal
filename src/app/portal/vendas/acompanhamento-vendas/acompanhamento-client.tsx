@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Bike, ShoppingBag, UtensilsCrossed, Ban } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
@@ -147,6 +147,13 @@ export function AcompanhamentoClient({ initialResult, initialFilters }: { initia
     setFilters(next);
     reload(next);
   }
+
+  // Atualiza os números periodicamente para refletir novas vendas
+  // sincronizadas da Saipos sem exigir que o usuário recarregue a página.
+  useEffect(() => {
+    const interval = setInterval(() => reload(filters), 60_000);
+    return () => clearInterval(interval);
+  }, [filters]);
 
   async function handleExport() {
     const { exportKpiReportToPdf } = await import("@/lib/pdf-export");
