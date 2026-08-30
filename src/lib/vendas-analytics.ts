@@ -8,10 +8,21 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   DOC: "DOC",
   TRANSFERENCIA: "Transferência",
   CHEQUE: "Cheque",
+  PAGO_ONLINE: "Pago Online",
+  FIADO: "Fiado",
   OUTRO: "Outros",
 };
 
-export const SALE_PAYMENT_METHODS = ["PIX", "DINHEIRO", "CARTAO_DEBITO", "CARTAO_CREDITO", "VOUCHER", "OUTRO"] as const;
+export const SALE_PAYMENT_METHODS = [
+  "PIX",
+  "DINHEIRO",
+  "CARTAO_DEBITO",
+  "CARTAO_CREDITO",
+  "VOUCHER",
+  "PAGO_ONLINE",
+  "FIADO",
+  "OUTRO",
+] as const;
 
 export const SALE_CHANNEL_LABEL: Record<string, string> = {
   SALAO: "Salão",

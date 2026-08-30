@@ -1785,6 +1785,8 @@ enum PaymentMethod {
   DOC
   TRANSFERENCIA
   CHEQUE
+  PAGO_ONLINE
+  FIADO
   OUTRO
 }
 

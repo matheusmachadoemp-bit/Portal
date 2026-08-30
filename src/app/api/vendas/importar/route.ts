@@ -8,6 +8,10 @@ import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
 
 const SALE_INSERT_CHUNK_SIZE = 1000;
 
+// Ordem importa: a primeira palavra-chave que bater na string normalizada
+// da forma de pagamento do arquivo é usada. Palavras-chave mais específicas
+// (pix, débito, crédito...) vêm antes das mais genéricas (online, fiado),
+// para que combinações como "Pago Online via Pix" caiam em PIX.
 const PAYMENT_KEYWORDS: [string, PaymentMethod][] = [
   ["pix", "PIX"],
   ["dinheiro", "DINHEIRO"],
@@ -17,6 +21,8 @@ const PAYMENT_KEYWORDS: [string, PaymentMethod][] = [
   ["voucher", "VOUCHER"],
   ["transferencia", "TRANSFERENCIA"],
   ["cheque", "CHEQUE"],
+  ["fiado", "FIADO"],
+  ["online", "PAGO_ONLINE"],
 ];
 
 // Duas planilhas são aceitas:
