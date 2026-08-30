@@ -61,6 +61,18 @@ export default async function ConfiguracoesPage() {
               }
             : null
         }
+        cardapioWeb={
+          ctx?.mode === "single"
+            ? {
+                establishmentId: ctx.empresa.cardapioWebEstablishmentId,
+                syncEnabled: ctx.empresa.cardapioWebSyncEnabled,
+                hasSecret: !!ctx.empresa.cardapioWebSecret,
+                lastSyncAt: ctx.empresa.cardapioWebLastSyncAt?.toISOString() ?? null,
+                lastTestAt: ctx.empresa.cardapioWebLastTestAt?.toISOString() ?? null,
+                lastTestResult: ctx.empresa.cardapioWebLastTestResult,
+              }
+            : null
+        }
       />
     </PageContainer>
   );

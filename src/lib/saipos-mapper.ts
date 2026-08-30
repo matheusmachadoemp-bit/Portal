@@ -63,6 +63,9 @@ export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {
   return {
     empresaId,
     saiposId: String(record.id_sale),
+    saleNumber: typeof record.sale_number === "number" ? record.sale_number : null,
+    customerName: record.customer?.name || null,
+    district: record.delivery?.district || null,
     shiftDate: new Date(record.shift_date),
     dateTime: new Date(record.created_at ?? record.shift_date),
     channel: mapSaiposChannel(record),

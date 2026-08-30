@@ -22,6 +22,7 @@ export function ConfiguracoesClient({
   empresaNome,
   saipos,
   metaAds,
+  cardapioWeb,
 }: {
   userName: string;
   userEmail: string;
@@ -38,6 +39,14 @@ export function ConfiguracoesClient({
     syncEnabled: boolean;
     hasToken: boolean;
     lastSyncAt: string | null;
+  } | null;
+  cardapioWeb: {
+    establishmentId: string | null;
+    syncEnabled: boolean;
+    hasSecret: boolean;
+    lastSyncAt: string | null;
+    lastTestAt: string | null;
+    lastTestResult: string | null;
   } | null;
 }) {
   const [state, formAction, pending] = useActionState(changePasswordAction, {});
@@ -121,6 +130,44 @@ export function ConfiguracoesClient({
     setMetaMessage(
       res.ok ? `Sincronização concluída: ${data.recordsSynced} registro(s) importado(s).` : data.error ?? "Falha ao sincronizar."
     );
+  }
+
+  const [cwEstablishmentId, setCwEstablishmentId] = useState(cardapioWeb?.establishmentId ?? "");
+  const [cwSecret, setCwSecret] = useState("");
+  const [cwSyncEnabled, setCwSyncEnabled] = useState(cardapioWeb?.syncEnabled ?? false);
+  const [cwHasSecret, setCwHasSecret] = useState(cardapioWeb?.hasSecret ?? false);
+  const [cwSaving, setCwSaving] = useState(false);
+  const [cwTesting, setCwTesting] = useState(false);
+  const [cwMessage, setCwMessage] = useState<string | null>(null);
+  const [cwTestResult, setCwTestResult] = useState<string | null>(cardapioWeb?.lastTestResult ?? null);
+
+  async function saveCardapioWebConfig() {
+    setCwSaving(true);
+    setCwMessage(null);
+    const res = await fetch("/api/configuracoes/cardapio-web", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ establishmentId: cwEstablishmentId, secret: cwSecret, syncEnabled: cwSyncEnabled }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCwSaving(false);
+    if (res.ok && cwSecret) setCwHasSecret(true);
+    setCwSecret("");
+    setCwMessage(res.ok ? "Configuração do Cardápio Web salva com sucesso." : data.error ?? "Não foi possível salvar.");
+  }
+
+  async function testCardapioWebNow() {
+    setCwTesting(true);
+    setCwMessage(null);
+    const res = await fetch("/api/integracoes/cardapio-web/test", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setCwTesting(false);
+    if (res.ok) {
+      setCwTestResult(JSON.stringify(data, null, 2));
+      setCwMessage("Teste concluído — veja o resultado detalhado abaixo.");
+    } else {
+      setCwMessage(data.error ?? "Falha ao testar a conexão.");
+    }
   }
 
   async function saveIfoodRate() {
@@ -360,6 +407,81 @@ export function ConfiguracoesClient({
                 )}
               </div>
               {metaMessage && <p className="text-xs text-emerald-400 mt-2">{metaMessage}</p>}
+            </>
+          )}
+        </Section>
+      )}
+
+      {isAdmin && (
+        <Section title="Integração Cardápio Web — status de pedidos (Open Delivery)">
+          {cardapioWeb === null ? (
+            <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+              Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+              configurar a integração com o Cardápio Web.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-nord-gray mb-4">
+                Conecta o Portal à API Open Delivery do Cardápio Web (Configurações → Integrações → API Open
+                Delivery, dentro do painel do Cardápio Web) para trazer o status de produção dos pedidos em tempo
+                real. O segredo é armazenado de forma criptografada. Essa integração ainda está em teste — use o
+                botão &quot;Testar conexão&quot; para verificar o resultado bruto antes de ativar.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl">
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Id do Estabelecimento</span>
+                  <input
+                    type="text"
+                    value={cwEstablishmentId}
+                    onChange={(e) => setCwEstablishmentId(e.target.value)}
+                    className="input"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Segredo do Estabelecimento</span>
+                  <input
+                    type="password"
+                    value={cwSecret}
+                    onChange={(e) => setCwSecret(e.target.value)}
+                    placeholder={cwHasSecret ? "•••••••• (configurado)" : "Cole o segredo aqui"}
+                    className="input"
+                  />
+                </label>
+                <label className="flex items-center gap-2 mt-5">
+                  <input type="checkbox" checked={cwSyncEnabled} onChange={(e) => setCwSyncEnabled(e.target.checked)} />
+                  <span className="text-xs text-nord-gray">Sincronização automática ativa</span>
+                </label>
+              </div>
+              <div className="flex items-center gap-3 mt-3">
+                <button
+                  onClick={saveCardapioWebConfig}
+                  disabled={cwSaving}
+                  className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                >
+                  {cwSaving ? "Salvando..." : "Salvar configuração"}
+                </button>
+                <button
+                  onClick={testCardapioWebNow}
+                  disabled={cwTesting || (!cwHasSecret && !cwSecret)}
+                  className="bg-nord-panel border border-nord-border hover:border-nord-blue disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                >
+                  {cwTesting ? "Testando..." : "Testar conexão"}
+                </button>
+                {cardapioWeb.lastTestAt && (
+                  <span className="text-xs text-nord-gray">
+                    Último teste: {format(new Date(cardapioWeb.lastTestAt), "dd/MM/yyyy HH:mm")}
+                  </span>
+                )}
+              </div>
+              {cwMessage && <p className="text-xs text-emerald-400 mt-2">{cwMessage}</p>}
+              {cwTestResult && (
+                <details className="mt-3" open>
+                  <summary className="text-xs text-nord-gray cursor-pointer">Resultado detalhado do teste</summary>
+                  <pre className="mt-2 text-[11px] text-nord-gray bg-nord-panel border border-nord-border rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+                    {cwTestResult}
+                  </pre>
+                </details>
+              )}
             </>
           )}
         </Section>
