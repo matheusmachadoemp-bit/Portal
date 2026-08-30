@@ -10,9 +10,9 @@ import crypto from "crypto";
 // blocking all future `prisma migrate deploy` runs (P3018). This route
 // clears that failed record, (re)applies the now-idempotent statements,
 // and records a clean success row with the exact checksum Prisma expects.
-// Delete this route after a single successful call. Reuses CRON_SECRET
-// (already configured in Vercel for the Saipos cron) as the access token,
-// instead of hardcoding a new secret in the repo.
+// Delete this route after a single successful call. Uses MIGRATION_FIX_TOKEN
+// (a plain-text env var the user adds temporarily to Preview+Production)
+// as the access token, instead of hardcoding a new secret in the repo.
 const MIGRATION_NAME = "20260830060000_sale_saipos_backfill";
 const MIGRATION_CHECKSUM = "ac0875717a7e15b78595bf3e1b02e27a0ce7e7f1e0f73babb1ab2ace129e072b";
 
@@ -24,7 +24,7 @@ const STATEMENTS = [
 ];
 
 async function run(token: string | null) {
-  if (!process.env.CRON_SECRET || token !== process.env.CRON_SECRET) {
+  if (!process.env.MIGRATION_FIX_TOKEN || token !== process.env.MIGRATION_FIX_TOKEN) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
