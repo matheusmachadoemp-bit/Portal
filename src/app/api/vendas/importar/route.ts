@@ -20,8 +20,6 @@ const HEADER_ALIASES: Record<string, string> = {
   bairro: "bairro",
   total: "totalVenda",
   totaltaxadeservico: "taxaServico",
-  codigodaloja: "codigoLoja",
-  nomedaloja: "nomeLoja",
   // Formato resumo diário
   data: "date",
   dia: "date",
@@ -196,10 +194,7 @@ export async function POST(req: Request) {
 
   const errors: string[] = [];
   const byDay = new Map<string, DayAggregate>();
-  const empresaNameNormalized = normalizeText(empresa.name);
-  const otherLojaNames = new Set<string>();
   let canceladosIgnorados = 0;
-  let outraLojaIgnorados = 0;
   let linhasValidas = 0;
 
   function dayOf(date: Date): DayAggregate {
@@ -227,19 +222,6 @@ export async function POST(req: Request) {
       if (cancelado) {
         canceladosIgnorados++;
         continue;
-      }
-
-      const codigoLoja = columnMap.codigoLoja !== undefined ? String(row[columnMap.codigoLoja] ?? "").trim() : "";
-      const nomeLoja = columnMap.nomeLoja !== undefined ? String(row[columnMap.nomeLoja] ?? "").trim() : "";
-      if (codigoLoja || nomeLoja) {
-        const pertenceAOutraLoja = empresa.saiposLojaId
-          ? codigoLoja && codigoLoja !== empresa.saiposLojaId
-          : nomeLoja && normalizeText(nomeLoja) !== empresaNameNormalized;
-        if (pertenceAOutraLoja) {
-          outraLojaIgnorados++;
-          if (nomeLoja) otherLojaNames.add(nomeLoja);
-          continue;
-        }
       }
 
       const tipoPedido = columnMap.tipoPedido !== undefined ? String(row[columnMap.tipoPedido] ?? "") : "";
@@ -344,7 +326,5 @@ export async function POST(req: Request) {
     updated,
     errors,
     canceladosIgnorados,
-    outraLojaIgnorados,
-    otherLojaNames: [...otherLojaNames],
   });
 }

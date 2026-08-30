@@ -79,8 +79,6 @@ export function VendasClient({
     updated: number;
     errors: string[];
     canceladosIgnorados: number;
-    outraLojaIgnorados: number;
-    otherLojaNames: string[];
   } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -227,8 +225,6 @@ export function VendasClient({
         updated: data.updated,
         errors: data.errors ?? [],
         canceladosIgnorados: data.canceladosIgnorados ?? 0,
-        outraLojaIgnorados: data.outraLojaIgnorados ?? 0,
-        otherLojaNames: data.otherLojaNames ?? [],
       });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
@@ -574,14 +570,10 @@ export function VendasClient({
           <div className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-xs space-y-1.5">
             <p className="text-white font-medium">Antes de exportar no Saipos:</p>
             <p>
-              Filtre o relatório para <span className="text-white">esta loja</span> ({empresaName ?? "a loja selecionada no menu lateral"}) e para o
-              período que deseja importar — isso é importante: o Saipos só identifica a loja de cada venda quando
-              ela vem de um parceiro online (iFood, Cardápio Web, 99Food). Vendas de mesa e comanda feitas direto
-              no caixa <span className="text-white">não trazem o nome da loja no arquivo</span>, então o sistema
-              não tem como saber de qual loja são — ele assume que todas pertencem à loja selecionada aqui. Se o
-              arquivo tiver vendas de mais de uma loja misturadas, o faturamento de mesa/comanda pode ficar
-              somado na loja errada. Para vendas por parceiro (delivery/balcão), o sistema consegue identificar e
-              ignora automaticamente as de outra loja.
+              Gere o relatório para o período que deseja importar. Todas as linhas do arquivo são somadas na loja{" "}
+              <span className="text-white">{empresaName ?? "selecionada no menu lateral"}</span> — inclusive vendas
+              feitas por marcas/vitrines secundárias (ex.: outra marca no iFood), já que contam como faturamento
+              da mesma loja.
             </p>
             <p>
               O sistema soma o faturamento e os pedidos de cada dia a partir das colunas &quot;Tipo do
@@ -612,19 +604,6 @@ export function VendasClient({
               </p>
               {importResult.canceladosIgnorados > 0 && (
                 <p className="text-nord-gray">{importResult.canceladosIgnorados} venda(s) cancelada(s) no arquivo foram ignoradas.</p>
-              )}
-              {importResult.outraLojaIgnorados > 0 && (
-                <div className="text-amber-300">
-                  <p>
-                    {importResult.outraLojaIgnorados} venda(s) de delivery/balcão do arquivo eram de outra(s) loja(s) e
-                    foram ignoradas{importResult.otherLojaNames.length > 0 ? `: ${importResult.otherLojaNames.join(", ")}.` : "."}
-                  </p>
-                  <p className="mt-1">
-                    Como o arquivo tem mais de uma loja misturada, as vendas de mesa/comanda (que não trazem o
-                    nome da loja) podem ter incluído vendas de outra loja nesta importação. Se possível, refaça
-                    a exportação no Saipos filtrando só por esta loja e importe de novo para corrigir.
-                  </p>
-                </div>
               )}
               {importResult.errors.length > 0 && (
                 <div className="text-amber-300">
