@@ -5,16 +5,23 @@ import { formatCurrency, formatNumber } from "@/lib/calc";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { subDays } from "date-fns";
 import { Trophy } from "lucide-react";
+import { GarconsImportButton } from "./garcons-import-button";
 
 export default async function GarconsDesempenhoPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const since = subDays(new Date(), 30);
 
-  const sales = await prisma.sale.findMany({
-    where: { empresaId: { in: empresaIds }, dateTime: { gte: since }, garcomId: { not: null } },
-    include: { items: true, garcom: { select: { id: true, name: true, photoUrl: true } } },
-  });
+  const [sales, importedItems] = await Promise.all([
+    prisma.sale.findMany({
+      where: { empresaId: { in: empresaIds }, dateTime: { gte: since }, garcomId: { not: null } },
+      include: { items: true, garcom: { select: { id: true, name: true, photoUrl: true } } },
+    }),
+    prisma.importedGarcomItem.findMany({
+      where: { empresaId: { in: empresaIds }, periodTo: { gte: since } },
+      select: { employeeId: true, garcomNome: true, categoria: true, quantidade: true, faturamento: true },
+    }),
+  ]);
 
   const byGarcom = new Map<
     string,
@@ -42,6 +49,27 @@ export default async function GarconsDesempenhoPage() {
     byGarcom.set(sale.garcomId, cur);
   }
 
+  // Vendas importadas (relatório "Desempenho por garçom" do Saipos) não têm
+  // separação por mesa/pedido — somam em "Total vendido" e "Itens vendidos",
+  // mas não em "Mesas atendidas" (por isso o Ticket médio não muda com elas).
+  for (const item of importedItems) {
+    const key = item.employeeId ?? item.garcomNome;
+    const cur = byGarcom.get(key) ?? {
+      name: item.garcomNome,
+      photo: null,
+      totalVendido: 0,
+      qtdItens: 0,
+      mesas: 0,
+      bebidas: 0,
+      sobremesas: 0,
+    };
+    cur.totalVendido += item.faturamento;
+    cur.qtdItens += item.quantidade;
+    if (item.categoria === "BEBIDA" || item.categoria === "DRINK") cur.bebidas += item.quantidade;
+    if (item.categoria === "SOBREMESA") cur.sobremesas += item.quantidade;
+    byGarcom.set(key, cur);
+  }
+
   const ranking = [...byGarcom.entries()]
     .map(([id, g]) => ({
       id,
@@ -54,7 +82,7 @@ export default async function GarconsDesempenhoPage() {
   return (
     <PageContainer title="Vendas" subtitle="Desempenho por Garçom">
       <div className="space-y-6">
-        <Section title="Ranking (últimos 30 dias)">
+        <Section title="Ranking (últimos 30 dias)" action={<GarconsImportButton canCreate={ctx?.mode === "single"} />}>
           <div className="space-y-2">
             {ranking.map((g, idx) => (
               <div key={g.id} className="grid grid-cols-2 md:grid-cols-7 gap-3 items-center rounded-lg border border-nord-border/60 p-3">

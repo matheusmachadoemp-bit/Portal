@@ -24,7 +24,11 @@ export default async function VendasPage() {
   return (
     <PageContainer title="Vendas" subtitle="Faturamento, pedidos, ticket médio e taxa de serviço">
       <div className="space-y-6">
-        <VendasClient initialEntries={serialized} canCreate={ctx?.mode === "single"} />
+        <VendasClient
+          initialEntries={serialized}
+          canCreate={ctx?.mode === "single"}
+          empresaName={ctx?.mode === "single" ? ctx.empresa.name : undefined}
+        />
       </div>
     </PageContainer>
   );

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
 
 // TEMPORARY, idempotent fix route. Delete after use.
 // Creates/updates the Universidade Grupo Nord sidebar subcategories
@@ -55,6 +57,8 @@ export async function GET() {
   } catch (err) {
     results.push({ step: "subcategorias universidade", ok: false, error: String(err) });
   }
+
+  revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
 
   return NextResponse.json({ results });
 }

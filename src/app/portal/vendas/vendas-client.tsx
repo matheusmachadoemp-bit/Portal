@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Download, FileText } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Plus, Pencil, Trash2, Download, FileText, Upload } from "lucide-react";
 import { PERIOD_OPTIONS, resolvePeriod, type PeriodKey } from "@/lib/periods";
 import { formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
 import { Section, Badge } from "@/components/ui/stat-card";
@@ -55,9 +55,11 @@ const emptyForm = {
 export function VendasClient({
   initialEntries,
   canCreate = true,
+  empresaName,
 }: {
   initialEntries: SalesEntryDTO[];
   canCreate?: boolean;
+  empresaName?: string;
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [periodKey, setPeriodKey] = useState<PeriodKey>("mes");
@@ -68,6 +70,18 @@ export function VendasClient({
   const [editing, setEditing] = useState<SalesEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    updated: number;
+    errors: string[];
+    canceladosIgnorados: number;
+    vendasImportadas: number;
+  } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const { from, to, prevFrom, prevTo } = resolvePeriod(periodKey, {
     from: customFrom,
@@ -183,6 +197,47 @@ export function VendasClient({
     refresh();
   }
 
+  function openImport() {
+    setImportFile(null);
+    setImportError(null);
+    setImportResult(null);
+    setShowImport(true);
+  }
+
+  async function submitImport() {
+    if (!importFile) {
+      setImportError("Selecione um arquivo .xlsx ou .csv antes de importar.");
+      return;
+    }
+    setImportLoading(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", importFile);
+      const res = await fetch("/api/vendas/importar", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportError(data.error ?? "Não foi possível importar o arquivo.");
+        return;
+      }
+      setImportResult({
+        created: data.created,
+        updated: data.updated,
+        errors: data.errors ?? [],
+        canceladosIgnorados: data.canceladosIgnorados ?? 0,
+        vendasImportadas: data.vendasImportadas ?? 0,
+      });
+      setImportFile(null);
+      if (importInputRef.current) importInputRef.current.value = "";
+      refresh();
+    } catch {
+      setImportError("Falha ao enviar o arquivo. Verifique sua conexão e tente novamente.");
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
   function exportCsv() {
     const header = [
       "Data",
@@ -261,6 +316,14 @@ export function VendasClient({
           >
             <FileText size={13} /> PDF
           </button>
+          {canCreate && (
+            <button
+              onClick={openImport}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white"
+            >
+              <Upload size={13} /> Importar arquivo
+            </button>
+          )}
           {canCreate && (
             <button
               onClick={openNew}
@@ -353,6 +416,8 @@ export function VendasClient({
                   <td className="py-2 pr-4 text-nord-gray">
                     {e.source === "SAIPOS" ? (
                       <Badge tone="info">Saipos (automático)</Badge>
+                    ) : e.source === "IMPORTADO" ? (
+                      <Badge tone="info">Importado (arquivo)</Badge>
                     ) : (
                       e.createdBy?.name ?? "—"
                     )}
@@ -490,6 +555,84 @@ export function VendasClient({
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5"
         >
           Salvar lançamento
+        </button>
+      </Modal>
+
+      <Modal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        title="Importar arquivo de vendas"
+      >
+        <div className="space-y-3 text-sm text-nord-gray">
+          <p>
+            Use esta opção enquanto a sincronização automática com a Saipos não está disponível. No Saipos, gere o
+            relatório <span className="text-white">&quot;Vendas por período&quot;</span> (uma linha por
+            pedido/comanda) e envie o arquivo aqui (.xlsx ou .csv).
+          </p>
+          <div className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-xs space-y-1.5">
+            <p className="text-white font-medium">Antes de exportar no Saipos:</p>
+            <p>
+              Gere o relatório para o período que deseja importar. Todas as linhas do arquivo são somadas na loja{" "}
+              <span className="text-white">{empresaName ?? "selecionada no menu lateral"}</span> — inclusive vendas
+              feitas por marcas/vitrines secundárias (ex.: outra marca no iFood), já que contam como faturamento
+              da mesma loja.
+            </p>
+            <p>
+              Além do resumo diário (faturamento, pedidos), cada venda do arquivo também é gravada individualmente
+              — por isso as telas de Formas de Pagamento, Área de Entrega, Vendas por Período, Vendas por Hora e
+              Acompanhamento de Vendas também passam a mostrar esses dados. Vendas canceladas são ignoradas.
+            </p>
+            <p>
+              <span className="text-amber-300">Limitação:</span> o relatório do Saipos não traz os itens de cada
+              venda (produtos e quantidades), só o valor total — por isso a tela de Itens Vendidos/Curva ABC vai
+              mostrar cada venda importada como um item genérico &quot;Venda importada (arquivo)&quot;, sem o
+              produto real.
+            </p>
+            <p>
+              Se já existir um dia ou vendas importadas anteriormente no mesmo período, eles serão{" "}
+              <span className="text-white">substituídos</span> pelos dados do novo arquivo (lançamentos feitos
+              manualmente não são afetados).
+            </p>
+          </div>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Arquivo (.xlsx ou .csv)</span>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+              className="input"
+            />
+          </label>
+          {importError && <p className="text-xs text-red-400">{importError}</p>}
+          {importResult && (
+            <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
+              <p>
+                Importação concluída: {importResult.created} dia(s) criado(s) e {importResult.updated} dia(s)
+                atualizado(s), com {importResult.vendasImportadas} venda(s) detalhada(s) gravada(s).
+              </p>
+              {importResult.canceladosIgnorados > 0 && (
+                <p className="text-nord-gray">{importResult.canceladosIgnorados} venda(s) cancelada(s) no arquivo foram ignoradas.</p>
+              )}
+              {importResult.errors.length > 0 && (
+                <div className="text-amber-300">
+                  <p>{importResult.errors.length} linha(s) ignorada(s):</p>
+                  <ul className="list-disc list-inside">
+                    {importResult.errors.slice(0, 5).map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={submitImport}
+          disabled={importLoading || !importFile}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {importLoading ? "Importando..." : "Importar"}
         </button>
       </Modal>
 

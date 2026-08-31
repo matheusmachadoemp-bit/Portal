@@ -189,6 +189,8 @@ model Empresa {
   employees              Employee[]
   waiterSales            WaiterSaleEntry[]
   sales                  Sale[]
+  importedSaleItems      ImportedSaleItem[]
+  importedGarcomItems    ImportedGarcomItem[]
   clientes               Cliente[]
   customerNotes          CustomerNote[]
   crmSegments            CrmSegment[]
@@ -293,6 +295,7 @@ enum PeriodType {
 enum SalesEntrySource {
   MANUAL
   SAIPOS
+  IMPORTADO
 }
 
 model SalesEntry {
@@ -355,8 +358,10 @@ model Sale {
   regiao         String?
   valorTotal     Float         @default(0)
   cancelado      Boolean       @default(false)
-  createdById    String
-  createdBy      User          @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  source         SalesEntrySource @default(MANUAL)
+  saiposSaleId   String?
+  createdById    String?
+  createdBy      User?         @relation("SaleCreatedBy", fields: [createdById], references: [id])
   createdAt      DateTime      @default(now())
 
   items SaleItem[]
@@ -727,6 +732,58 @@ model SaleItem {
 }
 
 // ---------------------------------------------------------------------------
+// ITENS VENDIDOS IMPORTADOS — relatório de produtos/sabores do Saipos
+// ("Itens e Opções") só traz um resumo agregado do período (sem hora, sem
+// pedido, sem forma de pagamento), então não faz sentido virar um SaleItem
+// preso a uma venda de verdade. Fica numa tabela própria, usada só pela tela
+// de Itens Vendidos / Curva ABC — não conta em nenhuma outra análise de
+// vendas (faturamento, pagamento, entrega, por hora, etc.).
+// ---------------------------------------------------------------------------
+
+model ImportedSaleItem {
+  id          String   @id @default(cuid())
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  nome        String
+  quantidade  Float
+  faturamento Float
+  periodFrom  DateTime
+  periodTo    DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([empresaId, periodFrom, periodTo])
+}
+
+// ---------------------------------------------------------------------------
+// DESEMPENHO POR GARÇOM IMPORTADO — relatório "Desempenho por garçom" do
+// Saipos é um resumo agregado (garçom x categoria x item), sem data e sem
+// separação por mesa/pedido. Por isso vai numa tabela própria — alimenta só
+// "Total vendido" e "Itens vendidos" na tela de Garçons; "Mesas atendidas" e
+// "Ticket médio" continuam vindo só de vendas lançadas manualmente, já que
+// esse relatório não permite saber quantos pedidos/mesas geraram os itens.
+// ---------------------------------------------------------------------------
+
+model ImportedGarcomItem {
+  id          String           @id @default(cuid())
+  empresaId   String
+  empresa     Empresa          @relation(fields: [empresaId], references: [id])
+  employeeId  String?
+  employee    Employee?        @relation(fields: [employeeId], references: [id])
+  garcomNome  String
+  categoria   ProductCategory?
+  item        String
+  quantidade  Float
+  faturamento Float
+  periodFrom  DateTime
+  periodTo    DateTime
+  createdAt   DateTime         @default(now())
+
+  @@index([empresaId, periodFrom, periodTo])
+}
+
+// ---------------------------------------------------------------------------
 // MARKETING
 // ---------------------------------------------------------------------------
 
@@ -992,10 +1049,11 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  occurrences       Occurrence[]
-  waiterSales       WaiterSaleEntry[]
-  sales             Sale[]
-  financeEntries    EmployeeFinanceEntry[]
+  occurrences         Occurrence[]
+  waiterSales         WaiterSaleEntry[]
+  sales               Sale[]
+  importedGarcomItems ImportedGarcomItem[]
+  financeEntries      EmployeeFinanceEntry[]
   timeEntries       TimeEntry[]
   vacations         Vacation[]
   uniformDeliveries UniformDelivery[]
@@ -1446,8 +1504,9 @@ model Product {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  ingredients ProductIngredient[]
-  saleItems   SaleItem[]
+  ingredients       ProductIngredient[]
+  saleItems         SaleItem[]
+  importedSaleItems ImportedSaleItem[]
 }
 
 model ProductIngredient {
@@ -1782,6 +1841,8 @@ enum PaymentMethod {
   DOC
   TRANSFERENCIA
   CHEQUE
+  PAGO_ONLINE
+  FIADO
   OUTRO
 }
 
