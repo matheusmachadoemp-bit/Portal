@@ -190,6 +190,7 @@ model Empresa {
   waiterSales            WaiterSaleEntry[]
   sales                  Sale[]
   importedSaleItems      ImportedSaleItem[]
+  importedGarcomItems    ImportedGarcomItem[]
   clientes               Cliente[]
   customerNotes          CustomerNote[]
   crmSegments            CrmSegment[]
@@ -756,6 +757,33 @@ model ImportedSaleItem {
 }
 
 // ---------------------------------------------------------------------------
+// DESEMPENHO POR GARÇOM IMPORTADO — relatório "Desempenho por garçom" do
+// Saipos é um resumo agregado (garçom x categoria x item), sem data e sem
+// separação por mesa/pedido. Por isso vai numa tabela própria — alimenta só
+// "Total vendido" e "Itens vendidos" na tela de Garçons; "Mesas atendidas" e
+// "Ticket médio" continuam vindo só de vendas lançadas manualmente, já que
+// esse relatório não permite saber quantos pedidos/mesas geraram os itens.
+// ---------------------------------------------------------------------------
+
+model ImportedGarcomItem {
+  id          String           @id @default(cuid())
+  empresaId   String
+  empresa     Empresa          @relation(fields: [empresaId], references: [id])
+  employeeId  String?
+  employee    Employee?        @relation(fields: [employeeId], references: [id])
+  garcomNome  String
+  categoria   ProductCategory?
+  item        String
+  quantidade  Float
+  faturamento Float
+  periodFrom  DateTime
+  periodTo    DateTime
+  createdAt   DateTime         @default(now())
+
+  @@index([empresaId, periodFrom, periodTo])
+}
+
+// ---------------------------------------------------------------------------
 // MARKETING
 // ---------------------------------------------------------------------------
 
@@ -1021,10 +1049,11 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  occurrences       Occurrence[]
-  waiterSales       WaiterSaleEntry[]
-  sales             Sale[]
-  financeEntries    EmployeeFinanceEntry[]
+  occurrences         Occurrence[]
+  waiterSales         WaiterSaleEntry[]
+  sales               Sale[]
+  importedGarcomItems ImportedGarcomItem[]
+  financeEntries      EmployeeFinanceEntry[]
   timeEntries       TimeEntry[]
   vacations         Vacation[]
   uniformDeliveries UniformDelivery[]
