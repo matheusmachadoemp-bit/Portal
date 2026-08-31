@@ -1,0 +1,6758 @@
+{
+ "insumos": [
+  {
+   "nome": "Açúcar",
+   "unidade": "Kg",
+   "precoCompra": 3.98,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Agua da casa",
+   "unidade": "L",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Alface americana",
+   "unidade": "kg",
+   "precoCompra": 2.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Alho",
+   "unidade": "kg",
+   "precoCompra": 29.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Alho Poró",
+   "unidade": "kg",
+   "precoCompra": 2.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Anel de cebola",
+   "unidade": "kg",
+   "precoCompra": 17.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Anel de cebola Frito",
+   "unidade": "un",
+   "precoCompra": 3.13,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Azeitona Balde",
+   "unidade": "Kg",
+   "precoCompra": 27.76,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Bacon cubos",
+   "unidade": "Kg",
+   "precoCompra": 22.97,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Bacon cubos porcionado",
+   "unidade": "Kg",
+   "precoCompra": 22.97,
+   "rendimento": 0.5725,
+   "semPreco": false
+  },
+  {
+   "nome": "Bacon fatiado",
+   "unidade": "kg",
+   "precoCompra": 41.18,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Banana D'agua",
+   "unidade": "Kg",
+   "precoCompra": 4.25,
+   "rendimento": 0.9,
+   "semPreco": false
+  },
+  {
+   "nome": "Barbecue",
+   "unidade": "un",
+   "precoCompra": 8.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Basicão",
+   "unidade": "un",
+   "precoCompra": 29.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Batata frita",
+   "unidade": "kg",
+   "precoCompra": 16.98,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Batata Grande",
+   "unidade": "un",
+   "precoCompra": 7.04,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Batata Nord",
+   "unidade": "un",
+   "precoCompra": 12.41,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Batata Pequena",
+   "unidade": "un",
+   "precoCompra": 2.64,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Blend Frango",
+   "unidade": "un",
+   "precoCompra": 2.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Brownie",
+   "unidade": "kg",
+   "precoCompra": 40.0,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Calabresa Fatiado",
+   "unidade": "kg",
+   "precoCompra": 15.91,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Camarão Limpo",
+   "unidade": "kg",
+   "precoCompra": 67.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Camarão Cru",
+   "unidade": "Kg",
+   "precoCompra": 67.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Canela em pó",
+   "unidade": "Kg",
+   "precoCompra": 0.0,
+   "rendimento": 0.9,
+   "semPreco": true
+  },
+  {
+   "nome": "Carne Blend",
+   "unidade": "kg",
+   "precoCompra": 31.5,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Carne seca desfiada",
+   "unidade": "Kg",
+   "precoCompra": 65.39,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Carne seca porcionada",
+   "unidade": "Kg",
+   "precoCompra": 65.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Cebola",
+   "unidade": "Kg",
+   "precoCompra": 3.75,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Cebola caramelizada",
+   "unidade": "kg",
+   "precoCompra": 1.4,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Cebola Crispy",
+   "unidade": "kg",
+   "precoCompra": 3.75,
+   "rendimento": 0.9,
+   "semPreco": false
+  },
+  {
+   "nome": "Cebola Fatiada",
+   "unidade": "kg",
+   "precoCompra": 3.75,
+   "rendimento": 0.9,
+   "semPreco": false
+  },
+  {
+   "nome": "Cheddar cremoso",
+   "unidade": "kg",
+   "precoCompra": 18.03,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Cheddar fatiado",
+   "unidade": "kg",
+   "precoCompra": 38.85,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Cheese Burger",
+   "unidade": "un",
+   "precoCompra": 24.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Chicken Ball",
+   "unidade": "un",
+   "precoCompra": 19.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Chicken Supreme",
+   "unidade": "kg",
+   "precoCompra": 22.81,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Chocolate ao leite",
+   "unidade": "Kg",
+   "precoCompra": 23.27,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Chocolate branco",
+   "unidade": "Kg",
+   "precoCompra": 20.97,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Coca cola 1,5l",
+   "unidade": "un",
+   "precoCompra": 6.53,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Coca cola 350ml",
+   "unidade": "un",
+   "precoCompra": 3.45,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Coca cola zero 1,5l",
+   "unidade": "un",
+   "precoCompra": 6.53,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Coca cola zero 350ml",
+   "unidade": "un",
+   "precoCompra": 3.45,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Confete",
+   "unidade": "Kg",
+   "precoCompra": 13.03,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Costela Ball",
+   "unidade": "un",
+   "precoCompra": 24.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Costela bovina desfiada",
+   "unidade": "kg",
+   "precoCompra": 67.69,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Costela porcionada",
+   "unidade": "Kg",
+   "precoCompra": 67.69,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Cream Cheese",
+   "unidade": "kg",
+   "precoCompra": 32.89,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Creme de leite",
+   "unidade": "Kg",
+   "precoCompra": 9.35,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Edu guedes",
+   "unidade": "kg",
+   "precoCompra": 99.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Fanta laranja 1,5l",
+   "unidade": "un",
+   "precoCompra": 5.02,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Fanta laranja 350ml",
+   "unidade": "un",
+   "precoCompra": 3.18,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Fanta uva 350ml",
+   "unidade": "un",
+   "precoCompra": 3.18,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Fanta uva1,5l",
+   "unidade": "UN",
+   "precoCompra": 5.02,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Farinha de Trigo",
+   "unidade": "kg",
+   "precoCompra": 4.15,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Farinha Panko",
+   "unidade": "kg",
+   "precoCompra": 14.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Farofa de bacon",
+   "unidade": "kg",
+   "precoCompra": 25.95,
+   "rendimento": 0.3,
+   "semPreco": false
+  },
+  {
+   "nome": "Favorito",
+   "unidade": "un",
+   "precoCompra": 36.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Fermento",
+   "unidade": "kg",
+   "precoCompra": 102.81,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Frango cru",
+   "unidade": "kg",
+   "precoCompra": 13.89,
+   "rendimento": 0.6925,
+   "semPreco": false
+  },
+  {
+   "nome": "Frango porcionado",
+   "unidade": "kg",
+   "precoCompra": 20.06,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Fúba",
+   "unidade": "kg",
+   "precoCompra": 4.69,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Geleia de pimenta",
+   "unidade": "kg",
+   "precoCompra": 28.49,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Goiabada cremosa",
+   "unidade": "kg",
+   "precoCompra": 27.19,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Gorgonzola",
+   "unidade": "kg",
+   "precoCompra": 58.7,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Granulado",
+   "unidade": "kg",
+   "precoCompra": 16.2,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Guarana 1,5l",
+   "unidade": "un",
+   "precoCompra": 5.06,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Guarana 350ml",
+   "unidade": "un",
+   "precoCompra": 3.1,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Guarana zero 1,5l",
+   "unidade": "un",
+   "precoCompra": 5.06,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Guaraná zero 350ml",
+   "unidade": "un",
+   "precoCompra": 3.1,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "KETCHUP",
+   "unidade": "kg",
+   "precoCompra": 21.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Leite",
+   "unidade": "L",
+   "precoCompra": 5.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Lemon Pepper",
+   "unidade": "kg",
+   "precoCompra": 99.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Limão",
+   "unidade": "kg",
+   "precoCompra": 4.55,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Linguiça Calabresa",
+   "unidade": "kg",
+   "precoCompra": 15.91,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Lombo Canadense",
+   "unidade": "kg",
+   "precoCompra": 35.57,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Maionese",
+   "unidade": "kg",
+   "precoCompra": 25.39,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Maionese de Alho Nord",
+   "unidade": "kg",
+   "precoCompra": 3.5,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Maionese lemon pepper",
+   "unidade": "kg",
+   "precoCompra": 7.08,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Maionese Verde Nord",
+   "unidade": "kg",
+   "precoCompra": 8.88,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Manjericão",
+   "unidade": "kg",
+   "precoCompra": 3.0,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Margarina",
+   "unidade": "kg",
+   "precoCompra": 10.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Massa Empanamento",
+   "unidade": "kg",
+   "precoCompra": 4.5,
+   "rendimento": 0.8,
+   "semPreco": false
+  },
+  {
+   "nome": "Massa Esfiha",
+   "unidade": "un",
+   "precoCompra": 0.33,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Massa Pizza",
+   "unidade": "un",
+   "precoCompra": 1.13,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Mel",
+   "unidade": "kg",
+   "precoCompra": 35.63,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Melt",
+   "unidade": "un",
+   "precoCompra": 26.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "molho barbecue",
+   "unidade": "kg",
+   "precoCompra": 8.98,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Molho Cheddar",
+   "unidade": "kg",
+   "precoCompra": 13.53,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Molho de tomate Nord",
+   "unidade": "kg",
+   "precoCompra": 4.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Molho de tomate Pronto",
+   "unidade": "un",
+   "precoCompra": 15.49,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Molho Tasty",
+   "unidade": "kg",
+   "precoCompra": 6.58,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Morango",
+   "unidade": "kg",
+   "precoCompra": 8.99,
+   "rendimento": 0.8,
+   "semPreco": false
+  },
+  {
+   "nome": "MOSTARDA",
+   "unidade": "kg",
+   "precoCompra": 21.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Mussarela",
+   "unidade": "kg",
+   "precoCompra": 36.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Mussarela empanada",
+   "unidade": "unidade",
+   "precoCompra": 2.03,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Mussarela porcionada",
+   "unidade": "kg",
+   "precoCompra": 36.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Nord",
+   "unidade": "un",
+   "precoCompra": 26.6,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Oleo",
+   "unidade": "L",
+   "precoCompra": 7.49,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Oleo de algodão",
+   "unidade": "L",
+   "precoCompra": 11.79,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Orégano",
+   "unidade": "kg",
+   "precoCompra": 26.45,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Ovo",
+   "unidade": "unidade",
+   "precoCompra": 0.69,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Palmito",
+   "unidade": "kg",
+   "precoCompra": 49.0,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Pão Australiano",
+   "unidade": "unidade",
+   "precoCompra": 1.71,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Pão brioche",
+   "unidade": "unidade",
+   "precoCompra": 1.52,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Pão prime",
+   "unidade": "unidade",
+   "precoCompra": 1.77,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "PAPRICA",
+   "unidade": "kg",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "Parmesão",
+   "unidade": "kg",
+   "precoCompra": 37.88,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Pepino",
+   "unidade": "kg",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "Pepperoni",
+   "unidade": "kg",
+   "precoCompra": 58.05,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "pepperoni Fatiado",
+   "unidade": "kg",
+   "precoCompra": 58.05,
+   "rendimento": 0.9,
+   "semPreco": false
+  },
+  {
+   "nome": "Picles",
+   "unidade": "kg",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "Pillow cheese",
+   "unidade": "kg",
+   "precoCompra": 51.55,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Pimenta do reino",
+   "unidade": "kg",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "Pimentão",
+   "unidade": "kg",
+   "precoCompra": 9.8,
+   "rendimento": 0.7,
+   "semPreco": false
+  },
+  {
+   "nome": "Presunto",
+   "unidade": "kg",
+   "precoCompra": 20.42,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Presunto porcionado",
+   "unidade": "kg",
+   "precoCompra": 20.42,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Prime chicken",
+   "unidade": "un",
+   "precoCompra": 23.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Queijo coalho",
+   "unidade": "kg",
+   "precoCompra": 40.5,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Queijo Coalho Fatiado",
+   "unidade": "kg",
+   "precoCompra": 40.5,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Queijo Prato fatiado",
+   "unidade": "kg",
+   "precoCompra": 41.75,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Queridinho",
+   "unidade": "un",
+   "precoCompra": 32.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Requeijão Cremoso",
+   "unidade": "kg",
+   "precoCompra": 27.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Sal",
+   "unidade": "kg",
+   "precoCompra": 2.3,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Salsa",
+   "unidade": "unidade",
+   "precoCompra": 2.0,
+   "rendimento": 0.7,
+   "semPreco": false
+  },
+  {
+   "nome": "Smash Duplo",
+   "unidade": "un",
+   "precoCompra": 24.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Smash Nordian",
+   "unidade": "un",
+   "precoCompra": 27.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Stick Mussarela",
+   "unidade": "un",
+   "precoCompra": 17.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Tempero camarão",
+   "unidade": "kg",
+   "precoCompra": 21.79,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Tempero de Galinha",
+   "unidade": "kg",
+   "precoCompra": 12.39,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Tomate",
+   "unidade": "kg",
+   "precoCompra": 4.2,
+   "rendimento": 0.7,
+   "semPreco": false
+  },
+  {
+   "nome": "Tomate fatiado",
+   "unidade": "kg",
+   "precoCompra": 4.2,
+   "rendimento": 0.7,
+   "semPreco": false
+  },
+  {
+   "nome": "Laranja",
+   "unidade": "kg",
+   "precoCompra": 4.5,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Vodka",
+   "unidade": "L",
+   "precoCompra": 41.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Cachaça 51",
+   "unidade": "L",
+   "precoCompra": 10.6,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Monin morango",
+   "unidade": "L",
+   "precoCompra": 51.18,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Monin Tangerina",
+   "unidade": "L",
+   "precoCompra": 51.18,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Monin maçã verde",
+   "unidade": "L",
+   "precoCompra": 51.18,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Curaçal Blue",
+   "unidade": "L",
+   "precoCompra": 40.8,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Peito de Peru",
+   "unidade": "kg",
+   "precoCompra": 37.8,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Smash Cheddar Dron",
+   "unidade": "un",
+   "precoCompra": 4.7,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Smash Bacon Dron",
+   "unidade": "un",
+   "precoCompra": 6.78,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "BBQ Dron",
+   "unidade": "un",
+   "precoCompra": 9.2,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Predileto Dron",
+   "unidade": "un",
+   "precoCompra": 7.54,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Pizza Salgada Dron",
+   "unidade": "un",
+   "precoCompra": 13.35,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "Alho torrado",
+   "unidade": "kg",
+   "precoCompra": 36.69,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "TOMATE CEREJA",
+   "unidade": "KG",
+   "precoCompra": 10.0,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "PROVOLONE",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "AZEITONA PRETA",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "BROCOLIS",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "ALHO TORRADO",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "coca cola lata",
+   "unidade": "unidade",
+   "precoCompra": 3.45,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "combo norflix",
+   "unidade": "unidade",
+   "precoCompra": 27.5,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "RUCULA",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "CONTRAFILE",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "CEBOLA ROXA",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "tomate seco",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "molho tare",
+   "unidade": "un",
+   "precoCompra": 0.0,
+   "rendimento": 1.0,
+   "semPreco": true
+  },
+  {
+   "nome": "creme de leite 2",
+   "unidade": "ml",
+   "precoCompra": 2.39,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "leite condesado",
+   "unidade": "ml",
+   "precoCompra": 5.99,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "chocolate em po",
+   "unidade": "kg",
+   "precoCompra": 54.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "granulado",
+   "unidade": "kg",
+   "precoCompra": 49.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "farinha 2",
+   "unidade": "kg",
+   "precoCompra": 3.19,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "açucar 2",
+   "unidade": "kg",
+   "precoCompra": 3.78,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "fermento 2",
+   "unidade": "kg",
+   "precoCompra": 59.95,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "ovo 2",
+   "unidade": "uni",
+   "precoCompra": 0.65,
+   "rendimento": 1.0,
+   "semPreco": false
+  },
+  {
+   "nome": "chant",
+   "unidade": "kg",
+   "precoCompra": 19.9,
+   "rendimento": 1.0,
+   "semPreco": false
+  }
+ ],
+ "produtos": [
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE MUSSARELA",
+   "precoVenda": 109.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "combo norflix",
+     "unidade": "un",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE CALABRESA",
+   "precoVenda": 109.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE CALABRESA C/ CATUPIRY",
+   "precoVenda": 68.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "BORDA CATUIRY",
+   "precoVenda": 18.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "KG",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE PEPPERONI",
+   "precoVenda": 62.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "pepperoni Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA PORTUGUESA",
+   "precoVenda": 72.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "Un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Pimentão",
+     "unidade": "kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "kg",
+     "gramatura": 0.25
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Azeitona Balde",
+     "unidade": "kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "un",
+     "gramatura": 2.0
+    },
+    {
+     "insumo": "Presunto porcionado",
+     "unidade": "kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA MARGUERITA",
+   "precoVenda": 57.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.3
+    },
+    {
+     "insumo": "Manjericão",
+     "unidade": "Unidade",
+     "gramatura": 10.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "BORDA CHEDDAR",
+   "precoVenda": 17.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Cheddar cremoso",
+     "unidade": "KG",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA ESPECIAL NORD",
+   "precoVenda": 79.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Pimentão",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "Presunto porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "un",
+     "gramatura": 2.0
+    },
+    {
+     "insumo": "Cebola",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Azeitona Balde",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.25
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA CAMARÃO",
+   "precoVenda": 72.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA CAMARÃO C/ CATUPIRY",
+   "precoVenda": 79.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "BORDA CREAM CHEESE",
+   "precoVenda": 18.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Cream Cheese",
+     "unidade": "KG",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA CAMARÃO C/ PORÓ",
+   "precoVenda": 82.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Alho Poró",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Cream Cheese",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA CARNE SECA",
+   "precoVenda": 75.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE CARNE SECA C/COALHO",
+   "precoVenda": 82.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Queijo coalho",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA COSTELA BBQ",
+   "precoVenda": 89.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Costela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "molho barbecue",
+     "unidade": "Kg",
+     "gramatura": 0.125
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA COSTELA C/ CATUPIRY",
+   "precoVenda": 99.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Costela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE  BACON",
+   "precoVenda": 72.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE CARNE SECA C/ CATUPIRY",
+   "precoVenda": 89.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA BACON COALHO",
+   "precoVenda": 74.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Queijo Coalho Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA CALACON",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE FRANGO CATUPIRY",
+   "precoVenda": 71.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Frango porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE FRANGO TWO CHEESE",
+   "precoVenda": 75.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Frango porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Cheddar cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA LOMBO CANADENSE",
+   "precoVenda": 64.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Lombo Canadense",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.11
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE PRESUNTO",
+   "precoVenda": 55.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Presunto porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA CARBONARA",
+   "precoVenda": 76.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "Kg",
+     "gramatura": 2.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA DO CHEFF -  LARIEMFAMILIA",
+   "precoVenda": 64.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Queijo coalho",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Geleia de pimenta",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA QUATRO QUEIJOS",
+   "precoVenda": 68.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Parmesão",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.11
+    },
+    {
+     "insumo": "Gorgonzola",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "PIZZA CINCO QUEIJOS",
+   "precoVenda": 74.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Parmesão",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.11
+    },
+    {
+     "insumo": "Gorgonzola",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    },
+    {
+     "insumo": "Cheddar cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos",
+   "categoria": "COMBO",
+   "nome": "NAPOLITANA- PIZZAIOLO NILSON",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Peito de Peru",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.086
+    },
+    {
+     "insumo": "Cream Cheese",
+     "unidade": "Kg",
+     "gramatura": 0.235
+    },
+    {
+     "insumo": "Manjericão",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "Combo nordflix",
+   "precoVenda": 49.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE CALABRESA",
+   "precoVenda": 59.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE CALABRESA C/ CATUPIRY",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "BORDA CATUIRY",
+   "precoVenda": 18.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "KG",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE PEPPERONI",
+   "precoVenda": 62.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "pepperoni Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA PORTUGUESA",
+   "precoVenda": 72.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "Un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Pimentão",
+     "unidade": "kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "kg",
+     "gramatura": 0.25
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Azeitona Balde",
+     "unidade": "kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "un",
+     "gramatura": 2.0
+    },
+    {
+     "insumo": "Presunto porcionado",
+     "unidade": "kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA MARGUERITA",
+   "precoVenda": 57.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.3
+    },
+    {
+     "insumo": "Manjericão",
+     "unidade": "Unidade",
+     "gramatura": 10.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "BORDA CHEDDAR",
+   "precoVenda": 17.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Cheddar cremoso",
+     "unidade": "KG",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA ESPECIAL NORD",
+   "precoVenda": 85.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Pimentão",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "Presunto porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "un",
+     "gramatura": 2.0
+    },
+    {
+     "insumo": "Cebola",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Azeitona Balde",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.25
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA CAMARÃO",
+   "precoVenda": 79.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA CAMARÃO C/ CATUPIRY",
+   "precoVenda": 89.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "BORDA CREAM CHEESE",
+   "precoVenda": 18.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Cream Cheese",
+     "unidade": "KG",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA CAMARÃO C/ PORÓ",
+   "precoVenda": 85.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Alho Poró",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Cream Cheese",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA CARNE SECA",
+   "precoVenda": 79.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE CARNE SECA C/COALHO",
+   "precoVenda": 86.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Queijo coalho",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA COSTELA BBQ",
+   "precoVenda": 89.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Costela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "molho barbecue",
+     "unidade": "Kg",
+     "gramatura": 0.125
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA COSTELA C/ CATUPIRY",
+   "precoVenda": 94.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Costela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE  BACON",
+   "precoVenda": 76.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE CARNE SECA C/ CATUPIRY",
+   "precoVenda": 89.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA BACON COALHO",
+   "precoVenda": 74.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Queijo Coalho Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA CALACON",
+   "precoVenda": 72.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE FRANGO CATUPIRY",
+   "precoVenda": 74.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Frango porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE FRANGO TWO CHEESE",
+   "precoVenda": 79.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Frango porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Cheddar cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.165
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA LOMBO CANADENSE",
+   "precoVenda": 72.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Lombo Canadense",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.11
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DE PRESUNTO",
+   "precoVenda": 55.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Presunto porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA CARBONARA",
+   "precoVenda": 76.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "Kg",
+     "gramatura": 2.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA DO CHEFF -  LARIEMFAMILIA",
+   "precoVenda": 68.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Queijo coalho",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Geleia de pimenta",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA QUATRO QUEIJOS",
+   "precoVenda": 71.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Parmesão",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.11
+    },
+    {
+     "insumo": "Gorgonzola",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    },
+    {
+     "insumo": "Orégano",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZA CINCO QUEIJOS",
+   "precoVenda": 82.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Parmesão",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.11
+    },
+    {
+     "insumo": "Gorgonzola",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    },
+    {
+     "insumo": "Cheddar cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "NAPOLITANA- PIZZAIOLO NILSON",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Peito de Peru",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.086
+    },
+    {
+     "insumo": "Cream Cheese",
+     "unidade": "Kg",
+     "gramatura": 0.235
+    },
+    {
+     "insumo": "Manjericão",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "BACON E GELEIA DE PIMENTA",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "TOMATE SECO COM RÚCULA",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "BACON E MILHO",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "COSTELA, BACON COM CREAM CHEESE",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "CARNE SECA. COALHO COM MEL",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "GONGONZOLA E GELEIA DE DAMASCO",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "FRANGO, CREAM CHEESE , BACON COM PARMESÃO",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - NILSON 1",
+   "precoVenda": 70.0,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Queijo coalho",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Manjericão",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "TOMATE CEREJA",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - NILSON 2",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - NILSON 3",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "COPIZZAS DA COPA - MILLENE 1",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - MILLENE 2",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - MILLENE 2",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - EDUARDO 1",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - EDUARDO 2",
+   "precoVenda": 70.0,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Queijo coalho",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - EDUARDO 3",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - LARYSSA",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA - FELIPE",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA -  KAUÃ",
+   "precoVenda": 69.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Nord",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PIZZAS DA COPA -  JOYCE",
+   "precoVenda": 70.0,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.24
+    },
+    {
+     "insumo": "Alho Poró",
+     "unidade": "Kg",
+     "gramatura": 0.003
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.098
+    },
+    {
+     "insumo": "Cream Cheese",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Alho torrado",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "CHOCOLATE AO LEITE",
+   "precoVenda": 35.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "CHOCOLATE BRANCO",
+   "precoVenda": 35.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate branco",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "CHOCOLATE AO LEITE C/ MORANGO",
+   "precoVenda": 39.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    },
+    {
+     "insumo": "Morango",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "CHOCOBANA",
+   "precoVenda": 36.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Banana D'agua",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "CHOCOBROWNIE",
+   "precoVenda": 40.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    },
+    {
+     "insumo": "Brownie",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "BRIGADEIRO",
+   "precoVenda": 36.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    },
+    {
+     "insumo": "Granulado",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "CHOCOLATE BRANCO C/ MORANGO",
+   "precoVenda": 39.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate branco",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    },
+    {
+     "insumo": "Morango",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "DUAS SENSAÇÕES",
+   "precoVenda": 40.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    },
+    {
+     "insumo": "Chocolate branco",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "CONFEITEIRA",
+   "precoVenda": 39.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.28
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "ROMEU E JULIETA",
+   "precoVenda": 42.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.2
+    },
+    {
+     "insumo": "Goiabada cremosa",
+     "unidade": "Kg",
+     "gramatura": 0.25
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "PIZZA DE PÁSCOA",
+   "precoVenda": 49.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Morango",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.3
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "BANANA NEVADA",
+   "precoVenda": 44.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Banana D'agua",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Chocolate branco",
+     "unidade": "Kg",
+     "gramatura": 0.35
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Doce",
+   "categoria": "PIZZA_DOCE",
+   "nome": "BANANA C/ CANELA",
+   "precoVenda": 37.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Banana D'agua",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Canela em pó",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA ALHO PORÓ.",
+   "precoVenda": 14.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Un",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Alho Poró",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA PEPPERONI.",
+   "precoVenda": 16.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "pepperoni Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CINCO QUEIJOS.",
+   "precoVenda": 20.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Parmesão",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Gorgonzola",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    },
+    {
+     "insumo": "Cheddar cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CARNE SECA C/COALHO.",
+   "precoVenda": 24.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Carne seca desfiada",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Queijo coalho",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA MUSSARELA.",
+   "precoVenda": 14.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CALABRESA.",
+   "precoVenda": 16.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CAMARÃO.",
+   "precoVenda": 19.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CATUPERONI.",
+   "precoVenda": 18.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "pepperoni Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA LOMBO CANADENSE.",
+   "precoVenda": 17.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Lombo Canadense",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CALABRESA C/CATUPIRY.",
+   "precoVenda": 18.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CAMARÃO C/CATUPIRY.",
+   "precoVenda": 23.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA PRESUNTO.",
+   "precoVenda": 15.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Presunto",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA COSTELA BBQ.",
+   "precoVenda": 24.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Costela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "molho barbecue",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA COSTELA C/CATUPIRY.",
+   "precoVenda": 26.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Costela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA BACON.",
+   "precoVenda": 19.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CAMARÃO C/PORÓ.",
+   "precoVenda": 22.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    },
+    {
+     "insumo": "Alho Poró",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CARNE SECA .",
+   "precoVenda": 22.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Cebola Fatiada",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CARNE SECA C/CATUPIRY.",
+   "precoVenda": 24.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Carne seca porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA CARBONARA.",
+   "precoVenda": 22.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "Unidade",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA QUATRO QUEIJOS.",
+   "precoVenda": 18.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Parmesão",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Gorgonzola",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Esfiha Salgada",
+   "categoria": "ESFIHA_SALGADA",
+   "nome": "ESFIHA MARGUERITA.",
+   "precoVenda": 15.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Mussarela porcionada",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Manjericão",
+     "unidade": "Unidade",
+     "gramatura": 0.015
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "1.0",
+   "precoVenda": 13.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "5.0",
+   "precoVenda": 13.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate branco",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "9.0",
+   "precoVenda": 16.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Chocolate branco",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "2.0",
+   "precoVenda": 15.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "6.0",
+   "precoVenda": 15.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Banana D'agua",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "10.0",
+   "precoVenda": 16.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Brownie",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "3.0",
+   "precoVenda": 15.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Morango",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "7.0",
+   "precoVenda": 13.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "11.0",
+   "precoVenda": 14.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "4.0",
+   "precoVenda": 19.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "8.0",
+   "precoVenda": 15.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    },
+    {
+     "insumo": "Chocolate ao leite",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Confete",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "ESFIHA DOCE",
+   "categoria": "ESFIHA_DOCE",
+   "nome": "12.0",
+   "precoVenda": 15.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Esfiha",
+     "unidade": "un",
+     "gramatura": 0.084
+    },
+    {
+     "insumo": "Creme de leite",
+     "unidade": "Kg",
+     "gramatura": 0.005
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Basicão",
+   "precoVenda": 29.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "unidade",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Mussarela empanada",
+     "unidade": "unidade",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Maionese de Alho Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Favorito",
+   "precoVenda": 36.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Queijo Prato fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Queijo Coalho Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Mel",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    },
+    {
+     "insumo": "Bacon fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Smash Melt",
+   "precoVenda": 26.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão Australiano",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Cebola caramelizada",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Queridinho",
+   "precoVenda": 32.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Anel de cebola",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Farofa de bacon",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Smash Nordian",
+   "precoVenda": 27.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão prime",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Bacon fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Alface americana",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Molho Tasty",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Nord",
+   "precoVenda": 27.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão prime",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Queijo Prato fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Alface americana",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Maionese de Alho Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Barbecue",
+   "precoVenda": 29.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão Australiano",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Queijo Prato fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Anel de cebola",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "molho barbecue",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Prime Chicken",
+   "precoVenda": 23.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão prime",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Blend Frango",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Alface americana",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    },
+    {
+     "insumo": "Maionese lemon pepper",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burgers",
+   "categoria": "BURGER",
+   "nome": "Smash Duplo",
+   "precoVenda": 24.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.034
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Basicão Combo",
+   "precoVenda": 54.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "unidade",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Mussarela empanada",
+     "unidade": "unidade",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Maionese de Alho Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Batata Pequena",
+     "unidade": "unidade",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "coca cola lata",
+     "unidade": "unidade",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Favorito",
+   "precoVenda": 36.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Queijo Prato fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Queijo Coalho Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.07
+    },
+    {
+     "insumo": "Mel",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    },
+    {
+     "insumo": "Bacon fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Smash Melt",
+   "precoVenda": 26.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão Australiano",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Cebola caramelizada",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Queridinho",
+   "precoVenda": 32.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Anel de cebola",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    },
+    {
+     "insumo": "Farofa de bacon",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Smash Nordian",
+   "precoVenda": 27.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão prime",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Bacon fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Alface americana",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Molho Tasty",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Nord",
+   "precoVenda": 27.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão prime",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Queijo Prato fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Alface americana",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Maionese de Alho Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Barbecue",
+   "precoVenda": 47.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão Australiano",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Queijo Prato fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Anel de cebola",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "molho barbecue",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Batata Pequena",
+     "unidade": "Kg",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "coca cola lata",
+     "unidade": "Kg",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Prime Chicken",
+   "precoVenda": 23.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão prime",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Blend Frango",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Alface americana",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    },
+    {
+     "insumo": "Maionese lemon pepper",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "Smash Duplo",
+   "precoVenda": 24.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.034
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos Burgers",
+   "categoria": "COMBO",
+   "nome": "PIZZA DE CALABRESA",
+   "precoVenda": 350.0,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "creme de leite 2",
+     "unidade": "un",
+     "gramatura": 12.0
+    },
+    {
+     "insumo": "leite condesado",
+     "unidade": "Unidade",
+     "gramatura": 6.0
+    },
+    {
+     "insumo": "farinha 2",
+     "unidade": "Kg",
+     "gramatura": 0.98
+    },
+    {
+     "insumo": "fermento 2",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "açucar 2",
+     "unidade": "Kg",
+     "gramatura": 0.75
+    },
+    {
+     "insumo": "ovo 2",
+     "unidade": "Unidade",
+     "gramatura": 12.0
+    },
+    {
+     "insumo": "chant",
+     "unidade": "Kg",
+     "gramatura": 0.5
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Batata Pequena",
+   "precoVenda": 14.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Batata frita",
+     "unidade": "kg",
+     "gramatura": 0.15
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Batata Basica Grande",
+   "precoVenda": 27.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Batata frita",
+     "unidade": "kg",
+     "gramatura": 0.4
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Batata Nord",
+   "precoVenda": 34.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Batata frita",
+     "unidade": "kg",
+     "gramatura": 0.45
+    },
+    {
+     "insumo": "Farofa de bacon",
+     "unidade": "Kg",
+     "gramatura": 0.025
+    },
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "Kg",
+     "gramatura": 0.172
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Anel de Cebola (10 unidades)",
+   "precoVenda": 16.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Anel de cebola",
+     "unidade": "kg",
+     "gramatura": 0.165
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Chicken Supreme",
+   "precoVenda": 21.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Chicken Supreme",
+     "unidade": "kg",
+     "gramatura": 0.184
+    },
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Pillow Cheese",
+   "precoVenda": 23.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Pillow cheese",
+     "unidade": "kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Geleia de pimenta",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Chicken Ball - 6 uni",
+   "precoVenda": 19.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Frango porcionado",
+     "unidade": "kg",
+     "gramatura": 0.154
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.154
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Stick  - 6 uni - fora do cardapio",
+   "precoVenda": 17.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Mussarela",
+     "unidade": "kg",
+     "gramatura": 0.01
+    },
+    {
+     "insumo": "Massa Empanamento",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    },
+    {
+     "insumo": "Geleia de pimenta",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "Costela Ball - 6 uni",
+   "precoVenda": 24.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Costela porcionada",
+     "unidade": "kg",
+     "gramatura": 0.105
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.105
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "MOLHO BARBECUE",
+   "precoVenda": 2.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "molho barbecue",
+     "unidade": "kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "MOLHO CHEDDAR",
+   "precoVenda": 2.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Acompanhamentos",
+   "categoria": "ACOMPANHAMENTO",
+   "nome": "GELEIA DE PIMENTA",
+   "precoVenda": 2.9,
+   "taxaIfood": 13.64,
+   "ingredientes": [
+    {
+     "insumo": "Geleia de pimenta",
+     "unidade": "kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Bebidas e Drinks",
+   "categoria": "BEBIDA",
+   "nome": "Suco Laranja",
+   "precoVenda": 8.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Laranja",
+     "unidade": "kg",
+     "gramatura": 1.051
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Bebidas e Drinks",
+   "categoria": "BEBIDA",
+   "nome": "Suco Limão",
+   "precoVenda": 8.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Limão",
+     "unidade": "kg",
+     "gramatura": 0.177
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Bebidas e Drinks",
+   "categoria": "DRINK",
+   "nome": "Sex on the Beach",
+   "precoVenda": 29.9,
+   "taxaIfood": null,
+   "ingredientes": []
+  },
+  {
+   "categoriaAba": "Bebidas e Drinks",
+   "categoria": "DRINK",
+   "nome": "Logoa Azul",
+   "precoVenda": 29.9,
+   "taxaIfood": null,
+   "ingredientes": []
+  },
+  {
+   "categoriaAba": "Bebidas e Drinks",
+   "categoria": "DRINK",
+   "nome": "Caipirinha Limão",
+   "precoVenda": 29.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Limão",
+     "unidade": "kg",
+     "gramatura": 0.259
+    },
+    {
+     "insumo": "Cachaça 51",
+     "unidade": "Kg",
+     "gramatura": 0.05
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos BurgerPizza",
+   "categoria": "COMBO",
+   "nome": "Combo Dron - 2 Pizza+Refri",
+   "precoVenda": 89.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pizza Salgada Dron",
+     "unidade": "un",
+     "gramatura": 2.0
+    },
+    {
+     "insumo": "Guarana zero 1,5l",
+     "unidade": "un",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos BurgerPizza",
+   "categoria": "COMBO",
+   "nome": "Combo Familia - 4 burger + Refri",
+   "precoVenda": 99.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Smash Cheddar Dron",
+     "unidade": "un",
+     "gramatura": 4.0
+    },
+    {
+     "insumo": "Batata Grande",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Guarana zero 1,5l",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Anel de cebola Frito",
+     "unidade": "un",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos BurgerPizza",
+   "categoria": "COMBO",
+   "nome": "Combo Casal - 2 Burger + Refri",
+   "precoVenda": 74.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Smash Bacon Dron",
+     "unidade": "un",
+     "gramatura": 2.0
+    },
+    {
+     "insumo": "Batata Grande",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Guarana zero 1,5l",
+     "unidade": "Kg",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Combos BurgerPizza",
+   "categoria": "COMBO",
+   "nome": "Combo Individual - 1 Burger + Refri",
+   "precoVenda": 39.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Smash Bacon Dron",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Coca cola 350ml",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Batata Pequena",
+     "unidade": "Kg",
+     "gramatura": 1.0
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burger Dron",
+   "categoria": "BURGER",
+   "nome": "Smash Dron (Dron)",
+   "precoVenda": 0.0,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Tomate",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Alface americana",
+     "unidade": "Kg",
+     "gramatura": 0.015
+    },
+    {
+     "insumo": "Maionese Verde Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burger Dron",
+   "categoria": "BURGER",
+   "nome": "Smash Cheddar (Dron)",
+   "precoVenda": 25.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Molho Cheddar",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burger Dron",
+   "categoria": "BURGER",
+   "nome": "BBQ (Dron)",
+   "precoVenda": null,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Bacon fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    },
+    {
+     "insumo": "molho barbecue",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burger Dron",
+   "categoria": "BURGER",
+   "nome": "Predileto (Dron)",
+   "precoVenda": null,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.15
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Anel de cebola",
+     "unidade": "Kg",
+     "gramatura": 0.035
+    },
+    {
+     "insumo": "Maionese Verde Nord",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Burger Dron",
+   "categoria": "BURGER",
+   "nome": "Smash bacon (Dron)",
+   "precoVenda": null,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Pão brioche",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Carne Blend",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Cheddar fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.017
+    },
+    {
+     "insumo": "Bacon fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.04
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "MUSSARELA (Dron)",
+   "precoVenda": 45.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "FRANGO CATUPIRY (Dron)",
+   "precoVenda": 59.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Frango porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "CAMARÃO C/ CATUPIRY (Dron)",
+   "precoVenda": 67.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Camarão Limpo",
+     "unidade": "Kg",
+     "gramatura": 0.115
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "CALABRESA C/ CATUPIRY (Dron)",
+   "precoVenda": 55.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Calabresa Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.068
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PEPPERONI (Dron)",
+   "precoVenda": 56.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "pepperoni Fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.06
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "CALABRESA (Dron)",
+   "precoVenda": 49.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Linguiça Calabresa",
+     "unidade": "Kg",
+     "gramatura": 0.068
+    },
+    {
+     "insumo": "Cebola",
+     "unidade": "Kg",
+     "gramatura": 0.02
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "CARBONARA (Dron)",
+   "precoVenda": 63.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Bacon cubos porcionado",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Ovo",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.08
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "MARGUERITA (Dron)",
+   "precoVenda": 53.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Manjericão",
+     "unidade": "un",
+     "gramatura": 0.1
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "LOMBO CANADENSE (Dron)",
+   "precoVenda": 61.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Lombo Canadense",
+     "unidade": "Kg",
+     "gramatura": 0.09
+    },
+    {
+     "insumo": "Requeijão Cremoso",
+     "unidade": "Kg",
+     "gramatura": 0.12
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "CAMARÃO (Dron)",
+   "precoVenda": 59.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "PORTUGUESA (Dron)",
+   "precoVenda": 53.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Tomate fatiado",
+     "unidade": "Kg",
+     "gramatura": 0.21
+    },
+    {
+     "insumo": "Pimentão",
+     "unidade": "un",
+     "gramatura": 0.1
+    }
+   ]
+  },
+  {
+   "categoriaAba": "Pizza Dron",
+   "categoria": "PIZZA_SALGADA",
+   "nome": "QUATRO QUEIJOS (Dron)",
+   "precoVenda": 64.9,
+   "taxaIfood": null,
+   "ingredientes": [
+    {
+     "insumo": "Massa Pizza",
+     "unidade": "un",
+     "gramatura": 1.0
+    },
+    {
+     "insumo": "Molho de tomate Nord",
+     "unidade": "Kg",
+     "gramatura": 0.1
+    },
+    {
+     "insumo": "Mussarela",
+     "unidade": "Kg",
+     "gramatura": 0.18
+    },
+    {
+     "insumo": "Parmesão",
+     "unidade": "Kg",
+     "gramatura": 0.03
+    },
+    {
+     "insumo": "Gorgonzola",
+     "unidade": "Kg",
+     "gramatura": 0.01
+    }
+   ]
+  }
+ ]
+}
