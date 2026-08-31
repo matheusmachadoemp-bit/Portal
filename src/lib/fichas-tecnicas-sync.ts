@@ -96,6 +96,22 @@ export async function runFichasTecnicasSync(apply: boolean): Promise<SyncReport>
   const empresa = await prisma.empresa.findUnique({ where: { key: EMPRESA_KEY } });
   if (!empresa) throw new Error(`Empresa '${EMPRESA_KEY}' não encontrada.`);
 
+  // Segurança: duas fichas técnicas com a mesma categoria+nome no arquivo de
+  // origem se sobrescreveriam silenciosamente durante o sync (a última
+  // processada "ganha"). Isso já causou uma corrupção real (uma aba com
+  // título errado colidindo com um produto de verdade) — recusa rodar em
+  // vez de aplicar silenciosamente.
+  const seenKeys = new Map<string, string>();
+  for (const p of DATA.produtos) {
+    const dupKey = `${p.categoria}::${normalize(p.nome)}`;
+    if (seenKeys.has(dupKey)) {
+      throw new Error(
+        `Dados de origem com fichas técnicas duplicadas para a mesma categoria+nome: '${p.nome}' (${p.categoria}), vindo de '${seenKeys.get(dupKey)}' e '${p.categoriaAba}'. Corrija o arquivo de dados antes de rodar o sync.`
+      );
+    }
+    seenKeys.set(dupKey, p.categoriaAba);
+  }
+
   const report: SyncReport = {
     apply,
     insumos: { total: DATA.insumos.length, created: 0, updated: 0, semPreco: [] },

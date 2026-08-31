@@ -3650,30 +3650,6 @@
   {
    "categoriaAba": "Pizza Nord",
    "categoria": "PIZZA_SALGADA",
-   "nome": "PIZZAS DA COPA - MILLENE 2",
-   "precoVenda": 69.9,
-   "taxaIfood": 13.64,
-   "ingredientes": [
-    {
-     "insumo": "Massa Pizza",
-     "unidade": "un",
-     "gramatura": 1.0
-    },
-    {
-     "insumo": "Molho de tomate Nord",
-     "unidade": "Kg",
-     "gramatura": 0.03
-    },
-    {
-     "insumo": "Mussarela",
-     "unidade": "Kg",
-     "gramatura": 0.24
-    }
-   ]
-  },
-  {
-   "categoriaAba": "Pizza Nord",
-   "categoria": "PIZZA_SALGADA",
    "nome": "PIZZAS DA COPA - EDUARDO 1",
    "precoVenda": 69.9,
    "taxaIfood": 13.64,
@@ -5792,50 +5768,6 @@
      "insumo": "Cheddar fatiado",
      "unidade": "Kg",
      "gramatura": 0.034
-    }
-   ]
-  },
-  {
-   "categoriaAba": "Combos Burgers",
-   "categoria": "COMBO",
-   "nome": "PIZZA DE CALABRESA",
-   "precoVenda": 350.0,
-   "taxaIfood": null,
-   "ingredientes": [
-    {
-     "insumo": "creme de leite 2",
-     "unidade": "un",
-     "gramatura": 12.0
-    },
-    {
-     "insumo": "leite condesado",
-     "unidade": "Unidade",
-     "gramatura": 6.0
-    },
-    {
-     "insumo": "farinha 2",
-     "unidade": "Kg",
-     "gramatura": 0.98
-    },
-    {
-     "insumo": "fermento 2",
-     "unidade": "Kg",
-     "gramatura": 0.03
-    },
-    {
-     "insumo": "açucar 2",
-     "unidade": "Kg",
-     "gramatura": 0.75
-    },
-    {
-     "insumo": "ovo 2",
-     "unidade": "Unidade",
-     "gramatura": 12.0
-    },
-    {
-     "insumo": "chant",
-     "unidade": "Kg",
-     "gramatura": 0.5
     }
    ]
   },
