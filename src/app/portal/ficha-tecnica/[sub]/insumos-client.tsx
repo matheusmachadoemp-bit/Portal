@@ -140,6 +140,14 @@ export function InsumosClient({
     ? groups.filter((g) => (g.category?.id ?? SEM_CATEGORIA) === categoryFilter)
     : groups;
 
+  // Só mostra categorias que já têm algum insumo cadastrado — a Ficha
+  // Técnica não usa todas as categorias globais do Estoque (ex.: "Insumos
+  // Orientais", "Carnes"), então elas só poluiriam o filtro sem uso.
+  const usedCategories = useMemo(
+    () => categories.filter((c) => ingredients.some((i) => i.categoryId === c.id)),
+    [categories, ingredients]
+  );
+
   return (
     <Section
       title="Insumos cadastrados"
@@ -176,7 +184,7 @@ export function InsumosClient({
         >
           Todas ({ingredients.length})
         </button>
-        {categories.map((c) => {
+        {usedCategories.map((c) => {
           const count = ingredients.filter((i) => i.categoryId === c.id).length;
           return (
             <button
@@ -240,27 +248,18 @@ export function InsumosClient({
                     <th className="py-2 pr-4">Insumo</th>
                     <th className="py-2 pr-4">Fornecedor</th>
                     <th className="py-2 pr-4">Preço atual</th>
-                    <th className="py-2 pr-4">Embalagem</th>
-                    <th className="py-2 pr-4">Estoque</th>
-                    <th className="py-2 pr-4">Alerta</th>
+                    <th className="py-2 pr-4">Unidade de medida</th>
                     <th className="py-2 pr-4"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {g.items.map((i) => {
-                    const baixo = i.estoqueAtual <= i.estoqueMinimo;
                     return (
                       <tr key={i.id} className="border-b border-nord-border/50 hover:bg-white/5">
                         <td className="py-2.5 pr-4 text-white">{i.name}</td>
                         <td className="py-2.5 pr-4 text-nord-gray">{i.fornecedor}</td>
                         <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(i.precoAtual)}</td>
-                        <td className="py-2.5 pr-4 text-nord-gray">
-                          {formatNumber(i.quantidadeEmbalagem)} {i.unidade}
-                        </td>
-                        <td className="py-2.5 pr-4 text-nord-gray">
-                          {formatNumber(i.estoqueAtual)} {i.unidade}
-                        </td>
-                        <td className="py-2.5 pr-4">{baixo && <Badge tone="danger">Repor estoque</Badge>}</td>
+                        <td className="py-2.5 pr-4 text-nord-gray">{i.unidade}</td>
                         <td className="py-2.5 pr-4">
                           <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
                             <button onClick={() => openEdit(i)} className="text-nord-gray hover:text-white">
