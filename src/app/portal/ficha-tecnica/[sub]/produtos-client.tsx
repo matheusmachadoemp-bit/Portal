@@ -19,7 +19,6 @@ import { formatCurrency, formatPercent } from "@/lib/calc";
 import {
   cmvPercent,
   lucroIfoodEstimado,
-  margemBrutaPercent,
   margemContribuicao,
   precoIfoodSugerido,
   productTotalCost,
@@ -245,10 +244,8 @@ export function ProdutosClient({
           const totalCost = productTotalCost(p.ingredients);
           const cmv = cmvPercent(totalCost, p.precoVenda);
           const margem = margemContribuicao(totalCost, p.precoVenda);
-          const margemPct = margemBrutaPercent(totalCost, p.precoVenda);
           const taxaIfood = p.taxaIfood ?? taxaIfoodPadrao;
           const precoIfood = precoIfoodSugerido(p.precoVenda, taxaIfood);
-          const lucroIfood = lucroIfoodEstimado(precoIfood, totalCost, taxaIfood);
           return (
             <div key={p.id} className="nord-card p-4 flex flex-col gap-2">
               <div className="flex items-start justify-between gap-2">
@@ -273,18 +270,10 @@ export function ProdutosClient({
                 </Badge>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs text-nord-gray">
+                <span>Custo: <span className="text-white">{formatCurrency(totalCost)}</span></span>
                 <span>Preço venda: <span className="text-white">{formatCurrency(p.precoVenda)}</span></span>
-                <span>Custo total: <span className="text-white">{formatCurrency(totalCost)}</span></span>
-                <span>Margem: <span className="text-white">{formatCurrency(margem)}</span></span>
-                <span>Margem %: <span className="text-white">{formatPercent(margemPct)}</span></span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-nord-gray bg-nord-panel rounded-lg p-2 border border-nord-border">
-                <span>Taxa iFood: <span className="text-white">{formatPercent(taxaIfood, 0)}</span></span>
-                <span>Preço iFood: <span className="text-white">{formatCurrency(precoIfood)}</span></span>
-                <span className="col-span-2">Lucro estimado iFood: <span className="text-white">{formatCurrency(lucroIfood)}</span></span>
-              </div>
-              <div className="text-xs text-nord-gray">
-                {p.ingredients.length} ingrediente(s) • {p.tempoPreparo ?? "-"} min preparo
+                <span>Preço venda iFood: <span className="text-white">{formatCurrency(precoIfood)}</span></span>
+                <span>Lucro: <span className="text-white">{formatCurrency(margem)}</span></span>
               </div>
               <div className={`flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1 ${!canCreate ? "hidden" : ""}`}>
                 <button onClick={() => openEdit(p)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
