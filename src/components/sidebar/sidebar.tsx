@@ -35,6 +35,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { logoutAction } from "@/app/actions/logout";
 import { StoreSwitcher } from "./store-switcher";
+import { NotificationBell } from "./notification-bell";
 import type { CategoryDTO, SubcategoryDTO } from "./types";
 
 export function Sidebar({
@@ -227,12 +228,15 @@ export function Sidebar({
             N
           </div>
         )}
-        <button
-          onClick={() => setCollapsed((v) => !v)}
-          className="text-nord-gray hover:text-white"
-        >
-          {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
-        </button>
+        <div className="flex items-center gap-1">
+          {!collapsed && <NotificationBell />}
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            className="text-nord-gray hover:text-white"
+          >
+            {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+          </button>
+        </div>
       </div>
 
       <div className="pt-2">

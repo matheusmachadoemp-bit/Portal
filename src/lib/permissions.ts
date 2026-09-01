@@ -13,6 +13,7 @@ export const MODULES = [
   { key: "administrativo", label: "Administrativo" },
   { key: "ficha-tecnica", label: "Ficha Técnica" },
   { key: "cmv", label: "CMV" },
+  { key: "tarefas", label: "Tarefas" },
   { key: "configuracoes", label: "Configurações" },
   { key: "usuarios", label: "Usuários" },
 ] as const;

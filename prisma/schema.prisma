@@ -56,32 +56,32 @@ model User {
   auditLogs                     AuditLog[]
   salesEntries                  SalesEntry[]
   marketingEntries              MarketingEntry[]
-  marketingTasksResponsavel     MarketingTask[]        @relation("MarketingTaskResponsavel")
-  marketingTasksCreated         MarketingTask[]        @relation("MarketingTaskCreatedBy")
+  marketingTasksResponsavel     MarketingTask[]            @relation("MarketingTaskResponsavel")
+  marketingTasksCreated         MarketingTask[]            @relation("MarketingTaskCreatedBy")
   marketingComments             MarketingComment[]
-  marketingCampaignsResponsavel MarketingCampaign[]    @relation("MarketingCampaignResponsavel")
-  marketingCampaignsCreated     MarketingCampaign[]    @relation("MarketingCampaignCreatedBy")
+  marketingCampaignsResponsavel MarketingCampaign[]        @relation("MarketingCampaignResponsavel")
+  marketingCampaignsCreated     MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
   marketingFiles                MarketingFile[]
   marketingIdeas                MarketingIdea[]
   goals                         Goal[]
-  waiterSalesCreated            WaiterSaleEntry[]      @relation("WaiterSaleCreatedBy")
-  stockMovementsCreated         StockMovement[]        @relation("StockMovementCreatedBy")
-  purchasesCreated              Purchase[]             @relation("PurchaseCreatedBy")
-  transfersCreated              Transfer[]             @relation("TransferCreatedBy")
-  lossesCreated                 Loss[]                 @relation("LossCreatedBy")
-  stockCountsCreated            StockCount[]           @relation("StockCountCreatedBy")
-  actionPlansCreated            ActionPlan[]           @relation("ActionPlanCreatedBy")
-  salesCreated                  Sale[]                 @relation("SaleCreatedBy")
+  waiterSalesCreated            WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
+  stockMovementsCreated         StockMovement[]            @relation("StockMovementCreatedBy")
+  purchasesCreated              Purchase[]                 @relation("PurchaseCreatedBy")
+  transfersCreated              Transfer[]                 @relation("TransferCreatedBy")
+  lossesCreated                 Loss[]                     @relation("LossCreatedBy")
+  stockCountsCreated            StockCount[]               @relation("StockCountCreatedBy")
+  actionPlansCreated            ActionPlan[]               @relation("ActionPlanCreatedBy")
+  salesCreated                  Sale[]                     @relation("SaleCreatedBy")
   vaultEntries                  VaultEntry[]
   vaultAccess                   VaultAccessLog[]
   courses                       Course[]
   files                         FileItem[]
   products                      Product[]
-  occurrences                   Occurrence[]           @relation("OccurrenceCreatedBy")
-  rhFinanceEntries              EmployeeFinanceEntry[] @relation("RhFinanceCreatedBy")
-  vacationsCreated              Vacation[]             @relation("VacationCreatedBy")
-  uniformDeliveriesCreated      UniformDelivery[]      @relation("UniformCreatedBy")
-  employeeDocumentsCreated      EmployeeDocument[]     @relation("EmployeeDocumentCreatedBy")
+  occurrences                   Occurrence[]               @relation("OccurrenceCreatedBy")
+  rhFinanceEntries              EmployeeFinanceEntry[]     @relation("RhFinanceCreatedBy")
+  vacationsCreated              Vacation[]                 @relation("VacationCreatedBy")
+  uniformDeliveriesCreated      UniformDelivery[]          @relation("UniformCreatedBy")
+  employeeDocumentsCreated      EmployeeDocument[]         @relation("EmployeeDocumentCreatedBy")
   payables                      Payable[]
   receivables                   Receivable[]
   cashMovements                 CashMovement[]
@@ -94,11 +94,23 @@ model User {
   trainingBadges                TrainingUserBadge[]
   trainingXpEvents              TrainingXpEvent[]
   trainingLibraryItems          TrainingLibraryItem[]
-  customerNotesAuthored         CustomerNote[]         @relation("CustomerNoteAuthor")
-  crmSegmentsCreated            CrmSegment[]           @relation("CrmSegmentCreatedBy")
-  campaignsCreated              Campaign[]             @relation("CampaignCreatedBy")
-  automationsCreated            Automation[]           @relation("AutomationCreatedBy")
-  npsResponsesAssigned          NpsResponse[]          @relation("NpsResponsavel")
+  customerNotesAuthored         CustomerNote[]             @relation("CustomerNoteAuthor")
+  crmSegmentsCreated            CrmSegment[]               @relation("CrmSegmentCreatedBy")
+  campaignsCreated              Campaign[]                 @relation("CampaignCreatedBy")
+  automationsCreated            Automation[]               @relation("AutomationCreatedBy")
+  npsResponsesAssigned          NpsResponse[]              @relation("NpsResponsavel")
+  tasksCreated                  Task[]                     @relation("TaskCreatedBy")
+  tasksToValidate               Task[]                     @relation("TaskValidator")
+  taskAssignments               TaskAssignee[]
+  taskChecklistItemsDone        TaskChecklistItem[]
+  taskComments                  TaskComment[]
+  taskAttachments               TaskAttachment[]
+  taskProofsSubmitted           TaskProof[]
+  taskValidations               TaskValidation[]
+  taskHistoryEntries            TaskHistory[]
+  taskRecurrencesCreated        TaskRecurrence[]           @relation("TaskRecurrenceCreatedBy")
+  taskRecurrencesToValidate     TaskRecurrence[]           @relation("TaskRecurrenceValidator")
+  notifications                 Notification[]
 }
 
 model UserPermission {
@@ -145,42 +157,42 @@ model ModulePermission {
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id                             String     @id @default(cuid())
-  key                            String     @unique
+  id                             String    @id @default(cuid())
+  key                            String    @unique
   name                           String
   logo                           String?
-  color                          String     @default("#2952E3")
-  active                         Boolean    @default(true)
-  order                          Int        @default(0)
+  color                          String    @default("#2952E3")
+  active                         Boolean   @default(true)
+  order                          Int       @default(0)
   driveFolderUrl                 String?
-  taxaIfoodPadrao                Float      @default(30)
-  metaCmvPercent                 Float      @default(30)
-  metaDivergenciaContagemPercent Float      @default(3)
+  taxaIfoodPadrao                Float     @default(30)
+  metaCmvPercent                 Float     @default(30)
+  metaDivergenciaContagemPercent Float     @default(3)
   saiposApiToken                 String?
   saiposLojaId                   String?
-  saiposSyncEnabled              Boolean    @default(false)
+  saiposSyncEnabled              Boolean   @default(false)
   saiposLastSyncAt               DateTime?
   metaAdsAccessToken             String?
   metaAdsAdAccountId             String?
   metaAdsAdAccountName           String?
-  metaAdsGraphVersion            String     @default("v21.0")
-  metaAdsSyncEnabled             Boolean    @default(false)
+  metaAdsGraphVersion            String    @default("v21.0")
+  metaAdsSyncEnabled             Boolean   @default(false)
   metaAdsLastSyncAt              DateTime?
   metaAdsInstagramAccountId      String?
   metaAdsInstagramUsername       String?
-  createdAt                      DateTime   @default(now())
-  updatedAt                      DateTime   @updatedAt
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
 
   userAccess             UserEmpresaAccess[]
   suppliers              Supplier[]
   purchases              Purchase[]
   receivings             Receiving[]
-  transfersOrigem        Transfer[]              @relation("TransferOrigem")
-  transfersDestino       Transfer[]              @relation("TransferDestino")
+  transfersOrigem        Transfer[]                 @relation("TransferOrigem")
+  transfersDestino       Transfer[]                 @relation("TransferDestino")
   losses                 Loss[]
   stockCounts            StockCount[]
   actionPlans            ActionPlan[]
-  usersDefault           User[]                  @relation("UserDefaultEmpresa")
+  usersDefault           User[]                     @relation("UserDefaultEmpresa")
   salesEntries           SalesEntry[]
   marketingEntries       MarketingEntry[]
   marketingTasks         MarketingTask[]
@@ -226,6 +238,8 @@ model Empresa {
   saiposSyncLogs         SaiposSyncLog[]
   metaAdsInsights        MetaAdsInsight[]
   metaAdsSyncLogs        MetaAdsSyncLog[]
+  tasks                  Task[]
+  taskRecurrences        TaskRecurrence[]
 }
 
 model UserEmpresaAccess {
@@ -301,25 +315,25 @@ enum SalesEntrySource {
 }
 
 model SalesEntry {
-  id                  String            @id @default(cuid())
+  id                  String           @id @default(cuid())
   empresaId           String
-  empresa             Empresa           @relation(fields: [empresaId], references: [id])
+  empresa             Empresa          @relation(fields: [empresaId], references: [id])
   date                DateTime
-  periodType          PeriodType        @default(DIARIO)
-  source              SalesEntrySource  @default(MANUAL)
-  faturamentoDelivery Float             @default(0)
-  faturamentoSalao    Float             @default(0)
-  pedidosDelivery     Int               @default(0)
-  pedidosBalcao       Int               @default(0)
-  pedidosSalao        Int               @default(0)
-  mesasAtendidas      Int               @default(0)
-  taxaServicoValor    Float             @default(0)
-  metaDiaria          Float             @default(0)
+  periodType          PeriodType       @default(DIARIO)
+  source              SalesEntrySource @default(MANUAL)
+  faturamentoDelivery Float            @default(0)
+  faturamentoSalao    Float            @default(0)
+  pedidosDelivery     Int              @default(0)
+  pedidosBalcao       Int              @default(0)
+  pedidosSalao        Int              @default(0)
+  mesasAtendidas      Int              @default(0)
+  taxaServicoValor    Float            @default(0)
+  metaDiaria          Float            @default(0)
   observacoes         String?
   createdById         String?
-  createdBy           User?             @relation(fields: [createdById], references: [id])
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdBy           User?            @relation(fields: [createdById], references: [id])
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@index([empresaId, date])
 }
@@ -344,27 +358,27 @@ enum SalePlatform {
 }
 
 model Sale {
-  id             String        @id @default(cuid())
+  id             String           @id @default(cuid())
   empresaId      String
-  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  empresa        Empresa          @relation(fields: [empresaId], references: [id])
   dateTime       DateTime
-  channel        SaleChannel   @default(SALAO)
-  platform       SalePlatform  @default(SITE_PROPRIO)
-  formaPagamento PaymentMethod @default(OUTRO)
+  channel        SaleChannel      @default(SALAO)
+  platform       SalePlatform     @default(SITE_PROPRIO)
+  formaPagamento PaymentMethod    @default(OUTRO)
   garcomId       String?
-  garcom         Employee?     @relation(fields: [garcomId], references: [id])
+  garcom         Employee?        @relation(fields: [garcomId], references: [id])
   clienteId      String?
-  cliente        Cliente?      @relation(fields: [clienteId], references: [id])
+  cliente        Cliente?         @relation(fields: [clienteId], references: [id])
   mesaNumero     String?
   bairro         String?
   regiao         String?
-  valorTotal     Float         @default(0)
-  cancelado      Boolean       @default(false)
+  valorTotal     Float            @default(0)
+  cancelado      Boolean          @default(false)
   source         SalesEntrySource @default(MANUAL)
   saiposSaleId   String?
   createdById    String?
-  createdBy      User?         @relation("SaleCreatedBy", fields: [createdById], references: [id])
-  createdAt      DateTime      @default(now())
+  createdBy      User?            @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime         @default(now())
 
   items SaleItem[]
 
@@ -800,25 +814,25 @@ model MarketingEntry {
   empresa             Empresa              @relation(fields: [empresaId], references: [id])
   date                DateTime
   source              MarketingEntrySource @default(MANUAL)
-  investimentoTrafego Float    @default(0)
-  receitaTrafego      Float    @default(0)
-  pedidosCampanha     Int      @default(0)
-  visitasSite         Int      @default(0)
-  conversoes          Int      @default(0)
-  seguidoresInicio    Int      @default(0)
-  seguidoresFim       Int      @default(0)
-  curtidas            Int      @default(0)
-  comentarios         Int      @default(0)
-  compartilhamentos   Int      @default(0)
-  salvamentos         Int      @default(0)
-  alcance             Int      @default(0)
-  impressoes          Int      @default(0)
+  investimentoTrafego Float                @default(0)
+  receitaTrafego      Float                @default(0)
+  pedidosCampanha     Int                  @default(0)
+  visitasSite         Int                  @default(0)
+  conversoes          Int                  @default(0)
+  seguidoresInicio    Int                  @default(0)
+  seguidoresFim       Int                  @default(0)
+  curtidas            Int                  @default(0)
+  comentarios         Int                  @default(0)
+  compartilhamentos   Int                  @default(0)
+  salvamentos         Int                  @default(0)
+  alcance             Int                  @default(0)
+  impressoes          Int                  @default(0)
   observacoes         String?
   planoDeAcao         String?
   createdById         String?
-  createdBy           User?    @relation(fields: [createdById], references: [id])
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdBy           User?                @relation(fields: [createdById], references: [id])
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }
 
 // ---------------------------------------------------------------------------
@@ -1057,10 +1071,10 @@ model Employee {
   sales               Sale[]
   importedGarcomItems ImportedGarcomItem[]
   financeEntries      EmployeeFinanceEntry[]
-  timeEntries       TimeEntry[]
-  vacations         Vacation[]
-  uniformDeliveries UniformDelivery[]
-  documents         EmployeeDocument[]
+  timeEntries         TimeEntry[]
+  vacations           Vacation[]
+  uniformDeliveries   UniformDelivery[]
+  documents           EmployeeDocument[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1900,13 +1914,13 @@ model BankAccount {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  payables               Payable[]
-  receivables            Receivable[]
-  cashMovements          CashMovement[]              @relation("CashMovementAccount")
-  cashMovementsDestino   CashMovement[]              @relation("CashMovementDestino")
-  recurringTemplates     RecurringTemplate[]
-  bankTransactions       BankTransaction[]
-  reconciliationImports  BankReconciliationImport[]
+  payables              Payable[]
+  receivables           Receivable[]
+  cashMovements         CashMovement[]             @relation("CashMovementAccount")
+  cashMovementsDestino  CashMovement[]             @relation("CashMovementDestino")
+  recurringTemplates    RecurringTemplate[]
+  bankTransactions      BankTransaction[]
+  reconciliationImports BankReconciliationImport[]
 }
 
 model FinancialCategory {
@@ -2046,18 +2060,18 @@ model CashMovement {
 }
 
 model BankReconciliationImport {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   empresaId     String
-  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  empresa       Empresa     @relation(fields: [empresaId], references: [id])
   bankAccountId String
   bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
   fileName      String
-  totalEntradas Float    @default(0)
-  totalSaidas   Float    @default(0)
-  totalLinhas   Int      @default(0)
+  totalEntradas Float       @default(0)
+  totalSaidas   Float       @default(0)
+  totalLinhas   Int         @default(0)
   createdById   String
-  createdBy     User     @relation(fields: [createdById], references: [id])
-  createdAt     DateTime @default(now())
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
 
   transactions BankTransaction[]
 
@@ -2065,23 +2079,23 @@ model BankReconciliationImport {
 }
 
 model BankTransaction {
-  id            String                    @id @default(cuid())
+  id            String                   @id @default(cuid())
   empresaId     String
-  empresa       Empresa                   @relation(fields: [empresaId], references: [id])
+  empresa       Empresa                  @relation(fields: [empresaId], references: [id])
   bankAccountId String
-  bankAccount   BankAccount               @relation(fields: [bankAccountId], references: [id])
+  bankAccount   BankAccount              @relation(fields: [bankAccountId], references: [id])
   importId      String
-  import        BankReconciliationImport  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  import        BankReconciliationImport @relation(fields: [importId], references: [id], onDelete: Cascade)
   date          DateTime
   descricao     String
   direction     BankTransactionDirection
   valor         Float
-  status        BankTransactionStatus     @default(PENDENTE)
+  status        BankTransactionStatus    @default(PENDENTE)
   matchedType   String? // PAYABLE | RECEIVABLE
   matchedId     String?
   observacoes   String?
-  createdAt     DateTime                  @default(now())
-  updatedAt     DateTime                  @updatedAt
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
 
   @@index([empresaId, bankAccountId, date])
   @@index([importId])
@@ -2355,4 +2369,205 @@ model AuditLog {
   before     String?
   after      String?
   createdAt  DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// TAREFAS — Central de Execução Operacional
+// ---------------------------------------------------------------------------
+
+enum TaskPriority {
+  URGENTE
+  ALTA
+  MEDIA
+  BAIXA
+}
+
+enum TaskStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  AGUARDANDO_VALIDACAO
+  CONCLUIDA
+}
+
+enum TaskProofType {
+  NENHUMA
+  FOTO
+  ARQUIVO
+  TEXTO
+  FOTO_TEXTO
+}
+
+enum TaskRecurrenceFreq {
+  NENHUMA
+  DIARIA
+  SEMANAL
+  QUINZENAL
+  MENSAL
+  PERSONALIZADA
+}
+
+model Task {
+  id                 String          @id @default(cuid())
+  empresaId          String
+  empresa            Empresa         @relation(fields: [empresaId], references: [id])
+  title              String
+  description        String?
+  sectorKey          String
+  priority           TaskPriority    @default(MEDIA)
+  status             TaskStatus      @default(PENDENTE)
+  startDate          DateTime?
+  dueDate            DateTime?
+  dueTime            String?
+  recurrenceId       String?
+  recurrence         TaskRecurrence? @relation(fields: [recurrenceId], references: [id])
+  proofType          TaskProofType   @default(NENHUMA)
+  requiresValidation Boolean         @default(false)
+  validatorId        String?
+  validator          User?           @relation("TaskValidator", fields: [validatorId], references: [id])
+  sourceType         String          @default("MANUAL")
+  sourceId           String?
+  createdById        String
+  createdBy          User            @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  order              Int             @default(0)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  completedAt        DateTime?
+
+  assignees     TaskAssignee[]
+  checklist     TaskChecklistItem[]
+  comments      TaskComment[]
+  attachments   TaskAttachment[]
+  proofs        TaskProof[]
+  validations   TaskValidation[]
+  history       TaskHistory[]
+  notifications Notification[]
+
+  @@unique([recurrenceId, dueDate])
+  @@index([empresaId, status])
+  @@index([empresaId, dueDate])
+}
+
+model TaskAssignee {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+}
+
+model TaskChecklistItem {
+  id       String    @id @default(cuid())
+  taskId   String
+  task     Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text     String
+  done     Boolean   @default(false)
+  order    Int       @default(0)
+  doneAt   DateTime?
+  doneById String?
+  doneBy   User?     @relation(fields: [doneById], references: [id])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model TaskAttachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  name         String
+  fileUrl      String
+  mimeType     String?
+  sizeBytes    Int?
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model TaskProof {
+  id            String   @id @default(cuid())
+  taskId        String
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  submittedById String
+  submittedBy   User     @relation(fields: [submittedById], references: [id])
+  text          String?
+  fileUrl       String?
+  mimeType      String?
+  createdAt     DateTime @default(now())
+
+  validations TaskValidation[]
+}
+
+model TaskValidation {
+  id          String     @id @default(cuid())
+  taskId      String
+  task        Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  proofId     String?
+  proof       TaskProof? @relation(fields: [proofId], references: [id])
+  validatorId String
+  validator   User       @relation(fields: [validatorId], references: [id])
+  approved    Boolean
+  reason      String?
+  createdAt   DateTime   @default(now())
+}
+
+model TaskHistory {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model TaskRecurrence {
+  id                 String             @id @default(cuid())
+  empresaId          String
+  empresa            Empresa            @relation(fields: [empresaId], references: [id])
+  title              String
+  description        String?
+  sectorKey          String
+  priority           TaskPriority       @default(MEDIA)
+  proofType          TaskProofType      @default(NENHUMA)
+  requiresValidation Boolean            @default(false)
+  validatorId        String?
+  validator          User?              @relation("TaskRecurrenceValidator", fields: [validatorId], references: [id])
+  defaultAssigneeIds String?
+  dueTime            String?
+  freq               TaskRecurrenceFreq @default(DIARIA)
+  config             String?
+  active             Boolean            @default(true)
+  lastGeneratedDate  DateTime?
+  createdById        String
+  createdBy          User               @relation("TaskRecurrenceCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  occurrences Task[]
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
 }
