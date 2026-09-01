@@ -55,6 +55,8 @@ export default async function ConfiguracoesPage() {
                 adAccountId: ctx.empresa.metaAdsAdAccountId,
                 adAccountName: ctx.empresa.metaAdsAdAccountName,
                 graphVersion: ctx.empresa.metaAdsGraphVersion,
+                instagramAccountId: ctx.empresa.metaAdsInstagramAccountId,
+                instagramUsername: ctx.empresa.metaAdsInstagramUsername,
                 syncEnabled: ctx.empresa.metaAdsSyncEnabled,
                 hasToken: !!ctx.empresa.metaAdsAccessToken,
                 lastSyncAt: ctx.empresa.metaAdsLastSyncAt?.toISOString() ?? null,
