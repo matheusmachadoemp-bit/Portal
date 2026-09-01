@@ -36,7 +36,6 @@ const CATEGORIES = [
       { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
       { key: "campanhas", name: "Campanhas", icon: "Megaphone" },
       { key: "biblioteca", name: "Biblioteca de Arquivos", icon: "FolderOpen" },
-      { key: "drive", name: "Google Drive", icon: "HardDrive" },
       { key: "ideias", name: "Banco de Ideias", icon: "Lightbulb" },
       { key: "trafego-pago", name: "Tráfego Pago", icon: "TrendingUp" },
       { key: "redes-sociais", name: "Redes Sociais", icon: "Share2" },
