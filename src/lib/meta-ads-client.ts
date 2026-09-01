@@ -99,6 +99,32 @@ export async function fetchMetaAdAccount(
   return { ok: true, name: payload.name ?? "", currency: payload.currency ?? "BRL" };
 }
 
+/** Busca o número de seguidores de uma conta do Instagram vinculada ao Business. */
+export async function fetchInstagramFollowers(
+  token: string,
+  instagramAccountId: string,
+  graphVersion: string
+): Promise<{ ok: true; followersCount: number; username: string } | { ok: false; error: string }> {
+  const url = new URL(`${GRAPH_BASE}/${graphVersion}/${instagramAccountId}`);
+  url.searchParams.set("fields", "username,followers_count");
+  url.searchParams.set("access_token", token);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { headers: { Accept: "application/json" } });
+  } catch {
+    return { ok: false, error: "Falha de conexão com a Graph API da Meta." };
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload || payload.error) {
+    const message = payload?.error?.message || `Erro HTTP ${response.status} na Graph API da Meta.`;
+    return { ok: false, error: message };
+  }
+
+  return { ok: true, followersCount: Number(payload.followers_count) || 0, username: payload.username ?? "" };
+}
+
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }

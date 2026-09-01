@@ -42,7 +42,13 @@ export async function GET(req: Request) {
 
   const empresas = await prisma.empresa.findMany({
     where: { active: true, metaAdsSyncEnabled: true, metaAdsAccessToken: { not: null }, metaAdsAdAccountId: { not: null } },
-    select: { id: true, metaAdsAccessToken: true, metaAdsAdAccountId: true, metaAdsGraphVersion: true },
+    select: {
+      id: true,
+      metaAdsAccessToken: true,
+      metaAdsAdAccountId: true,
+      metaAdsGraphVersion: true,
+      metaAdsInstagramAccountId: true,
+    },
   });
 
   const range = defaultRange();

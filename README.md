@@ -58,9 +58,12 @@ usuário e menu lateral reorganizável por arrastar e soltar.
   `src/lib/vault.ts`). Os dados brutos por campanha ficam em `MetaAdsInsight`
   e os totais do mês corrente alimentam automaticamente o lançamento de
   Tráfego Pago (`MarketingEntry`, `source = META_ADS`) em
-  `/portal/marketing/trafego-pago`. Sincronização manual ("Sincronizar agora")
-  ou cron diário (`vercel.json` → `/api/integracoes/meta-ads/sync`, mesmo
-  `CRON_SECRET`). Ver `src/lib/meta-ads-client.ts`, `src/lib/meta-ads-sync.ts`
-  e `src/lib/meta-ads-mapper.ts`.
+  `/portal/marketing/trafego-pago`. Opcionalmente, informando o ID da conta
+  do Instagram (mesma tela), a sincronização também busca `followers_count`
+  na Graph API e atualiza o campo "Seguidores" do mês corrente. Sincronização
+  manual ("Sincronizar agora") ou cron diário (`vercel.json` →
+  `/api/integracoes/meta-ads/sync`, mesmo `CRON_SECRET`). Ver
+  `src/lib/meta-ads-client.ts`, `src/lib/meta-ads-sync.ts` e
+  `src/lib/meta-ads-mapper.ts`.
 - A página **Configurações** também lista os endpoints de webhook reservados
   para futuras integrações com iFood, 99Food, site próprio e Google Ads.

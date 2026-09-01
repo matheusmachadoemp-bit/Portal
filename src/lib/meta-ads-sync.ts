@@ -1,12 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
-import { fetchMetaAdsInsights } from "@/lib/meta-ads-client";
+import { fetchMetaAdsInsights, fetchInstagramFollowers } from "@/lib/meta-ads-client";
 import { toMetaAdsInsightData } from "@/lib/meta-ads-mapper";
 import type { Empresa } from "@prisma/client";
 
 export type MetaAdsSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
 
-type SyncableEmpresa = Pick<Empresa, "id" | "metaAdsAccessToken" | "metaAdsAdAccountId" | "metaAdsGraphVersion">;
+type SyncableEmpresa = Pick<
+  Empresa,
+  | "id"
+  | "metaAdsAccessToken"
+  | "metaAdsAdAccountId"
+  | "metaAdsGraphVersion"
+  | "metaAdsInstagramAccountId"
+>;
 
 /**
  * Sincroniza os insights de campanhas do Meta Ads de uma empresa para um
@@ -85,6 +92,10 @@ export async function syncEmpresaMetaAdsInsights(
 
   await syncMarketingEntryFromMetaAds(empresa.id, range);
 
+  if (empresa.metaAdsInstagramAccountId) {
+    await syncInstagramFollowers(empresa.id, token, empresa.metaAdsInstagramAccountId, empresa.metaAdsGraphVersion);
+  }
+
   await prisma.$transaction([
     prisma.metaAdsSyncLog.update({
       where: { id: log.id },
@@ -162,5 +173,49 @@ async function syncMarketingEntryFromMetaAds(empresaId: string, range: { start: 
     } else {
       await prisma.marketingEntry.create({ data: { empresaId, date: month, source: "META_ADS", ...data } });
     }
+  }
+}
+
+/**
+ * Busca o número atual de seguidores do Instagram e atualiza o lançamento
+ * do mês corrente de Tráfego Pago: `seguidoresFim` sempre reflete a última
+ * contagem; `seguidoresInicio` só é definido na criação do lançamento (como
+ * base para o cálculo de crescimento), nunca sobrescrito depois.
+ */
+async function syncInstagramFollowers(
+  empresaId: string,
+  token: string,
+  instagramAccountId: string,
+  graphVersion: string
+) {
+  const result = await fetchInstagramFollowers(token, instagramAccountId, graphVersion);
+  if (!result.ok) return;
+
+  await prisma.empresa.update({
+    where: { id: empresaId },
+    data: { metaAdsInstagramUsername: result.username || null },
+  });
+
+  const month = startOfMonthUtc(new Date());
+  const existing = await prisma.marketingEntry.findFirst({
+    where: { empresaId, date: month },
+    select: { id: true },
+  });
+
+  if (existing) {
+    await prisma.marketingEntry.update({
+      where: { id: existing.id },
+      data: { seguidoresFim: result.followersCount },
+    });
+  } else {
+    await prisma.marketingEntry.create({
+      data: {
+        empresaId,
+        date: month,
+        source: "META_ADS",
+        seguidoresInicio: result.followersCount,
+        seguidoresFim: result.followersCount,
+      },
+    });
   }
 }
