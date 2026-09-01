@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
 import { upload } from "@vercel/blob/client";
+import { sanitizeFileName } from "@/lib/upload";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { FILE_CATEGORY_OPTIONS } from "@/lib/marketing";
 
@@ -60,7 +61,7 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
     setUploadError(null);
     try {
       for (const file of Array.from(fileList)) {
-        const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
+        const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
         await fetch("/api/marketing/files", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

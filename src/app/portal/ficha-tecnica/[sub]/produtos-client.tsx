@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus } from "lucide-react";
 import { upload } from "@vercel/blob/client";
+import { sanitizeFileName } from "@/lib/upload";
 import {
   DndContext,
   DragEndEvent,
@@ -170,7 +171,7 @@ export function ProdutosClient({
     setUploading(true);
     setUploadError(null);
     try {
-      const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
+      const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
       setForm((f) => ({ ...f, photoUrl: blob.url }));
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Falha ao enviar a foto.");
