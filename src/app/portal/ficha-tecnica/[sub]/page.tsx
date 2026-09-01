@@ -25,22 +25,25 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   const canCreate = ctx?.mode === "single";
 
   if (sub === "insumos") {
-    const [ingredients, categories] = await Promise.all([
+    const [ingredients, categories, suppliers] = await Promise.all([
       prisma.ingredient.findMany({
         where: { empresaId: { in: empresaIds } },
         orderBy: { name: "asc" },
         include: {
           priceHistory: { orderBy: { createdAt: "desc" }, take: 10 },
           category: { select: { id: true, name: true, color: true, icon: true } },
+          fornecedorPrincipal: { select: { id: true, nomeFantasia: true, razaoSocial: true } },
         },
       }),
       prisma.stockCategory.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+      prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
     ]);
     const serialized = ingredients.map((i) => ({
       ...i,
       lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.toISOString() : null,
       validade: i.validade ? i.validade.toISOString() : null,
       priceHistory: i.priceHistory.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
+      fornecedorNome: i.fornecedorPrincipal?.nomeFantasia ?? i.fornecedorPrincipal?.razaoSocial ?? null,
     }));
 
     return (
@@ -48,6 +51,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
         <InsumosClient
           initialIngredients={serialized}
           categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon }))}
+          suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
           canCreate={canCreate}
         />
       </PageContainer>

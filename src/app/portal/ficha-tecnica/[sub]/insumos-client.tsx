@@ -10,10 +10,14 @@ import { formatCurrency, formatNumber } from "@/lib/calc";
 
 type CategoryDTO = { id: string; name: string; color: string; icon: string };
 
+type SupplierDTO = { id: string; name: string };
+
 type IngredientDTO = {
   id: string;
   name: string;
   fornecedor: string | null;
+  fornecedorPrincipalId: string | null;
+  fornecedorNome: string | null;
   unidade: string;
   precoAtual: number;
   quantidadeEmbalagem: number;
@@ -29,7 +33,7 @@ type IngredientDTO = {
 
 const emptyForm = {
   name: "",
-  fornecedor: "",
+  fornecedorPrincipalId: "",
   unidade: "kg",
   precoAtual: "",
   quantidadeEmbalagem: "1",
@@ -45,10 +49,12 @@ const SEM_CATEGORIA = "__sem-categoria__";
 export function InsumosClient({
   initialIngredients,
   categories,
+  suppliers,
   canCreate = true,
 }: {
   initialIngredients: IngredientDTO[];
   categories: CategoryDTO[];
+  suppliers: SupplierDTO[];
   canCreate?: boolean;
 }) {
   const [ingredients, setIngredients] = useState(initialIngredients);
@@ -75,7 +81,7 @@ export function InsumosClient({
     setEditing(i);
     setForm({
       name: i.name,
-      fornecedor: i.fornecedor ?? "",
+      fornecedorPrincipalId: i.fornecedorPrincipalId ?? "",
       unidade: i.unidade,
       precoAtual: String(i.precoAtual),
       quantidadeEmbalagem: String(i.quantidadeEmbalagem),
@@ -257,7 +263,7 @@ export function InsumosClient({
                     return (
                       <tr key={i.id} className="border-b border-nord-border/50 hover:bg-white/5">
                         <td className="py-2.5 pr-4 text-white">{i.name}</td>
-                        <td className="py-2.5 pr-4 text-nord-gray">{i.fornecedor}</td>
+                        <td className="py-2.5 pr-4 text-nord-gray">{i.fornecedorNome}</td>
                         <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(i.precoAtual)}</td>
                         <td className="py-2.5 pr-4 text-nord-gray">{i.unidade}</td>
                         <td className="py-2.5 pr-4">
@@ -300,7 +306,18 @@ export function InsumosClient({
             </Field>
           </div>
           <Field label="Fornecedor">
-            <input value={form.fornecedor} onChange={(e) => setForm({ ...form, fornecedor: e.target.value })} className="input" />
+            <select
+              value={form.fornecedorPrincipalId}
+              onChange={(e) => setForm({ ...form, fornecedorPrincipalId: e.target.value })}
+              className="input"
+            >
+              <option value="">Selecione...</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Unidade de medida">
             <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" placeholder="kg, g, L, un" />

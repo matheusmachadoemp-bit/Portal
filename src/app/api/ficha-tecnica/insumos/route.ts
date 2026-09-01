@@ -19,7 +19,12 @@ export async function GET() {
       fornecedorPrincipal: { select: { id: true, nomeFantasia: true, razaoSocial: true } },
     },
   });
-  return NextResponse.json({ ingredients });
+  return NextResponse.json({
+    ingredients: ingredients.map((i) => ({
+      ...i,
+      fornecedorNome: i.fornecedorPrincipal?.nomeFantasia ?? i.fornecedorPrincipal?.razaoSocial ?? null,
+    })),
+  });
 }
 
 export async function POST(req: Request) {
