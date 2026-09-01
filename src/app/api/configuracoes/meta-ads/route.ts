@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { encryptSecret, decryptSecret } from "@/lib/vault";
-import { fetchMetaAdAccount } from "@/lib/meta-ads-client";
+import { fetchMetaAdAccount, fetchInstagramFollowers } from "@/lib/meta-ads-client";
 
 export async function PATCH(req: Request) {
   const session = await auth();
@@ -24,6 +24,7 @@ export async function PATCH(req: Request) {
   const accessToken = typeof body.accessToken === "string" ? body.accessToken.trim() : "";
   const adAccountId = typeof body.adAccountId === "string" ? body.adAccountId.trim().replace(/^act_/, "") : "";
   const graphVersion = typeof body.graphVersion === "string" && body.graphVersion.trim() ? body.graphVersion.trim() : "v21.0";
+  const instagramAccountId = typeof body.instagramAccountId === "string" ? body.instagramAccountId.trim() : "";
   const syncEnabled = Boolean(body.syncEnabled);
 
   const tokenToUse = accessToken || (empresa.metaAdsAccessToken ? decryptSecret(empresa.metaAdsAccessToken) : "");
@@ -44,6 +45,18 @@ export async function PATCH(req: Request) {
     adAccountName = check.name;
   }
 
+  let instagramUsername: string | null = empresa.metaAdsInstagramUsername;
+  if (tokenToUse && instagramAccountId) {
+    const check = await fetchInstagramFollowers(tokenToUse, instagramAccountId, graphVersion);
+    if (!check.ok) {
+      return NextResponse.json(
+        { error: `Não foi possível validar a conta do Instagram: ${check.error}` },
+        { status: 400 }
+      );
+    }
+    instagramUsername = check.username || null;
+  }
+
   await prisma.empresa.update({
     where: { id: empresa.id },
     data: {
@@ -51,9 +64,11 @@ export async function PATCH(req: Request) {
       metaAdsAdAccountId: adAccountId || null,
       metaAdsAdAccountName: adAccountName,
       metaAdsGraphVersion: graphVersion,
+      metaAdsInstagramAccountId: instagramAccountId || null,
+      metaAdsInstagramUsername: instagramAccountId ? instagramUsername : null,
       metaAdsSyncEnabled: syncEnabled,
     },
   });
 
-  return NextResponse.json({ ok: true, adAccountName });
+  return NextResponse.json({ ok: true, adAccountName, instagramUsername });
 }

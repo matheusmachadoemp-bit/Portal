@@ -35,6 +35,8 @@ export function ConfiguracoesClient({
     adAccountId: string | null;
     adAccountName: string | null;
     graphVersion: string;
+    instagramAccountId: string | null;
+    instagramUsername: string | null;
     syncEnabled: boolean;
     hasToken: boolean;
     lastSyncAt: string | null;
@@ -85,6 +87,8 @@ export function ConfiguracoesClient({
   const [metaSyncEnabled, setMetaSyncEnabled] = useState(metaAds?.syncEnabled ?? false);
   const [metaHasToken, setMetaHasToken] = useState(metaAds?.hasToken ?? false);
   const [metaAdAccountName, setMetaAdAccountName] = useState(metaAds?.adAccountName ?? "");
+  const [metaInstagramAccountId, setMetaInstagramAccountId] = useState(metaAds?.instagramAccountId ?? "");
+  const [metaInstagramUsername, setMetaInstagramUsername] = useState(metaAds?.instagramUsername ?? "");
   const [metaSaving, setMetaSaving] = useState(false);
   const [metaSyncing, setMetaSyncing] = useState(false);
   const [metaMessage, setMetaMessage] = useState<string | null>(null);
@@ -99,6 +103,7 @@ export function ConfiguracoesClient({
         accessToken: metaToken,
         adAccountId: metaAdAccountId,
         graphVersion: metaGraphVersion,
+        instagramAccountId: metaInstagramAccountId,
         syncEnabled: metaSyncEnabled,
       }),
     });
@@ -107,6 +112,7 @@ export function ConfiguracoesClient({
     if (res.ok) {
       if (metaToken) setMetaHasToken(true);
       if (data.adAccountName) setMetaAdAccountName(data.adAccountName);
+      setMetaInstagramUsername(metaInstagramAccountId ? data.instagramUsername ?? "" : "");
     }
     setMetaToken("");
     setMetaMessage(res.ok ? "Configuração do Meta Ads salva com sucesso." : data.error ?? "Não foi possível salvar.");
@@ -290,8 +296,9 @@ export function ConfiguracoesClient({
               <p className="text-xs text-nord-gray mb-4">
                 Conecta o Portal à Graph API da Meta para importar investimento, alcance, impressões e
                 resultados de campanhas automaticamente, preenchendo o lançamento mensal de{" "}
-                <strong>Tráfego Pago</strong>. O token é armazenado de forma criptografada e precisa da
-                permissão <code>ads_read</code>.
+                <strong>Tráfego Pago</strong>. Também busca o número de seguidores do Instagram, se o ID da
+                conta for informado. O token é armazenado de forma criptografada e precisa da permissão{" "}
+                <code>ads_read</code>.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3 max-w-4xl">
                 <label className="block">
@@ -333,9 +340,26 @@ export function ConfiguracoesClient({
                   <span className="text-xs text-nord-gray">Sincronização automática diária ativa</span>
                 </label>
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 max-w-4xl mt-3">
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">ID da conta do Instagram (opcional)</span>
+                  <input
+                    type="text"
+                    value={metaInstagramAccountId}
+                    onChange={(e) => setMetaInstagramAccountId(e.target.value)}
+                    placeholder="Ex: 17841452307575010"
+                    className="input"
+                  />
+                </label>
+              </div>
               {metaAdAccountName && (
                 <p className="text-xs text-nord-gray mt-2">
-                  Conta conectada: <span className="text-white">{metaAdAccountName}</span>
+                  Conta de anúncios conectada: <span className="text-white">{metaAdAccountName}</span>
+                </p>
+              )}
+              {metaInstagramUsername && (
+                <p className="text-xs text-nord-gray mt-1">
+                  Instagram conectado: <span className="text-white">@{metaInstagramUsername}</span>
                 </p>
               )}
               <div className="flex items-center gap-3 mt-3">
