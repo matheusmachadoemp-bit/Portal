@@ -15,7 +15,7 @@ export async function GET() {
     orderBy: { name: "asc" },
     include: {
       priceHistory: { orderBy: { createdAt: "desc" }, take: 10 },
-      category: { select: { id: true, name: true, color: true } },
+      category: { select: { id: true, name: true, color: true, icon: true } },
       fornecedorPrincipal: { select: { id: true, nomeFantasia: true, razaoSocial: true } },
     },
   });

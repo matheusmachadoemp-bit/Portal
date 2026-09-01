@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Plus, Pencil, Trash2, AlertTriangle, Tag, Settings2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
+
+type CategoryDTO = { id: string; name: string; color: string; icon: string };
 
 type IngredientDTO = {
   id: string;
@@ -18,6 +22,8 @@ type IngredientDTO = {
   estoqueAtual: number;
   validade: string | null;
   lastPurchaseDate: string | null;
+  categoryId: string | null;
+  category: CategoryDTO | null;
   priceHistory: { id: string; price: number; createdAt: string }[];
 };
 
@@ -31,13 +37,18 @@ const emptyForm = {
   estoqueMinimo: "",
   estoqueAtual: "",
   validade: "",
+  categoryId: "",
 };
+
+const SEM_CATEGORIA = "__sem-categoria__";
 
 export function InsumosClient({
   initialIngredients,
+  categories,
   canCreate = true,
 }: {
   initialIngredients: IngredientDTO[];
+  categories: CategoryDTO[];
   canCreate?: boolean;
 }) {
   const [ingredients, setIngredients] = useState(initialIngredients);
@@ -46,6 +57,7 @@ export function InsumosClient({
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [priceAlert, setPriceAlert] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
 
   async function refresh() {
     const res = await fetch("/api/ficha-tecnica/insumos");
@@ -71,6 +83,7 @@ export function InsumosClient({
       estoqueMinimo: String(i.estoqueMinimo),
       estoqueAtual: String(i.estoqueAtual),
       validade: i.validade ? i.validade.slice(0, 10) : "",
+      categoryId: i.categoryId ?? "",
     });
     setShowForm(true);
   }
@@ -108,6 +121,25 @@ export function InsumosClient({
     refresh();
   }
 
+  const groups = useMemo(() => {
+    const byCategory = new Map<string, { category: CategoryDTO | null; items: IngredientDTO[] }>();
+    for (const i of ingredients) {
+      const key = i.category?.id ?? SEM_CATEGORIA;
+      if (!byCategory.has(key)) byCategory.set(key, { category: i.category, items: [] });
+      byCategory.get(key)!.items.push(i);
+    }
+    const ordered = categories
+      .map((c) => byCategory.get(c.id))
+      .filter((g): g is { category: CategoryDTO | null; items: IngredientDTO[] } => !!g);
+    const semCategoria = byCategory.get(SEM_CATEGORIA);
+    if (semCategoria) ordered.push({ category: null, items: semCategoria.items });
+    return ordered;
+  }, [ingredients, categories]);
+
+  const visibleGroups = categoryFilter
+    ? groups.filter((g) => (g.category?.id ?? SEM_CATEGORIA) === categoryFilter)
+    : groups;
+
   return (
     <Section
       title="Insumos cadastrados"
@@ -135,51 +167,119 @@ export function InsumosClient({
         </div>
       )}
 
-      <div className="overflow-x-auto nord-scrollbar">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
-              <th className="py-2 pr-4">Insumo</th>
-              <th className="py-2 pr-4">Fornecedor</th>
-              <th className="py-2 pr-4">Preço atual</th>
-              <th className="py-2 pr-4">Embalagem</th>
-              <th className="py-2 pr-4">Estoque</th>
-              <th className="py-2 pr-4">Alerta</th>
-              <th className="py-2 pr-4"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {ingredients.map((i) => {
-              const baixo = i.estoqueAtual <= i.estoqueMinimo;
-              return (
-                <tr key={i.id} className="border-b border-nord-border/50 hover:bg-white/5">
-                  <td className="py-2.5 pr-4 text-white">{i.name}</td>
-                  <td className="py-2.5 pr-4 text-nord-gray">{i.fornecedor}</td>
-                  <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(i.precoAtual)}</td>
-                  <td className="py-2.5 pr-4 text-nord-gray">
-                    {formatNumber(i.quantidadeEmbalagem)} {i.unidade}
-                  </td>
-                  <td className="py-2.5 pr-4 text-nord-gray">
-                    {formatNumber(i.estoqueAtual)} {i.unidade}
-                  </td>
-                  <td className="py-2.5 pr-4">
-                    {baixo && <Badge tone="danger">Repor estoque</Badge>}
-                  </td>
-                  <td className="py-2.5 pr-4">
-                    <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
-                      <button onClick={() => openEdit(i)} className="text-nord-gray hover:text-white">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setConfirmDeleteId(i.id)} className="text-nord-gray hover:text-red-400">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setCategoryFilter("")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
+            categoryFilter === "" ? "bg-nord-blue border-nord-blue text-white" : "border-nord-border text-nord-gray hover:text-white"
+          }`}
+        >
+          Todas ({ingredients.length})
+        </button>
+        {categories.map((c) => {
+          const count = ingredients.filter((i) => i.categoryId === c.id).length;
+          return (
+            <button
+              key={c.id}
+              onClick={() => setCategoryFilter(c.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                categoryFilter === c.id ? "text-white" : "border-nord-border text-nord-gray hover:text-white"
+              }`}
+              style={categoryFilter === c.id ? { backgroundColor: c.color, borderColor: c.color } : undefined}
+            >
+              <DynamicIcon name={c.icon} size={13} />
+              {c.name} ({count})
+            </button>
+          );
+        })}
+        {ingredients.some((i) => !i.categoryId) && (
+          <button
+            onClick={() => setCategoryFilter(SEM_CATEGORIA)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
+              categoryFilter === SEM_CATEGORIA ? "bg-nord-gray border-nord-gray text-white" : "border-nord-border text-nord-gray hover:text-white"
+            }`}
+          >
+            <Tag size={13} /> Sem categoria ({ingredients.filter((i) => !i.categoryId).length})
+          </button>
+        )}
+        <Link
+          href="/portal/estoque/categorias"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-dashed border-nord-border text-nord-gray hover:text-white hover:border-white/30 ml-auto"
+        >
+          <Settings2 size={13} /> Gerenciar categorias
+        </Link>
+      </div>
+
+      <div className="space-y-6">
+        {visibleGroups.map((g) => (
+          <div key={g.category?.id ?? SEM_CATEGORIA}>
+            <div className="flex items-center gap-2 mb-2">
+              {g.category ? (
+                <>
+                  <div
+                    className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${g.category.color}22` }}
+                  >
+                    <DynamicIcon name={g.category.icon} size={13} style={{ color: g.category.color }} />
+                  </div>
+                  <h3 className="text-sm font-medium text-white">{g.category.name}</h3>
+                </>
+              ) : (
+                <>
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-white/5">
+                    <Tag size={13} className="text-nord-gray" />
+                  </div>
+                  <h3 className="text-sm font-medium text-nord-gray">Sem categoria</h3>
+                </>
+              )}
+              <span className="text-xs text-nord-gray">({g.items.length})</span>
+            </div>
+            <div className="overflow-x-auto nord-scrollbar">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                    <th className="py-2 pr-4">Insumo</th>
+                    <th className="py-2 pr-4">Fornecedor</th>
+                    <th className="py-2 pr-4">Preço atual</th>
+                    <th className="py-2 pr-4">Embalagem</th>
+                    <th className="py-2 pr-4">Estoque</th>
+                    <th className="py-2 pr-4">Alerta</th>
+                    <th className="py-2 pr-4"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.items.map((i) => {
+                    const baixo = i.estoqueAtual <= i.estoqueMinimo;
+                    return (
+                      <tr key={i.id} className="border-b border-nord-border/50 hover:bg-white/5">
+                        <td className="py-2.5 pr-4 text-white">{i.name}</td>
+                        <td className="py-2.5 pr-4 text-nord-gray">{i.fornecedor}</td>
+                        <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(i.precoAtual)}</td>
+                        <td className="py-2.5 pr-4 text-nord-gray">
+                          {formatNumber(i.quantidadeEmbalagem)} {i.unidade}
+                        </td>
+                        <td className="py-2.5 pr-4 text-nord-gray">
+                          {formatNumber(i.estoqueAtual)} {i.unidade}
+                        </td>
+                        <td className="py-2.5 pr-4">{baixo && <Badge tone="danger">Repor estoque</Badge>}</td>
+                        <td className="py-2.5 pr-4">
+                          <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
+                            <button onClick={() => openEdit(i)} className="text-nord-gray hover:text-white">
+                              <Pencil size={14} />
+                            </button>
+                            <button onClick={() => setConfirmDeleteId(i.id)} className="text-nord-gray hover:text-red-400">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar insumo" : "Novo insumo"}>
@@ -187,6 +287,18 @@ export function InsumosClient({
           <div className="col-span-2">
             <Field label="Nome do insumo">
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+            </Field>
+          </div>
+          <div className="col-span-2">
+            <Field label="Categoria">
+              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="input">
+                <option value="">Sem categoria</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
           <Field label="Fornecedor">

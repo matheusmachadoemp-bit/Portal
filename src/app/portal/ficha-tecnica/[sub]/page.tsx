@@ -25,11 +25,17 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   const canCreate = ctx?.mode === "single";
 
   if (sub === "insumos") {
-    const ingredients = await prisma.ingredient.findMany({
-      where: { empresaId: { in: empresaIds } },
-      orderBy: { name: "asc" },
-      include: { priceHistory: { orderBy: { createdAt: "desc" }, take: 10 } },
-    });
+    const [ingredients, categories] = await Promise.all([
+      prisma.ingredient.findMany({
+        where: { empresaId: { in: empresaIds } },
+        orderBy: { name: "asc" },
+        include: {
+          priceHistory: { orderBy: { createdAt: "desc" }, take: 10 },
+          category: { select: { id: true, name: true, color: true, icon: true } },
+        },
+      }),
+      prisma.stockCategory.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    ]);
     const serialized = ingredients.map((i) => ({
       ...i,
       lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.toISOString() : null,
@@ -39,7 +45,11 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
 
     return (
       <PageContainer title="Ficha Técnica" subtitle="Insumos">
-        <InsumosClient initialIngredients={serialized} canCreate={canCreate} />
+        <InsumosClient
+          initialIngredients={serialized}
+          categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon }))}
+          canCreate={canCreate}
+        />
       </PageContainer>
     );
   }
