@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { upload } from "@vercel/blob/client";
+import { sanitizeFileName } from "@/lib/upload";
 import { Modal } from "@/components/ui/modal";
 import { Plus, Trash2, GripVertical, Upload } from "lucide-react";
 import { COURSE_CATEGORY_OPTIONS, COURSE_STATUS_OPTIONS, MODULE_TYPE_OPTIONS, QUESTION_TYPE_OPTIONS } from "@/lib/university";
@@ -96,7 +97,7 @@ export function CourseBuilderModal({
     setUploadError(null);
     setUploadingIdx(idx);
     try {
-      const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
+      const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
       updateModule(idx, { videoUrl: blob.url });
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Falha ao enviar o vídeo.");
