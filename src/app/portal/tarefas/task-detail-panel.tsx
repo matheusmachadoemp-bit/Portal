@@ -6,6 +6,7 @@ import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { Modal, FormError } from "@/components/ui/modal";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
+import { SectorBadge } from "./sector-badge";
 import {
   TASK_PRIORITY_LABEL,
   TASK_PRIORITY_COLOR,
@@ -228,7 +229,7 @@ export function TaskDetailPanel({
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: task.empresa.color }} />
               {task.empresa.name}
             </span>
-            <span className="text-xs text-nord-gray">{task.sectorKey}</span>
+            <SectorBadge sectorKey={task.sectorKey} />
             {task.dueDate && (
               <span className={`text-xs ${task.overdue ? "text-red-400 font-medium" : "text-nord-gray"}`}>
                 Prazo: {new Date(task.dueDate).toLocaleDateString("pt-BR")}

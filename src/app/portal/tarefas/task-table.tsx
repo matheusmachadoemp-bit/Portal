@@ -11,6 +11,7 @@ import {
   TASK_STATUS_TONE,
   effectiveTaskStatus,
 } from "@/lib/tarefas";
+import { SectorBadge } from "./sector-badge";
 import type { TaskDTO } from "./types";
 
 type SortField = "title" | "empresa" | "sectorKey" | "dueDate" | "priority" | "status";
@@ -138,7 +139,9 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
                     {t.empresa.name}
                   </span>
                 </td>
-                <td className="py-2.5 pr-4 text-nord-gray">{t.sectorKey}</td>
+                <td className="py-2.5 pr-4">
+                  <SectorBadge sectorKey={t.sectorKey} />
+                </td>
                 <td className="py-2.5 pr-4 text-nord-gray">
                   {t.assignees.length === 0
                     ? "—"

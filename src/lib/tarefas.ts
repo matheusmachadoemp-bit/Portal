@@ -21,6 +21,30 @@ export const TASK_SECTORS = [
   "Outros",
 ] as const;
 
+// Ícone (sempre azul na UI) e cor (usada no fundo do selo) de cada setor.
+export const TASK_SECTOR_OPTIONS: { key: (typeof TASK_SECTORS)[number]; icon: string; color: string }[] = [
+  { key: "Gestão", icon: "Briefcase", color: "#2952E3" },
+  { key: "Gerência", icon: "UserCog", color: "#8b5cf6" },
+  { key: "Cozinha", icon: "ChefHat", color: "#f97316" },
+  { key: "Salão", icon: "UtensilsCrossed", color: "#eab308" },
+  { key: "Delivery", icon: "Bike", color: "#22c55e" },
+  { key: "Bar", icon: "Wine", color: "#ec4899" },
+  { key: "Financeiro", icon: "DollarSign", color: "#10b981" },
+  { key: "RH", icon: "Users", color: "#06b6d4" },
+  { key: "Marketing", icon: "Megaphone", color: "#f43f5e" },
+  { key: "Compras", icon: "ShoppingCart", color: "#a855f7" },
+  { key: "Estoque", icon: "Package", color: "#84cc16" },
+  { key: "Manutenção", icon: "Wrench", color: "#64748b" },
+  { key: "Outros", icon: "MoreHorizontal", color: "#71717a" },
+];
+
+export const TASK_SECTOR_ICON: Record<string, string> = Object.fromEntries(
+  TASK_SECTOR_OPTIONS.map((s) => [s.key, s.icon])
+);
+export const TASK_SECTOR_COLOR: Record<string, string> = Object.fromEntries(
+  TASK_SECTOR_OPTIONS.map((s) => [s.key, s.color])
+);
+
 // ---------------------------------------------------------------------------
 // Prioridade
 // ---------------------------------------------------------------------------
