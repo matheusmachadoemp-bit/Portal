@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Download, AlertTriangle, FileText } from "lucide-react";
 import { upload } from "@vercel/blob/client";
+import { sanitizeFileName } from "@/lib/upload";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -105,7 +106,7 @@ export function DocumentosClient({
     if (!file) return;
     setUploading(true);
     try {
-      const blob = await upload(file.name, file, { access: "public", handleUploadUrl: "/api/upload" });
+      const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
 
       await fetch("/api/rh/documents", {
         method: "POST",
