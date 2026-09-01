@@ -12,7 +12,7 @@ const OVERDUE_DAYS = 7;
 export default async function PainelGestorPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canManageUsers(session.user.role)) redirect("/portal/universidade/dashboard");
+  if (!canManageUsers(session.user.role)) redirect("/portal/universidade");
 
   const now = new Date();
 

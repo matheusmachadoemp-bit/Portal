@@ -11,7 +11,7 @@ const TABS = [
   { href: "/portal/rh/ferias", label: "Férias" },
   { href: "/portal/rh/uniformes", label: "Uniformes" },
   { href: "/portal/rh/documentos", label: "Documentos" },
-  { href: "/portal/rh/dashboard", label: "Dashboard" },
+  { href: "/portal/rh", label: "Dashboard" },
 ];
 
 export function RhTabs() {
