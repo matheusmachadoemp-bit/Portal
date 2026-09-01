@@ -170,8 +170,8 @@ export function InsumosClient({
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           onClick={() => setCategoryFilter("")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
-            categoryFilter === "" ? "bg-nord-blue border-nord-blue text-white" : "border-nord-border text-nord-gray hover:text-white"
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border text-white ${
+            categoryFilter === "" ? "bg-nord-blue border-nord-blue" : "border-nord-border hover:border-white/30"
           }`}
         >
           Todas ({ingredients.length})
@@ -182,12 +182,11 @@ export function InsumosClient({
             <button
               key={c.id}
               onClick={() => setCategoryFilter(c.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
-                categoryFilter === c.id ? "text-white" : "border-nord-border text-nord-gray hover:text-white"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border text-white ${
+                categoryFilter === c.id ? "bg-nord-blue border-nord-blue" : "border-nord-border hover:border-white/30"
               }`}
-              style={categoryFilter === c.id ? { backgroundColor: c.color, borderColor: c.color } : undefined}
             >
-              <DynamicIcon name={c.icon} size={13} />
+              <DynamicIcon name={c.icon} size={13} className="text-nord-blue-light" />
               {c.name} ({count})
             </button>
           );
@@ -195,11 +194,11 @@ export function InsumosClient({
         {ingredients.some((i) => !i.categoryId) && (
           <button
             onClick={() => setCategoryFilter(SEM_CATEGORIA)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
-              categoryFilter === SEM_CATEGORIA ? "bg-nord-gray border-nord-gray text-white" : "border-nord-border text-nord-gray hover:text-white"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border text-white ${
+              categoryFilter === SEM_CATEGORIA ? "bg-nord-blue border-nord-blue" : "border-nord-border hover:border-white/30"
             }`}
           >
-            <Tag size={13} /> Sem categoria ({ingredients.filter((i) => !i.categoryId).length})
+            <Tag size={13} className="text-nord-blue-light" /> Sem categoria ({ingredients.filter((i) => !i.categoryId).length})
           </button>
         )}
         <Link
