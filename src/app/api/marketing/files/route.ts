@@ -3,15 +3,18 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
 
+  const { searchParams } = new URL(req.url);
+  const space = searchParams.get("space") || "biblioteca";
+
   const files = await prisma.marketingFile.findMany({
-    where: { empresaId: { in: empresaIdsForContext(ctx) } },
+    where: { empresaId: { in: empresaIdsForContext(ctx) }, space },
     orderBy: { createdAt: "desc" },
     include: { uploadedBy: { select: { name: true } }, empresa: { select: { name: true } } },
   });
@@ -40,6 +43,7 @@ export async function POST(req: Request) {
     data: {
       empresaId: empresa.id,
       name: body.name,
+      space: body.space === "drive" ? "drive" : "biblioteca",
       category: body.category || "Artes",
       fileUrl: body.fileUrl,
       mimeType: body.mimeType || null,

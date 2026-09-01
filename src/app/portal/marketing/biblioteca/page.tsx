@@ -8,7 +8,7 @@ export default async function BibliotecaPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const files = await prisma.marketingFile.findMany({
-    where: { empresaId: { in: empresaIds } },
+    where: { empresaId: { in: empresaIds }, space: "biblioteca" },
     orderBy: { createdAt: "desc" },
     include: { uploadedBy: { select: { name: true } }, empresa: { select: { name: true } } },
   });

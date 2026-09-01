@@ -1,14 +1,23 @@
+import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { DriveClient } from "./drive-client";
-import { getActiveEmpresaContext } from "@/lib/empresa";
+import { FilesClient } from "../biblioteca/files-client";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function DrivePage() {
   const ctx = await getActiveEmpresaContext();
-  const driveFolderUrl = ctx?.mode === "single" ? ctx.empresa.driveFolderUrl : null;
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
+  const files = await prisma.marketingFile.findMany({
+    where: { empresaId: { in: empresaIds }, space: "drive" },
+    orderBy: { createdAt: "desc" },
+    include: { uploadedBy: { select: { name: true } }, empresa: { select: { name: true } } },
+  });
+
+  const serialized = files.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() }));
 
   return (
     <PageContainer title="Marketing" subtitle="Google Drive">
-      <DriveClient driveFolderUrl={driveFolderUrl} canEdit={ctx?.mode === "single"} />
+      <FilesClient initialFiles={serialized} canCreate={ctx?.mode === "single"} space="drive" />
     </PageContainer>
   );
 }

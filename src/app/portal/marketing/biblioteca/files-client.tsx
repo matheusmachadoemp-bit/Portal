@@ -22,7 +22,15 @@ type FileDTO = {
 
 const isImage = (url: string) => /\.(png|jpe?g|webp|gif)$/i.test(url);
 
-export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO[]; canCreate: boolean }) {
+export function FilesClient({
+  initialFiles,
+  canCreate,
+  space = "biblioteca",
+}: {
+  initialFiles: FileDTO[];
+  canCreate: boolean;
+  space?: "biblioteca" | "drive";
+}) {
   const [files, setFiles] = useState(initialFiles);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -50,7 +58,7 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
   }, [files]);
 
   async function refresh() {
-    const res = await fetch("/api/marketing/files");
+    const res = await fetch(`/api/marketing/files?space=${space}`);
     const data = await res.json();
     setFiles(data.files);
   }
@@ -67,6 +75,7 @@ export function FilesClient({ initialFiles, canCreate }: { initialFiles: FileDTO
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: file.name,
+            space,
             category: uploadCategory,
             fileUrl: blob.url,
             mimeType: file.type,

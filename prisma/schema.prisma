@@ -929,6 +929,7 @@ model MarketingFile {
   empresaId    String
   empresa      Empresa        @relation(fields: [empresaId], references: [id])
   name         String
+  space        String         @default("biblioteca")
   category     String         @default("Artes")
   fileUrl      String
   mimeType     String?
