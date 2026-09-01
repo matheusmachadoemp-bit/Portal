@@ -12,6 +12,7 @@ import {
   effectiveTaskStatus,
 } from "@/lib/tarefas";
 import { SectorBadge } from "./sector-badge";
+import { ResponsavelBadge } from "./responsavel-badge";
 import type { TaskDTO } from "./types";
 
 type SortField = "title" | "empresa" | "sectorKey" | "dueDate" | "priority" | "status";
@@ -94,9 +95,9 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
         <thead>
           <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
             <Th field="title">Tarefa</Th>
+            <th className="py-2 pr-4">Responsável</th>
             <Th field="empresa">Unidade</Th>
             <Th field="sectorKey">Setor</Th>
-            <th className="py-2 pr-4">Responsável</th>
             <Th field="dueDate">Prazo</Th>
             <Th field="priority">Prioridade</Th>
             <Th field="status">Status</Th>
@@ -134,6 +135,18 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
+                  {t.assignees.length === 0 ? (
+                    <span className="text-nord-gray">—</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <ResponsavelBadge userId={t.assignees[0].userId} name={t.assignees[0].user.name} />
+                      {t.assignees.length > 1 && (
+                        <span className="text-[11px] text-nord-gray">+{t.assignees.length - 1}</span>
+                      )}
+                    </span>
+                  )}
+                </td>
+                <td className="py-2.5 pr-4">
                   <span className="inline-flex items-center gap-1.5 text-nord-gray">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.empresa.color }} />
                     {t.empresa.name}
@@ -141,13 +154,6 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
                 </td>
                 <td className="py-2.5 pr-4">
                   <SectorBadge sectorKey={t.sectorKey} />
-                </td>
-                <td className="py-2.5 pr-4 text-nord-gray">
-                  {t.assignees.length === 0
-                    ? "—"
-                    : t.assignees.length === 1
-                      ? t.assignees[0].user.name
-                      : `${t.assignees[0].user.name} +${t.assignees.length - 1}`}
                 </td>
                 <td className={`py-2.5 pr-4 ${t.overdue ? "text-red-400 font-medium" : "text-nord-gray"}`}>
                   {formatDueDate(t.dueDate, t.dueTime)}

@@ -6,8 +6,8 @@ export function SectorBadge({ sectorKey }: { sectorKey: string }) {
   const icon = TASK_SECTOR_ICON[sectorKey] ?? "MoreHorizontal";
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-white"
-      style={{ backgroundColor: `${color}33` }}
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold text-white"
+      style={{ backgroundColor: `${color}4D`, boxShadow: `inset 0 0 0 1px ${color}80` }}
     >
       <DynamicIcon name={icon} size={12} className="text-nord-blue-light" />
       {sectorKey}

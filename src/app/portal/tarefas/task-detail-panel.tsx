@@ -7,6 +7,7 @@ import { sanitizeFileName } from "@/lib/upload";
 import { Modal, FormError } from "@/components/ui/modal";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
 import { SectorBadge } from "./sector-badge";
+import { ResponsavelBadge } from "./responsavel-badge";
 import {
   TASK_PRIORITY_LABEL,
   TASK_PRIORITY_COLOR,
@@ -240,10 +241,14 @@ export function TaskDetailPanel({
 
           {task.description && <p className="text-sm text-nord-gray whitespace-pre-wrap">{task.description}</p>}
 
-          <div className="text-xs text-nord-gray">
-            Criada por {task.createdBy.name} · Responsáveis:{" "}
-            {task.assignees.length > 0 ? task.assignees.map((a) => a.user.name).join(", ") : "ninguém atribuído"}
-            {task.requiresValidation && task.validator && <> · Validador: {task.validator.name}</>}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-nord-gray">
+            <span>Criada por {task.createdBy.name} · Responsáveis:</span>
+            {task.assignees.length === 0 ? (
+              <span>ninguém atribuído</span>
+            ) : (
+              task.assignees.map((a) => <ResponsavelBadge key={a.userId} userId={a.userId} name={a.user.name} />)
+            )}
+            {task.requiresValidation && task.validator && <span>· Validador: {task.validator.name}</span>}
           </div>
 
           {task.status === "PENDENTE" && isAssignee && (
