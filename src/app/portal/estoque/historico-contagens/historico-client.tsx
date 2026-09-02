@@ -88,30 +88,30 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
       <div className="overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+            <tr className="text-left text-xs text-white border-b border-nord-border">
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} /> Data</span>
+                <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} className="text-nord-blue-light" /> Data</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><ClipboardList size={13} /> Tipo</span>
+                <span className="inline-flex items-center gap-1.5"><ClipboardList size={13} className="text-nord-blue-light" /> Tipo</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><Boxes size={13} /> Setor</span>
+                <span className="inline-flex items-center gap-1.5"><Boxes size={13} className="text-nord-blue-light" /> Setor</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><User size={13} /> Responsável</span>
+                <span className="inline-flex items-center gap-1.5"><User size={13} className="text-nord-blue-light" /> Responsável</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><Package size={13} /> Itens</span>
+                <span className="inline-flex items-center gap-1.5"><Package size={13} className="text-nord-blue-light" /> Itens</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={13} /> Divergências</span>
+                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={13} className="text-nord-blue-light" /> Divergências</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><DollarSign size={13} /> Diferença</span>
+                <span className="inline-flex items-center gap-1.5"><DollarSign size={13} className="text-nord-blue-light" /> Diferença</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><CircleCheck size={13} /> Status</span>
+                <span className="inline-flex items-center gap-1.5"><CircleCheck size={13} className="text-nord-blue-light" /> Status</span>
               </th>
               <th className="py-2 pr-4" />
             </tr>
