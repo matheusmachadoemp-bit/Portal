@@ -51,18 +51,28 @@ type Venda = {
 
 type Nota = { id: string; texto: string; autor: string; createdAt: string };
 
+type PedidoImportado = {
+  id: string;
+  numeroPedido: string | null;
+  itens: string | null;
+  valorGasto: number | null;
+  createdAt: string;
+};
+
 export function ClienteProfileClient({
   cliente,
   metrics,
   preferencias,
   vendas,
   notas: notasIniciais,
+  historicoImportado,
 }: {
   cliente: ClienteInfo;
   metrics: Metrics;
   preferencias: Preferencias;
   vendas: Venda[];
   notas: Nota[];
+  historicoImportado: PedidoImportado[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -258,6 +268,34 @@ export function ClienteProfileClient({
               {vendas.length === 0 && <p className="text-sm text-nord-gray text-center py-6">Nenhum pedido registrado ainda.</p>}
             </div>
           </Section>
+
+          {historicoImportado.length > 0 && (
+            <div className="mt-6">
+              <Section title="Histórico de pedidos importado">
+                <p className="text-xs text-nord-gray mb-3">
+                  Trazido de uma planilha — não entra nos relatórios de Vendas nem no cálculo de VIP/status.
+                </p>
+                <div className="space-y-3 max-h-[480px] overflow-y-auto nord-scrollbar">
+                  {historicoImportado.map((p) => (
+                    <div key={p.id} className="flex gap-3 pb-3 border-b border-nord-border/50 last:border-0">
+                      <div className="w-8 h-8 rounded-lg bg-nord-gray/15 flex items-center justify-center shrink-0 mt-0.5">
+                        <DynamicIcon name="FileClock" size={14} className="text-nord-gray" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <p className="text-sm text-white font-medium">
+                            {p.numeroPedido ? `Pedido ${p.numeroPedido}` : "Pedido sem número"}
+                            {p.valorGasto !== null && <> · {formatCurrency(p.valorGasto)}</>}
+                          </p>
+                        </div>
+                        <p className="text-xs text-nord-gray mt-0.5">{p.itens || "Sem itens detalhados"}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            </div>
+          )}
         </div>
       </div>
     </div>
