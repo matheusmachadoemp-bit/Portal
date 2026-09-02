@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { CalendarDays, ClipboardList, Boxes, User, Package, AlertTriangle, DollarSign, CircleCheck } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -72,9 +73,8 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
           exportRows={() =>
             filtered.map((c) => ({
               Data: format(new Date(c.dataContagem), "dd/MM/yyyy"),
-              Loja: c.empresaNome,
               Tipo: c.type === "MENSAL" ? "Mensal" : "Semanal",
-              "Setor/Mês": c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : ""),
+              Setor: c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : ""),
               Responsável: c.responsavel ?? "",
               Itens: c.totalItens,
               Divergências: c.divergencias,
@@ -89,32 +89,41 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
-              <th className="py-2 pr-4">Data</th>
-              <th className="py-2 pr-4">Loja</th>
-              <th className="py-2 pr-4">Tipo</th>
-              <th className="py-2 pr-4">Setor/Período</th>
-              <th className="py-2 pr-4">Responsável</th>
-              <th className="py-2 pr-4">Itens</th>
-              <th className="py-2 pr-4">Divergências</th>
-              <th className="py-2 pr-4">Diferença</th>
-              <th className="py-2 pr-4">Status</th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} /> Data</span>
+              </th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><ClipboardList size={13} /> Tipo</span>
+              </th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><Boxes size={13} /> Setor</span>
+              </th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><User size={13} /> Responsável</span>
+              </th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><Package size={13} /> Itens</span>
+              </th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={13} /> Divergências</span>
+              </th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><DollarSign size={13} /> Diferença</span>
+              </th>
+              <th className="py-2 pr-4">
+                <span className="inline-flex items-center gap-1.5"><CircleCheck size={13} /> Status</span>
+              </th>
               <th className="py-2 pr-4" />
             </tr>
           </thead>
           <tbody>
             {filtered.map((c) => (
               <tr key={c.id} className="border-b border-nord-border/50 hover:bg-white/5">
-                <td className="py-2.5 pr-4 text-nord-gray">{format(new Date(c.dataContagem), "dd/MM/yyyy")}</td>
-                <td className="py-2.5 pr-4">
-                  <span className="inline-flex items-center gap-1.5 text-white">
-                    <span className="w-2 h-2 rounded-full" style={{ background: c.empresaCor }} />
-                    {c.empresaNome}
-                  </span>
-                </td>
-                <td className="py-2.5 pr-4 text-nord-gray">{c.type === "MENSAL" ? "Mensal" : "Semanal"}</td>
-                <td className="py-2.5 pr-4 text-nord-gray">{c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : `Sem. ${c.semana}/${c.ano}`)}</td>
-                <td className="py-2.5 pr-4 text-nord-gray">{c.responsavel ?? "—"}</td>
-                <td className="py-2.5 pr-4 text-nord-gray">{c.totalItens}</td>
+                <td className="py-2.5 pr-4 text-white">{format(new Date(c.dataContagem), "dd/MM/yyyy")}</td>
+                <td className="py-2.5 pr-4 text-white">{c.type === "MENSAL" ? "Mensal" : "Semanal"}</td>
+                <td className="py-2.5 pr-4 text-white">{c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : `Sem. ${c.semana}/${c.ano}`)}</td>
+                <td className="py-2.5 pr-4 text-white">{c.responsavel ?? "—"}</td>
+                <td className="py-2.5 pr-4 text-white">{c.totalItens}</td>
                 <td className="py-2.5 pr-4"><Badge tone={c.divergencias ? "danger" : "default"}>{c.divergencias}</Badge></td>
                 <td className="py-2.5 pr-4">
                   <span className={c.valorDiferenca < 0 ? "text-red-400" : "text-emerald-400"}>{formatCurrency(c.valorDiferenca)}</span>
@@ -129,7 +138,7 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="py-6 text-center text-nord-gray">
+                <td colSpan={9} className="py-6 text-center text-nord-gray">
                   Nenhuma contagem encontrada.
                 </td>
               </tr>
