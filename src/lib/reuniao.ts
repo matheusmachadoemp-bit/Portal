@@ -17,6 +17,13 @@ export function periodoLabel(periodo: string) {
   return start.toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+const MES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+export function periodoShortLabel(periodo: string) {
+  const { start } = periodoRange(periodo);
+  return `${MES_ABREV[start.getUTCMonth()]}/${String(start.getUTCFullYear()).slice(2)}`;
+}
+
 export function previousPeriodo(periodo: string) {
   const [yearStr, monthStr] = periodo.split("-");
   const year = Number(yearStr);
