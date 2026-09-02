@@ -48,7 +48,7 @@ export default async function ClientesPage() {
   return (
     <PageContainer title="CRM" subtitle="Clientes">
       <div className="space-y-6">
-        <ClientesClient rows={rows} lojas={lojas} isGrupo={isGrupo} />
+        <ClientesClient rows={rows} lojas={lojas} isGrupo={isGrupo} canCreate={ctx?.mode === "single"} />
       </div>
     </PageContainer>
   );

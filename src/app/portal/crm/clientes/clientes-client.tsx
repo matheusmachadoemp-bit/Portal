@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { STATUS_LABEL, STATUS_TONE, frequenciaLabel, matchesCriteria, type ClienteStatus, type SegmentCriteria } from "@/lib/crm";
+import { ClientesImportButton } from "./clientes-import-button";
 
 type Row = {
   id: string;
@@ -39,10 +40,12 @@ export function ClientesClient({
   rows,
   lojas,
   isGrupo,
+  canCreate,
 }: {
   rows: Row[];
   lojas: { id: string; name: string; color: string }[];
   isGrupo: boolean;
+  canCreate: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -220,6 +223,7 @@ export function ClientesClient({
           >
             <SlidersHorizontal size={13} /> Filtros avançados
           </button>
+          <ClientesImportButton canCreate={canCreate} />
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
