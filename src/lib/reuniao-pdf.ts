@@ -1,19 +1,26 @@
 import jsPDF from "jspdf";
 
-// Paleta do design system (DESIGN_SYSTEM.md), em RGB.
+// Tema escuro, no estilo dos relatórios de fechamento já usados pela loja.
 const COLOR = {
-  blue: [20, 100, 244] as const,
-  blueLight: [59, 130, 246] as const,
-  dark: [21, 26, 35] as const,
-  gray: [110, 118, 130] as const,
-  grayLight: [154, 164, 178] as const,
-  border: [226, 230, 236] as const,
-  panel: [246, 248, 251] as const,
+  bg: [10, 13, 20] as const,
+  bgPanel: [17, 21, 31] as const,
   white: [255, 255, 255] as const,
+  grayLight: [180, 188, 199] as const,
+  gray: [120, 129, 143] as const,
+  grid: [45, 52, 66] as const,
+  gold: [245, 183, 0] as const,
   success: [34, 197, 94] as const,
   warning: [245, 158, 11] as const,
   danger: [239, 68, 68] as const,
+  blue: [20, 100, 244] as const,
 };
+
+// Paleta rotativa dos meses no gráfico (mais antigo -> mais recente).
+const MONTH_COLORS: readonly (readonly [number, number, number])[] = [
+  [22, 163, 74], // verde
+  [34, 211, 238], // ciano
+  [245, 183, 0], // dourado (mês atual)
+];
 
 type Unit = "percent" | "currency" | "minutes";
 type Status = "batida" | "abaixo" | "sem-dado";
@@ -22,14 +29,13 @@ type MetaDirection = "max" | "min";
 export type MeetingIndicator = {
   key: string;
   label: string;
-  color: readonly [number, number, number];
   unit: Unit;
-  valorAtual: number | null;
-  valorAnterior: number | null;
   meta: number;
   metaDirection: MetaDirection;
   status: Status;
   premio: number;
+  /** Do mais antigo para o mais recente (até 3 meses); o último é sempre o mês selecionado. */
+  historico: { monthLabel: string; value: number | null }[];
 };
 
 function formatValue(unit: Unit, value: number | null) {
@@ -39,246 +45,263 @@ function formatValue(unit: Unit, value: number | null) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function formatPercent1(value: number) {
-  return value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-}
-
-function statusStyle(status: Status) {
-  if (status === "batida") return { label: "Meta batida", color: COLOR.success };
-  if (status === "abaixo") return { label: "Abaixo da meta", color: COLOR.warning };
-  return { label: "Sem dado", color: COLOR.grayLight };
-}
-
-/** % de variação e se essa variação é boa (verde) ou ruim (vermelho) para o indicador. */
-function deltaInfo(indicator: MeetingIndicator) {
-  const { valorAtual, valorAnterior, metaDirection } = indicator;
-  if (valorAtual === null || valorAnterior === null || valorAnterior === 0) return null;
-  const pct = ((valorAtual - valorAnterior) / Math.abs(valorAnterior)) * 100;
-  const melhorou = metaDirection === "min" ? pct <= 0 : pct >= 0;
-  return { pct, melhorou };
-}
-
 function setColor(doc: jsPDF, method: "setFillColor" | "setDrawColor" | "setTextColor", color: readonly [number, number, number]) {
   doc[method](color[0], color[1], color[2]);
 }
 
-function drawBadge(doc: jsPDF, text: string, x: number, y: number, color: readonly [number, number, number], fontSize = 9) {
-  doc.setFontSize(fontSize);
-  const w = doc.getTextWidth(text) + 8;
-  setColor(doc, "setFillColor", color);
-  doc.roundedRect(x, y, w, fontSize * 0.75, fontSize * 0.35, fontSize * 0.35, "F");
-  setColor(doc, "setTextColor", COLOR.white);
-  doc.text(text, x + 4, y + fontSize * 0.52);
-  return w;
+/** Arredonda para cima num "número redondo" agradável para o eixo do gráfico. */
+function niceMax(raw: number) {
+  if (raw <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const normalized = raw / magnitude;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return step * magnitude;
 }
 
-function drawTriangle(doc: jsPDF, cx: number, cy: number, up: boolean, color: readonly [number, number, number]) {
-  setColor(doc, "setFillColor", color);
-  if (up) doc.triangle(cx - 2, cy + 1.6, cx + 2, cy + 1.6, cx, cy - 1.6, "F");
-  else doc.triangle(cx - 2, cy - 1.6, cx + 2, cy - 1.6, cx, cy + 1.6, "F");
+function centeredText(doc: jsPDF, text: string, centerX: number, y: number) {
+  doc.text(text, centerX - doc.getTextWidth(text) / 2, y);
 }
 
-function drawFooter(doc: jsPDF, pageWidth: number, pageHeight: number, margin: number) {
-  setColor(doc, "setDrawColor", COLOR.border);
-  doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
-  setColor(doc, "setTextColor", COLOR.grayLight);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")} pelo Portal Nord`, margin, pageHeight - 9);
+/** Troféu dourado simplificado, desenhado com formas básicas do jsPDF. */
+function drawTrophy(doc: jsPDF, cx: number, cy: number, size: number) {
+  setColor(doc, "setFillColor", COLOR.gold);
+  const cupW = size * 0.6;
+  const cupH = size * 0.5;
+  doc.roundedRect(cx - cupW / 2, cy - cupH / 2, cupW, cupH, cupW / 4, cupW / 4, "F");
+  doc.circle(cx - cupW / 2 - size * 0.12, cy - cupH / 4, size * 0.14, "F");
+  doc.circle(cx + cupW / 2 + size * 0.12, cy - cupH / 4, size * 0.14, "F");
+  doc.rect(cx - size * 0.06, cy + cupH / 2 - 1, size * 0.12, size * 0.28, "F");
+  doc.triangle(
+    cx - size * 0.28,
+    cy + cupH / 2 + size * 0.28,
+    cx + size * 0.28,
+    cy + cupH / 2 + size * 0.28,
+    cx,
+    cy + cupH / 2 + size * 0.14,
+    "F"
+  );
+  doc.rect(cx - size * 0.32, cy + cupH / 2 + size * 0.26, size * 0.64, size * 0.08, "F");
 }
 
-function drawHeader(doc: jsPDF, pageWidth: number, margin: number, title: string, empresaName: string, periodoLabelStr: string) {
+function drawPageBackground(doc: jsPDF, pageWidth: number, pageHeight: number) {
+  setColor(doc, "setFillColor", COLOR.bg);
+  doc.rect(0, 0, pageWidth, pageHeight, "F");
+  // faixa de destaque no rodapé, remetendo à identidade visual da marca
   setColor(doc, "setFillColor", COLOR.blue);
-  doc.rect(0, 0, pageWidth, 26, "F");
+  doc.rect(0, pageHeight - 6, pageWidth, 6, "F");
+}
+
+function drawWordmark(doc: jsPDF, x: number, y: number) {
+  setColor(doc, "setFillColor", COLOR.blue);
+  doc.circle(x + 2, y - 2, 2.6, "F");
   setColor(doc, "setTextColor", COLOR.white);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(17);
-  doc.text(title, margin, 13);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(`${empresaName} · Fechamento de ${periodoLabelStr}`, margin, 20);
+  doc.setFontSize(11);
+  doc.text("NORD", x + 7, y);
 }
 
-/**
- * Gera um PDF com uma página inteira por indicador (gráfico de colunas
- * grande, mês atual x mês anterior) mais uma página de resumo/premiação.
- */
+function messageFor(status: Status) {
+  if (status === "batida") return { text: "PARABÉNS! EXCELENTE RESULTADO", color: COLOR.success };
+  if (status === "abaixo") return { text: "VAMOS SUPERAR ESSA META NO PRÓXIMO MÊS!", color: COLOR.warning };
+  return { text: "AINDA SEM DADOS PARA ESSE INDICADOR", color: COLOR.grayLight };
+}
+
 export function exportCozinhaMeetingPdf(params: {
   empresaName: string;
   periodoLabel: string;
-  periodoAtualShort: string;
-  periodoAnteriorShort: string | null;
   indicators: MeetingIndicator[];
   premiacaoTotal: number;
   observacoes: string;
 }) {
-  const { empresaName, periodoLabel, periodoAtualShort, periodoAnteriorShort, indicators, premiacaoTotal, observacoes } = params;
+  const { empresaName, periodoLabel, indicators, premiacaoTotal, observacoes } = params;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 16;
+  const centerX = pageWidth / 2;
 
   indicators.forEach((ind, i) => {
     if (i > 0) doc.addPage();
-    drawHeader(doc, pageWidth, margin, "Reunião Cozinha", empresaName, periodoLabel);
+    drawPageBackground(doc, pageWidth, pageHeight);
+    drawWordmark(doc, margin, 16);
 
-    // Título do indicador + status
-    setColor(doc, "setTextColor", COLOR.dark);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text(ind.label, margin, 42);
-    const st = statusStyle(ind.status);
-    drawBadge(doc, st.label, margin, 46, st.color, 10);
-
-    // Valor atual em destaque + variação
+    // Título
+    setColor(doc, "setTextColor", COLOR.white);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(30);
-    setColor(doc, "setTextColor", ind.color);
-    doc.text(formatValue(ind.unit, ind.valorAtual), margin, 68);
+    centeredText(doc, ind.label.toUpperCase(), centerX, 38);
 
-    const delta = deltaInfo(ind);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    if (delta) {
-      const deltaColor = delta.melhorou ? COLOR.success : COLOR.danger;
-      drawTriangle(doc, margin + 2.5, 74.5, delta.pct >= 0, deltaColor);
-      setColor(doc, "setTextColor", deltaColor);
-      doc.text(`${formatPercent1(Math.abs(delta.pct))}% vs. mês anterior`, margin + 7, 76);
-    } else {
-      setColor(doc, "setTextColor", COLOR.grayLight);
-      doc.text("Sem dado do mês anterior para comparar", margin, 76);
-    }
-
-    // Meta e premiação (canto direito)
-    setColor(doc, "setTextColor", COLOR.gray);
-    doc.setFontSize(10);
-    const metaLabel = ind.metaDirection === "min" ? `Meta: até ${formatValue(ind.unit, ind.meta)}` : `Meta: mín. ${formatValue(ind.unit, ind.meta)}`;
-    doc.text(metaLabel, pageWidth - margin - doc.getTextWidth(metaLabel), 42);
-    if (ind.status === "batida" && ind.premio > 0) {
-      setColor(doc, "setTextColor", COLOR.warning);
-      doc.setFont("helvetica", "bold");
-      const premioLabel = `Premiação: ${formatValue("currency", ind.premio)}`;
-      doc.text(premioLabel, pageWidth - margin - doc.getTextWidth(premioLabel), 49);
-    }
-
-    // Gráfico de colunas grande: mês atual x mês anterior
-    const chartTop = 90;
-    const chartBottom = pageHeight - 40;
-    const chartH = chartBottom - chartTop;
-    const chartAreaW = pageWidth - margin * 2;
-    const colW = 46;
-    const gapBetween = 30;
-    const totalColsW = colW * 2 + gapBetween;
-    const chartLeft = margin + (chartAreaW - totalColsW) / 2;
-
-    const maxVal = Math.max(ind.valorAtual ?? 0, ind.valorAnterior ?? 0, ind.meta, 0.0001) * 1.15;
-
-    // linha de base
-    setColor(doc, "setDrawColor", COLOR.border);
-    doc.line(margin, chartBottom, pageWidth - margin, chartBottom);
-
-    // linha de meta (tracejada)
-    const metaY = chartBottom - (ind.meta / maxVal) * chartH;
-    doc.setLineDashPattern([2, 1.5], 0);
-    setColor(doc, "setDrawColor", COLOR.grayLight);
-    doc.line(margin, metaY, pageWidth - margin, metaY);
-    doc.setLineDashPattern([], 0);
+    const metaLabel = ind.metaDirection === "min" ? `META: ATÉ ${formatValue(ind.unit, ind.meta).toUpperCase()}` : `META: MÍN. ${formatValue(ind.unit, ind.meta).toUpperCase()}`;
     setColor(doc, "setTextColor", COLOR.grayLight);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    centeredText(doc, metaLabel, centerX, 47);
+
+    const currentStatus = ind.status;
+    if (currentStatus === "batida") drawTrophy(doc, pageWidth - margin - 12, 24, 16);
+
+    // Legenda dos meses
+    const historico = ind.historico.slice(-3);
+    const legendY = 62;
+    const legendGap = 42;
+    const legendStartX = centerX - ((historico.length - 1) * legendGap) / 2;
+    const colors = MONTH_COLORS.slice(MONTH_COLORS.length - historico.length);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    historico.forEach((h, idx) => {
+      const lx = legendStartX + idx * legendGap;
+      setColor(doc, "setFillColor", colors[idx]);
+      doc.circle(lx - 3, legendY - 1.2, 1.8, "F");
+      setColor(doc, "setTextColor", COLOR.white);
+      doc.text(h.monthLabel.toUpperCase(), lx + 1, legendY);
+    });
+
+    // Área do gráfico
+    const chartLeft = margin + 12;
+    const chartRight = pageWidth - margin - 4;
+    const chartBottom = pageHeight - 62;
+    const chartTop = 78;
+    const chartH = chartBottom - chartTop;
+    const chartW = chartRight - chartLeft;
+
+    const maxRaw = Math.max(ind.meta, ...historico.map((h) => h.value ?? 0));
+    const axisMax = niceMax(maxRaw * 1.15);
+    const steps = 6;
+
+    setColor(doc, "setDrawColor", COLOR.grid);
+    setColor(doc, "setTextColor", COLOR.gray);
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(`Meta: ${formatValue(ind.unit, ind.meta)}`, pageWidth - margin - doc.getTextWidth(`Meta: ${formatValue(ind.unit, ind.meta)}`), metaY - 1.5);
-
-    const columns: { x: number; value: number | null; color: readonly [number, number, number]; monthLabel: string }[] = [
-      { x: chartLeft, value: ind.valorAtual, color: ind.color, monthLabel: periodoAtualShort },
-      {
-        x: chartLeft + colW + gapBetween,
-        value: ind.valorAnterior,
-        color: COLOR.border,
-        monthLabel: periodoAnteriorShort ?? "-",
-      },
-    ];
-
-    for (const col of columns) {
-      const h = col.value !== null ? Math.max((col.value / maxVal) * chartH, 2) : 0;
-      const barY = chartBottom - h;
-      setColor(doc, "setFillColor", col.value === null ? COLOR.panel : col.color);
-      doc.roundedRect(col.x, barY, colW, h, 2, 2, "F");
-
-      // valor acima da coluna
-      setColor(doc, "setTextColor", COLOR.dark);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      const valueText = formatValue(ind.unit, col.value);
-      doc.text(valueText, col.x + colW / 2 - doc.getTextWidth(valueText) / 2, barY - 4);
-
-      // nome do mês em destaque abaixo da coluna
-      setColor(doc, "setTextColor", COLOR.dark);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text(col.monthLabel, col.x + colW / 2 - doc.getTextWidth(col.monthLabel) / 2, chartBottom + 9);
+    for (let s = 0; s <= steps; s++) {
+      const val = (axisMax / steps) * s;
+      const gy = chartBottom - (val / axisMax) * chartH;
+      doc.line(chartLeft, gy, chartRight, gy);
+      const label = val.toFixed(0);
+      doc.text(label, chartLeft - 3 - doc.getTextWidth(label), gy + 1.2);
     }
 
-    drawFooter(doc, pageWidth, pageHeight, margin);
+    // linha de meta
+    const metaY = chartBottom - (ind.meta / axisMax) * chartH;
+    doc.setLineDashPattern([2, 1.5], 0);
+    setColor(doc, "setDrawColor", COLOR.gold);
+    doc.line(chartLeft, metaY, chartRight, metaY);
+    doc.setLineDashPattern([], 0);
+
+    // barras
+    const barCount = historico.length;
+    const barGap = 14;
+    const barW = Math.min(34, (chartW - barGap * (barCount - 1)) / barCount - 6);
+    const groupW = barW * barCount + barGap * (barCount - 1);
+    const groupStart = chartLeft + (chartW - groupW) / 2;
+
+    historico.forEach((point, idx) => {
+      const bx = groupStart + idx * (barW + barGap);
+      const val = point.value ?? 0;
+      const barHeight = point.value !== null ? Math.max((val / axisMax) * chartH, 1.5) : 0;
+      const by = chartBottom - barHeight;
+      setColor(doc, "setFillColor", point.value === null ? COLOR.grid : colors[idx]);
+      doc.roundedRect(bx, by, barW, barHeight, 1.5, 1.5, "F");
+
+      setColor(doc, "setTextColor", COLOR.white);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      const valueText = formatValue(ind.unit, point.value);
+      centeredText(doc, valueText, bx + barW / 2, by - 3);
+    });
+
+    setColor(doc, "setDrawColor", COLOR.grayLight);
+    doc.line(chartLeft, chartBottom, chartRight, chartBottom);
+
+    // faixa de mensagem
+    const msg = messageFor(currentStatus);
+    setColor(doc, "setTextColor", msg.color);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    centeredText(doc, msg.text, centerX, pageHeight - 38);
+
+    if (currentStatus === "batida" && ind.premio > 0) {
+      setColor(doc, "setTextColor", COLOR.gold);
+      doc.setFontSize(11);
+      centeredText(doc, `PREMIAÇÃO: ${formatValue("currency", ind.premio).toUpperCase()}`, centerX, pageHeight - 30);
+    }
+
+    setColor(doc, "setTextColor", COLOR.gray);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
   });
 
-  // Página de resumo
+  // Página final: resumo + observações
   doc.addPage();
-  drawHeader(doc, pageWidth, margin, "Reunião Cozinha", empresaName, periodoLabel);
+  drawPageBackground(doc, pageWidth, pageHeight);
+  drawWordmark(doc, margin, 16);
 
-  setColor(doc, "setTextColor", COLOR.dark);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("Resumo do mês", margin, 42);
-
-  setColor(doc, "setFillColor", COLOR.warning);
-  doc.roundedRect(margin, 48, pageWidth - margin * 2, 16, 2, 2, "F");
   setColor(doc, "setTextColor", COLOR.white);
-  doc.setFontSize(13);
-  doc.text(`Premiação total do mês: ${formatValue("currency", premiacaoTotal)}`, pageWidth / 2, 58, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(26);
+  centeredText(doc, "RESUMO DA REUNIÃO", centerX, 32);
+  setColor(doc, "setTextColor", COLOR.grayLight);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  centeredText(doc, `${empresaName} · Fechamento de ${periodoLabel}`, centerX, 40);
 
-  // tabela resumo por indicador
-  let rowY = 76;
+  setColor(doc, "setFillColor", COLOR.bgPanel);
+  doc.roundedRect(margin, 50, pageWidth - margin * 2, 18, 3, 3, "F");
+  setColor(doc, "setTextColor", COLOR.gold);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  centeredText(doc, `PREMIAÇÃO TOTAL DO MÊS: ${formatValue("currency", premiacaoTotal).toUpperCase()}`, centerX, 61);
+
+  let rowY = 84;
   setColor(doc, "setTextColor", COLOR.gray);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text("Indicador", margin, rowY);
-  doc.text("Atual", margin + 60, rowY);
-  doc.text("Anterior", margin + 90, rowY);
-  doc.text("Meta", margin + 122, rowY);
-  doc.text("Status", margin + 152, rowY);
+  doc.text("INDICADOR", margin, rowY);
+  doc.text("ATUAL", margin + 68, rowY);
+  doc.text("META", margin + 108, rowY);
+  doc.text("STATUS", margin + 140, rowY);
   rowY += 3;
-  setColor(doc, "setDrawColor", COLOR.border);
+  setColor(doc, "setDrawColor", COLOR.grid);
   doc.line(margin, rowY, pageWidth - margin, rowY);
-  rowY += 6;
+  rowY += 8;
 
   for (const ind of indicators) {
-    setColor(doc, "setFillColor", ind.color);
+    const atual = ind.historico[ind.historico.length - 1]?.value ?? null;
+    setColor(doc, "setFillColor", COLOR.gold);
     doc.circle(margin + 1.5, rowY - 1.5, 1.5, "F");
-    setColor(doc, "setTextColor", COLOR.dark);
+    setColor(doc, "setTextColor", COLOR.white);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
+    doc.setFontSize(10);
     doc.text(ind.label, margin + 5, rowY);
-    doc.text(formatValue(ind.unit, ind.valorAtual), margin + 60, rowY);
-    doc.text(formatValue(ind.unit, ind.valorAnterior), margin + 90, rowY);
-    doc.text(formatValue(ind.unit, ind.meta), margin + 122, rowY);
-    const st = statusStyle(ind.status);
+    doc.text(formatValue(ind.unit, atual), margin + 68, rowY);
+    doc.text(formatValue(ind.unit, ind.meta), margin + 108, rowY);
+    const st = messageForStatusShort(ind.status);
     setColor(doc, "setTextColor", st.color);
-    doc.text(st.label, margin + 152, rowY);
-    rowY += 9;
+    doc.text(st.label, margin + 140, rowY);
+    rowY += 10;
   }
 
-  rowY += 6;
-  setColor(doc, "setTextColor", COLOR.dark);
+  rowY += 8;
+  setColor(doc, "setTextColor", COLOR.white);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text("Observações da reunião", margin, rowY);
+  doc.setFontSize(13);
+  doc.text("OBSERVAÇÕES DA REUNIÃO", margin, rowY);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  setColor(doc, "setTextColor", COLOR.gray);
+  doc.setFontSize(10.5);
+  setColor(doc, "setTextColor", COLOR.grayLight);
   const obsLines = doc.splitTextToSize(observacoes || "Sem observações registradas.", pageWidth - margin * 2);
-  doc.text(obsLines, margin, rowY + 7);
+  doc.text(obsLines, margin, rowY + 8);
 
-  drawFooter(doc, pageWidth, pageHeight, margin);
+  setColor(doc, "setTextColor", COLOR.gray);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
 
   doc.save(`reuniao-cozinha-${periodoLabel.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+}
+
+function messageForStatusShort(status: Status) {
+  if (status === "batida") return { label: "Meta batida", color: COLOR.success };
+  if (status === "abaixo") return { label: "Abaixo da meta", color: COLOR.warning };
+  return { label: "Sem dado", color: COLOR.grayLight };
 }

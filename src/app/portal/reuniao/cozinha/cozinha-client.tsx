@@ -194,63 +194,68 @@ export function CozinhaClient({
   }, [bateuCmv, bateuDesperdicio, bateuTempo, bateuOrganizacao, form]);
 
   function exportPdf() {
-    const anterior = meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null;
+    const periodo1 = previousPeriodo(selectedPeriodo);
+    const periodo2 = previousPeriodo(periodo1);
+    const anterior1 = meetings.find((m) => m.periodo === periodo1) ?? null;
+    const anterior2 = meetings.find((m) => m.periodo === periodo2) ?? null;
+
+    function historico<K extends "cmvPercent" | "desperdicioValor" | "tempoPedidoMinutos" | "organizacaoPercent">(
+      key: K,
+      atualValue: number | null
+    ) {
+      const points = [
+        anterior2 && { monthLabel: periodoShortLabel(anterior2.periodo), value: anterior2[key] },
+        anterior1 && { monthLabel: periodoShortLabel(anterior1.periodo), value: anterior1[key] },
+      ].filter((p): p is { monthLabel: string; value: number | null } => Boolean(p));
+      points.push({ monthLabel: periodoShortLabel(selectedPeriodo), value: atualValue });
+      return points;
+    }
 
     exportCozinhaMeetingPdf({
       empresaName,
       periodoLabel: periodoLabel(selectedPeriodo),
-      periodoAtualShort: periodoShortLabel(selectedPeriodo),
-      periodoAnteriorShort: anterior ? periodoShortLabel(anterior.periodo) : null,
       premiacaoTotal,
       observacoes: form.notas,
       indicators: [
         {
           key: "cmv",
           label: "CMV",
-          color: [20, 100, 244],
           unit: "percent",
-          valorAtual: metrics.cmvPercent,
-          valorAnterior: anterior?.cmvPercent ?? null,
           meta: cmvMeta,
           metaDirection: "min",
           status: statusOf(bateuCmv),
           premio: bateuCmv ? Number(form.premiacaoCmv) || 0 : 0,
+          historico: historico("cmvPercent", metrics.cmvPercent),
         },
         {
           key: "desperdicio",
           label: "Desperdício",
-          color: [239, 68, 68],
           unit: "currency",
-          valorAtual: metrics.desperdicioValor,
-          valorAnterior: anterior?.desperdicioValor ?? null,
           meta: desperdicioMeta,
           metaDirection: "min",
           status: statusOf(bateuDesperdicio),
           premio: bateuDesperdicio ? Number(form.premiacaoDesperdicio) || 0 : 0,
+          historico: historico("desperdicioValor", metrics.desperdicioValor),
         },
         {
           key: "tempo-pedido",
           label: "Tempo de Pedido",
-          color: [168, 85, 247],
           unit: "minutes",
-          valorAtual: tempoValor,
-          valorAnterior: anterior?.tempoPedidoMinutos ?? null,
           meta: tempoMeta,
           metaDirection: "min",
           status: statusOf(bateuTempo),
           premio: bateuTempo ? Number(form.premiacaoTempoPedido) || 0 : 0,
+          historico: historico("tempoPedidoMinutos", tempoValor),
         },
         {
           key: "organizacao",
           label: "Organização e Limpeza",
-          color: [20, 184, 166],
           unit: "percent",
-          valorAtual: organizacaoValor,
-          valorAnterior: anterior?.organizacaoPercent ?? null,
           meta: organizacaoMeta,
           metaDirection: "max",
           status: statusOf(bateuOrganizacao),
           premio: bateuOrganizacao ? Number(form.premiacaoOrganizacao) || 0 : 0,
+          historico: historico("organizacaoPercent", organizacaoValor),
         },
       ],
     });
