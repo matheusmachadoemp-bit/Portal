@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     },
   });
 
-  await prisma.auditLog.create({
+  const log = await prisma.auditLog.create({
     data: {
       userId: session.user.id,
       empresaId: empresa.id,
@@ -76,7 +76,16 @@ export async function POST(req: Request) {
       entityId: task.id,
       after: task.title,
     },
+    include: { user: { select: { name: true } } },
   });
+  const historyEntry = {
+    id: log.id,
+    action: log.action,
+    before: log.before,
+    after: log.after,
+    userName: log.user?.name ?? "Sistema",
+    createdAt: log.createdAt.toISOString(),
+  };
 
-  return NextResponse.json({ task });
+  return NextResponse.json({ task, historyEntry });
 }

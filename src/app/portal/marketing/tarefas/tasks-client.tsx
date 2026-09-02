@@ -65,6 +65,7 @@ export function TasksClient({
   history: HistoryEntry[];
 }) {
   const [tasks, setTasks] = useState(initialTasks);
+  const [taskHistory, setTaskHistory] = useState(history);
   const [view, setView] = useState<"kanban" | "lista">("kanban");
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [showModal, setShowModal] = useState(false);
@@ -74,9 +75,14 @@ export function TasksClient({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   async function refresh() {
-    const res = await fetch("/api/marketing/tasks");
-    const data = await res.json();
+    const [tasksRes, historyRes] = await Promise.all([
+      fetch("/api/marketing/tasks"),
+      fetch("/api/marketing/tasks/history"),
+    ]);
+    const data = await tasksRes.json();
     setTasks(data.tasks.map((t: TaskDTO) => t));
+    const historyData = await historyRes.json();
+    if (historyData.history) setTaskHistory(historyData.history);
   }
 
   const filtered = useMemo(() => {
@@ -113,11 +119,13 @@ export function TasksClient({
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.status === newStatus) return;
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
-    await fetch(`/api/marketing/tasks/${taskId}`, {
+    const res = await fetch(`/api/marketing/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
+    const data = await res.json();
+    if (data.historyEntry) setTaskHistory((prev) => [data.historyEntry, ...prev]);
   }
 
   const activeTask = tasks.find((t) => t.id === activeId);
@@ -240,7 +248,7 @@ export function TasksClient({
 
       <Section title="Histórico de movimentação">
         <div className="space-y-2 max-h-[420px] overflow-y-auto nord-scrollbar">
-          {history.map((h) => {
+          {taskHistory.map((h) => {
             const isCreate = h.action === "CREATE";
             const [title, newStatusKey] = isCreate ? [h.after ?? "", null] : (h.after ?? "").split(" → ");
             const fromLabel = h.before ? (STATUS_LABEL[h.before] ?? h.before) : null;
@@ -268,7 +276,7 @@ export function TasksClient({
               </div>
             );
           })}
-          {history.length === 0 && <p className="text-sm text-nord-gray text-center py-6">Nenhuma movimentação registrada ainda.</p>}
+          {taskHistory.length === 0 && <p className="text-sm text-nord-gray text-center py-6">Nenhuma movimentação registrada ainda.</p>}
         </div>
       </Section>
 

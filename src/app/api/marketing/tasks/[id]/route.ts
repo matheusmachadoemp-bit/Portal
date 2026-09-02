@@ -42,8 +42,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const task = await prisma.marketingTask.update({ where: { id }, data });
 
+  let historyEntry = null;
   if (data.status && data.status !== existing.status) {
-    await prisma.auditLog.create({
+    const log = await prisma.auditLog.create({
       data: {
         userId: session.user.id,
         empresaId: existing.empresaId,
@@ -53,10 +54,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         before: existing.status,
         after: `${task.title} → ${data.status}`,
       },
+      include: { user: { select: { name: true } } },
     });
+    historyEntry = {
+      id: log.id,
+      action: log.action,
+      before: log.before,
+      after: log.after,
+      userName: log.user?.name ?? "Sistema",
+      createdAt: log.createdAt.toISOString(),
+    };
   }
 
-  return NextResponse.json({ task });
+  return NextResponse.json({ task, historyEntry });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
