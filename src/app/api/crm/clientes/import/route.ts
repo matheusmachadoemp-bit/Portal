@@ -74,15 +74,29 @@ function parseDateFlexible(raw: string | number): Date | null {
   return null;
 }
 
-function parseValor(raw: string): number | null {
+// A célula pode chegar como number (xlsx com raw:true entrega números de
+// verdade) ou como string em formato brasileiro ("1.234,56"). Só aplica a
+// conversão de separador de milhar/decimal quando é texto — se já é number,
+// já está correto, e tratar como texto (ex.: "206.39999999999998") inflava
+// o valor ao remover o ponto decimal.
+function parseValor(raw: string | number): number | null {
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
   const cleaned = raw.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) && cleaned !== "" ? n : null;
 }
 
-function parseInteiro(raw: string): number | null {
+function parseInteiro(raw: string | number): number | null {
+  if (typeof raw === "number") return Number.isFinite(raw) ? Math.round(raw) : null;
   const n = parseInt(raw.replace(/\D/g, ""), 10);
   return Number.isFinite(n) ? n : null;
+}
+
+// Algumas exportações (ex.: Saipos) juntam vários endereços já usados pelo
+// cliente numa única célula, separados por ";". Fica ilegível se guardado
+// inteiro — usa só o primeiro como endereço atual do cadastro.
+function primeiroEndereco(raw: string): string {
+  return raw.split(";")[0].trim();
 }
 
 function onlyDigits(s: string): string {
@@ -181,6 +195,10 @@ export async function POST(req: Request) {
     if (!row || row.every((c) => String(c).trim() === "")) continue;
 
     const get = (key: string) => (columnMap[key] !== undefined ? String(row[columnMap[key]] ?? "").trim() : "");
+    // Preserva o tipo original da célula (number vs string) para os campos
+    // numéricos — ver parseValor/parseInteiro.
+    const getRaw = (key: string): string | number =>
+      columnMap[key] !== undefined ? (row[columnMap[key]] ?? "") : "";
 
     const nome = get("nome");
     if (!nome) {
@@ -190,10 +208,11 @@ export async function POST(req: Request) {
 
     const telefoneRaw = get("telefone");
     const nascimentoRaw = get("dataNascimento");
-    const valorPedidoRaw = get("valorPedido");
-    const pedidosImportadosRaw = get("pedidosImportados");
-    const valorGastoImportadoRaw = get("valorGastoImportado");
-    const ticketMedioImportadoRaw = get("ticketMedioImportado");
+    const enderecoRaw = get("endereco");
+    const valorPedidoRaw = getRaw("valorPedido");
+    const pedidosImportadosRaw = getRaw("pedidosImportados");
+    const valorGastoImportadoRaw = getRaw("valorGastoImportado");
+    const ticketMedioImportadoRaw = getRaw("ticketMedioImportado");
     const ultimaCompraRaw = get("ultimaCompraImportada");
 
     parsed.push({
@@ -203,15 +222,15 @@ export async function POST(req: Request) {
       whatsapp: get("whatsapp") || null,
       email: get("email") || null,
       dataNascimento: nascimentoRaw ? parseDateFlexible(nascimentoRaw) : null,
-      endereco: get("endereco") || null,
+      endereco: enderecoRaw ? primeiroEndereco(enderecoRaw) : null,
       bairro: get("bairro") || null,
       cidade: get("cidade") || null,
       numeroPedido: get("numeroPedido") || null,
       itens: get("itens") || null,
-      valorPedido: valorPedidoRaw ? parseValor(valorPedidoRaw) : null,
-      pedidosImportados: pedidosImportadosRaw ? parseInteiro(pedidosImportadosRaw) : null,
-      valorGastoImportado: valorGastoImportadoRaw ? parseValor(valorGastoImportadoRaw) : null,
-      ticketMedioImportado: ticketMedioImportadoRaw ? parseValor(ticketMedioImportadoRaw) : null,
+      valorPedido: valorPedidoRaw !== "" ? parseValor(valorPedidoRaw) : null,
+      pedidosImportados: pedidosImportadosRaw !== "" ? parseInteiro(pedidosImportadosRaw) : null,
+      valorGastoImportado: valorGastoImportadoRaw !== "" ? parseValor(valorGastoImportadoRaw) : null,
+      ticketMedioImportado: ticketMedioImportadoRaw !== "" ? parseValor(ticketMedioImportadoRaw) : null,
       ultimaCompraImportada: ultimaCompraRaw ? parseDateFlexible(ultimaCompraRaw) : null,
     });
   }
