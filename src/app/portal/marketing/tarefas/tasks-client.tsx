@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Plus, LayoutGrid, List as ListIcon, History } from "lucide-react";
 import {
   DndContext,
   DragEndEvent,
@@ -14,13 +14,14 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { TaskModal } from "../task-modal";
-import { Badge, ProgressBar } from "@/components/ui/stat-card";
+import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import {
   KANBAN_COLUMNS,
   PRIORITY_COLOR,
   PRIORITY_LABEL,
   STATUS_COLOR,
+  STATUS_LABEL,
   checklistProgress,
 } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "../marketing-types";
@@ -41,16 +42,27 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 
 const DONE = ["PUBLICADO", "RESULTADOS"];
 
+type HistoryEntry = {
+  id: string;
+  action: string;
+  before: string | null;
+  after: string | null;
+  userName: string;
+  createdAt: string;
+};
+
 export function TasksClient({
   initialTasks,
   teamMembers,
   campaigns,
   canCreate,
+  history,
 }: {
   initialTasks: TaskDTO[];
   teamMembers: TeamMember[];
   campaigns: { id: string; name: string }[];
   canCreate: boolean;
+  history: HistoryEntry[];
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [view, setView] = useState<"kanban" | "lista">("kanban");
@@ -225,6 +237,40 @@ export function TasksClient({
           </table>
         </div>
       )}
+
+      <Section title="Histórico de movimentação">
+        <div className="space-y-2 max-h-[420px] overflow-y-auto nord-scrollbar">
+          {history.map((h) => {
+            const isCreate = h.action === "CREATE";
+            const [title, newStatusKey] = isCreate ? [h.after ?? "", null] : (h.after ?? "").split(" → ");
+            const fromLabel = h.before ? (STATUS_LABEL[h.before] ?? h.before) : null;
+            const toLabel = newStatusKey ? (STATUS_LABEL[newStatusKey] ?? newStatusKey) : null;
+            return (
+              <div key={h.id} className="flex items-start gap-2.5 text-xs border-b border-nord-border/50 pb-2 last:border-0">
+                <History size={13} className="text-nord-gray mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-white">
+                    <span className="font-medium">{h.userName}</span>{" "}
+                    {isCreate ? (
+                      <>
+                        criou <span className="text-nord-gray">&quot;{title}&quot;</span>
+                      </>
+                    ) : (
+                      <>
+                        moveu <span className="text-nord-gray">&quot;{title}&quot;</span> de{" "}
+                        <span style={{ color: h.before ? STATUS_COLOR[h.before] : undefined }}>{fromLabel}</span> para{" "}
+                        <span style={{ color: newStatusKey ? STATUS_COLOR[newStatusKey] : undefined }}>{toLabel}</span>
+                      </>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-nord-gray mt-0.5">{format(parseISO(h.createdAt), "dd/MM/yyyy 'às' HH:mm")}</p>
+                </div>
+              </div>
+            );
+          })}
+          {history.length === 0 && <p className="text-sm text-nord-gray text-center py-6">Nenhuma movimentação registrada ainda.</p>}
+        </div>
+      </Section>
 
       <TaskModal
         open={showModal}
