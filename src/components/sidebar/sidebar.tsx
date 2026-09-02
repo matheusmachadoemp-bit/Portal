@@ -26,9 +26,7 @@ import {
   GripVertical,
   LogOut,
   MoreVertical,
-  Plus,
   Search,
-  RotateCcw,
 } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -57,7 +55,6 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
-  const [showNewCategory, setShowNewCategory] = useState(false);
   const [editCategory, setEditCategory] = useState<CategoryDTO | null>(null);
   const [newSubFor, setNewSubFor] = useState<string | null>(null);
   const [editSub, setEditSub] = useState<SubcategoryDTO | null>(null);
@@ -66,7 +63,6 @@ export function Sidebar({
     { type: "category" | "subcategory"; id: string; name: string } | null
   >(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [confirmReset, setConfirmReset] = useState(false);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -206,12 +202,6 @@ export function Sidebar({
     refresh();
   }
 
-  async function resetOrder() {
-    await fetch("/api/menu/reset", { method: "POST" });
-    setConfirmReset(false);
-    refresh();
-  }
-
   return (
     <aside
       className={`h-screen sticky top-0 flex flex-col bg-nord-panel border-r border-nord-border transition-all duration-200 ${
@@ -295,22 +285,6 @@ export function Sidebar({
           </SortableContext>
         </DndContext>
 
-        {isAdmin && !collapsed && (
-          <div className="mt-3 space-y-1.5">
-            <button
-              onClick={() => setShowNewCategory(true)}
-              className="w-full flex items-center gap-2 text-sm text-nord-gray hover:text-white px-3 py-2 rounded-lg border border-dashed border-nord-border hover:border-nord-blue transition"
-            >
-              <Plus size={14} /> Nova categoria
-            </button>
-            <button
-              onClick={() => setConfirmReset(true)}
-              className="w-full flex items-center gap-2 text-xs text-nord-gray hover:text-white px-3 py-1.5 rounded-lg transition"
-            >
-              <RotateCcw size={12} /> Restaurar ordem padrão
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="border-t border-nord-border p-3">
@@ -330,15 +304,6 @@ export function Sidebar({
         </form>
       </div>
 
-      {/* New category modal */}
-      <CategoryFormModal
-        open={showNewCategory}
-        onClose={() => setShowNewCategory(false)}
-        onSaved={() => {
-          setShowNewCategory(false);
-          refresh();
-        }}
-      />
       <CategoryFormModal
         key={editCategory?.id ?? "edit-category-empty"}
         open={!!editCategory}
@@ -405,15 +370,6 @@ export function Sidebar({
         }}
         confirmLabel={deleteError ? "Tentar novamente" : "Excluir"}
         danger
-      />
-
-      <ConfirmDialog
-        open={confirmReset}
-        title="Restaurar ordem padrão"
-        message="Isso irá restaurar a ordem original das categorias e subcategorias do sistema. Deseja continuar?"
-        onConfirm={resetOrder}
-        onCancel={() => setConfirmReset(false)}
-        confirmLabel="Restaurar"
       />
     </aside>
   );
