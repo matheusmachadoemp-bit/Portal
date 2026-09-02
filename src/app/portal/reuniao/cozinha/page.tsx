@@ -29,6 +29,7 @@ export default async function ReuniaoCozinhaPage() {
         initialMetrics={metrics}
         periodo={periodo}
         canCreate={ctx?.mode === "single"}
+        empresaName={ctx?.mode === "single" ? ctx.empresa.name : "Grupo Nord"}
       />
     </PageContainer>
   );

@@ -7,7 +7,7 @@ import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { periodoLabel, previousPeriodo } from "@/lib/reuniao";
-import { exportKpiReportToPdf } from "@/lib/pdf-export";
+import { exportCozinhaMeetingPdf } from "@/lib/reuniao-pdf";
 
 type Meeting = {
   id: string;
@@ -131,12 +131,14 @@ export function CozinhaClient({
   initialMetrics,
   periodo,
   canCreate,
+  empresaName,
 }: {
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
   initialMetrics: Metrics;
   periodo: string;
   canCreate: boolean;
+  empresaName: string;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   const [selectedPeriodo, setSelectedPeriodo] = useState(periodo);
@@ -191,64 +193,66 @@ export function CozinhaClient({
     return total;
   }, [bateuCmv, bateuDesperdicio, bateuTempo, bateuOrganizacao, form]);
 
-  const statusLabel = (s: Status) => (s === "batida" ? "Meta batida" : s === "abaixo" ? "Abaixo da meta" : "Sem dado");
-
   function exportPdf() {
     const anterior = meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null;
 
-    exportKpiReportToPdf(
-      "Reunião Cozinha",
-      `Fechamento — ${periodoLabel(selectedPeriodo)} (vs. ${anterior ? periodoLabel(anterior.periodo) : "sem dado do mês anterior"})`,
-      [
+    exportCozinhaMeetingPdf({
+      empresaName,
+      periodoLabel: periodoLabel(selectedPeriodo),
+      periodoAnteriorLabel: anterior ? periodoLabel(anterior.periodo) : null,
+      premiacaoTotal,
+      observacoes: form.notas,
+      indicators: [
         {
-          title: "CMV",
-          rows: [
-            ["Mês atual", metrics.cmvPercent === null ? "-" : `${formatNumber(metrics.cmvPercent, 1)}%`],
-            ["Mês anterior", anterior?.cmvPercent == null ? "-" : `${formatNumber(anterior.cmvPercent, 1)}%`],
-            ["Meta", `até ${formatNumber(cmvMeta, 1)}%`],
-            ["Status", statusLabel(statusOf(bateuCmv))],
-            ["Premiação", formatCurrency(bateuCmv ? Number(form.premiacaoCmv) || 0 : 0)],
-          ],
+          key: "cmv",
+          label: "CMV",
+          color: [20, 100, 244],
+          unit: "percent",
+          valorAtual: metrics.cmvPercent,
+          valorAnterior: anterior?.cmvPercent ?? null,
+          meta: cmvMeta,
+          metaDirection: "min",
+          status: statusOf(bateuCmv),
+          premio: bateuCmv ? Number(form.premiacaoCmv) || 0 : 0,
         },
         {
-          title: "Desperdício",
-          rows: [
-            ["Mês atual", formatCurrency(metrics.desperdicioValor)],
-            ["Mês anterior", anterior?.desperdicioValor == null ? "-" : formatCurrency(anterior.desperdicioValor)],
-            ["Meta", `até ${formatCurrency(desperdicioMeta)}`],
-            ["Status", statusLabel(statusOf(bateuDesperdicio))],
-            ["Premiação", formatCurrency(bateuDesperdicio ? Number(form.premiacaoDesperdicio) || 0 : 0)],
-          ],
+          key: "desperdicio",
+          label: "Desperdício",
+          color: [239, 68, 68],
+          unit: "currency",
+          valorAtual: metrics.desperdicioValor,
+          valorAnterior: anterior?.desperdicioValor ?? null,
+          meta: desperdicioMeta,
+          metaDirection: "min",
+          status: statusOf(bateuDesperdicio),
+          premio: bateuDesperdicio ? Number(form.premiacaoDesperdicio) || 0 : 0,
         },
         {
-          title: "Tempo de Pedido",
-          rows: [
-            ["Mês atual", tempoValor === null ? "-" : `${tempoValor} min`],
-            ["Mês anterior", anterior?.tempoPedidoMinutos == null ? "-" : `${anterior.tempoPedidoMinutos} min`],
-            ["Meta", `até ${formatNumber(tempoMeta, 0)} min`],
-            ["Status", statusLabel(statusOf(bateuTempo))],
-            ["Premiação", formatCurrency(bateuTempo ? Number(form.premiacaoTempoPedido) || 0 : 0)],
-          ],
+          key: "tempo-pedido",
+          label: "Tempo de Pedido",
+          color: [168, 85, 247],
+          unit: "minutes",
+          valorAtual: tempoValor,
+          valorAnterior: anterior?.tempoPedidoMinutos ?? null,
+          meta: tempoMeta,
+          metaDirection: "min",
+          status: statusOf(bateuTempo),
+          premio: bateuTempo ? Number(form.premiacaoTempoPedido) || 0 : 0,
         },
         {
-          title: "Organização e Limpeza",
-          rows: [
-            ["Mês atual", organizacaoValor === null ? "-" : `${organizacaoValor}%`],
-            ["Mês anterior", anterior?.organizacaoPercent == null ? "-" : `${anterior.organizacaoPercent}%`],
-            ["Meta", `mín. ${formatNumber(organizacaoMeta, 0)}%`],
-            ["Status", statusLabel(statusOf(bateuOrganizacao))],
-            ["Premiação", formatCurrency(bateuOrganizacao ? Number(form.premiacaoOrganizacao) || 0 : 0)],
-          ],
+          key: "organizacao",
+          label: "Organização e Limpeza",
+          color: [20, 184, 166],
+          unit: "percent",
+          valorAtual: organizacaoValor,
+          valorAnterior: anterior?.organizacaoPercent ?? null,
+          meta: organizacaoMeta,
+          metaDirection: "max",
+          status: statusOf(bateuOrganizacao),
+          premio: bateuOrganizacao ? Number(form.premiacaoOrganizacao) || 0 : 0,
         },
-        {
-          title: "Resumo",
-          rows: [
-            ["Premiação total do mês", formatCurrency(premiacaoTotal)],
-            ["Observações", form.notas || "-"],
-          ],
-        },
-      ]
-    );
+      ],
+    });
   }
 
   async function refresh(targetPeriodo: string) {
