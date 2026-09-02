@@ -35,8 +35,8 @@ export default async function CmvTeoricoPage() {
   const produtosMaiorImpacto = productsWithCost
     .filter((p) => p.precoVenda > 0)
     .map((p) => ({ id: p.id, name: p.name, cmv: cmvPercent(p.totalCost, p.precoVenda), custo: p.totalCost, precoVenda: p.precoVenda }))
-    .sort((a, b) => b.cmv - a.cmv)
-    .slice(0, 10);
+    .filter((p) => p.cmv > metaCmvPercent)
+    .sort((a, b) => b.cmv - a.cmv);
 
   const produtosSemFicha = products.filter((p) => p.ingredients.length === 0).map((p) => ({ id: p.id, name: p.name }));
 

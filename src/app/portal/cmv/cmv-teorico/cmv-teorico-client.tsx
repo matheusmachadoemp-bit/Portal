@@ -64,18 +64,20 @@ export function CmvTeoricoClient({
         </ResponsiveContainer>
       </Section>
 
-      <Section title="Produtos com maior impacto no CMV">
+      <Section title={`Produtos com CMV acima da meta (${produtosMaiorImpacto.length})`}>
         <div className="space-y-1.5">
           {produtosMaiorImpacto.map((p) => (
             <div key={p.id} className="flex items-center justify-between text-sm border-b border-nord-border/60 py-1.5 last:border-0">
               <span className="text-white">{p.name}</span>
               <span className="flex items-center gap-2">
                 <span className="text-xs text-nord-gray">{formatCurrency(p.custo)} / {formatCurrency(p.precoVenda)}</span>
-                <Badge tone={p.cmv > 35 ? "danger" : p.cmv > 28 ? "warning" : "success"}>{formatPercent(p.cmv)}</Badge>
+                <Badge tone={p.cmv > metaCmvPercent * 1.5 ? "danger" : "warning"}>{formatPercent(p.cmv)}</Badge>
               </span>
             </div>
           ))}
-          {produtosMaiorImpacto.length === 0 && <p className="text-sm text-nord-gray text-center py-4">Nenhum produto com preço de venda cadastrado.</p>}
+          {produtosMaiorImpacto.length === 0 && (
+            <p className="text-sm text-nord-gray text-center py-4">Nenhum produto com CMV acima da meta ({formatPercent(metaCmvPercent)}).</p>
+          )}
         </div>
       </Section>
 
