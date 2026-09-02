@@ -213,6 +213,20 @@ const CATEGORIES = [
       { key: "relatorios", name: "Relatórios", icon: "FileBarChart" },
     ],
   },
+  {
+    key: "reuniao",
+    name: "Reunião",
+    icon: "Presentation",
+    order: 14,
+    contentType: "reuniao",
+    subs: [
+      { key: "salao", name: "Reunião Salão", icon: "Utensils" },
+      { key: "delivery", name: "Reunião Delivery", icon: "Truck" },
+      { key: "cozinha", name: "Reunião Cozinha", icon: "ChefHat" },
+      { key: "gerente", name: "Reunião Gerente", icon: "Briefcase" },
+      { key: "lideranca", name: "Reunião Liderança", icon: "Crown" },
+    ],
+  },
 ];
 
 async function main() {
