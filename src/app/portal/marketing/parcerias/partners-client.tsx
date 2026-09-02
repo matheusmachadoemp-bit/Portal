@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Trophy } from "lucide-react";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
-import { StatCard } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatNumber, safeDiv } from "@/lib/calc";
 
 type Partner = {
@@ -107,17 +107,22 @@ export function PartnersClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Cupons usados" value={formatNumber(totals.usos)} icon="Ticket" />
-        <StatCard label="Vendas geradas" value={formatCurrency(totals.vendas)} icon="TrendingUp" color="#22c55e" />
-        <StatCard label="Gasto com parceiros" value={formatCurrency(totals.gasto)} icon="Wallet" color="#eab308" />
-        <StatCard
-          label="Retorno líquido"
-          value={formatCurrency(totals.retorno)}
-          icon="Trophy"
-          color={totals.retorno >= 0 ? "#22c55e" : "#ef4444"}
-        />
-      </div>
+      <SortableStatCards
+        storageKey="marketing-parcerias-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          { key: "cupons-usados", label: "Cupons usados", value: formatNumber(totals.usos), icon: "Ticket" },
+          { key: "vendas-geradas", label: "Vendas geradas", value: formatCurrency(totals.vendas), icon: "TrendingUp", color: "#22c55e" },
+          { key: "gasto-parceiros", label: "Gasto com parceiros", value: formatCurrency(totals.gasto), icon: "Wallet", color: "#eab308" },
+          {
+            key: "retorno-liquido",
+            label: "Retorno líquido",
+            value: formatCurrency(totals.retorno),
+            icon: "Trophy",
+            color: totals.retorno >= 0 ? "#22c55e" : "#ef4444",
+          },
+        ]}
+      />
 
       {canCreate && (
         <div className="flex justify-end">

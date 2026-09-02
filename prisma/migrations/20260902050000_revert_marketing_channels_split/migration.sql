@@ -1,11 +1,16 @@
-UPDATE "Subcategory" SET "key" = 'redes-sociais', "name" = 'Redes Sociais', "icon" = 'Share2'
-WHERE "categoryId" = (SELECT "id" FROM "Category" WHERE "key" = 'marketing') AND "key" = 'instagram-organico';
-
-UPDATE "Subcategory" SET "key" = 'trafego-pago', "name" = 'Tráfego Pago', "icon" = 'TrendingUp'
-WHERE "categoryId" = (SELECT "id" FROM "Category" WHERE "key" = 'marketing') AND "key" = 'meta-ads';
-
+-- Reverte a divisão Instagram Orgânico / Meta Ads / Google Ads: remove os
+-- itens de menu criados por ela, mantendo "trafego-pago" e "redes-sociais"
+-- que já existiam antes (evita colidir com a constraint de unicidade
+-- categoryId+key caso os dois conjuntos coexistam em produção).
 DELETE FROM "Subcategory"
-WHERE "categoryId" = (SELECT "id" FROM "Category" WHERE "key" = 'marketing') AND "key" = 'google-ads';
+WHERE "categoryId" = (SELECT "id" FROM "Category" WHERE "key" = 'marketing')
+  AND "key" IN ('instagram-organico', 'meta-ads', 'google-ads');
+
+UPDATE "Subcategory" SET "name" = 'Tráfego Pago', "icon" = 'TrendingUp'
+WHERE "categoryId" = (SELECT "id" FROM "Category" WHERE "key" = 'marketing') AND "key" = 'trafego-pago';
+
+UPDATE "Subcategory" SET "name" = 'Redes Sociais', "icon" = 'Share2'
+WHERE "categoryId" = (SELECT "id" FROM "Category" WHERE "key" = 'marketing') AND "key" = 'redes-sociais';
 
 UPDATE "Subcategory"
 SET "order" = CASE "key"
