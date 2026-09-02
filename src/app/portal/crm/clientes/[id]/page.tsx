@@ -93,6 +93,12 @@ export default async function ClienteProfilePage({ params }: { params: Promise<{
           valorGasto: p.valorGasto,
           createdAt: p.createdAt.toISOString(),
         }))}
+        resumoImportado={{
+          pedidosImportados: cliente.pedidosImportados,
+          valorGastoImportado: cliente.valorGastoImportado,
+          ticketMedioImportado: cliente.ticketMedioImportado,
+          ultimaCompraImportada: cliente.ultimaCompraImportada ? cliente.ultimaCompraImportada.toISOString() : null,
+        }}
       />
     </PageContainer>
   );

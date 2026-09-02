@@ -482,6 +482,17 @@ model Cliente {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  // Resumo trazido por planilha de importação (ex.: exportação de outro
+  // CRM/sistema com "Qtd. Pedidos"/"Valor Total"/"Última Compra" agregados
+  // por cliente, sem linha por pedido). É só um retrato do momento da
+  // importação — não é recalculado, e não alimenta Sale/SaleItem nem
+  // nenhum relatório de Vendas ou o cálculo de VIP/status do CRM (que
+  // seguem baseados só em vendas reais registradas no sistema).
+  pedidosImportados     Int?
+  valorGastoImportado   Float?
+  ticketMedioImportado  Float?
+  ultimaCompraImportada DateTime?
+
   vendas             Sale[]
   notas              CustomerNote[]
   campaignRecipients CampaignRecipient[]

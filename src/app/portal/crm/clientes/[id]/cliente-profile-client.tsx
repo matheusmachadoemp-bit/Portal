@@ -51,6 +51,13 @@ type Venda = {
 
 type Nota = { id: string; texto: string; autor: string; createdAt: string };
 
+type ResumoImportado = {
+  pedidosImportados: number | null;
+  valorGastoImportado: number | null;
+  ticketMedioImportado: number | null;
+  ultimaCompraImportada: string | null;
+};
+
 type PedidoImportado = {
   id: string;
   numeroPedido: string | null;
@@ -66,6 +73,7 @@ export function ClienteProfileClient({
   vendas,
   notas: notasIniciais,
   historicoImportado,
+  resumoImportado,
 }: {
   cliente: ClienteInfo;
   metrics: Metrics;
@@ -73,6 +81,7 @@ export function ClienteProfileClient({
   vendas: Venda[];
   notas: Nota[];
   historicoImportado: PedidoImportado[];
+  resumoImportado: ResumoImportado;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -156,6 +165,27 @@ export function ClienteProfileClient({
         <StatCard label="Dias desde última compra" value={metrics.diasDesdeUltimaCompra !== null ? `${metrics.diasDesdeUltimaCompra}d` : "—"} icon="History" />
         <StatCard label="Cadastro" value={cliente.lojaNome} icon="Store" />
       </div>
+
+      {(resumoImportado.pedidosImportados !== null ||
+        resumoImportado.valorGastoImportado !== null ||
+        resumoImportado.ultimaCompraImportada !== null) && (
+        <div className="nord-card p-4 border-nord-blue/30 bg-nord-blue/5">
+          <p className="text-xs text-white font-medium mb-1">Resumo importado de outro sistema</p>
+          <p className="text-xs text-nord-gray">
+            {resumoImportado.pedidosImportados !== null && <>{resumoImportado.pedidosImportados} pedido(s) anterior(es)</>}
+            {resumoImportado.valorGastoImportado !== null && (
+              <> · {formatCurrency(resumoImportado.valorGastoImportado)} no total</>
+            )}
+            {resumoImportado.ticketMedioImportado !== null && (
+              <> · ticket médio {formatCurrency(resumoImportado.ticketMedioImportado)}</>
+            )}
+            {resumoImportado.ultimaCompraImportada && (
+              <> · última compra em {new Date(resumoImportado.ultimaCompraImportada).toLocaleDateString("pt-BR")}</>
+            )}
+            {" "}— não entra nos indicadores acima nem no status VIP, que seguem só as vendas reais registradas no sistema.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-1 space-y-4">
