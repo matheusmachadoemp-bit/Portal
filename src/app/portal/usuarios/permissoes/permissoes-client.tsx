@@ -3,10 +3,22 @@
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
+import { DynamicIcon } from "@/components/dynamic-icon";
 import { PERMISSION_ACTIONS, type PermissionAction } from "@/lib/permissions";
 
 type ModulePermissionDTO = { moduleKey: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean };
 type ProfileDTO = { id: string; name: string; modulePermissions: ModulePermissionDTO[] };
+
+const PROFILE_ICON: Record<string, string> = {
+  Administrador: "ShieldCheck",
+  Gestor: "Briefcase",
+  Supervisor: "UserCog",
+  Gerente: "UserCircle",
+  Líder: "Star",
+  Funcionário: "User",
+  Marketing: "Megaphone",
+  Financeiro: "DollarSign",
+};
 
 export function PermissoesClient({
   initialProfiles,
@@ -107,10 +119,11 @@ export function PermissoesClient({
           <button
             key={p.id}
             onClick={() => setActiveId(p.id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-              activeId === p.id ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
+              activeId === p.id ? "bg-nord-blue text-white" : "border border-nord-border text-nord-blue-light hover:text-white"
             }`}
           >
+            <DynamicIcon name={PROFILE_ICON[p.name] ?? "User"} size={13} />
             {p.name}
           </button>
         ))}
