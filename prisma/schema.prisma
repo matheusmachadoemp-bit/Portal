@@ -63,6 +63,7 @@ model User {
   marketingCampaignsCreated     MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
   marketingFiles                MarketingFile[]
   marketingIdeas                MarketingIdea[]
+  marketingPartners             MarketingPartner[]
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
   stockMovementsCreated         StockMovement[]            @relation("StockMovementCreatedBy")
@@ -199,6 +200,7 @@ model Empresa {
   marketingCampaigns     MarketingCampaign[]
   marketingFiles         MarketingFile[]
   marketingIdeas         MarketingIdea[]
+  marketingPartners      MarketingPartner[]
   goals                  Goal[]
   employees              Employee[]
   waiterSales            WaiterSaleEntry[]
@@ -971,6 +973,22 @@ model MarketingIdea {
   createdBy   User                @relation(fields: [createdById], references: [id])
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
+}
+
+model MarketingPartner {
+  id                  String   @id @default(cuid())
+  empresaId           String
+  empresa             Empresa  @relation(fields: [empresaId], references: [id])
+  nome                String
+  cupom               String
+  quantidadeUtilizada Int      @default(0)
+  vendas              Float    @default(0)
+  gasto               Float    @default(0)
+  observacoes         String?
+  createdById         String
+  createdBy           User     @relation(fields: [createdById], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------
