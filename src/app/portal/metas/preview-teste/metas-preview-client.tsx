@@ -22,7 +22,7 @@ const ritmo = { metaDiaria: 10546, metaSemanal: 73820, realizadoHoje: 12230, rea
 
 const alertas = [
   { icon: "TrendingDown", cor: "#ef4444", titulo: "CMV", valor: "30,4%", detalhe: "Meta ≤ 28%", nota: "2,4 p.p. acima da meta", tone: "danger" as const },
-  { icon: "Wallet", cor: "#eab308", titulo: "Ticket médio", valor: "R$ 137", detalhe: "Meta R$ 150", nota: "R$ 13 abaixo da meta", tone: "warning" as const },
+  { icon: "Wallet", cor: "#f59e0b", titulo: "Ticket médio", valor: "R$ 137", detalhe: "Meta R$ 150", nota: "R$ 13 abaixo da meta", tone: "warning" as const },
   { icon: "Bike", cor: "#22c55e", titulo: "Delivery", valor: "68% da meta", detalhe: "", nota: "Ritmo adequado", tone: "success" as const },
 ];
 
@@ -63,7 +63,6 @@ const setores = [
   {
     nome: "Salão",
     icon: "UtensilsCrossed",
-    color: "#eab308",
     principal: { label: "Faturamento", realizado: "R$ 92.300", meta: "R$ 150.000", percent: 62 },
     metricas: [
       { label: "Ticket médio", realizado: "R$ 137", meta: "R$ 150", percent: 91, ok: true },
@@ -75,7 +74,6 @@ const setores = [
   {
     nome: "Delivery",
     icon: "Bike",
-    color: "#22c55e",
     principal: { label: "Faturamento", realizado: "R$ 146.150", meta: "R$ 215.000", percent: 68 },
     metricas: [
       { label: "Pedidos", realizado: "1.842", meta: "2.600", percent: 71, ok: true },
@@ -87,7 +85,6 @@ const setores = [
   {
     nome: "Cozinha",
     icon: "ChefHat",
-    color: "#f97316",
     principal: { label: "CMV", realizado: "30,4%", meta: "≤ 28%", percent: 108, invertido: true },
     metricas: [
       { label: "Desperdício", realizado: "2,1%", meta: "≤ 1,5%", percent: 140, ok: false },
@@ -132,18 +129,19 @@ function Ring({ percent, size = 78, stroke = 8, color }: { percent: number; size
   );
 }
 
+// Mesma convenção já usada no restante do sistema (ex: metas-overview-client.tsx):
+// azul enquanto não bateu a meta, verde quando bate. Métricas "invertidas" (quanto
+// menor, melhor — CMV, cancelamento, tempo) viram vermelho quando estouram o limite,
+// igual ao card de Alertas.
 function ringColor(percent: number, invertido?: boolean) {
-  const ok = invertido ? percent <= 100 : percent >= 100;
-  const quaseLa = invertido ? percent <= 115 : percent >= 85;
-  if (ok) return "#22c55e";
-  if (quaseLa) return "#eab308";
-  return "#ef4444";
+  if (invertido) return percent <= 100 ? "#22c55e" : "#ef4444";
+  return percent >= 100 ? "#22c55e" : "#2952E3";
 }
 
 export function MetasPreviewClient() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-1 nord-card p-5">
           <p className="text-xs text-nord-gray uppercase tracking-wide mb-2">Meta de faturamento — Setembro</p>
           <p className="text-2xl font-semibold text-white mb-3">
@@ -151,7 +149,7 @@ export function MetasPreviewClient() {
           </p>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1">
-              <ProgressBar percent={(META.realizado / META.total) * 100} color="#ef4444" />
+              <ProgressBar percent={(META.realizado / META.total) * 100} color={ringColor((META.realizado / META.total) * 100)} />
             </div>
             <span className="text-white text-sm font-semibold shrink-0">{((META.realizado / META.total) * 100).toFixed(1)}%</span>
           </div>
@@ -211,15 +209,15 @@ export function MetasPreviewClient() {
           <div className="nord-card p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-white font-medium flex items-center gap-1.5">
-                <Trophy size={14} className="text-amber-400" /> Conquistas do mês
+                <Trophy size={14} className="text-nord-success" /> Conquistas do mês
               </p>
               <button className="text-xs text-nord-blue-light hover:underline">Ver todas</button>
             </div>
             <div className="space-y-2.5">
               {conquistas.map((c) => (
                 <div key={c.titulo} className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
-                    <DynamicIcon name={c.icon} size={15} className="text-amber-400" />
+                  <div className="w-8 h-8 rounded-lg bg-nord-success/15 flex items-center justify-center shrink-0">
+                    <DynamicIcon name={c.icon} size={15} className="text-nord-success" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs text-white font-medium truncate">{c.titulo}</p>
@@ -257,9 +255,9 @@ export function MetasPreviewClient() {
                   labelStyle={{ color: "#fff" }}
                   formatter={(v) => formatCurrency(Number(v))}
                 />
-                <Line type="monotone" dataKey="meta" name="Meta acumulada" stroke="#6b7280" strokeDasharray="5 4" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="realizado" name="Realizado acumulado" stroke="#ef4444" strokeWidth={2.5} connectNulls />
-                <Line type="monotone" dataKey="projecao" name="Projeção atual" stroke="#eab308" strokeDasharray="2 3" strokeWidth={2} connectNulls />
+                <Line type="monotone" dataKey="meta" name="Meta acumulada" stroke="#9a9aa2" strokeDasharray="5 4" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="realizado" name="Realizado acumulado" stroke="#2952E3" strokeWidth={2.5} connectNulls />
+                <Line type="monotone" dataKey="projecao" name="Projeção atual" stroke="#f59e0b" strokeDasharray="2 3" strokeWidth={2} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </Section>
@@ -283,11 +281,13 @@ export function MetasPreviewClient() {
         <div className="xl:col-span-2">
           <Section title="Metas por setor" action={<button className="text-xs text-nord-blue-light hover:underline">Ver todas</button>}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {setores.map((s) => (
+              {setores.map((s) => {
+                const cor = ringColor(s.principal.percent, s.principal.invertido);
+                return (
                 <div key={s.nome} className="rounded-lg border border-nord-border p-3.5">
                   <div className="flex items-center gap-2 mb-2.5">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${s.color}22` }}>
-                      <DynamicIcon name={s.icon} size={14} style={{ color: s.color }} />
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${cor}22` }}>
+                      <DynamicIcon name={s.icon} size={14} style={{ color: cor }} />
                     </div>
                     <p className="text-sm text-white font-medium">{s.nome}</p>
                   </div>
@@ -295,7 +295,7 @@ export function MetasPreviewClient() {
                   <p className="text-sm text-white font-semibold mb-1.5">
                     {s.principal.realizado} <span className="text-nord-gray font-normal">/ {s.principal.meta}</span>
                   </p>
-                  <ProgressBar percent={s.principal.percent} color={ringColor(s.principal.percent, s.principal.invertido)} />
+                  <ProgressBar percent={s.principal.percent} color={cor} />
                   <div className="mt-3 space-y-1.5">
                     {s.metricas.map((m) => (
                       <div key={m.label} className="flex items-center justify-between text-[11px]">
@@ -307,7 +307,8 @@ export function MetasPreviewClient() {
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </Section>
         </div>
