@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, AlertTriangle, Trophy, Pencil } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Trophy, Pencil, FileDown } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel } from "@/lib/reuniao";
+import { periodoLabel, previousPeriodo } from "@/lib/reuniao";
+import { exportKpiReportToPdf } from "@/lib/pdf-export";
 
 type Meeting = {
   id: string;
@@ -190,6 +191,66 @@ export function CozinhaClient({
     return total;
   }, [bateuCmv, bateuDesperdicio, bateuTempo, bateuOrganizacao, form]);
 
+  const statusLabel = (s: Status) => (s === "batida" ? "Meta batida" : s === "abaixo" ? "Abaixo da meta" : "Sem dado");
+
+  function exportPdf() {
+    const anterior = meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null;
+
+    exportKpiReportToPdf(
+      "Reunião Cozinha",
+      `Fechamento — ${periodoLabel(selectedPeriodo)} (vs. ${anterior ? periodoLabel(anterior.periodo) : "sem dado do mês anterior"})`,
+      [
+        {
+          title: "CMV",
+          rows: [
+            ["Mês atual", metrics.cmvPercent === null ? "-" : `${formatNumber(metrics.cmvPercent, 1)}%`],
+            ["Mês anterior", anterior?.cmvPercent == null ? "-" : `${formatNumber(anterior.cmvPercent, 1)}%`],
+            ["Meta", `até ${formatNumber(cmvMeta, 1)}%`],
+            ["Status", statusLabel(statusOf(bateuCmv))],
+            ["Premiação", formatCurrency(bateuCmv ? Number(form.premiacaoCmv) || 0 : 0)],
+          ],
+        },
+        {
+          title: "Desperdício",
+          rows: [
+            ["Mês atual", formatCurrency(metrics.desperdicioValor)],
+            ["Mês anterior", anterior?.desperdicioValor == null ? "-" : formatCurrency(anterior.desperdicioValor)],
+            ["Meta", `até ${formatCurrency(desperdicioMeta)}`],
+            ["Status", statusLabel(statusOf(bateuDesperdicio))],
+            ["Premiação", formatCurrency(bateuDesperdicio ? Number(form.premiacaoDesperdicio) || 0 : 0)],
+          ],
+        },
+        {
+          title: "Tempo de Pedido",
+          rows: [
+            ["Mês atual", tempoValor === null ? "-" : `${tempoValor} min`],
+            ["Mês anterior", anterior?.tempoPedidoMinutos == null ? "-" : `${anterior.tempoPedidoMinutos} min`],
+            ["Meta", `até ${formatNumber(tempoMeta, 0)} min`],
+            ["Status", statusLabel(statusOf(bateuTempo))],
+            ["Premiação", formatCurrency(bateuTempo ? Number(form.premiacaoTempoPedido) || 0 : 0)],
+          ],
+        },
+        {
+          title: "Organização e Limpeza",
+          rows: [
+            ["Mês atual", organizacaoValor === null ? "-" : `${organizacaoValor}%`],
+            ["Mês anterior", anterior?.organizacaoPercent == null ? "-" : `${anterior.organizacaoPercent}%`],
+            ["Meta", `mín. ${formatNumber(organizacaoMeta, 0)}%`],
+            ["Status", statusLabel(statusOf(bateuOrganizacao))],
+            ["Premiação", formatCurrency(bateuOrganizacao ? Number(form.premiacaoOrganizacao) || 0 : 0)],
+          ],
+        },
+        {
+          title: "Resumo",
+          rows: [
+            ["Premiação total do mês", formatCurrency(premiacaoTotal)],
+            ["Observações", form.notas || "-"],
+          ],
+        },
+      ]
+    );
+  }
+
   async function refresh(targetPeriodo: string) {
     const res = await fetch(`/api/reuniao/cozinha?periodo=${targetPeriodo}`);
     const data = await res.json();
@@ -319,11 +380,19 @@ export function CozinhaClient({
           <h3 className="text-white font-medium capitalize">{periodoLabel(selectedPeriodo)}</h3>
           {loading && <span className="text-xs text-nord-gray">Carregando...</span>}
         </div>
-        {canCreate && (
-          <button onClick={() => setShowMetas((s) => !s)} className="text-xs text-nord-blue-light hover:underline">
-            {showMetas ? "Ocultar metas e premiação" : "Editar metas e premiação"}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={exportPdf}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white hover:border-nord-blue-light"
+          >
+            <FileDown size={13} /> Exportar PDF
           </button>
-        )}
+          {canCreate && (
+            <button onClick={() => setShowMetas((s) => !s)} className="text-xs text-nord-blue-light hover:underline">
+              {showMetas ? "Ocultar metas e premiação" : "Editar metas e premiação"}
+            </button>
+          )}
+        </div>
       </div>
 
       <SortableCardGrid
