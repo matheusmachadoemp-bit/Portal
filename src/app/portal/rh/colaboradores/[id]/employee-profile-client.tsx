@@ -27,6 +27,7 @@ type EmployeeDTO = {
   phone: string | null;
   email: string | null;
   cpf: string | null;
+  pixKey: string | null;
   birthDate: string | null;
   escala: string | null;
   gestorResponsavel: string | null;
@@ -92,6 +93,7 @@ export function EmployeeProfileClient({
     phone: employee.phone ?? "",
     email: employee.email ?? "",
     cpf: employee.cpf ?? "",
+    pixKey: employee.pixKey ?? "",
     birthDate: employee.birthDate ? format(new Date(employee.birthDate), "yyyy-MM-dd") : "",
     escala: employee.escala ?? "",
     gestorResponsavel: employee.gestorResponsavel ?? "",
@@ -171,6 +173,7 @@ export function EmployeeProfileClient({
               <span>Tempo de empresa: {tempoDeEmpresa(employee.admissionDate)}</span>
               {employee.cpf && <span>CPF: {employee.cpf}</span>}
               {employee.phone && <span>Tel: {employee.phone}</span>}
+              {employee.pixKey && <span>Pix: {employee.pixKey}</span>}
             </div>
           </div>
         </div>
@@ -290,6 +293,9 @@ export function EmployeeProfileClient({
           </Field>
           <Field label="CPF">
             <input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="input" />
+          </Field>
+          <Field label="Chave Pix">
+            <input value={form.pixKey} onChange={(e) => setForm({ ...form, pixKey: e.target.value })} className="input" />
           </Field>
           <Field label="Data de nascimento">
             <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className="input" />

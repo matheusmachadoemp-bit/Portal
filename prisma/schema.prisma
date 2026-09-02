@@ -1054,6 +1054,7 @@ model Employee {
   phone                 String?
   email                 String?
   cpf                   String?
+  pixKey                String?
   birthDate             DateTime?
   escala                String?
   gestorResponsavel     String?

@@ -26,6 +26,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       phone: body.phone ?? undefined,
       email: body.email ?? undefined,
       cpf: body.cpf ?? undefined,
+      pixKey: body.pixKey ?? undefined,
       birthDate: body.birthDate !== undefined ? (body.birthDate ? new Date(body.birthDate) : null) : undefined,
       escala: body.escala ?? undefined,
       gestorResponsavel: body.gestorResponsavel ?? undefined,

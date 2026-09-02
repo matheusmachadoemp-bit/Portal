@@ -41,6 +41,28 @@ export function tempoDeEmpresa(admissionDate: Date | string, until: Date = new D
   return parts.join(" e ");
 }
 
+/**
+ * Período aquisitivo de férias vigente pela CLT (art. 130): cada ciclo dura
+ * 12 meses a partir da admissão (ou do fim do ciclo anterior), com direito a
+ * 30 dias. Dado a data de admissão, devolve o ciclo de 12 meses em que o
+ * colaborador está agora (o próximo a vencer).
+ */
+export function computeCurrentAquisitivePeriod(
+  admissionDate: Date | string,
+  now: Date = new Date()
+): { inicio: Date; fim: Date; diasDireito: number } {
+  const start = new Date(admissionDate);
+  let inicio = new Date(start);
+  let fim = new Date(start);
+  fim.setFullYear(fim.getFullYear() + 1);
+  while (fim <= now) {
+    inicio = new Date(fim);
+    fim = new Date(inicio);
+    fim.setFullYear(fim.getFullYear() + 1);
+  }
+  return { inicio, fim, diasDireito: 30 };
+}
+
 export type TimeEntryLike = {
   date: string;
   entrada: string | null;

@@ -43,6 +43,7 @@ export async function POST(req: Request) {
       phone: body.phone || null,
       email: body.email || null,
       cpf: body.cpf || null,
+      pixKey: body.pixKey || null,
       birthDate: body.birthDate ? new Date(body.birthDate) : null,
       escala: body.escala || null,
       gestorResponsavel: body.gestorResponsavel || null,

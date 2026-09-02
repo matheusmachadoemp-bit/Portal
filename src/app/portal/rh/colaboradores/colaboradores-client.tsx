@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Search, Eye } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Plus, Pencil, Trash2, Search, Eye, Upload } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -23,6 +23,7 @@ type EmployeeDTO = {
   phone: string | null;
   email: string | null;
   cpf: string | null;
+  pixKey: string | null;
   birthDate: string | null;
   escala: string | null;
   gestorResponsavel: string | null;
@@ -58,6 +59,7 @@ const emptyForm = {
   phone: "",
   email: "",
   cpf: "",
+  pixKey: "",
   birthDate: "",
   escala: "",
   gestorResponsavel: "",
@@ -109,6 +111,9 @@ export function ColaboradoresClient({
   const [editing, setEditing] = useState<EmployeeDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [search, setSearch] = useState("");
   const [filterLoja, setFilterLoja] = useState("");
@@ -158,6 +163,7 @@ export function ColaboradoresClient({
       phone: e.phone ?? "",
       email: e.email ?? "",
       cpf: e.cpf ?? "",
+      pixKey: e.pixKey ?? "",
       birthDate: e.birthDate ? format(new Date(e.birthDate), "yyyy-MM-dd") : "",
       escala: e.escala ?? "",
       gestorResponsavel: e.gestorResponsavel ?? "",
@@ -196,6 +202,28 @@ export function ColaboradoresClient({
     refresh();
   }
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setImportResult(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch("/api/rh/employees/import", { method: "POST", body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        setImportResult(data);
+        refresh();
+      } else {
+        setImportResult({ imported: 0, errors: [data.error ?? "Erro ao importar."] });
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SortableStatCards
@@ -213,12 +241,28 @@ export function ColaboradoresClient({
       <div className="flex items-center justify-between">
         <RhTabs />
         {canCreate && (
-          <button
-            onClick={openNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-          >
-            <Plus size={13} /> Novo colaborador
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.txt,.xlsx"
+              className="hidden"
+              id="colaboradores-upload"
+              onChange={handleFileChange}
+            />
+            <label
+              htmlFor="colaboradores-upload"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white cursor-pointer"
+            >
+              <Upload size={13} /> {uploading ? "Enviando..." : "Importar"}
+            </label>
+            <button
+              onClick={openNew}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+            >
+              <Plus size={13} /> Novo colaborador
+            </button>
+          </div>
         )}
       </div>
       {!canCreate && (
@@ -226,6 +270,20 @@ export function ColaboradoresClient({
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
           cadastrar ou editar colaboradores.
         </p>
+      )}
+      {importResult && (
+        <div
+          className={`text-xs rounded-lg px-3 py-2 border ${
+            importResult.errors.length > 0
+              ? "bg-amber-950/20 border-amber-900/40 text-amber-400"
+              : "bg-emerald-950/20 border-emerald-900/40 text-emerald-400"
+          }`}
+        >
+          <p>{importResult.imported} colaborador(es) importado(s).</p>
+          {importResult.errors.slice(0, 8).map((err, i) => (
+            <p key={i}>{err}</p>
+          ))}
+        </div>
       )}
 
       <div className="nord-card p-4 space-y-3">
@@ -369,6 +427,9 @@ export function ColaboradoresClient({
           </Field>
           <Field label="CPF">
             <input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="input" />
+          </Field>
+          <Field label="Chave Pix">
+            <input value={form.pixKey} onChange={(e) => setForm({ ...form, pixKey: e.target.value })} className="input" />
           </Field>
           <Field label="Data de nascimento">
             <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className="input" />
