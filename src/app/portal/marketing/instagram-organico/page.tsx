@@ -2,7 +2,6 @@ import { PageContainer } from "@/components/page-container";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { ChannelMetricCard, type ChannelMetric } from "../channel-metric-card";
-import { ChannelPageHeader } from "../channel-page-header";
 import { InstagramProfileClicks } from "./profile-clicks";
 import { BestPostingDays } from "./posting-days";
 
@@ -30,7 +29,6 @@ export default function InstagramOrganicoPage() {
   return (
     <PageContainer title="Marketing" subtitle="Instagram Orgânico — perfil, conteúdo e audiência">
       <div className="space-y-6">
-        <ChannelPageHeader active="Instagram Orgânico" />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-white">Desempenho do perfil</h2>
