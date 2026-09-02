@@ -66,7 +66,7 @@ export default async function ComparativoPage() {
   const perdasPorSetorChart = [...perdasPorSetor.entries()].map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 })).sort((a, b) => b.value - a.value);
 
   return (
-    <PageContainer title="Estoque" subtitle="Comparativo Real x Teórico">
+    <PageContainer title="CMV" subtitle="Comparativo Real x Teórico" backHref="/portal/cmv" backLabel="CMV">
       <div className="space-y-6">
         <ComparativoClient
           cmvRealPercent={cmvRealPercent}

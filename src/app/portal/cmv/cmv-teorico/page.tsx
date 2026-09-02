@@ -41,7 +41,7 @@ export default async function CmvTeoricoPage() {
   const produtosSemFicha = products.filter((p) => p.ingredients.length === 0).map((p) => ({ id: p.id, name: p.name }));
 
   return (
-    <PageContainer title="Estoque" subtitle="CMV Teórico">
+    <PageContainer title="CMV" subtitle="CMV Teórico" backHref="/portal/cmv" backLabel="CMV">
       <div className="space-y-6">
         <CmvTeoricoClient
           faturamentoPeriodo={faturamentoPeriodo}

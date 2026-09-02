@@ -34,7 +34,7 @@ export default async function CmvRealPage() {
   const faturamentoSalao = salesEntries.reduce((s, e) => s + e.faturamentoSalao, 0);
 
   return (
-    <PageContainer title="Estoque" subtitle="CMV Real">
+    <PageContainer title="CMV" subtitle="CMV Real" backHref="/portal/cmv" backLabel="CMV">
       <div className="space-y-6">
         <CmvRealClient
           estoqueInicial={estoqueInicial}

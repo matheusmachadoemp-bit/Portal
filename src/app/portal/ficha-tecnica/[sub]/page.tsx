@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
+import { StatCard } from "@/components/ui/stat-card";
 import { notFound } from "next/navigation";
 import { ProdutosClient } from "./produtos-client";
 import { InsumosClient } from "./insumos-client";
 import { QualidadePanel } from "./qualidade-panel";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { productTotalCost, cmvPercent } from "@/lib/ficha";
+import { formatPercent } from "@/lib/calc";
 
 const SUB_MAP: Record<string, { category: string; label: string }> = {
   "pizzas-salgadas": { category: "PIZZA_SALGADA", label: "Pizzas Salgadas" },
@@ -23,6 +26,16 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canCreate = ctx?.mode === "single";
+
+  const allProducts = await prisma.product.findMany({
+    where: { empresaId: { in: empresaIds }, precoVenda: { gt: 0 } },
+    select: { precoVenda: true, ingredients: { include: { ingredient: true } } },
+  });
+  const cmvValues = allProducts.map((p) => cmvPercent(productTotalCost(p.ingredients), p.precoVenda));
+  const cmvMedioCardapio = cmvValues.length ? cmvValues.reduce((s, v) => s + v, 0) / cmvValues.length : 0;
+  const cmvMedioCard = (
+    <StatCard label="CMV médio do cardápio" value={formatPercent(cmvMedioCardapio)} icon="Calculator" />
+  );
 
   if (sub === "insumos") {
     const [ingredients, categories, suppliers] = await Promise.all([
@@ -48,12 +61,15 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
 
     return (
       <PageContainer title="Ficha Técnica" subtitle="Insumos">
-        <InsumosClient
-          initialIngredients={serialized}
-          categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon }))}
-          suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
-          canCreate={canCreate}
-        />
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{cmvMedioCard}</div>
+          <InsumosClient
+            initialIngredients={serialized}
+            categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon }))}
+            suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
+            canCreate={canCreate}
+          />
+        </div>
       </PageContainer>
     );
   }
@@ -104,6 +120,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   return (
     <PageContainer title="Ficha Técnica" subtitle={info.label} backHref="/portal/ficha-tecnica" backLabel="Ficha Técnica">
       <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{cmvMedioCard}</div>
         <QualidadePanel
           products={serializedProducts}
           category={info.category}
