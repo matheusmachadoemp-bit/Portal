@@ -403,13 +403,37 @@ export function CozinhaClient({
           <div className="overflow-x-auto nord-scrollbar">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
-                  <th className="py-2 px-3">Período</th>
-                  <th className="py-2 px-3">CMV</th>
-                  <th className="py-2 px-3">Desperdício</th>
-                  <th className="py-2 px-3">Tempo Pedido</th>
-                  <th className="py-2 px-3">Organização</th>
-                  <th className="py-2 px-3">Premiação total</th>
+                <tr className="text-left text-xs text-white border-b border-nord-border">
+                  <th className="py-2 px-3">
+                    <span className="flex items-center gap-1.5">
+                      <DynamicIcon name="Calendar" size={13} className="text-nord-blue-light" /> Período
+                    </span>
+                  </th>
+                  <th className="py-2 px-3">
+                    <span className="flex items-center gap-1.5">
+                      <DynamicIcon name="Percent" size={13} className="text-nord-blue-light" /> CMV
+                    </span>
+                  </th>
+                  <th className="py-2 px-3">
+                    <span className="flex items-center gap-1.5">
+                      <DynamicIcon name="Trash2" size={13} className="text-nord-blue-light" /> Desperdício
+                    </span>
+                  </th>
+                  <th className="py-2 px-3">
+                    <span className="flex items-center gap-1.5">
+                      <DynamicIcon name="Clock" size={13} className="text-nord-blue-light" /> Tempo Pedido
+                    </span>
+                  </th>
+                  <th className="py-2 px-3">
+                    <span className="flex items-center gap-1.5">
+                      <DynamicIcon name="Sparkles" size={13} className="text-nord-blue-light" /> Organização
+                    </span>
+                  </th>
+                  <th className="py-2 px-3">
+                    <span className="flex items-center gap-1.5">
+                      <DynamicIcon name="Trophy" size={13} className="text-nord-blue-light" /> Premiação total
+                    </span>
+                  </th>
                   <th className="py-2 px-3"></th>
                 </tr>
               </thead>
