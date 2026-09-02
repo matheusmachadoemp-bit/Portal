@@ -208,6 +208,7 @@ model Empresa {
   importedSaleItems      ImportedSaleItem[]
   importedGarcomItems    ImportedGarcomItem[]
   clientes               Cliente[]
+  clienteHistoricoImportado ClienteHistoricoImportado[]
   customerNotes          CustomerNote[]
   crmSegments            CrmSegment[]
   campaigns              Campaign[]
@@ -486,9 +487,29 @@ model Cliente {
   campaignRecipients CampaignRecipient[]
   npsResponses       NpsResponse[]
   loyaltyAccount     LoyaltyAccount?
+  historicoImportado ClienteHistoricoImportado[]
 
   @@unique([empresaId, telefone])
   @@index([empresaId, dataNascimento])
+}
+
+// Histórico de pedidos trazido por planilha (CRM > Clientes > Importar
+// clientes), sem data/canal/forma de pagamento confiáveis — por isso fica
+// só como contexto no perfil do cliente e NÃO alimenta Sale/SaleItem nem
+// nenhum relatório de Vendas ou métrica de VIP/recência do CRM.
+model ClienteHistoricoImportado {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id])
+  clienteId    String
+  cliente      Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  numeroPedido String?
+  itens        String?
+  valorGasto   Float?
+  createdAt    DateTime @default(now())
+
+  @@unique([clienteId, numeroPedido])
+  @@index([empresaId])
 }
 
 model CustomerNote {

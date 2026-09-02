@@ -68,14 +68,19 @@ export function ClientesImportButton({ canCreate = true }: { canCreate?: boolean
         <div className="space-y-3 text-sm text-nord-gray">
           <p>
             Envie uma planilha (.csv ou .xlsx) com os clientes. A única coluna obrigatória é{" "}
-            <span className="text-white">&quot;Nome&quot;</span> — telefone, WhatsApp, e-mail, data de nascimento,
-            endereço, bairro e cidade são opcionais.
+            <span className="text-white">&quot;Nome&quot;</span> — as demais são opcionais: Telefone, WhatsApp,
+            E-mail, Data de nascimento, Endereço, Bairro, Cidade, Número do pedido, O que pediu, Valor gasto.
           </p>
           <div className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-xs space-y-1.5">
             <p>
               Clientes existentes são identificados pelo <span className="text-white">telefone</span>: se já houver
               um cadastro com o mesmo telefone, ele é atualizado em vez de duplicado. Sem telefone, um novo cadastro
               é sempre criado.
+            </p>
+            <p>
+              Se a planilha tiver linhas de pedidos (número do pedido, o que pediu, valor gasto), elas aparecem no
+              histórico do cliente como contexto — não entram nos relatórios de Vendas nem no cálculo de VIP/status do
+              CRM, já que a planilha não traz data do pedido.
             </p>
           </div>
           <label className="block">

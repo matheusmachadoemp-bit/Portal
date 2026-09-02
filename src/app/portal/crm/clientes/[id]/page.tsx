@@ -19,6 +19,7 @@ export default async function ClienteProfilePage({ params }: { params: Promise<{
         orderBy: { dateTime: "desc" },
         include: { items: { select: { nome: true, categoria: true, quantidade: true, precoUnitario: true } } },
       },
+      historicoImportado: { orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -84,6 +85,13 @@ export default async function ClienteProfilePage({ params }: { params: Promise<{
           texto: n.texto,
           autor: n.author.name,
           createdAt: n.createdAt.toISOString(),
+        }))}
+        historicoImportado={cliente.historicoImportado.map((p) => ({
+          id: p.id,
+          numeroPedido: p.numeroPedido,
+          itens: p.itens,
+          valorGasto: p.valorGasto,
+          createdAt: p.createdAt.toISOString(),
         }))}
       />
     </PageContainer>

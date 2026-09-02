@@ -23,7 +23,23 @@ const HEADER_ALIASES: Record<string, string> = {
   enderecocompleto: "endereco",
   bairro: "bairro",
   cidade: "cidade",
+  numerodopedido: "numeroPedido",
+  numeropedido: "numeroPedido",
+  pedido: "numeroPedido",
+  oquepediu: "itens",
+  itenspedidos: "itens",
+  itens: "itens",
+  pedidorealizado: "itens",
+  valorgasto: "valorGasto",
+  valor: "valorGasto",
+  valortotal: "valorGasto",
 };
+
+function parseValor(raw: string): number | null {
+  const cleaned = raw.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
+  const n = Number(cleaned);
+  return Number.isFinite(n) && cleaned !== "" ? n : null;
+}
 
 function normalizeHeader(h: string): string {
   return h
@@ -136,6 +152,10 @@ export async function POST(req: Request) {
     const endereco = get("endereco") || null;
     const bairro = get("bairro") || null;
     const cidade = get("cidade") || null;
+    const numeroPedido = get("numeroPedido") || null;
+    const itens = get("itens") || null;
+    const valorGastoRaw = get("valorGasto");
+    const valorGasto = valorGastoRaw ? parseValor(valorGastoRaw) : null;
 
     const data = {
       nome,
@@ -150,13 +170,31 @@ export async function POST(req: Request) {
 
     const existing = telefone ? byTelefone.get(telefone) : undefined;
 
+    let clienteId: string;
     if (existing) {
       await prisma.cliente.update({ where: { id: existing.id }, data });
+      clienteId = existing.id;
       updated++;
     } else {
       const cliente = await prisma.cliente.create({ data: { ...data, empresaId: empresa.id } });
+      clienteId = cliente.id;
       created++;
       if (telefone) byTelefone.set(telefone, cliente);
+    }
+
+    if (numeroPedido || itens || valorGasto !== null) {
+      if (numeroPedido) {
+        // Reimportar a mesma planilha atualiza o pedido em vez de duplicá-lo.
+        await prisma.clienteHistoricoImportado.upsert({
+          where: { clienteId_numeroPedido: { clienteId, numeroPedido } },
+          update: { itens, valorGasto },
+          create: { clienteId, empresaId: empresa.id, numeroPedido, itens, valorGasto },
+        });
+      } else {
+        await prisma.clienteHistoricoImportado.create({
+          data: { clienteId, empresaId: empresa.id, numeroPedido: null, itens, valorGasto },
+        });
+      }
     }
   }
 
