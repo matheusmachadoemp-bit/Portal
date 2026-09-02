@@ -85,7 +85,7 @@ export function TaskCalendarView({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: 
 
       <div className="grid grid-cols-7 gap-px bg-nord-border rounded-lg overflow-hidden">
         {WEEKDAY_HEADERS.map((w) => (
-          <div key={w} className="bg-nord-panel text-center text-[11px] text-nord-gray py-1.5">
+          <div key={w} className="bg-nord-panel text-center text-[11px] font-semibold text-white py-1.5">
             {w}
           </div>
         ))}
@@ -95,19 +95,22 @@ export function TaskCalendarView({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: 
           const dayTasks = tasksByDay.get(dateKey(d)) ?? [];
           return (
             <div key={i} className={`bg-nord-card min-h-[90px] p-1.5 ${inMonth ? "" : "opacity-40"}`}>
-              <p className={`text-[11px] mb-1 ${isToday ? "text-nord-blue-light font-semibold" : "text-nord-gray"}`}>{d.getDate()}</p>
+              <p className={`text-[11px] mb-1 font-semibold ${isToday ? "text-nord-blue-light" : "text-white"}`}>{d.getDate()}</p>
               <div className="space-y-0.5">
                 {dayTasks.slice(0, 3).map((t) => (
                   <button
                     key={t.id}
                     onClick={() => onOpen(t)}
-                    className="w-full text-left text-[10px] px-1 py-0.5 rounded truncate bg-white/5 hover:bg-white/10 text-white"
-                    style={{ borderLeft: `2px solid ${TASK_PRIORITY_COLOR[t.priority]}` }}
+                    className="w-full text-left text-[10px] px-1.5 py-0.5 rounded truncate font-medium text-white"
+                    style={{
+                      backgroundColor: `${TASK_PRIORITY_COLOR[t.priority]}59`,
+                      borderLeft: `3px solid ${TASK_PRIORITY_COLOR[t.priority]}`,
+                    }}
                   >
                     {t.title}
                   </button>
                 ))}
-                {dayTasks.length > 3 && <p className="text-[10px] text-nord-gray">+{dayTasks.length - 3} mais</p>}
+                {dayTasks.length > 3 && <p className="text-[10px] text-white/80">+{dayTasks.length - 3} mais</p>}
               </div>
             </div>
           );
