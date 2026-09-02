@@ -1,5 +1,6 @@
 import { PageContainer } from "@/components/page-container";
 import { Section } from "@/components/ui/stat-card";
+import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { ChannelMetricCard, type ChannelMetric } from "../channel-metric-card";
 import { ChannelPageHeader } from "../channel-page-header";
 import { InstagramProfileClicks } from "./profile-clicks";
@@ -37,17 +38,17 @@ export default function InstagramOrganicoPage() {
           </div>
           <button className="btn-outline">Selecionar período</button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-          {profile.map((metric) => (
-            <ChannelMetricCard key={metric.label} metric={metric} />
-          ))}
-        </div>
+        <SortableCardGrid
+          storageKey="instagram-organico-profile-order"
+          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4"
+          items={profile.map((metric) => ({ key: metric.label, content: <ChannelMetricCard metric={metric} /> }))}
+        />
         <Section title="Conteúdo publicado">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-            {content.map((metric) => (
-              <ChannelMetricCard key={metric.label} metric={metric} />
-            ))}
-          </div>
+          <SortableCardGrid
+            storageKey="instagram-organico-content-order"
+            className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4"
+            items={content.map((metric) => ({ key: metric.label, content: <ChannelMetricCard metric={metric} /> }))}
+          />
         </Section>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <InstagramProfileClicks />

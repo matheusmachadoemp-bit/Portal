@@ -1,5 +1,6 @@
 import { PageContainer } from "@/components/page-container";
 import { Section } from "@/components/ui/stat-card";
+import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { ChannelMetricCard, type ChannelMetric } from "../channel-metric-card";
 import { ChannelPageHeader } from "../channel-page-header";
 
@@ -32,11 +33,11 @@ export default function MetaAdsPage() {
           </div>
           <button className="btn-outline">Selecionar período</button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {metrics.map((metric) => (
-            <ChannelMetricCard key={metric.label} metric={metric} />
-          ))}
-        </div>
+        <SortableCardGrid
+          storageKey="meta-ads-metrics-order"
+          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+          items={metrics.map((metric) => ({ key: metric.label, content: <ChannelMetricCard metric={metric} /> }))}
+        />
         <Section title="Leitura executiva">
           <p className="text-sm text-nord-gray leading-relaxed">
             O investimento caiu 32,3% e as compras recuaram 22,05%, mas o custo por compra melhorou 13,15% e o ROAS
