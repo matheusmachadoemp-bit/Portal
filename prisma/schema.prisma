@@ -64,6 +64,7 @@ model User {
   marketingFiles                MarketingFile[]
   marketingIdeas                MarketingIdea[]
   marketingPartners             MarketingPartner[]
+  kitchenMeetings               KitchenMeeting[]
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
   stockMovementsCreated         StockMovement[]            @relation("StockMovementCreatedBy")
@@ -184,65 +185,66 @@ model Empresa {
   createdAt                      DateTime  @default(now())
   updatedAt                      DateTime  @updatedAt
 
-  userAccess             UserEmpresaAccess[]
-  suppliers              Supplier[]
-  purchases              Purchase[]
-  receivings             Receiving[]
-  transfersOrigem        Transfer[]                 @relation("TransferOrigem")
-  transfersDestino       Transfer[]                 @relation("TransferDestino")
-  losses                 Loss[]
-  stockCounts            StockCount[]
-  actionPlans            ActionPlan[]
-  usersDefault           User[]                     @relation("UserDefaultEmpresa")
-  salesEntries           SalesEntry[]
-  marketingEntries       MarketingEntry[]
-  marketingTasks         MarketingTask[]
-  marketingCampaigns     MarketingCampaign[]
-  marketingFiles         MarketingFile[]
-  marketingIdeas         MarketingIdea[]
-  marketingPartners      MarketingPartner[]
-  goals                  Goal[]
-  employees              Employee[]
-  waiterSales            WaiterSaleEntry[]
-  sales                  Sale[]
-  importedSaleItems      ImportedSaleItem[]
-  importedGarcomItems    ImportedGarcomItem[]
-  clientes               Cliente[]
+  userAccess                UserEmpresaAccess[]
+  suppliers                 Supplier[]
+  purchases                 Purchase[]
+  receivings                Receiving[]
+  transfersOrigem           Transfer[]                  @relation("TransferOrigem")
+  transfersDestino          Transfer[]                  @relation("TransferDestino")
+  losses                    Loss[]
+  stockCounts               StockCount[]
+  actionPlans               ActionPlan[]
+  usersDefault              User[]                      @relation("UserDefaultEmpresa")
+  salesEntries              SalesEntry[]
+  marketingEntries          MarketingEntry[]
+  marketingTasks            MarketingTask[]
+  marketingCampaigns        MarketingCampaign[]
+  marketingFiles            MarketingFile[]
+  marketingIdeas            MarketingIdea[]
+  marketingPartners         MarketingPartner[]
+  kitchenMeetings           KitchenMeeting[]
+  goals                     Goal[]
+  employees                 Employee[]
+  waiterSales               WaiterSaleEntry[]
+  sales                     Sale[]
+  importedSaleItems         ImportedSaleItem[]
+  importedGarcomItems       ImportedGarcomItem[]
+  clientes                  Cliente[]
   clienteHistoricoImportado ClienteHistoricoImportado[]
-  customerNotes          CustomerNote[]
-  crmSegments            CrmSegment[]
-  campaigns              Campaign[]
-  automations            Automation[]
-  loyaltyConfig          LoyaltyConfig?
-  loyaltyRewards         LoyaltyReward[]
-  loyaltyAccounts        LoyaltyAccount[]
-  npsResponses           NpsResponse[]
-  products               Product[]
-  ingredients            Ingredient[]
-  stockMovements         StockMovement[]
-  bankAccounts           BankAccount[]
-  payables               Payable[]
-  receivables            Receivable[]
-  cashMovements          CashMovement[]
-  recurringTemplates     RecurringTemplate[]
-  bankTransactions       BankTransaction[]
-  reconciliationImports  BankReconciliationImport[]
-  auditLogs              AuditLog[]
-  trainingTracks         TrainingTrack[]
-  trainingCourses        TrainingCourse[]
-  trainingLibrary        TrainingLibraryItem[]
-  qualityConfigs         CategoryQualityConfig[]
-  employeeFinanceEntries EmployeeFinanceEntry[]
-  timeEntries            TimeEntry[]
-  vacations              Vacation[]
-  uniformDeliveries      UniformDelivery[]
-  employeeDocuments      EmployeeDocument[]
-  saiposSales            SaiposSale[]
-  saiposSyncLogs         SaiposSyncLog[]
-  metaAdsInsights        MetaAdsInsight[]
-  metaAdsSyncLogs        MetaAdsSyncLog[]
-  tasks                  Task[]
-  taskRecurrences        TaskRecurrence[]
+  customerNotes             CustomerNote[]
+  crmSegments               CrmSegment[]
+  campaigns                 Campaign[]
+  automations               Automation[]
+  loyaltyConfig             LoyaltyConfig?
+  loyaltyRewards            LoyaltyReward[]
+  loyaltyAccounts           LoyaltyAccount[]
+  npsResponses              NpsResponse[]
+  products                  Product[]
+  ingredients               Ingredient[]
+  stockMovements            StockMovement[]
+  bankAccounts              BankAccount[]
+  payables                  Payable[]
+  receivables               Receivable[]
+  cashMovements             CashMovement[]
+  recurringTemplates        RecurringTemplate[]
+  bankTransactions          BankTransaction[]
+  reconciliationImports     BankReconciliationImport[]
+  auditLogs                 AuditLog[]
+  trainingTracks            TrainingTrack[]
+  trainingCourses           TrainingCourse[]
+  trainingLibrary           TrainingLibraryItem[]
+  qualityConfigs            CategoryQualityConfig[]
+  employeeFinanceEntries    EmployeeFinanceEntry[]
+  timeEntries               TimeEntry[]
+  vacations                 Vacation[]
+  uniformDeliveries         UniformDelivery[]
+  employeeDocuments         EmployeeDocument[]
+  saiposSales               SaiposSale[]
+  saiposSyncLogs            SaiposSyncLog[]
+  metaAdsInsights           MetaAdsInsight[]
+  metaAdsSyncLogs           MetaAdsSyncLog[]
+  tasks                     Task[]
+  taskRecurrences           TaskRecurrence[]
 }
 
 model UserEmpresaAccess {
@@ -1799,6 +1801,45 @@ model Loss {
   createdAt     DateTime   @default(now())
 
   @@index([empresaId, data])
+}
+
+// ---------------------------------------------------------------------------
+// REUNIÃO — fechamentos mensais por equipe (Cozinha, Salão, Delivery, etc.)
+// ---------------------------------------------------------------------------
+
+model KitchenMeeting {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  periodo   String // "2026-08" (YYYY-MM)
+
+  // Puxados automaticamente do sistema (CMV/Estoque) no momento do fechamento
+  cmvPercent       Float?
+  desperdicioValor Float?
+
+  // Digitados manualmente (ainda não rastreados em nenhum módulo)
+  tempoPedidoMinutos Float?
+  organizacaoPercent Float?
+
+  // Metas vigentes nesse período (editáveis, herdam do período anterior)
+  cmvMetaPercent         Float @default(30)
+  desperdicioMetaValor   Float @default(450)
+  tempoPedidoMetaMinutos Float @default(15)
+  organizacaoMetaPercent Float @default(90)
+
+  // Premiação paga por meta batida nesse período
+  premiacaoCmv         Float @default(0)
+  premiacaoDesperdicio Float @default(0)
+  premiacaoTempoPedido Float @default(0)
+  premiacaoOrganizacao Float @default(0)
+
+  notas       String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([empresaId, periodo])
 }
 
 enum CountType {
