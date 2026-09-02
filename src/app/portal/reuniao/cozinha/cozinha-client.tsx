@@ -6,7 +6,7 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, previousPeriodo } from "@/lib/reuniao";
+import { periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
 import { exportCozinhaMeetingPdf } from "@/lib/reuniao-pdf";
 
 type Meeting = {
@@ -199,7 +199,8 @@ export function CozinhaClient({
     exportCozinhaMeetingPdf({
       empresaName,
       periodoLabel: periodoLabel(selectedPeriodo),
-      periodoAnteriorLabel: anterior ? periodoLabel(anterior.periodo) : null,
+      periodoAtualShort: periodoShortLabel(selectedPeriodo),
+      periodoAnteriorShort: anterior ? periodoShortLabel(anterior.periodo) : null,
       premiacaoTotal,
       observacoes: form.notas,
       indicators: [
