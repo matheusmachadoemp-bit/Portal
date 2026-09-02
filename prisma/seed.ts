@@ -35,6 +35,7 @@ const CATEGORIES = [
       { key: "calendario", name: "Calendário de Conteúdo", icon: "Calendar" },
       { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
       { key: "campanhas", name: "Campanhas", icon: "Megaphone" },
+      { key: "parcerias", name: "Parcerias", icon: "Handshake" },
       { key: "biblioteca", name: "Biblioteca de Arquivos", icon: "FolderOpen" },
       { key: "ideias", name: "Banco de Ideias", icon: "Lightbulb" },
       { key: "trafego-pago", name: "Tráfego Pago", icon: "TrendingUp" },
