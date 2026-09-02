@@ -1,0 +1,5 @@
+import { PageContainer } from "@/components/page-container";
+import { Section } from "@/components/ui/stat-card";
+import { ChannelPageHeader } from "../channel-page-header";
+const planned = ["Impressões", "Cliques", "CTR", "CPC médio", "Conversões", "Custo por conversão", "Valor investido", "Receita atribuída", "ROAS"];
+export default function GoogleAdsPage() { return <PageContainer title="Marketing" subtitle="Google Ads — pesquisa, conversão e retorno"><div className="space-y-6"><ChannelPageHeader active="Google Ads" /><Section title="Google Ads"><div className="rounded-xl border border-dashed border-nord-blue/50 bg-nord-blue/5 p-8 text-center"><h2 className="text-lg font-semibold text-white">Integração preparada</h2><p className="mx-auto mt-2 max-w-2xl text-sm text-nord-gray">Ao conectar a conta do Google Ads, esta tela exibirá automaticamente os principais indicadores de mídia e vendas.</p><div className="mt-5 flex flex-wrap justify-center gap-2">{planned.map((item) => <span key={item} className="rounded-full border border-nord-border bg-nord-card px-3 py-1.5 text-xs text-nord-gray">{item}</span>)}</div></div></Section></div></PageContainer>; }
