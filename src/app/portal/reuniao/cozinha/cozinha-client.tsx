@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CheckCircle2, AlertTriangle, Trophy } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, AlertTriangle, Trophy, Pencil } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
+import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { periodoLabel } from "@/lib/reuniao";
 
@@ -29,70 +31,96 @@ type Meeting = {
 
 type Metrics = { cmvPercent: number | null; desperdicioValor: number; faturamento: number };
 
-const emptyForm = (m: Metrics, latest?: Meeting | null) => ({
-  tempoPedidoMinutos: "",
-  organizacaoPercent: "",
-  cmvMetaPercent: String(latest?.cmvMetaPercent ?? 30),
-  desperdicioMetaValor: String(latest?.desperdicioMetaValor ?? 450),
-  tempoPedidoMetaMinutos: String(latest?.tempoPedidoMetaMinutos ?? 15),
-  organizacaoMetaPercent: String(latest?.organizacaoMetaPercent ?? 90),
-  premiacaoCmv: String(latest?.premiacaoCmv ?? 400),
-  premiacaoDesperdicio: String(latest?.premiacaoDesperdicio ?? 300),
-  premiacaoTempoPedido: String(latest?.premiacaoTempoPedido ?? 500),
-  premiacaoOrganizacao: String(latest?.premiacaoOrganizacao ?? 300),
-  notas: "",
-});
+type Status = "batida" | "abaixo" | "sem-dado";
 
-function metricCard({
+function statusOf(bateu: boolean | null): Status {
+  return bateu === null ? "sem-dado" : bateu ? "batida" : "abaixo";
+}
+
+function StatusBadge({ status }: { status: Status }) {
+  if (status === "sem-dado") return <Badge tone="default">Sem dado</Badge>;
+  if (status === "batida")
+    return (
+      <Badge tone="success">
+        <CheckCircle2 size={11} className="inline mr-1 -mt-0.5" />
+        Meta batida
+      </Badge>
+    );
+  return (
+    <Badge tone="warning">
+      <AlertTriangle size={11} className="inline mr-1 -mt-0.5" />
+      Abaixo da meta
+    </Badge>
+  );
+}
+
+function IndicatorCard({
+  icon,
+  color,
   label,
-  value,
-  unit,
-  meta,
-  metaUnit,
-  bateu,
+  status,
+  valueSlot,
+  metaText,
   premio,
-  lowerIsBetter = true,
 }: {
+  icon: string;
+  color: string;
   label: string;
-  value: number | null;
-  unit: string;
-  meta: number;
-  metaUnit: string;
-  bateu: boolean | null;
+  status: Status;
+  valueSlot: React.ReactNode;
+  metaText: string;
   premio: number;
-  lowerIsBetter?: boolean;
 }) {
   return (
-    <div className="nord-card p-4 flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-white font-medium">{label}</span>
-        {bateu === null ? (
-          <Badge tone="default">Sem dado</Badge>
-        ) : bateu ? (
-          <Badge tone="success">
-            <CheckCircle2 size={11} className="inline mr-1 -mt-0.5" />
-            Meta batida
-          </Badge>
-        ) : (
-          <Badge tone="warning">
-            <AlertTriangle size={11} className="inline mr-1 -mt-0.5" />
-            Abaixo da meta
-          </Badge>
-        )}
+    <div className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2" style={{ borderTopColor: color }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22` }}>
+            <DynamicIcon name={icon} size={20} style={{ color }} />
+          </div>
+          <span className="text-sm text-white leading-tight">{label}</span>
+        </div>
+        <div className="shrink-0 whitespace-nowrap">
+          <StatusBadge status={status} />
+        </div>
       </div>
-      <span className="text-2xl font-semibold text-white">
-        {value === null ? "-" : `${formatNumber(value, 1)}${unit}`}
-      </span>
-      <span className="text-xs text-nord-gray">
-        Meta: {lowerIsBetter ? "até" : "mín."} {formatNumber(meta, 1)}
-        {metaUnit}
-      </span>
-      {bateu && premio > 0 && (
+      {valueSlot}
+      <span className="text-xs text-nord-gray">{metaText}</span>
+      {status === "batida" && premio > 0 && (
         <span className="text-xs text-amber-400 flex items-center gap-1">
           <Trophy size={11} /> {formatCurrency(premio)} de premiação
         </span>
       )}
     </div>
+  );
+}
+
+function formToPayload(periodo: string, form: ReturnType<typeof buildForm>) {
+  return { periodo, ...form };
+}
+
+function buildForm(m?: Meeting | null) {
+  return {
+    tempoPedidoMinutos: m?.tempoPedidoMinutos != null ? String(m.tempoPedidoMinutos) : "",
+    organizacaoPercent: m?.organizacaoPercent != null ? String(m.organizacaoPercent) : "",
+    cmvMetaPercent: String(m?.cmvMetaPercent ?? 30),
+    desperdicioMetaValor: String(m?.desperdicioMetaValor ?? 450),
+    tempoPedidoMetaMinutos: String(m?.tempoPedidoMetaMinutos ?? 15),
+    organizacaoMetaPercent: String(m?.organizacaoMetaPercent ?? 90),
+    premiacaoCmv: String(m?.premiacaoCmv ?? 400),
+    premiacaoDesperdicio: String(m?.premiacaoDesperdicio ?? 300),
+    premiacaoTempoPedido: String(m?.premiacaoTempoPedido ?? 500),
+    premiacaoOrganizacao: String(m?.premiacaoOrganizacao ?? 300),
+    notas: m?.notas ?? "",
+  };
+}
+
+function meetingPremiacaoTotal(m: Meeting) {
+  return (
+    (m.cmvPercent !== null && m.cmvPercent <= m.cmvMetaPercent ? m.premiacaoCmv : 0) +
+    (m.desperdicioValor !== null && m.desperdicioValor <= m.desperdicioMetaValor ? m.premiacaoDesperdicio : 0) +
+    (m.tempoPedidoMinutos !== null && m.tempoPedidoMinutos <= m.tempoPedidoMetaMinutos ? m.premiacaoTempoPedido : 0) +
+    (m.organizacaoPercent !== null && m.organizacaoPercent >= m.organizacaoMetaPercent ? m.premiacaoOrganizacao : 0)
   );
 }
 
@@ -110,27 +138,35 @@ export function CozinhaClient({
   canCreate: boolean;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
+  const [selectedPeriodo, setSelectedPeriodo] = useState(periodo);
   const [current, setCurrent] = useState(initialCurrent);
   const [metrics, setMetrics] = useState(initialMetrics);
-  const [form, setForm] = useState(
-    initialCurrent
-      ? {
-          tempoPedidoMinutos: String(initialCurrent.tempoPedidoMinutos ?? ""),
-          organizacaoPercent: String(initialCurrent.organizacaoPercent ?? ""),
-          cmvMetaPercent: String(initialCurrent.cmvMetaPercent),
-          desperdicioMetaValor: String(initialCurrent.desperdicioMetaValor),
-          tempoPedidoMetaMinutos: String(initialCurrent.tempoPedidoMetaMinutos),
-          organizacaoMetaPercent: String(initialCurrent.organizacaoMetaPercent),
-          premiacaoCmv: String(initialCurrent.premiacaoCmv),
-          premiacaoDesperdicio: String(initialCurrent.premiacaoDesperdicio),
-          premiacaoTempoPedido: String(initialCurrent.premiacaoTempoPedido),
-          premiacaoOrganizacao: String(initialCurrent.premiacaoOrganizacao),
-          notas: initialCurrent.notas ?? "",
-        }
-      : emptyForm(initialMetrics, initialMeetings[0])
-  );
+  const [form, setForm] = useState(buildForm(initialCurrent));
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showMetas, setShowMetas] = useState(false);
+
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/reuniao/cozinha?periodo=${selectedPeriodo}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setCurrent(data.current);
+        setMetrics(data.metrics);
+        setForm(buildForm(data.current));
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPeriodo]);
 
   const cmvMeta = Number(form.cmvMetaPercent) || 0;
   const desperdicioMeta = Number(form.desperdicioMetaValor) || 0;
@@ -154,8 +190,8 @@ export function CozinhaClient({
     return total;
   }, [bateuCmv, bateuDesperdicio, bateuTempo, bateuOrganizacao, form]);
 
-  async function refresh() {
-    const res = await fetch(`/api/reuniao/cozinha?periodo=${periodo}`);
+  async function refresh(targetPeriodo: string) {
+    const res = await fetch(`/api/reuniao/cozinha?periodo=${targetPeriodo}`);
     const data = await res.json();
     setMeetings(data.meetings);
     setCurrent(data.current);
@@ -168,18 +204,121 @@ export function CozinhaClient({
       await fetch("/api/reuniao/cozinha", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ periodo, ...form }),
+        body: JSON.stringify(formToPayload(selectedPeriodo, form)),
       });
-      await refresh();
+      await refresh(selectedPeriodo);
     } finally {
       setSaving(false);
     }
   }
 
+  function editHistoryRow(m: Meeting) {
+    setSelectedPeriodo(m.periodo);
+    setCurrent(m);
+    setForm(buildForm(m));
+    setMetrics({ cmvPercent: m.cmvPercent, desperdicioValor: m.desperdicioValor ?? 0, faturamento: 0 });
+  }
+
+  const cards = [
+    {
+      key: "cmv",
+      content: (
+        <IndicatorCard
+          icon="Percent"
+          color="#1464F4"
+          label="CMV"
+          status={statusOf(bateuCmv)}
+          valueSlot={
+            <span className="text-2xl font-semibold text-white">
+              {metrics.cmvPercent === null ? "-" : `${formatNumber(metrics.cmvPercent, 1)}%`}
+            </span>
+          }
+          metaText={`Meta: até ${formatNumber(cmvMeta, 1)}%`}
+          premio={Number(form.premiacaoCmv) || 0}
+        />
+      ),
+    },
+    {
+      key: "desperdicio",
+      content: (
+        <IndicatorCard
+          icon="Trash2"
+          color="#ef4444"
+          label="Desperdício"
+          status={statusOf(bateuDesperdicio)}
+          valueSlot={<span className="text-2xl font-semibold text-white">{formatCurrency(metrics.desperdicioValor)}</span>}
+          metaText={`Meta: até ${formatCurrency(desperdicioMeta)}`}
+          premio={Number(form.premiacaoDesperdicio) || 0}
+        />
+      ),
+    },
+    {
+      key: "tempo-pedido",
+      content: (
+        <IndicatorCard
+          icon="Clock"
+          color="#a855f7"
+          label="Tempo Pedido"
+          status={statusOf(bateuTempo)}
+          valueSlot={
+            canCreate ? (
+              <input
+                type="number"
+                value={form.tempoPedidoMinutos}
+                onChange={(e) => setForm({ ...form, tempoPedidoMinutos: e.target.value })}
+                placeholder="minutos"
+                className="input"
+              />
+            ) : (
+              <span className="text-2xl font-semibold text-white">{tempoValor ?? "-"} min</span>
+            )
+          }
+          metaText={`Meta: até ${formatNumber(tempoMeta, 0)} min`}
+          premio={Number(form.premiacaoTempoPedido) || 0}
+        />
+      ),
+    },
+    {
+      key: "organizacao",
+      content: (
+        <IndicatorCard
+          icon="Sparkles"
+          color="#14b8a6"
+          label="Organização"
+          status={statusOf(bateuOrganizacao)}
+          valueSlot={
+            canCreate ? (
+              <input
+                type="number"
+                value={form.organizacaoPercent}
+                onChange={(e) => setForm({ ...form, organizacaoPercent: e.target.value })}
+                placeholder="%"
+                className="input"
+              />
+            ) : (
+              <span className="text-2xl font-semibold text-white">{organizacaoValor ?? "-"}%</span>
+            )
+          }
+          metaText={`Meta: mín. ${formatNumber(organizacaoMeta, 0)}%`}
+          premio={Number(form.premiacaoOrganizacao) || 0}
+        />
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-white font-medium capitalize">{periodoLabel(periodo)}</h3>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <input
+            type="month"
+            value={selectedPeriodo}
+            onChange={(e) => setSelectedPeriodo(e.target.value)}
+            className="input w-auto"
+          />
+          <h3 className="text-white font-medium capitalize">{periodoLabel(selectedPeriodo)}</h3>
+          {loading && <span className="text-xs text-nord-gray">Carregando...</span>}
+        </div>
         {canCreate && (
           <button onClick={() => setShowMetas((s) => !s)} className="text-xs text-nord-blue-light hover:underline">
             {showMetas ? "Ocultar metas e premiação" : "Editar metas e premiação"}
@@ -187,96 +326,11 @@ export function CozinhaClient({
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {metricCard({
-          label: "CMV",
-          value: metrics.cmvPercent,
-          unit: "%",
-          meta: cmvMeta,
-          metaUnit: "%",
-          bateu: bateuCmv,
-          premio: Number(form.premiacaoCmv) || 0,
-        })}
-        {metricCard({
-          label: "Desperdício",
-          value: metrics.desperdicioValor,
-          unit: "",
-          meta: desperdicioMeta,
-          metaUnit: "",
-          bateu: bateuDesperdicio,
-          premio: Number(form.premiacaoDesperdicio) || 0,
-        })}
-        <div className="nord-card p-4 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-white font-medium">Tempo de Pedido</span>
-            {bateuTempo === null ? (
-              <Badge tone="default">Sem dado</Badge>
-            ) : bateuTempo ? (
-              <Badge tone="success">
-                <CheckCircle2 size={11} className="inline mr-1 -mt-0.5" />
-                Meta batida
-              </Badge>
-            ) : (
-              <Badge tone="warning">
-                <AlertTriangle size={11} className="inline mr-1 -mt-0.5" />
-                Abaixo da meta
-              </Badge>
-            )}
-          </div>
-          {canCreate ? (
-            <input
-              type="number"
-              value={form.tempoPedidoMinutos}
-              onChange={(e) => setForm({ ...form, tempoPedidoMinutos: e.target.value })}
-              placeholder="minutos"
-              className="input"
-            />
-          ) : (
-            <span className="text-2xl font-semibold text-white">{tempoValor ?? "-"} min</span>
-          )}
-          <span className="text-xs text-nord-gray">Meta: até {formatNumber(tempoMeta, 0)} min</span>
-          {bateuTempo && (
-            <span className="text-xs text-amber-400 flex items-center gap-1">
-              <Trophy size={11} /> {formatCurrency(Number(form.premiacaoTempoPedido) || 0)} de premiação
-            </span>
-          )}
-        </div>
-        <div className="nord-card p-4 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-white font-medium">Organização e Limpeza</span>
-            {bateuOrganizacao === null ? (
-              <Badge tone="default">Sem dado</Badge>
-            ) : bateuOrganizacao ? (
-              <Badge tone="success">
-                <CheckCircle2 size={11} className="inline mr-1 -mt-0.5" />
-                Meta batida
-              </Badge>
-            ) : (
-              <Badge tone="warning">
-                <AlertTriangle size={11} className="inline mr-1 -mt-0.5" />
-                Abaixo da meta
-              </Badge>
-            )}
-          </div>
-          {canCreate ? (
-            <input
-              type="number"
-              value={form.organizacaoPercent}
-              onChange={(e) => setForm({ ...form, organizacaoPercent: e.target.value })}
-              placeholder="%"
-              className="input"
-            />
-          ) : (
-            <span className="text-2xl font-semibold text-white">{organizacaoValor ?? "-"}%</span>
-          )}
-          <span className="text-xs text-nord-gray">Meta: mín. {formatNumber(organizacaoMeta, 0)}%</span>
-          {bateuOrganizacao && (
-            <span className="text-xs text-amber-400 flex items-center gap-1">
-              <Trophy size={11} /> {formatCurrency(Number(form.premiacaoOrganizacao) || 0)} de premiação
-            </span>
-          )}
-        </div>
-      </div>
+      <SortableCardGrid
+        storageKey="reuniao-cozinha-kpi-order"
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
+        items={cards}
+      />
 
       {premiacaoTotal > 0 && (
         <div className="nord-card p-4 flex items-center gap-3 bg-amber-950/10 border-amber-900/40">
@@ -345,7 +399,7 @@ export function CozinhaClient({
       )}
 
       {meetings.length > 0 && (
-        <Section title="Histórico de fechamentos">
+        <Section title="Histórico de reuniões">
           <div className="overflow-x-auto nord-scrollbar">
             <table className="w-full text-sm">
               <thead>
@@ -356,22 +410,23 @@ export function CozinhaClient({
                   <th className="py-2 px-3">Tempo Pedido</th>
                   <th className="py-2 px-3">Organização</th>
                   <th className="py-2 px-3">Premiação total</th>
+                  <th className="py-2 px-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {meetings.map((m) => (
-                  <tr key={m.id} className="border-b border-nord-border/50">
+                  <tr key={m.id} className={`border-b border-nord-border/50 ${m.periodo === selectedPeriodo ? "bg-white/5" : ""}`}>
                     <td className="py-2 px-3 text-white capitalize">{periodoLabel(m.periodo)}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.cmvPercent === null ? "-" : `${formatNumber(m.cmvPercent, 1)}%`}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.desperdicioValor === null ? "-" : formatCurrency(m.desperdicioValor)}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.tempoPedidoMinutos === null ? "-" : `${m.tempoPedidoMinutos} min`}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.organizacaoPercent === null ? "-" : `${m.organizacaoPercent}%`}</td>
-                    <td className="py-2 px-3 text-amber-400">
-                      {formatCurrency(
-                        (m.cmvPercent !== null && m.cmvPercent <= m.cmvMetaPercent ? m.premiacaoCmv : 0) +
-                          (m.desperdicioValor !== null && m.desperdicioValor <= m.desperdicioMetaValor ? m.premiacaoDesperdicio : 0) +
-                          (m.tempoPedidoMinutos !== null && m.tempoPedidoMinutos <= m.tempoPedidoMetaMinutos ? m.premiacaoTempoPedido : 0) +
-                          (m.organizacaoPercent !== null && m.organizacaoPercent >= m.organizacaoMetaPercent ? m.premiacaoOrganizacao : 0)
+                    <td className="py-2 px-3 text-amber-400">{formatCurrency(meetingPremiacaoTotal(m))}</td>
+                    <td className="py-2 px-3">
+                      {canCreate && (
+                        <button onClick={() => editHistoryRow(m)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">
+                          <Pencil size={12} /> Editar
+                        </button>
                       )}
                     </td>
                   </tr>
