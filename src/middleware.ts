@@ -13,6 +13,7 @@ export default auth((req) => {
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/internal/unstick-migration") ||
+    pathname.startsWith("/api/internal/cliente-resumo-fix") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
     pathname === "/favicon.ico";
