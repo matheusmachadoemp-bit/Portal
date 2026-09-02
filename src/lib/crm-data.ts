@@ -44,8 +44,19 @@ const loadClientesCompletosCached = unstable_cache(
   { revalidate: 60 }
 );
 
+// unstable_cache serializa o retorno pra JSON: numa leitura que bate no
+// cache (em vez de recalcular), Date vira string simples — quem chamar
+// .toISOString()/.getTime() num campo de data quebra de forma intermitente
+// (funciona quando o cache está frio, quebra quando está quente). Sempre
+// reconstrói os campos de data em Date de verdade na saída, cache ou não.
 export async function loadClientesCompletos(empresaIds: string[]) {
-  return loadClientesCompletosCached([...empresaIds].sort());
+  const clientes = await loadClientesCompletosCached([...empresaIds].sort());
+  return clientes.map((c) => ({
+    ...c,
+    createdAt: new Date(c.createdAt),
+    dataNascimento: c.dataNascimento ? new Date(c.dataNascimento) : null,
+    vendas: c.vendas.map((v) => ({ ...v, dateTime: new Date(v.dateTime) })),
+  }));
 }
 
 export type ClienteCompleto = Awaited<ReturnType<typeof loadClientesCompletos>>[number];
