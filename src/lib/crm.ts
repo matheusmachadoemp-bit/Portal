@@ -523,6 +523,7 @@ function topEntry(counts: Map<string, number>): string | null {
 export type VendaComItens = {
   dateTime: Date;
   channel?: string | null;
+  platform?: string | null;
   items: { nome: string; categoria?: string | null; quantidade: number }[];
 };
 
@@ -530,6 +531,7 @@ export type ClientePreferencias = {
   produtoFavorito: string | null;
   categoriaFavorita: string | null;
   canalFavorito: string | null;
+  plataformaFavorita: string | null;
   diaFavorito: string | null;
   horarioFavorito: string | null;
 };
@@ -538,11 +540,13 @@ export function computePreferencias(vendas: VendaComItens[]): ClientePreferencia
   const produtos = new Map<string, number>();
   const categorias = new Map<string, number>();
   const canais = new Map<string, number>();
+  const plataformas = new Map<string, number>();
   const dias = new Map<string, number>();
   const horarios = new Map<string, number>();
 
   for (const v of vendas) {
     if (v.channel) canais.set(v.channel, (canais.get(v.channel) ?? 0) + 1);
+    if (v.platform) plataformas.set(v.platform, (plataformas.get(v.platform) ?? 0) + 1);
     dias.set(DIAS_SEMANA[v.dateTime.getDay()], (dias.get(DIAS_SEMANA[v.dateTime.getDay()]) ?? 0) + 1);
     const hour = v.dateTime.getHours();
     const bucket = hour < 11 ? "Manhã (até 11h)" : hour < 15 ? "Almoço (11h-15h)" : hour < 18 ? "Tarde (15h-18h)" : hour < 22 ? "Jantar (18h-22h)" : "Madrugada";
@@ -557,6 +561,7 @@ export function computePreferencias(vendas: VendaComItens[]): ClientePreferencia
     produtoFavorito: topEntry(produtos),
     categoriaFavorita: topEntry(categorias),
     canalFavorito: topEntry(canais),
+    plataformaFavorita: topEntry(plataformas),
     diaFavorito: topEntry(dias),
     horarioFavorito: topEntry(horarios),
   };
