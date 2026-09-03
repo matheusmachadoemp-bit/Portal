@@ -83,6 +83,19 @@ export function ClienteProfileClient({
   historicoImportado: PedidoImportado[];
   resumoImportado: ResumoImportado;
 }) {
+  // Cards do topo somam vendas reais + resumo importado (visual, só nessa
+  // tela) — os relatórios de Vendas da loja e o status VIP (badge acima)
+  // continuam baseados só em vendas reais.
+  const pedidosCombinado = metrics.pedidos + (resumoImportado.pedidosImportados ?? 0);
+  const totalGastoCombinado = metrics.totalGasto + (resumoImportado.valorGastoImportado ?? 0);
+  const ticketMedioCombinado = pedidosCombinado > 0 ? totalGastoCombinado / pedidosCombinado : 0;
+  const ultimaCompraCombinada = (() => {
+    const real = metrics.ultimaCompra ? new Date(metrics.ultimaCompra) : null;
+    const importada = resumoImportado.ultimaCompraImportada ? new Date(resumoImportado.ultimaCompraImportada) : null;
+    if (real && importada) return real > importada ? real : importada;
+    return real ?? importada;
+  })();
+
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -151,13 +164,13 @@ export function ClienteProfileClient({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total gasto" value={formatCurrency(metrics.totalGasto)} icon="Wallet" color="#22c55e" />
-        <StatCard label="Pedidos" value={formatNumber(metrics.pedidos)} icon="ShoppingBag" />
-        <StatCard label="Ticket médio" value={formatCurrency(metrics.ticketMedio)} icon="Receipt" />
-        <StatCard label="LTV" value={formatCurrency(metrics.totalGasto)} icon="TrendingUp" color="#a855f7" />
+        <StatCard label="Total gasto" value={formatCurrency(totalGastoCombinado)} icon="Wallet" color="#22c55e" />
+        <StatCard label="Pedidos" value={formatNumber(pedidosCombinado)} icon="ShoppingBag" />
+        <StatCard label="Ticket médio" value={formatCurrency(ticketMedioCombinado)} icon="Receipt" />
+        <StatCard label="LTV" value={formatCurrency(totalGastoCombinado)} icon="TrendingUp" color="#a855f7" />
         <StatCard
           label="Última compra"
-          value={metrics.ultimaCompra ? new Date(metrics.ultimaCompra).toLocaleDateString("pt-BR") : "—"}
+          value={ultimaCompraCombinada ? ultimaCompraCombinada.toLocaleDateString("pt-BR") : "—"}
           icon="Calendar"
           hint={metrics.diasDesdeUltimaCompra !== null ? `${metrics.diasDesdeUltimaCompra} dias atrás` : undefined}
         />
@@ -170,19 +183,12 @@ export function ClienteProfileClient({
         resumoImportado.valorGastoImportado !== null ||
         resumoImportado.ultimaCompraImportada !== null) && (
         <div className="nord-card p-4 border-nord-blue/30 bg-nord-blue/5">
-          <p className="text-xs text-white font-medium mb-1">Resumo importado de outro sistema</p>
+          <p className="text-xs text-white font-medium mb-1">Inclui resumo importado de outro sistema</p>
           <p className="text-xs text-nord-gray">
-            {resumoImportado.pedidosImportados !== null && <>{resumoImportado.pedidosImportados} pedido(s) anterior(es)</>}
-            {resumoImportado.valorGastoImportado !== null && (
-              <> · {formatCurrency(resumoImportado.valorGastoImportado)} no total</>
-            )}
-            {resumoImportado.ticketMedioImportado !== null && (
-              <> · ticket médio {formatCurrency(resumoImportado.ticketMedioImportado)}</>
-            )}
-            {resumoImportado.ultimaCompraImportada && (
-              <> · última compra em {new Date(resumoImportado.ultimaCompraImportada).toLocaleDateString("pt-BR")}</>
-            )}
-            {" "}— não entra nos indicadores acima nem no status VIP, que seguem só as vendas reais registradas no sistema.
+            Dos totais acima, {resumoImportado.pedidosImportados ?? 0} pedido(s) e{" "}
+            {formatCurrency(resumoImportado.valorGastoImportado ?? 0)} vêm de uma planilha importada (sem registro de
+            venda por trás) — não entram nos relatórios de Vendas da loja nem no cálculo de status VIP (badge acima),
+            que seguem baseados só nas vendas reais registradas no sistema.
           </p>
         </div>
       )}
