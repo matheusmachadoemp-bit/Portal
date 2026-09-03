@@ -106,14 +106,15 @@ function messageFor(status: Status) {
   return { text: "AINDA SEM DADOS PARA ESSE INDICADOR", color: COLOR.grayLight };
 }
 
-export function exportCozinhaMeetingPdf(params: {
+export function exportMeetingReportPdf(params: {
+  fileSlug: string;
   empresaName: string;
   periodoLabel: string;
   indicators: MeetingIndicator[];
   premiacaoTotal: number;
   observacoes: string;
 }) {
-  const { empresaName, periodoLabel, indicators, premiacaoTotal, observacoes } = params;
+  const { fileSlug, empresaName, periodoLabel, indicators, premiacaoTotal, observacoes } = params;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -297,7 +298,7 @@ export function exportCozinhaMeetingPdf(params: {
   doc.setFontSize(8);
   centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
 
-  doc.save(`reuniao-cozinha-${periodoLabel.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+  doc.save(`${fileSlug}-${periodoLabel.replace(/\s+/g, "-").toLowerCase()}.pdf`);
 }
 
 function messageForStatusShort(status: Status) {

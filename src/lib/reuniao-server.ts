@@ -32,3 +32,30 @@ export async function computeCozinhaMetrics(empresaId: string, periodo: string) 
 
   return { cmvPercent, desperdicioValor, faturamento };
 }
+
+/**
+ * NPS geral (%), faturamento do salão (R$) e ticket médio (R$) do mês,
+ * calculados a partir do CRM (NpsResponse) e Vendas (SalesEntry) já
+ * existentes — sem precisar digitar nada.
+ */
+export async function computeSalaoMetrics(empresaId: string, periodo: string) {
+  const { start, end } = periodoRange(periodo);
+
+  const [respostas, salesEntries] = await Promise.all([
+    prisma.npsResponse.findMany({ where: { empresaId, createdAt: { gte: start, lt: end } }, select: { nota: true } }),
+    prisma.salesEntry.findMany({
+      where: { empresaId, date: { gte: start, lt: end } },
+      select: { faturamentoSalao: true, pedidosSalao: true },
+    }),
+  ]);
+
+  const promotores = respostas.filter((r) => r.nota >= 9).length;
+  const detratores = respostas.filter((r) => r.nota <= 6).length;
+  const npsPercent = respostas.length > 0 ? ((promotores - detratores) / respostas.length) * 100 : null;
+
+  const faturamentoValor = salesEntries.reduce((s, e) => s + e.faturamentoSalao, 0);
+  const pedidosSalao = salesEntries.reduce((s, e) => s + e.pedidosSalao, 0);
+  const ticketMedioValor = pedidosSalao > 0 ? safeDiv(faturamentoValor, pedidosSalao) : null;
+
+  return { npsPercent, faturamentoValor, ticketMedioValor };
+}
