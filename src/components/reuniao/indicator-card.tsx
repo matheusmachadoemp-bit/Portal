@@ -51,8 +51,8 @@ export function IndicatorCard({
 }) {
   return (
     <div className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2" style={{ borderTopColor: color }}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}22` }}>
             <DynamicIcon name={icon} size={20} style={{ color }} />
           </div>

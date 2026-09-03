@@ -67,6 +67,7 @@ model User {
   kitchenMeetings               KitchenMeeting[]
   salaoMeetings                 SalaoMeeting[]
   deliveryMeetings              DeliveryMeeting[]
+  gerenteMeetings               GerenteMeeting[]
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
   stockMovementsCreated         StockMovement[]            @relation("StockMovementCreatedBy")
@@ -207,6 +208,7 @@ model Empresa {
   kitchenMeetings           KitchenMeeting[]
   salaoMeetings             SalaoMeeting[]
   deliveryMeetings          DeliveryMeeting[]
+  gerenteMeetings           GerenteMeeting[]
   goals                     Goal[]
   employees                 Employee[]
   waiterSales               WaiterSaleEntry[]
@@ -1926,6 +1928,44 @@ model DeliveryMeeting {
   premiacaoAvaliacao    Float @default(0)
   premiacaoTempoEntrega Float @default(0)
   premiacaoChamados     Float @default(0)
+
+  notas       String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([empresaId, periodo])
+}
+
+model GerenteMeeting {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  periodo   String // "2026-08" (YYYY-MM)
+
+  // Puxado automaticamente do sistema (Cozinha, Salão, Delivery) no momento do fechamento
+  faturamentoTotalValor       Float?
+  cmvPercent                  Float?
+  npsPercent                  Float?
+  cancelamentoDeliveryPercent Float?
+
+  // Digitados manualmente (ainda não rastreados em nenhum módulo)
+  turnoverPercent             Float?
+  faltasAtrasosAtestados      Int?
+  checklistOperacionalPercent Float?
+
+  // Metas vigentes nesse período (editáveis, herdam do período anterior)
+  faturamentoMetaValor            Float @default(0)
+  cmvMetaPercent                  Float @default(30)
+  turnoverMetaPercent             Float @default(5)
+  checklistOperacionalMetaPercent Float @default(90)
+
+  // Premiação paga por meta batida nesse período
+  premiacaoFaturamento Float @default(0)
+  premiacaoCmv         Float @default(0)
+  premiacaoTurnover    Float @default(0)
+  premiacaoChecklist   Float @default(0)
 
   notas       String?
   createdById String
