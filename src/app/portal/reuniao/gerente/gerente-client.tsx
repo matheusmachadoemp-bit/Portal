@@ -7,7 +7,7 @@ import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
+import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
 import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type Meeting = {
@@ -135,6 +135,22 @@ export function GerenteClient({
   const bateuCmv = metrics.cmvPercent === null ? null : metrics.cmvPercent <= cmvMeta;
   const bateuTurnover = turnoverValor === null ? null : turnoverValor <= turnoverMeta;
   const bateuChecklist = checklistValor === null ? null : checklistValor >= checklistMeta;
+
+  const previousMeeting = useMemo(
+    () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
+    [meetings, selectedPeriodo]
+  );
+  const compFaturamento = compareToPrevious(metrics.faturamentoTotalValor, previousMeeting?.faturamentoTotalValor, "max");
+  const compCmv = compareToPrevious(metrics.cmvPercent, previousMeeting?.cmvPercent, "min");
+  const compNps = compareToPrevious(metrics.npsPercent, previousMeeting?.npsPercent, "max");
+  const compCancelamentoDelivery = compareToPrevious(
+    metrics.cancelamentoDeliveryPercent,
+    previousMeeting?.cancelamentoDeliveryPercent,
+    "min"
+  );
+  const compTurnover = compareToPrevious(turnoverValor, previousMeeting?.turnoverPercent, "min");
+  const compFaltas = compareToPrevious(faltasValor, previousMeeting?.faltasAtrasosAtestados, "min");
+  const compChecklist = compareToPrevious(checklistValor, previousMeeting?.checklistOperacionalPercent, "max");
 
   const premiacaoTotal = useMemo(() => {
     let total = 0;
@@ -264,6 +280,7 @@ export function GerenteClient({
           }
           metaText={`Meta: mín. ${formatCurrency(faturamentoMeta)}`}
           premio={Number(form.premiacaoFaturamento) || 0}
+          comparison={compFaturamento}
         />
       ),
     },
@@ -282,6 +299,7 @@ export function GerenteClient({
           }
           metaText={`Meta: até ${formatNumber(cmvMeta, 1)}%`}
           premio={Number(form.premiacaoCmv) || 0}
+          comparison={compCmv}
         />
       ),
     },
@@ -300,6 +318,7 @@ export function GerenteClient({
           }
           metaText="Detalhado na Reunião Salão"
           premio={0}
+          comparison={compNps}
         />
       ),
     },
@@ -318,6 +337,7 @@ export function GerenteClient({
           }
           metaText="Detalhado na Reunião Delivery"
           premio={0}
+          comparison={compCancelamentoDelivery}
         />
       ),
     },
@@ -345,6 +365,7 @@ export function GerenteClient({
           }
           metaText={`Meta: até ${formatNumber(turnoverMeta, 1)}%`}
           premio={Number(form.premiacaoTurnover) || 0}
+          comparison={compTurnover}
         />
       ),
     },
@@ -371,6 +392,7 @@ export function GerenteClient({
           }
           metaText="Indicador informativo"
           premio={0}
+          comparison={compFaltas}
         />
       ),
     },
@@ -398,6 +420,7 @@ export function GerenteClient({
           }
           metaText={`Meta: mín. ${formatNumber(checklistMeta, 1)}%`}
           premio={Number(form.premiacaoChecklist) || 0}
+          comparison={compChecklist}
         />
       ),
     },

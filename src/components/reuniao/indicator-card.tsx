@@ -1,9 +1,24 @@
 "use client";
 
-import { CheckCircle2, AlertTriangle, Trophy } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { formatCurrency } from "@/lib/calc";
+import { formatCurrency, formatNumber } from "@/lib/calc";
+import type { Comparison } from "@/lib/reuniao";
+
+export function ComparisonLine({ comparison }: { comparison?: Comparison | null }) {
+  if (!comparison) return null;
+  const { deltaPercent, favorable } = comparison;
+  const color = favorable === true ? "text-emerald-400" : favorable === false ? "text-red-400" : "text-nord-gray";
+  const Icon = favorable === true ? TrendingUp : favorable === false ? TrendingDown : Minus;
+  const deltaText = deltaPercent === null ? "" : `${deltaPercent > 0 ? "+" : ""}${formatNumber(deltaPercent, 1)}% `;
+  return (
+    <span className={`text-xs flex items-center gap-1 ${color}`}>
+      <Icon size={11} />
+      {deltaText}vs mês passado
+    </span>
+  );
+}
 
 export type Status = "batida" | "abaixo" | "sem-dado";
 
@@ -40,6 +55,7 @@ export function IndicatorCard({
   valueSlot,
   metaText,
   premio,
+  comparison,
 }: {
   icon: string;
   color: string;
@@ -48,6 +64,7 @@ export function IndicatorCard({
   valueSlot: React.ReactNode;
   metaText: string;
   premio: number;
+  comparison?: Comparison | null;
 }) {
   return (
     <div className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2" style={{ borderTopColor: color }}>
@@ -64,6 +81,7 @@ export function IndicatorCard({
       </div>
       {valueSlot}
       <span className="text-xs text-nord-gray">{metaText}</span>
+      <ComparisonLine comparison={comparison} />
       {status === "batida" && premio > 0 && (
         <span className="text-xs text-amber-400 flex items-center gap-1">
           <Trophy size={11} /> {formatCurrency(premio)} de premiação

@@ -7,7 +7,7 @@ import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
+import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
 import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type Meeting = {
@@ -122,6 +122,15 @@ export function DeliveryClient({
   const bateuAvaliacao = avaliacaoValor === null ? null : avaliacaoValor >= avaliacaoMeta;
   const bateuTempoEntrega = tempoEntregaValor === null ? null : tempoEntregaValor <= tempoEntregaMeta;
   const bateuChamados = chamadosValor === null ? null : chamadosValor <= chamadosMeta;
+
+  const previousMeeting = useMemo(
+    () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
+    [meetings, selectedPeriodo]
+  );
+  const compCancelamento = compareToPrevious(metrics.cancelamentoPercent, previousMeeting?.cancelamentoPercent, "min");
+  const compAvaliacao = compareToPrevious(avaliacaoValor, previousMeeting?.avaliacaoNota, "max");
+  const compTempoEntrega = compareToPrevious(tempoEntregaValor, previousMeeting?.tempoEntregaMinutos, "min");
+  const compChamados = compareToPrevious(chamadosValor, previousMeeting?.chamadosPercent, "min");
 
   const premiacaoTotal = useMemo(() => {
     let total = 0;
@@ -246,6 +255,7 @@ export function DeliveryClient({
           }
           metaText={`Meta: até ${formatNumber(cancelamentoMeta, 1)}%`}
           premio={Number(form.premiacaoCancelamento) || 0}
+          comparison={compCancelamento}
         />
       ),
     },
@@ -273,6 +283,7 @@ export function DeliveryClient({
           }
           metaText={`Meta: mín. ${formatNumber(avaliacaoMeta, 1)}`}
           premio={Number(form.premiacaoAvaliacao) || 0}
+          comparison={compAvaliacao}
         />
       ),
     },
@@ -299,6 +310,7 @@ export function DeliveryClient({
           }
           metaText={`Meta: até ${formatNumber(tempoEntregaMeta, 0)} min`}
           premio={Number(form.premiacaoTempoEntrega) || 0}
+          comparison={compTempoEntrega}
         />
       ),
     },
@@ -325,6 +337,7 @@ export function DeliveryClient({
           }
           metaText={`Meta: até ${formatNumber(chamadosMeta, 1)}%`}
           premio={Number(form.premiacaoChamados) || 0}
+          comparison={compChamados}
         />
       ),
     },
