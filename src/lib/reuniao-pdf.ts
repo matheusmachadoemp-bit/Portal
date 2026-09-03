@@ -22,7 +22,7 @@ const MONTH_COLORS: readonly (readonly [number, number, number])[] = [
   [245, 183, 0], // dourado (mês atual)
 ];
 
-type Unit = "percent" | "currency" | "minutes" | "quantity";
+type Unit = "percent" | "currency" | "minutes" | "quantity" | "rating";
 type Status = "batida" | "abaixo" | "sem-dado";
 type MetaDirection = "max" | "min";
 
@@ -43,6 +43,7 @@ function formatValue(unit: Unit, value: number | null) {
   if (unit === "percent") return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
   if (unit === "minutes") return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} min`;
   if (unit === "quantity") return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} un.`;
+  if (unit === "rating") return value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
