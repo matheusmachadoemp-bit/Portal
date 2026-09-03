@@ -38,10 +38,13 @@ export async function GET(req: NextRequest) {
     return { status: res.status, body };
   }
 
-  const [businessInstagramAccounts, ownedPages, clientPages] = await Promise.all([
+  const [businessInstagramAccounts, ownedPages, clientPages, pageDirect] = await Promise.all([
     callGraph(`/${BUSINESS_ID}/instagram_accounts`, { fields: "id,username,profile_pic" }),
     callGraph(`/${BUSINESS_ID}/owned_pages`, { fields: "id,name,instagram_business_account{id,username}" }),
     callGraph(`/${BUSINESS_ID}/client_pages`, { fields: "id,name,instagram_business_account{id,username}" }),
+    // Consulta a página "Nord PizzaBurger" (achada no owned_pages) direto,
+    // caso o campo aninhado não tenha vindo na consulta em lote acima.
+    callGraph(`/105467122159310`, { fields: "id,name,instagram_business_account{id,username},connected_instagram_account{id,username}" }),
   ]);
 
   return NextResponse.json({
@@ -49,5 +52,6 @@ export async function GET(req: NextRequest) {
     businessInstagramAccounts: businessInstagramAccounts.body,
     ownedPages: ownedPages.body,
     clientPages: clientPages.body,
+    nordPizzaBurgerPageDirect: pageDirect.body,
   });
 }
