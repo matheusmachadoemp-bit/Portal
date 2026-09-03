@@ -118,3 +118,25 @@ export async function computeDeliveryMetrics(empresaId: string, periodo: string)
 
   return { cancelamentoPercent };
 }
+
+/**
+ * Faturamento total, CMV, NPS geral e cancelamento de delivery do mês —
+ * um resumo consolidado puxado automaticamente do que já é calculado nas
+ * reuniões de Cozinha, Salão e Delivery, sem precisar digitar nada.
+ */
+export async function computeGerenteMetrics(empresaId: string, periodo: string) {
+  const [cozinha, salao, delivery] = await Promise.all([
+    computeCozinhaMetrics(empresaId, periodo),
+    computeSalaoMetrics(empresaId, periodo),
+    computeDeliveryMetrics(empresaId, periodo),
+  ]);
+
+  const faturamentoTotalValor = cozinha.faturamento;
+
+  return {
+    faturamentoTotalValor,
+    cmvPercent: cozinha.cmvPercent,
+    npsPercent: salao.npsPercent,
+    cancelamentoDeliveryPercent: delivery.cancelamentoPercent,
+  };
+}
