@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Trash2, Check, X } from "lucide-react";
-import { Section, StatCard, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { STATUS_LABEL, STATUS_TONE, frequenciaLabel, type ClienteStatus } from "@/lib/crm";
@@ -164,25 +165,35 @@ export function ClienteProfileClient({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total gasto" value={formatCurrency(totalGastoCombinado)} icon="Wallet" color="#22c55e" />
-        <StatCard label="Pedidos" value={formatNumber(pedidosCombinado)} icon="ShoppingBag" />
-        <StatCard label="Ticket médio" value={formatCurrency(ticketMedioCombinado)} icon="Receipt" />
-        <StatCard label="LTV" value={formatCurrency(totalGastoCombinado)} icon="TrendingUp" color="#a855f7" />
-        <StatCard
-          label="Última compra"
-          value={ultimaCompraCombinada ? ultimaCompraCombinada.toLocaleDateString("pt-BR") : "—"}
-          icon="Calendar"
-          hint={metrics.diasDesdeUltimaCompra !== null ? `${metrics.diasDesdeUltimaCompra} dias atrás` : undefined}
-        />
-        <StatCard label="Frequência média" value={frequenciaLabel(metrics.frequenciaMediaDias)} icon="Clock" />
-        <StatCard label="Dias desde última compra" value={metrics.diasDesdeUltimaCompra !== null ? `${metrics.diasDesdeUltimaCompra}d` : "—"} icon="History" />
-        <StatCard
-          label="Plataforma"
-          value={preferencias.plataformaFavorita ? SALE_PLATFORM_LABEL[preferencias.plataformaFavorita] ?? preferencias.plataformaFavorita : "—"}
-          icon="Globe"
-        />
-      </div>
+      <SortableStatCards
+        storageKey="crm-cliente-perfil-cards"
+        cards={[
+          { key: "totalGasto", label: "Total gasto", value: formatCurrency(totalGastoCombinado), icon: "Wallet", color: "#22c55e" },
+          { key: "pedidos", label: "Pedidos", value: formatNumber(pedidosCombinado), icon: "ShoppingBag" },
+          { key: "ticketMedio", label: "Ticket médio", value: formatCurrency(ticketMedioCombinado), icon: "Receipt" },
+          { key: "ltv", label: "LTV", value: formatCurrency(totalGastoCombinado), icon: "TrendingUp", color: "#a855f7" },
+          {
+            key: "ultimaCompra",
+            label: "Última compra",
+            value: ultimaCompraCombinada ? ultimaCompraCombinada.toLocaleDateString("pt-BR") : "—",
+            icon: "Calendar",
+            hint: metrics.diasDesdeUltimaCompra !== null ? `${metrics.diasDesdeUltimaCompra} dias atrás` : undefined,
+          },
+          { key: "frequenciaMedia", label: "Frequência média", value: frequenciaLabel(metrics.frequenciaMediaDias), icon: "Clock" },
+          {
+            key: "diasDesdeUltimaCompra",
+            label: "Dias desde última compra",
+            value: metrics.diasDesdeUltimaCompra !== null ? `${metrics.diasDesdeUltimaCompra}d` : "—",
+            icon: "History",
+          },
+          {
+            key: "plataforma",
+            label: "Plataforma",
+            value: preferencias.plataformaFavorita ? SALE_PLATFORM_LABEL[preferencias.plataformaFavorita] ?? preferencias.plataformaFavorita : "—",
+            icon: "Globe",
+          },
+        ]}
+      />
 
       {(resumoImportado.pedidosImportados !== null ||
         resumoImportado.valorGastoImportado !== null ||
