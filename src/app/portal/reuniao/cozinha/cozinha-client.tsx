@@ -7,7 +7,7 @@ import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
+import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
 import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type Meeting = {
@@ -120,6 +120,15 @@ export function CozinhaClient({
   const bateuDesperdicio = metrics.desperdicioValor <= desperdicioMeta;
   const bateuTempo = tempoValor === null ? null : tempoValor <= tempoMeta;
   const bateuOrganizacao = organizacaoValor === null ? null : organizacaoValor >= organizacaoMeta;
+
+  const previousMeeting = useMemo(
+    () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
+    [meetings, selectedPeriodo]
+  );
+  const compCmv = compareToPrevious(metrics.cmvPercent, previousMeeting?.cmvPercent, "min");
+  const compDesperdicio = compareToPrevious(metrics.desperdicioValor, previousMeeting?.desperdicioValor, "min");
+  const compTempo = compareToPrevious(tempoValor, previousMeeting?.tempoPedidoMinutos, "min");
+  const compOrganizacao = compareToPrevious(organizacaoValor, previousMeeting?.organizacaoPercent, "max");
 
   const premiacaoTotal = useMemo(() => {
     let total = 0;
@@ -244,6 +253,7 @@ export function CozinhaClient({
           }
           metaText={`Meta: até ${formatNumber(cmvMeta, 1)}%`}
           premio={Number(form.premiacaoCmv) || 0}
+          comparison={compCmv}
         />
       ),
     },
@@ -258,6 +268,7 @@ export function CozinhaClient({
           valueSlot={<span className="text-2xl font-semibold text-white">{formatCurrency(metrics.desperdicioValor)}</span>}
           metaText={`Meta: até ${formatCurrency(desperdicioMeta)}`}
           premio={Number(form.premiacaoDesperdicio) || 0}
+          comparison={compDesperdicio}
         />
       ),
     },
@@ -284,6 +295,7 @@ export function CozinhaClient({
           }
           metaText={`Meta: até ${formatNumber(tempoMeta, 0)} min`}
           premio={Number(form.premiacaoTempoPedido) || 0}
+          comparison={compTempo}
         />
       ),
     },
@@ -310,6 +322,7 @@ export function CozinhaClient({
           }
           metaText={`Meta: mín. ${formatNumber(organizacaoMeta, 0)}%`}
           premio={Number(form.premiacaoOrganizacao) || 0}
+          comparison={compOrganizacao}
         />
       ),
     },

@@ -7,7 +7,7 @@ import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, previousPeriodo, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
+import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
 import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type ProdutoMeta = { produto: string; quantidade: number | null; meta: number; premiacao: number };
@@ -173,6 +173,11 @@ export function SalaoClient({
     return meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null;
   }
 
+  const anteriorParaComparacao = anteriorMeeting();
+  const compNps = compareToPrevious(metrics.npsPercent, anteriorParaComparacao?.npsPercent, "max");
+  const compFaturamento = compareToPrevious(metrics.faturamentoValor, anteriorParaComparacao?.faturamentoValor, "max");
+  const compTicketMedio = compareToPrevious(metrics.ticketMedioValor, anteriorParaComparacao?.ticketMedioValor, "max");
+
   function exportPdf() {
     const periodo1 = previousPeriodo(selectedPeriodo);
     const periodo2 = previousPeriodo(periodo1);
@@ -300,6 +305,7 @@ export function SalaoClient({
           }
           metaText={`Meta: mín. ${formatNumber(npsMeta, 0)}%`}
           premio={Number(form.premiacaoNps) || 0}
+          comparison={compNps}
         />
       ),
     },
@@ -314,6 +320,7 @@ export function SalaoClient({
           valueSlot={<span className="text-2xl font-semibold text-white">{formatCurrency(metrics.faturamentoValor)}</span>}
           metaText={`Meta: mín. ${formatCurrency(faturamentoMeta)}`}
           premio={Number(form.premiacaoFaturamento) || 0}
+          comparison={compFaturamento}
         />
       ),
     },
@@ -332,12 +339,13 @@ export function SalaoClient({
           }
           metaText={`Meta: mín. ${formatCurrency(ticketMedioMeta)}`}
           premio={Number(form.premiacaoTicketMedio) || 0}
+          comparison={compTicketMedio}
         />
       ),
     },
   ];
 
-  const anterior = anteriorMeeting();
+  const anterior = anteriorParaComparacao;
 
   return (
     <div className="space-y-6">
