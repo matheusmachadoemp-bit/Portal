@@ -7,7 +7,7 @@ import { Section, StatCard, Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { STATUS_LABEL, STATUS_TONE, frequenciaLabel, type ClienteStatus } from "@/lib/crm";
-import { SALE_CHANNEL_LABEL } from "@/lib/vendas-analytics";
+import { SALE_CHANNEL_LABEL, SALE_PLATFORM_LABEL } from "@/lib/vendas-analytics";
 
 type ClienteInfo = {
   id: string;
@@ -37,6 +37,7 @@ type Preferencias = {
   produtoFavorito: string | null;
   categoriaFavorita: string | null;
   canalFavorito: string | null;
+  plataformaFavorita: string | null;
   diaFavorito: string | null;
   horarioFavorito: string | null;
 };
@@ -176,7 +177,11 @@ export function ClienteProfileClient({
         />
         <StatCard label="Frequência média" value={frequenciaLabel(metrics.frequenciaMediaDias)} icon="Clock" />
         <StatCard label="Dias desde última compra" value={metrics.diasDesdeUltimaCompra !== null ? `${metrics.diasDesdeUltimaCompra}d` : "—"} icon="History" />
-        <StatCard label="Cadastro" value={cliente.lojaNome} icon="Store" />
+        <StatCard
+          label="Plataforma"
+          value={preferencias.plataformaFavorita ? SALE_PLATFORM_LABEL[preferencias.plataformaFavorita] ?? preferencias.plataformaFavorita : "—"}
+          icon="Globe"
+        />
       </div>
 
       {(resumoImportado.pedidosImportados !== null ||

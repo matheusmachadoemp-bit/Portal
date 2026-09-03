@@ -44,7 +44,7 @@ export default async function ClienteProfilePage({ params }: { params: Promise<{
   ]);
 
   const preferencias = computePreferencias(
-    cliente.vendas.map((v) => ({ dateTime: v.dateTime, channel: v.channel, items: v.items }))
+    cliente.vendas.map((v) => ({ dateTime: v.dateTime, channel: v.channel, platform: v.platform, items: v.items }))
   );
 
   return (
