@@ -66,6 +66,7 @@ model User {
   marketingPartners             MarketingPartner[]
   kitchenMeetings               KitchenMeeting[]
   salaoMeetings                 SalaoMeeting[]
+  deliveryMeetings              DeliveryMeeting[]
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
   stockMovementsCreated         StockMovement[]            @relation("StockMovementCreatedBy")
@@ -205,6 +206,7 @@ model Empresa {
   marketingPartners         MarketingPartner[]
   kitchenMeetings           KitchenMeeting[]
   salaoMeetings             SalaoMeeting[]
+  deliveryMeetings          DeliveryMeeting[]
   goals                     Goal[]
   employees                 Employee[]
   waiterSales               WaiterSaleEntry[]
@@ -1897,6 +1899,41 @@ model SalaoProductGoal {
   premiacao  Float        @default(0)
 
   @@unique([meetingId, produto])
+}
+
+model DeliveryMeeting {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  periodo   String // "2026-08" (YYYY-MM)
+
+  // Puxado automaticamente do sistema (Vendas) no momento do fechamento
+  cancelamentoPercent Float?
+
+  // Digitados manualmente (ainda não rastreados em nenhum módulo)
+  avaliacaoNota       Float?
+  tempoEntregaMinutos Float?
+  chamadosPercent     Float?
+
+  // Metas vigentes nesse período (editáveis, herdam do período anterior)
+  cancelamentoMetaPercent Float @default(1)
+  avaliacaoMetaNota       Float @default(4.7)
+  tempoEntregaMetaMinutos Float @default(40)
+  chamadosMetaPercent     Float @default(2.5)
+
+  // Premiação paga por meta batida nesse período
+  premiacaoCancelamento Float @default(0)
+  premiacaoAvaliacao    Float @default(0)
+  premiacaoTempoEntrega Float @default(0)
+  premiacaoChamados     Float @default(0)
+
+  notas       String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([empresaId, periodo])
 }
 
 enum CountType {

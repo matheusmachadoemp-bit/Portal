@@ -100,3 +100,21 @@ export async function computeComentariosDestaque(empresaId: string, periodo: str
     .filter((r) => r.comentario && r.comentario.trim())
     .map((r) => ({ nome: r.cliente?.nome ?? "Cliente", comentario: r.comentario as string, nota: r.nota }));
 }
+
+/**
+ * % de cancelamento dos pedidos de delivery no mês, calculado a partir
+ * das Vendas (Sale: channel=DELIVERY) já existentes — sem precisar
+ * digitar nada.
+ */
+export async function computeDeliveryMetrics(empresaId: string, periodo: string) {
+  const { start, end } = periodoRange(periodo);
+
+  const vendas = await prisma.sale.findMany({
+    where: { empresaId, channel: "DELIVERY", dateTime: { gte: start, lt: end } },
+    select: { cancelado: true },
+  });
+
+  const cancelamentoPercent = vendas.length > 0 ? (vendas.filter((v) => v.cancelado).length / vendas.length) * 100 : null;
+
+  return { cancelamentoPercent };
+}
