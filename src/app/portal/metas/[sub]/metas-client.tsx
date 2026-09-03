@@ -5,8 +5,8 @@ import { Plus, Pencil, Trash2, Paperclip, Award, Clock } from "lucide-react";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber, pct } from "@/lib/calc";
-import { GOAL_STATUS_LABEL, GOAL_STATUS_TONE } from "@/lib/goals";
-import { differenceInCalendarDays, format } from "date-fns";
+import { currentMonth, dateToMonth, GOAL_STATUS_LABEL, GOAL_STATUS_TONE, monthToDateRange } from "@/lib/goals";
+import { differenceInCalendarDays } from "date-fns";
 
 type GoalDTO = {
   id: string;
@@ -35,8 +35,7 @@ const emptyForm = {
   valorMeta: "",
   valorRealizado: "",
   unidade: "R$",
-  startDate: format(new Date(), "yyyy-MM-dd"),
-  endDate: format(new Date(), "yyyy-MM-dd"),
+  mes: currentMonth(),
   bonificacao: "",
   observacoes: "",
   planoDeAcao: "",
@@ -90,8 +89,7 @@ export function MetasClient({
       valorMeta: String(g.valorMeta),
       valorRealizado: String(g.valorRealizado),
       unidade: g.unidade,
-      startDate: format(new Date(g.startDate), "yyyy-MM-dd"),
-      endDate: format(new Date(g.endDate), "yyyy-MM-dd"),
+      mes: dateToMonth(g.startDate),
       bonificacao: g.bonificacao ?? "",
       observacoes: g.observacoes ?? "",
       planoDeAcao: g.planoDeAcao ?? "",
@@ -100,7 +98,8 @@ export function MetasClient({
   }
 
   async function submit() {
-    const payload = { ...form, category };
+    const { mes, ...rest } = form;
+    const payload = { ...rest, ...monthToDateRange(mes), category };
     if (editing) {
       await fetch(`/api/metas/${editing.id}`, {
         method: "PATCH",
@@ -267,12 +266,11 @@ export function MetasClient({
           <Field label="Unidade de medida">
             <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" />
           </Field>
-          <Field label="Data inicial">
-            <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="input" />
-          </Field>
-          <Field label="Data final">
-            <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} className="input" />
-          </Field>
+          <div className="col-span-2">
+            <Field label="Mês de vigência">
+              <input type="month" value={form.mes} onChange={(e) => setForm({ ...form, mes: e.target.value })} className="input" />
+            </Field>
+          </div>
           <div className="col-span-2">
             <Field label="Bonificação">
               <input value={form.bonificacao} onChange={(e) => setForm({ ...form, bonificacao: e.target.value })} className="input" />

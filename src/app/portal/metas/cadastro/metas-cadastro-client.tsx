@@ -5,8 +5,17 @@ import { Plus, Pencil, Trash2, Paperclip, Award, Clock, Search } from "lucide-re
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber, pct } from "@/lib/calc";
-import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, GOAL_STATUS_LABEL, GOAL_STATUS_TONE, type GoalCategoryKey } from "@/lib/goals";
-import { differenceInCalendarDays, format } from "date-fns";
+import {
+  currentMonth,
+  dateToMonth,
+  GOAL_CATEGORIES,
+  GOAL_CATEGORY_LABEL,
+  GOAL_STATUS_LABEL,
+  GOAL_STATUS_TONE,
+  monthToDateRange,
+  type GoalCategoryKey,
+} from "@/lib/goals";
+import { differenceInCalendarDays } from "date-fns";
 
 type GoalDTO = {
   id: string;
@@ -37,8 +46,7 @@ function emptyForm(category: GoalCategoryKey) {
     valorMeta: "",
     valorRealizado: "",
     unidade: "R$",
-    startDate: format(new Date(), "yyyy-MM-dd"),
-    endDate: format(new Date(), "yyyy-MM-dd"),
+    mes: currentMonth(),
     bonificacao: "",
     observacoes: "",
     planoDeAcao: "",
@@ -97,8 +105,7 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
       valorMeta: String(g.valorMeta),
       valorRealizado: String(g.valorRealizado),
       unidade: g.unidade,
-      startDate: format(new Date(g.startDate), "yyyy-MM-dd"),
-      endDate: format(new Date(g.endDate), "yyyy-MM-dd"),
+      mes: dateToMonth(g.startDate),
       bonificacao: g.bonificacao ?? "",
       observacoes: g.observacoes ?? "",
       planoDeAcao: g.planoDeAcao ?? "",
@@ -107,17 +114,19 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
   }
 
   async function submit() {
+    const { mes, ...rest } = form;
+    const payload = { ...rest, ...monthToDateRange(mes) };
     if (editing) {
       await fetch(`/api/metas/${editing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
     } else {
       await fetch("/api/metas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
     }
     setShowForm(false);
@@ -318,12 +327,11 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
           <Field label="Unidade de medida">
             <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" />
           </Field>
-          <Field label="Data inicial">
-            <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="input" />
-          </Field>
-          <Field label="Data final">
-            <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} className="input" />
-          </Field>
+          <div className="col-span-2">
+            <Field label="Mês de vigência">
+              <input type="month" value={form.mes} onChange={(e) => setForm({ ...form, mes: e.target.value })} className="input" />
+            </Field>
+          </div>
           <div className="col-span-2">
             <Field label="Bonificação">
               <input value={form.bonificacao} onChange={(e) => setForm({ ...form, bonificacao: e.target.value })} className="input" />
