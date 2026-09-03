@@ -12,8 +12,6 @@ export default auth((req) => {
   const isPublic =
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/internal/diag-meta-ads") ||
-    pathname.startsWith("/api/internal/diag-find-instagram") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
     pathname === "/favicon.ico";
