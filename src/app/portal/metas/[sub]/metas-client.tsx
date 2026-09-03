@@ -51,6 +51,7 @@ export function MetasClient({
   canCreate?: boolean;
 }) {
   const [goals, setGoals] = useState(initialGoals);
+  const [mesFiltro, setMesFiltro] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GoalDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -59,12 +60,17 @@ export function MetasClient({
   const [attachName, setAttachName] = useState("");
   const [attachUrl, setAttachUrl] = useState("");
 
+  const filtered = useMemo(
+    () => (mesFiltro ? goals.filter((g) => dateToMonth(g.startDate) === mesFiltro) : goals),
+    [goals, mesFiltro]
+  );
+
   const ranked = useMemo(
     () =>
-      [...goals].sort(
+      [...filtered].sort(
         (a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)
       ),
-    [goals]
+    [filtered]
   );
 
   async function refresh() {
@@ -145,16 +151,24 @@ export function MetasClient({
           ou editar metas.
         </p>
       )}
-      {canCreate && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <input type="month" value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} className="input w-auto" />
+          {mesFiltro && (
+            <button onClick={() => setMesFiltro("")} className="text-xs text-nord-blue-light hover:underline">
+              Ver todos os meses
+            </button>
+          )}
+        </div>
+        {canCreate && (
           <button
             onClick={openNew}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
             <Plus size={13} /> Nova meta
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {ranked.map((g, idx) => {
@@ -239,7 +253,7 @@ export function MetasClient({
         })}
         {ranked.length === 0 && (
           <p className="text-sm text-nord-gray col-span-full text-center py-10">
-            Nenhuma meta cadastrada nesta categoria ainda.
+            {mesFiltro ? "Nenhuma meta cadastrada nesse mês." : "Nenhuma meta cadastrada nesta categoria ainda."}
           </p>
         )}
       </div>
