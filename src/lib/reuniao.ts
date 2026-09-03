@@ -24,6 +24,8 @@ export function periodoShortLabel(periodo: string) {
   return `${MES_ABREV[start.getUTCMonth()]}/${String(start.getUTCFullYear()).slice(2)}`;
 }
 
+export const SALAO_PRODUTOS_PADRAO = ["Bebidas", "Pizza Doce", "Suco", "Vinho", "Combos NordFlix"];
+
 export function previousPeriodo(periodo: string) {
   const [yearStr, monthStr] = periodo.split("-");
   const year = Number(yearStr);

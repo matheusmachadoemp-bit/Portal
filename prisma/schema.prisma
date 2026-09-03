@@ -1865,13 +1865,38 @@ model SalaoMeeting {
   premiacaoFaturamento Float @default(0)
   premiacaoTicketMedio Float @default(0)
 
+  // Melhor vendedor do mês — puxado automaticamente das vendas por garçom
+  melhorVendedorNome  String?
+  melhorVendedorValor Float?
+
+  // NPS detalhado por categoria — digitado manualmente (o CRM não separa por categoria hoje)
+  npsQualidadeProduto Float?
+  npsAtendimento      Float?
+  npsAmbiente         Float?
+  npsRodizio          Float?
+  npsTempoEspera      Float?
+
   notas       String?
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  produtoMetas SalaoProductGoal[]
+
   @@unique([empresaId, periodo])
+}
+
+model SalaoProductGoal {
+  id         String       @id @default(cuid())
+  meetingId  String
+  meeting    SalaoMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  produto    String // "Bebidas", "Pizza Doce", "Suco", "Vinho", "Combos NordFlix"
+  quantidade Int?
+  meta       Int          @default(0)
+  premiacao  Float        @default(0)
+
+  @@unique([meetingId, produto])
 }
 
 enum CountType {

@@ -59,3 +59,44 @@ export async function computeSalaoMetrics(empresaId: string, periodo: string) {
 
   return { npsPercent, faturamentoValor, ticketMedioValor };
 }
+
+/**
+ * Vendedor com maior soma de vendas no período — puxado automaticamente
+ * das Vendas por Garçom (WaiterSaleEntry) já existentes.
+ */
+export async function computeMelhorVendedor(empresaId: string, periodo: string) {
+  const { start, end } = periodoRange(periodo);
+
+  const grupos = await prisma.waiterSaleEntry.groupBy({
+    by: ["employeeId"],
+    where: { empresaId, date: { gte: start, lt: end } },
+    _sum: { amount: true },
+    orderBy: { _sum: { amount: "desc" } },
+    take: 1,
+  });
+
+  const top = grupos[0];
+  if (!top || !top._sum.amount) return { nome: null, valor: null };
+
+  const employee = await prisma.employee.findUnique({ where: { id: top.employeeId }, select: { name: true } });
+  return { nome: employee?.name ?? null, valor: top._sum.amount };
+}
+
+/**
+ * Comentários de clientes em destaque (notas altas, com texto) no
+ * período — puxados automaticamente do CRM (NpsResponse) já existente.
+ */
+export async function computeComentariosDestaque(empresaId: string, periodo: string, take = 5) {
+  const { start, end } = periodoRange(periodo);
+
+  const respostas = await prisma.npsResponse.findMany({
+    where: { empresaId, createdAt: { gte: start, lt: end }, nota: { gte: 9 }, comentario: { not: null } },
+    orderBy: { nota: "desc" },
+    take,
+    select: { comentario: true, nota: true, cliente: { select: { nome: true } } },
+  });
+
+  return respostas
+    .filter((r) => r.comentario && r.comentario.trim())
+    .map((r) => ({ nome: r.cliente?.nome ?? "Cliente", comentario: r.comentario as string, nota: r.nota }));
+}
