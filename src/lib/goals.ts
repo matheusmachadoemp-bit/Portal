@@ -26,6 +26,32 @@ export const GOAL_STATUS_TONE: Record<string, "default" | "success" | "warning" 
   NAO_ATINGIDA: "danger",
 };
 
+/**
+ * Toda meta vale por um mês inteiro (dia 1 ao último dia). Esses helpers
+ * convertem entre o "YYYY-MM" do seletor de mês e as datas de início/fim
+ * que o Goal guarda no banco.
+ */
+export function monthToDateRange(month: string): { startDate: string; endDate: string } {
+  const [yearStr, monthStr] = month.split("-");
+  const year = Number(yearStr);
+  const monthIdx = Number(monthStr) - 1;
+  const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    startDate: `${year}-${pad(monthIdx + 1)}-01`,
+    endDate: `${year}-${pad(monthIdx + 1)}-${pad(lastDay)}`,
+  };
+}
+
+export function dateToMonth(date: string | Date): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function currentMonth(): string {
+  return dateToMonth(new Date());
+}
+
 const NEAR_TARGET_THRESHOLD = 90;
 
 /**
