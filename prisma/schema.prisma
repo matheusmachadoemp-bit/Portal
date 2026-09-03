@@ -65,6 +65,7 @@ model User {
   marketingIdeas                MarketingIdea[]
   marketingPartners             MarketingPartner[]
   kitchenMeetings               KitchenMeeting[]
+  salaoMeetings                 SalaoMeeting[]
   goals                         Goal[]
   waiterSalesCreated            WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
   stockMovementsCreated         StockMovement[]            @relation("StockMovementCreatedBy")
@@ -203,6 +204,7 @@ model Empresa {
   marketingIdeas            MarketingIdea[]
   marketingPartners         MarketingPartner[]
   kitchenMeetings           KitchenMeeting[]
+  salaoMeetings             SalaoMeeting[]
   goals                     Goal[]
   employees                 Employee[]
   waiterSales               WaiterSaleEntry[]
@@ -1832,6 +1834,36 @@ model KitchenMeeting {
   premiacaoDesperdicio Float @default(0)
   premiacaoTempoPedido Float @default(0)
   premiacaoOrganizacao Float @default(0)
+
+  notas       String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([empresaId, periodo])
+}
+
+model SalaoMeeting {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  periodo   String // "2026-08" (YYYY-MM)
+
+  // Puxados automaticamente do sistema (CRM/Vendas) no momento do fechamento
+  npsPercent       Float?
+  faturamentoValor Float?
+  ticketMedioValor Float?
+
+  // Metas vigentes nesse período (editáveis, herdam do período anterior)
+  npsMetaPercent       Float @default(80)
+  faturamentoMetaValor Float @default(0)
+  ticketMedioMetaValor Float @default(0)
+
+  // Premiação paga por meta batida nesse período
+  premiacaoNps         Float @default(0)
+  premiacaoFaturamento Float @default(0)
+  premiacaoTicketMedio Float @default(0)
 
   notas       String?
   createdById String
