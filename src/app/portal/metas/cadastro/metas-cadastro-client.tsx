@@ -67,6 +67,7 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
   const [filterSetor, setFilterSetor] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterResponsavel, setFilterResponsavel] = useState("");
+  const [filterMes, setFilterMes] = useState("");
 
   const responsaveis = useMemo(() => [...new Set(goals.map((g) => g.responsavel))].filter(Boolean).sort(), [goals]);
 
@@ -76,9 +77,10 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
       if (filterSetor && g.category !== filterSetor) return false;
       if (filterStatus && g.status !== filterStatus) return false;
       if (filterResponsavel && g.responsavel !== filterResponsavel) return false;
+      if (filterMes && dateToMonth(g.startDate) !== filterMes) return false;
       return true;
     });
-  }, [goals, search, filterSetor, filterStatus, filterResponsavel]);
+  }, [goals, search, filterSetor, filterStatus, filterResponsavel, filterMes]);
 
   const ranked = useMemo(() => [...filtered].sort((a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)), [filtered]);
 
@@ -177,7 +179,15 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="flex items-center gap-1.5">
+            <input type="month" value={filterMes} onChange={(e) => setFilterMes(e.target.value)} className="input" />
+            {filterMes && (
+              <button onClick={() => setFilterMes("")} className="text-xs text-nord-blue-light hover:underline shrink-0" title="Ver todos os meses">
+                Todos
+              </button>
+            )}
+          </div>
           <select value={filterSetor} onChange={(e) => setFilterSetor(e.target.value)} className="input">
             <option value="">Todos os setores</option>
             {GOAL_CATEGORIES.map((c) => (

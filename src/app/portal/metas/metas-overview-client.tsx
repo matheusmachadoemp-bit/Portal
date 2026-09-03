@@ -6,7 +6,7 @@ import { Award, ChevronRight, Trophy } from "lucide-react";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { pct } from "@/lib/calc";
-import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, GOAL_STATUS_LABEL, GOAL_STATUS_TONE, type GoalCategoryKey } from "@/lib/goals";
+import { dateToMonth, GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, GOAL_STATUS_LABEL, GOAL_STATUS_TONE, type GoalCategoryKey } from "@/lib/goals";
 
 type GoalDTO = {
   id: string;
@@ -36,8 +36,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
   const [setor, setSetor] = useState("");
   const [responsavel, setResponsavel] = useState("");
   const [status, setStatus] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [mes, setMes] = useState("");
 
   const responsaveis = useMemo(() => [...new Set(goals.map((g) => g.responsavel))].sort(), [goals]);
 
@@ -47,11 +46,10 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
         if (setor && g.category !== setor) return false;
         if (responsavel && g.responsavel !== responsavel) return false;
         if (status && g.status !== status) return false;
-        if (from && new Date(g.endDate) < new Date(from)) return false;
-        if (to && new Date(g.startDate) > new Date(to)) return false;
+        if (mes && dateToMonth(g.startDate) !== mes) return false;
         return true;
       }),
-    [goals, setor, responsavel, status, from, to]
+    [goals, setor, responsavel, status, mes]
   );
 
   const total = filtered.length;
@@ -130,9 +128,13 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
               </option>
             ))}
           </select>
-          <div className="flex gap-2">
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input" title="De" />
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input" title="Até" />
+          <div className="flex items-center gap-1.5">
+            <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} className="input" />
+            {mes && (
+              <button onClick={() => setMes("")} className="text-xs text-nord-blue-light hover:underline shrink-0">
+                Todos
+              </button>
+            )}
           </div>
         </div>
       </Section>
