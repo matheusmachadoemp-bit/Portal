@@ -6,8 +6,16 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
+import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
+import {
+  compareToPrevious,
+  periodoLabel,
+  periodoShortLabel,
+  previousPeriodo,
+  resolveComparePeriodos,
+  SALAO_PRODUTOS_PADRAO,
+} from "@/lib/reuniao";
 import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type ProdutoMeta = { produto: string; quantidade: number | null; meta: number; premiacao: number };
@@ -122,6 +130,7 @@ export function SalaoClient({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showMetas, setShowMetas] = useState(false);
+  const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -179,18 +188,14 @@ export function SalaoClient({
   const compTicketMedio = compareToPrevious(metrics.ticketMedioValor, anteriorParaComparacao?.ticketMedioValor, "max");
 
   function exportPdf() {
-    const periodo1 = previousPeriodo(selectedPeriodo);
-    const periodo2 = previousPeriodo(periodo1);
-    const anterior1 = meetings.find((m) => m.periodo === periodo1) ?? null;
-    const anterior2 = meetings.find((m) => m.periodo === periodo2) ?? null;
+    const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
 
     function historico<K extends "npsPercent" | "faturamentoValor" | "ticketMedioValor">(key: K, atualValue: number | null) {
-      const points = [
-        anterior2 && { monthLabel: periodoShortLabel(anterior2.periodo), value: anterior2[key] },
-        anterior1 && { monthLabel: periodoShortLabel(anterior1.periodo), value: anterior1[key] },
-      ].filter((p): p is { monthLabel: string; value: number | null } => Boolean(p));
-      points.push({ monthLabel: periodoShortLabel(selectedPeriodo), value: atualValue });
-      return points;
+      return periodosComparados.map((p) => {
+        if (p === selectedPeriodo) return { monthLabel: periodoShortLabel(p), value: atualValue };
+        const m = meetings.find((mm) => mm.periodo === p);
+        return { monthLabel: periodoShortLabel(p), value: m ? m[key] : null };
+      });
     }
 
     exportMeetingReportPdf({
@@ -234,13 +239,11 @@ export function SalaoClient({
           const qtd = p.quantidade === "" ? null : Number(p.quantidade);
           const meta = Number(p.meta) || 0;
           const bateu = qtd === null || meta <= 0 ? null : qtd >= meta;
-          const anteriorProduto = anterior1?.produtoMetas.find((x) => x.produto === p.produto) ?? null;
-          const anterior2Produto = anterior2?.produtoMetas.find((x) => x.produto === p.produto) ?? null;
-          const pontos = [
-            anterior2Produto && { monthLabel: periodoShortLabel(anterior2!.periodo), value: anterior2Produto.quantidade },
-            anteriorProduto && { monthLabel: periodoShortLabel(anterior1!.periodo), value: anteriorProduto.quantidade },
-          ].filter((x): x is { monthLabel: string; value: number | null } => Boolean(x));
-          pontos.push({ monthLabel: periodoShortLabel(selectedPeriodo), value: qtd });
+          const pontos = periodosComparados.map((periodo) => {
+            if (periodo === selectedPeriodo) return { monthLabel: periodoShortLabel(periodo), value: qtd };
+            const produtoMeta = meetings.find((mm) => mm.periodo === periodo)?.produtoMetas.find((x) => x.produto === p.produto);
+            return { monthLabel: periodoShortLabel(periodo), value: produtoMeta?.quantidade ?? null };
+          });
           return {
             key: `produto-${p.produto}`,
             label: `Meta: ${p.produto}`,
@@ -356,6 +359,7 @@ export function SalaoClient({
           {loading && <span className="text-xs text-nord-gray">Carregando...</span>}
         </div>
         <div className="flex items-center gap-4">
+          <CompareMonthsPicker periodos={comparePeriodos} onChange={setComparePeriodos} />
           <button
             onClick={exportPdf}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white hover:border-nord-blue-light"
