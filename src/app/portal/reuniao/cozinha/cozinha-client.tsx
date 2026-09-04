@@ -6,8 +6,9 @@ import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
+import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo } from "@/lib/reuniao";
+import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
 import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type Meeting = {
@@ -85,6 +86,7 @@ export function CozinhaClient({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showMetas, setShowMetas] = useState(false);
+  const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -140,21 +142,17 @@ export function CozinhaClient({
   }, [bateuCmv, bateuDesperdicio, bateuTempo, bateuOrganizacao, form]);
 
   function exportPdf() {
-    const periodo1 = previousPeriodo(selectedPeriodo);
-    const periodo2 = previousPeriodo(periodo1);
-    const anterior1 = meetings.find((m) => m.periodo === periodo1) ?? null;
-    const anterior2 = meetings.find((m) => m.periodo === periodo2) ?? null;
+    const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
 
     function historico<K extends "cmvPercent" | "desperdicioValor" | "tempoPedidoMinutos" | "organizacaoPercent">(
       key: K,
       atualValue: number | null
     ) {
-      const points = [
-        anterior2 && { monthLabel: periodoShortLabel(anterior2.periodo), value: anterior2[key] },
-        anterior1 && { monthLabel: periodoShortLabel(anterior1.periodo), value: anterior1[key] },
-      ].filter((p): p is { monthLabel: string; value: number | null } => Boolean(p));
-      points.push({ monthLabel: periodoShortLabel(selectedPeriodo), value: atualValue });
-      return points;
+      return periodosComparados.map((p) => {
+        if (p === selectedPeriodo) return { monthLabel: periodoShortLabel(p), value: atualValue };
+        const m = meetings.find((mm) => mm.periodo === p);
+        return { monthLabel: periodoShortLabel(p), value: m ? m[key] : null };
+      });
     }
 
     exportMeetingReportPdf({
@@ -342,6 +340,7 @@ export function CozinhaClient({
           {loading && <span className="text-xs text-nord-gray">Carregando...</span>}
         </div>
         <div className="flex items-center gap-4">
+          <CompareMonthsPicker periodos={comparePeriodos} onChange={setComparePeriodos} />
           <button
             onClick={exportPdf}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white hover:border-nord-blue-light"

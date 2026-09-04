@@ -34,6 +34,20 @@ export function previousPeriodo(periodo: string) {
   return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+/**
+ * Resolve quais até 3 períodos entram no comparativo do PDF/gráfico.
+ * Se o usuário escolheu meses manualmente (ex.: Jan/2025 x Jan/2026, ou
+ * Jun x Jul x Ago), usa exatamente esses, em ordem cronológica. Sem
+ * escolha manual, cai no padrão: o mês selecionado e os 2 anteriores.
+ */
+export function resolveComparePeriodos(selected: string, custom: (string | null | undefined)[]): string[] {
+  const filled = [...new Set(custom.filter((p): p is string => Boolean(p)))].sort();
+  if (filled.length > 0) return filled;
+  const p1 = previousPeriodo(selected);
+  const p2 = previousPeriodo(p1);
+  return [p2, p1, selected];
+}
+
 export type Comparison = { deltaPercent: number | null; favorable: boolean | null };
 
 /**
