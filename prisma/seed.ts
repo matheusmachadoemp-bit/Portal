@@ -227,6 +227,14 @@ const CATEGORIES = [
       { key: "lideranca", name: "Reunião Liderança", icon: "Crown" },
     ],
   },
+  {
+    key: "tarefas",
+    name: "Tarefas",
+    icon: "ListChecks",
+    order: 15,
+    contentType: "tarefas",
+    subs: [{ key: "checklist", name: "Checklist", icon: "ClipboardCheck" }],
+  },
 ];
 
 async function main() {
