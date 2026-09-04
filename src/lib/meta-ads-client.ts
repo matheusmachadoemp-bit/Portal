@@ -45,6 +45,7 @@ export async function fetchMetaAdsInsights(
   );
   url.searchParams.set("level", "campaign");
   url.searchParams.set("breakdowns", "publisher_platform,platform_position");
+  url.searchParams.set("time_increment", "1");
   url.searchParams.set("limit", String(PAGE_LIMIT));
   url.searchParams.set("access_token", token);
 
