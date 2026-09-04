@@ -2,6 +2,34 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
+import { refreshOccurrenceStatuses } from "@/lib/checklist-server";
+
+const DETAIL_INCLUDE = {
+  template: { include: { itens: { orderBy: { ordem: "asc" as const } } } },
+  empresa: { select: { id: true, name: true } },
+  responsavel: { select: { id: true, name: true } },
+  respostas: { include: { fotos: true } },
+  fotos: true,
+};
+
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+
+  const { id } = await params;
+  await refreshOccurrenceStatuses([id]);
+
+  const occurrence = await prisma.checklistOccurrence.findFirst({
+    where: { id, empresaId: { in: empresaIdsForContext(ctx) } },
+    include: DETAIL_INCLUDE,
+  });
+  if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
+
+  return NextResponse.json({ occurrence });
+}
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
