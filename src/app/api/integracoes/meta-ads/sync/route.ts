@@ -4,7 +4,14 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { syncEmpresaMetaAdsInsights } from "@/lib/meta-ads-sync";
 
+// O histórico completo (36 meses, granularidade diária) busca e grava muito
+// mais linhas que a sincronização incremental de 30 dias.
+export const maxDuration = 60;
+
 const DEFAULT_SYNC_WINDOW_DAYS = 30;
+// A Graph API rejeita ranges de insights maiores que ~37 meses; 36 cobre
+// "desde o primeiro dia" com folga para qualquer conta já configurada.
+const FULL_HISTORY_MONTHS = 36;
 
 function defaultRange() {
   const end = new Date();
@@ -12,8 +19,19 @@ function defaultRange() {
   return { start, end };
 }
 
-/** Disparo manual (botão "Sincronizar agora" nas configurações). */
-export async function POST() {
+function fullHistoryRange() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - FULL_HISTORY_MONTHS);
+  return { start, end };
+}
+
+/**
+ * Disparo manual (botão "Sincronizar agora" nas configurações).
+ * Com `?range=all`, busca todo o histórico disponível (até 36 meses) em vez
+ * dos últimos 30 dias — usado pelo botão "Sincronizar histórico completo".
+ */
+export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
@@ -28,7 +46,8 @@ export async function POST() {
     );
   }
 
-  const result = await syncEmpresaMetaAdsInsights(empresa, defaultRange());
+  const full = new URL(req.url).searchParams.get("range") === "all";
+  const result = await syncEmpresaMetaAdsInsights(empresa, full ? fullHistoryRange() : defaultRange());
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
   return NextResponse.json({ recordsSynced: result.recordsSynced });
 }

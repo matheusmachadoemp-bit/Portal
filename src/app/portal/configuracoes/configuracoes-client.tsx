@@ -91,6 +91,7 @@ export function ConfiguracoesClient({
   const [metaInstagramUsername, setMetaInstagramUsername] = useState(metaAds?.instagramUsername ?? "");
   const [metaSaving, setMetaSaving] = useState(false);
   const [metaSyncing, setMetaSyncing] = useState(false);
+  const [metaSyncingFull, setMetaSyncingFull] = useState(false);
   const [metaMessage, setMetaMessage] = useState<string | null>(null);
 
   async function saveMetaAdsConfig() {
@@ -126,6 +127,19 @@ export function ConfiguracoesClient({
     setMetaSyncing(false);
     setMetaMessage(
       res.ok ? `Sincronização concluída: ${data.recordsSynced} registro(s) importado(s).` : data.error ?? "Falha ao sincronizar."
+    );
+  }
+
+  async function syncMetaAdsFullHistory() {
+    setMetaSyncingFull(true);
+    setMetaMessage(null);
+    const res = await fetch("/api/integracoes/meta-ads/sync?range=all", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setMetaSyncingFull(false);
+    setMetaMessage(
+      res.ok
+        ? `Histórico completo sincronizado: ${data.recordsSynced} registro(s) importado(s).`
+        : data.error ?? "Falha ao sincronizar o histórico completo."
     );
   }
 
@@ -372,10 +386,18 @@ export function ConfiguracoesClient({
                 </button>
                 <button
                   onClick={syncMetaAdsNow}
-                  disabled={metaSyncing || !metaHasToken}
+                  disabled={metaSyncing || metaSyncingFull || !metaHasToken}
                   className="bg-nord-panel border border-nord-border hover:border-nord-blue disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
                 >
                   {metaSyncing ? "Sincronizando..." : "Sincronizar agora"}
+                </button>
+                <button
+                  onClick={syncMetaAdsFullHistory}
+                  disabled={metaSyncing || metaSyncingFull || !metaHasToken}
+                  title="Busca todos os meses com campanhas desde o início da conta (pode levar alguns minutos)"
+                  className="bg-nord-panel border border-nord-border hover:border-nord-blue disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                >
+                  {metaSyncingFull ? "Sincronizando histórico..." : "Sincronizar histórico completo"}
                 </button>
                 {metaAds.lastSyncAt && (
                   <span className="text-xs text-nord-gray">
@@ -383,6 +405,11 @@ export function ConfiguracoesClient({
                   </span>
                 )}
               </div>
+              <p className="text-[11px] text-nord-gray mt-2">
+                &quot;Sincronizar histórico completo&quot; busca todos os dados de campanhas desde até 36 meses atrás
+                (o máximo permitido pelo Meta), não só os últimos 30 dias. Use uma vez para trazer o histórico
+                antigo — pode levar alguns minutos.
+              </p>
               {metaMessage && <p className="text-xs text-emerald-400 mt-2">{metaMessage}</p>}
             </>
           )}
