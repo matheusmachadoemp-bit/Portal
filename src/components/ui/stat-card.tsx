@@ -10,6 +10,7 @@ export function StatCard({
   color = "#1464F4",
   hint,
   labelClassName = "text-sm text-white",
+  invertDeltaColor = false,
 }: {
   label: string;
   value: string;
@@ -18,8 +19,11 @@ export function StatCard({
   color?: string;
   hint?: string;
   labelClassName?: string;
+  /** Set when a rising value is bad (ex.: "Atrasadas") so the pill colors correctly without flipping the number's sign. */
+  invertDeltaColor?: boolean;
 }) {
-  const positive = (delta ?? 0) >= 0;
+  const rising = (delta ?? 0) >= 0;
+  const good = rising !== invertDeltaColor;
   return (
     <div
       className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2 transition-colors hover:border-white/20"
@@ -41,11 +45,11 @@ export function StatCard({
         {delta !== undefined && delta !== null && (
           <span
             className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-medium ${
-              positive ? "bg-nord-success/15 text-nord-success" : "bg-nord-danger/15 text-nord-danger"
+              good ? "bg-nord-success/15 text-nord-success" : "bg-nord-danger/15 text-nord-danger"
             }`}
           >
-            {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {positive ? "+" : ""}
+            {rising ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {rising ? "+" : ""}
             {delta.toFixed(1)}%
           </span>
         )}

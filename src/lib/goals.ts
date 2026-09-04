@@ -10,6 +10,15 @@ export const GOAL_CATEGORY_LABEL: Record<GoalCategoryKey, string> = {
   ADMINISTRATIVO: "Administrativo",
 };
 
+export const GOAL_CATEGORY_ROUTE: Record<GoalCategoryKey, string> = {
+  GERENCIA: "gerencia",
+  SALAO: "salao",
+  COZINHA: "cozinha",
+  DELIVERY: "delivery",
+  MARKETING: "marketing",
+  ADMINISTRATIVO: "administrativo",
+};
+
 export const GOAL_STATUS_LABEL: Record<string, string> = {
   NAO_INICIADA: "Não iniciada",
   EM_ANDAMENTO: "Em andamento",
