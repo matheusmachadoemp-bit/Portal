@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/checklist/escalations/run",
-      "schedule": "*/10 * * * *"
+      "schedule": "30 2 * * *"
     }
   ]
 }
