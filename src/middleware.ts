@@ -9,7 +9,15 @@ const PUBLIC_PATHS = ["/login", "/esqueci-senha"];
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
+  // Disparos do Vercel Cron (ex.: sincronizações, cobrança automática do
+  // Checklist) chegam sem sessão de usuário — cada rota valida o próprio
+  // CRON_SECRET, então deixamos passar aqui para não redirecioná-los ao
+  // /login antes de chegarem no handler.
+  const isCronRequest =
+    !!process.env.CRON_SECRET && req.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
+
   const isPublic =
+    isCronRequest ||
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
