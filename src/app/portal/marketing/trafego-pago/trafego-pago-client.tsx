@@ -423,6 +423,34 @@ const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   WITH_ISSUES: "Com problemas",
 };
 
+const CAMPAIGN_COLUMNS: { key: string; label: string; icon: string }[] = [
+  { key: "campanha", label: "Campanha", icon: "Megaphone" },
+  { key: "status", label: "Status", icon: "CircleDot" },
+  { key: "investido", label: "Investido", icon: "Wallet" },
+  { key: "impressoes", label: "Impressões", icon: "Eye" },
+  { key: "cliques", label: "Cliques no link", icon: "MousePointerClick" },
+  { key: "ctr", label: "CTR", icon: "Percent" },
+  { key: "compras", label: "Compras", icon: "ShoppingBag" },
+  { key: "roas", label: "ROAS", icon: "TrendingUp" },
+];
+
+type ResultTone = "ruim" | "atencao" | "normal" | "bom";
+
+const RESULT_TONE_CLASS: Record<ResultTone, string> = {
+  ruim: "text-red-400",
+  atencao: "text-amber-400",
+  normal: "text-white",
+  bom: "text-green-400",
+};
+
+/** Classifica um número de resultado em 4 níveis visuais: ruim, atenção, normal ou bom. */
+function classifyResult(value: number, thresholds: { ruim: number; atencao: number; bom: number }): ResultTone {
+  if (value <= thresholds.ruim) return "ruim";
+  if (value <= thresholds.atencao) return "atencao";
+  if (value < thresholds.bom) return "normal";
+  return "bom";
+}
+
 /**
  * Dados reais das campanhas do Meta Ads (Facebook + Instagram Ads), vindos
  * dos insights já sincronizados via a integração (Configurações > Meta Ads).
@@ -596,34 +624,39 @@ function MetaAdsView({
           <div className="overflow-x-auto nord-scrollbar">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
-                  <th className="py-2 pr-4">Campanha</th>
-                  <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 pr-4">Investido</th>
-                  <th className="py-2 pr-4">Impressões</th>
-                  <th className="py-2 pr-4">Cliques no link</th>
-                  <th className="py-2 pr-4">CTR</th>
-                  <th className="py-2 pr-4">Compras</th>
-                  <th className="py-2 pr-4">ROAS</th>
+                <tr className="text-left border-b border-nord-border">
+                  {CAMPAIGN_COLUMNS.map((col) => (
+                    <th key={col.key} className="py-2 pr-4 text-[11px] font-semibold uppercase tracking-wide text-nord-gray whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <DynamicIcon name={col.icon} size={13} className="text-nord-blue" />
+                        {col.label}
+                      </span>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {campaigns.map((c) => (
-                  <tr key={c.campaignId} className="border-b border-nord-border/50 hover:bg-white/5">
-                    <td className="py-2 pr-4 text-white max-w-xs truncate" title={c.campaignName}>
-                      {c.campaignName}
-                    </td>
-                    <td className="py-2 pr-4">
-                      <Badge tone="success">{CAMPAIGN_STATUS_LABEL[c.status] ?? c.status}</Badge>
-                    </td>
-                    <td className="py-2 pr-4 text-nord-gray">{formatCurrency(c.valorInvestido)}</td>
-                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.impressoes)}</td>
-                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.cliquesLink)}</td>
-                    <td className="py-2 pr-4 text-nord-gray">{formatPercent(c.ctr)}</td>
-                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.compras)}</td>
-                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.roas, 2)}x</td>
-                  </tr>
-                ))}
+                {campaigns.map((c) => {
+                  const ctrTone = classifyResult(c.ctr, { ruim: 0.5, atencao: 1, bom: 2 });
+                  const comprasTone = classifyResult(c.compras, { ruim: -1, atencao: 0.5, bom: 3 });
+                  const roasTone = classifyResult(c.roas, { ruim: 1.5, atencao: 2.5, bom: 4 });
+                  return (
+                    <tr key={c.campaignId} className="border-b border-nord-border/50 hover:bg-white/5">
+                      <td className="py-2 pr-4 text-white max-w-xs truncate" title={c.campaignName}>
+                        {c.campaignName}
+                      </td>
+                      <td className="py-2 pr-4">
+                        <Badge tone="success">{CAMPAIGN_STATUS_LABEL[c.status] ?? c.status}</Badge>
+                      </td>
+                      <td className="py-2 pr-4 text-white">{formatCurrency(c.valorInvestido)}</td>
+                      <td className="py-2 pr-4 text-white">{formatNumber(c.impressoes)}</td>
+                      <td className="py-2 pr-4 text-white">{formatNumber(c.cliquesLink)}</td>
+                      <td className={`py-2 pr-4 ${RESULT_TONE_CLASS[ctrTone]}`}>{formatPercent(c.ctr)}</td>
+                      <td className={`py-2 pr-4 ${RESULT_TONE_CLASS[comprasTone]}`}>{formatNumber(c.compras)}</td>
+                      <td className={`py-2 pr-4 ${RESULT_TONE_CLASS[roasTone]}`}>{formatNumber(c.roas, 2)}x</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
