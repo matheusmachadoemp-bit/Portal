@@ -126,6 +126,57 @@ export async function fetchInstagramFollowers(
   return { ok: true, followersCount: Number(payload.followers_count) || 0, username: payload.username ?? "" };
 }
 
+export type MetaAdsCampaignStatus = {
+  id: string;
+  name: string;
+  status: string;
+  objective: string | null;
+};
+
+export type MetaAdsCampaignsResult =
+  | { ok: true; campaigns: MetaAdsCampaignStatus[] }
+  | { ok: false; error: string };
+
+/** Busca o status atual (ativa, pausada etc.) das campanhas da conta de anúncios. */
+export async function fetchMetaAdsCampaigns(
+  token: string,
+  adAccountId: string,
+  graphVersion: string
+): Promise<MetaAdsCampaignsResult> {
+  const accountId = adAccountId.replace(/^act_/, "");
+  const graphBase = `${GRAPH_BASE}/${graphVersion}`;
+
+  const url = new URL(`${graphBase}/act_${accountId}/campaigns`);
+  url.searchParams.set("fields", "id,name,effective_status,objective");
+  url.searchParams.set("limit", String(PAGE_LIMIT));
+  url.searchParams.set("access_token", token);
+
+  const campaigns: MetaAdsCampaignStatus[] = [];
+  let nextUrl: string | null = url.toString();
+
+  while (nextUrl) {
+    let response: Response;
+    try {
+      response = await fetch(nextUrl, { headers: { Accept: "application/json" } });
+    } catch {
+      return { ok: false, error: "Falha de conexão com a Graph API da Meta." };
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload || payload.error) {
+      const message = payload?.error?.message || `Erro HTTP ${response.status} na Graph API da Meta.`;
+      return { ok: false, error: message };
+    }
+
+    for (const c of (payload.data ?? []) as { id: string; name: string; effective_status?: string; objective?: string }[]) {
+      campaigns.push({ id: c.id, name: c.name, status: c.effective_status ?? "DESCONHECIDO", objective: c.objective ?? null });
+    }
+    nextUrl = payload.paging?.next ?? null;
+  }
+
+  return { ok: true, campaigns };
+}
+
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }

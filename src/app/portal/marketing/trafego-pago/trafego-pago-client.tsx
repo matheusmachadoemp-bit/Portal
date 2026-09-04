@@ -18,7 +18,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import type { MetaAdsInsightSummary } from "@/lib/meta-ads-insights";
+import type { MetaAdsCampaignPerformance, MetaAdsInsightSummary } from "@/lib/meta-ads-insights";
 
 type MarketingEntryDTO = {
   id: string;
@@ -71,10 +71,14 @@ export function TrafegoPagoClient({
   initialEntries,
   canCreate = true,
   metaAdsSummary,
+  metaAdsCampaigns,
+  metaAdsRange,
 }: {
   initialEntries: MarketingEntryDTO[];
   canCreate?: boolean;
   metaAdsSummary: MetaAdsInsightSummary;
+  metaAdsCampaigns: MetaAdsCampaignPerformance[];
+  metaAdsRange: { start: string; end: string };
 }) {
   const [tab, setTab] = useState<TabKey>("geral");
   const [entries, setEntries] = useState(initialEntries);
@@ -306,7 +310,13 @@ export function TrafegoPagoClient({
         </>
       )}
 
-      {tab === "meta-ads" && <MetaAdsView summary={metaAdsSummary} />}
+      {tab === "meta-ads" && (
+        <MetaAdsView
+          initialSummary={metaAdsSummary}
+          initialCampaigns={metaAdsCampaigns}
+          initialRange={metaAdsRange}
+        />
+      )}
 
       {tab === "google-ads" && (
         <div className="nord-card p-6 text-center">
@@ -404,13 +414,62 @@ export function TrafegoPagoClient({
   );
 }
 
+const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "Ativa",
+  PAUSED: "Pausada",
+  DELETED: "Excluída",
+  ARCHIVED: "Arquivada",
+  IN_PROCESS: "Em análise",
+  WITH_ISSUES: "Com problemas",
+};
+
 /**
  * Dados reais das campanhas do Meta Ads (Facebook + Instagram Ads), vindos
  * dos insights já sincronizados via a integração (Configurações > Meta Ads).
- * Últimos 30 dias, comparados com os 30 dias anteriores.
+ * Tem seletor de período (padrão: últimos 30 dias) e lista as campanhas
+ * atualmente ativas com o desempenho de cada uma no período selecionado.
  */
-function MetaAdsView({ summary }: { summary: MetaAdsInsightSummary }) {
-  if (!summary.connected) {
+function MetaAdsView({
+  initialSummary,
+  initialCampaigns,
+  initialRange,
+}: {
+  initialSummary: MetaAdsInsightSummary;
+  initialCampaigns: MetaAdsCampaignPerformance[];
+  initialRange: { start: string; end: string };
+}) {
+  const [summary, setSummary] = useState(initialSummary);
+  const [campaigns, setCampaigns] = useState(initialCampaigns);
+  const [startDate, setStartDate] = useState(initialRange.start.slice(0, 10));
+  const [endDate, setEndDate] = useState(initialRange.end.slice(0, 10));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function applyRange(start: string, end: string) {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/marketing/meta-ads?start=${start}&end=${end}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setSummary(data.summary);
+      setCampaigns(data.campaigns);
+    } catch {
+      setError("Não foi possível carregar os dados desse período.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleApply() {
+    if (!startDate || !endDate || startDate > endDate) {
+      setError("Selecione um período válido.");
+      return;
+    }
+    applyRange(startDate, endDate);
+  }
+
+  if (!summary.connected && campaigns.length === 0) {
     return (
       <div className="nord-card p-6 text-center">
         <DynamicIcon name="Megaphone" size={28} className="text-nord-gray mx-auto mb-3" />
@@ -425,7 +484,42 @@ function MetaAdsView({ summary }: { summary: MetaAdsInsightSummary }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-xs text-nord-gray">Últimos 30 dias, comparado com os 30 dias anteriores. Dados reais das campanhas do Meta Ads.</p>
+      <div className="nord-card p-3 flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="block text-xs text-nord-gray mb-1">De</span>
+          <input
+            type="date"
+            value={startDate}
+            max={endDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="input !w-auto"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs text-nord-gray mb-1">Até</span>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate}
+            max={format(new Date(), "yyyy-MM-dd")}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="input !w-auto"
+          />
+        </label>
+        <button
+          onClick={handleApply}
+          disabled={loading}
+          className="px-3 py-2 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
+        >
+          {loading ? "Carregando..." : "Aplicar período"}
+        </button>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+      </div>
+
+      <p className="text-xs text-nord-gray">
+        Período selecionado, comparado com um período anterior de mesma duração. Dados reais das campanhas do Meta
+        Ads.
+      </p>
       <SortableStatCards
         storageKey="trafego-pago-meta-ads-kpi-order"
         className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
@@ -492,6 +586,49 @@ function MetaAdsView({ summary }: { summary: MetaAdsInsightSummary }) {
           },
         ]}
       />
+
+      <Section title="Campanhas ativas">
+        {campaigns.length === 0 ? (
+          <p className="text-xs text-nord-gray py-2">
+            Nenhuma campanha ativa no momento na conta de anúncios conectada.
+          </p>
+        ) : (
+          <div className="overflow-x-auto nord-scrollbar">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                  <th className="py-2 pr-4">Campanha</th>
+                  <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4">Investido</th>
+                  <th className="py-2 pr-4">Impressões</th>
+                  <th className="py-2 pr-4">Cliques no link</th>
+                  <th className="py-2 pr-4">CTR</th>
+                  <th className="py-2 pr-4">Compras</th>
+                  <th className="py-2 pr-4">ROAS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaigns.map((c) => (
+                  <tr key={c.campaignId} className="border-b border-nord-border/50 hover:bg-white/5">
+                    <td className="py-2 pr-4 text-white max-w-xs truncate" title={c.campaignName}>
+                      {c.campaignName}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <Badge tone="success">{CAMPAIGN_STATUS_LABEL[c.status] ?? c.status}</Badge>
+                    </td>
+                    <td className="py-2 pr-4 text-nord-gray">{formatCurrency(c.valorInvestido)}</td>
+                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.impressoes)}</td>
+                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.cliquesLink)}</td>
+                    <td className="py-2 pr-4 text-nord-gray">{formatPercent(c.ctr)}</td>
+                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.compras)}</td>
+                    <td className="py-2 pr-4 text-nord-gray">{formatNumber(c.roas, 2)}x</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
