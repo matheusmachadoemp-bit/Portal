@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Pencil,
@@ -13,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   Ban,
+  ExternalLink,
   MessageSquareWarning,
 } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
@@ -183,6 +185,7 @@ export function ChecklistClient({
   dateKey: string;
   canCreate: boolean;
 }) {
+  const router = useRouter();
   const [occurrences, setOccurrences] = useState(initialOccurrences);
   const [templates, setTemplates] = useState(initialTemplates);
   const [selectedDate, setSelectedDate] = useState(dateKey);
@@ -204,7 +207,6 @@ export function ChecklistClient({
   const [reassignUserId, setReassignUserId] = useState("");
   const [justifying, setJustifying] = useState<Occurrence | null>(null);
   const [justificativa, setJustificativa] = useState("");
-  const [detail, setDetail] = useState<Occurrence | null>(null);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -540,7 +542,7 @@ export function ChecklistClient({
               return (
                 <button
                   key={o.id}
-                  onClick={() => setDetail(o)}
+                  onClick={() => router.push(`/portal/tarefas/checklist/executar/${o.id}`)}
                   className="w-full flex items-center gap-3 rounded-lg border border-nord-border/60 hover:border-nord-blue-light p-3 text-left transition-colors"
                 >
                   <span className="w-14 shrink-0 text-sm font-mono text-white">{formatTime(o.dueAt)}</span>
@@ -606,6 +608,13 @@ export function ChecklistClient({
                     <td className="py-2 px-3">
                       {canCreate && (
                         <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => router.push(`/portal/tarefas/checklist/executar/${o.id}`)}
+                            className="text-nord-gray hover:text-white"
+                            title="Abrir"
+                          >
+                            <ExternalLink size={13} />
+                          </button>
                           {(o.status === "ATRASADO" || o.status === "NAO_REALIZADO") && (
                             <button
                               onClick={() => {
@@ -939,29 +948,6 @@ export function ChecklistClient({
             Registrar justificativa
           </button>
         </div>
-      </Modal>
-
-      {/* Detalhe rápido (Agenda do dia) */}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail?.template.name ?? ""} widthClass="max-w-lg">
-        {detail && (
-          <div className="space-y-3 text-sm">
-            <div className="grid grid-cols-2 gap-2 text-xs text-nord-gray">
-              <span>Loja: {detail.template.empresa.name}</span>
-              <span>Setor: {GOAL_CATEGORY_LABEL[detail.template.setor as GoalCategoryKey] ?? detail.template.setor}</span>
-              <span>Liberação: {formatTime(detail.releaseAt)}</span>
-              <span>Limite: {formatTime(detail.dueAt)}</span>
-              <span>Responsável: {detail.responsavel?.name ?? "-"}</span>
-              <span>Comprovação: {FOTO_LABEL[detail.template.fotoChecklist] ?? detail.template.fotoChecklist}</span>
-            </div>
-            <Badge tone={CHECKLIST_STATUS_TONE[detail.status as keyof typeof CHECKLIST_STATUS_TONE]}>
-              {CHECKLIST_STATUS_LABEL[detail.status as keyof typeof CHECKLIST_STATUS_LABEL]}
-            </Badge>
-            {detail.justificativa && <p className="text-xs text-nord-gray">Justificativa: {detail.justificativa}</p>}
-            <p className="text-[11px] text-nord-gray">
-              A execução detalhada (itens, fotos) chega numa próxima etapa deste módulo.
-            </p>
-          </div>
-        )}
       </Modal>
 
       <ConfirmDialog
