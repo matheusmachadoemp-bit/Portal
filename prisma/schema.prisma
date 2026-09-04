@@ -116,6 +116,12 @@ model User {
   taskRecurrencesCreated        TaskRecurrence[]           @relation("TaskRecurrenceCreatedBy")
   taskRecurrencesToValidate     TaskRecurrence[]           @relation("TaskRecurrenceValidator")
   notifications                 Notification[]
+  checklistTemplatesCreated     ChecklistTemplate[]        @relation("ChecklistTemplateCreatedBy")
+  checklistTemplatesResponsavel ChecklistTemplate[]        @relation("ChecklistTemplateResponsavel")
+  checklistTemplatesSubstituto  ChecklistTemplate[]        @relation("ChecklistTemplateSubstituto")
+  checklistOccurrences          ChecklistOccurrence[]      @relation("ChecklistOccurrenceResponsavel")
+  checklistItemResponses        ChecklistItemResponse[]
+  checklistPhotos               ChecklistPhoto[]
 }
 
 model UserPermission {
@@ -251,6 +257,8 @@ model Empresa {
   metaAdsSyncLogs           MetaAdsSyncLog[]
   tasks                     Task[]
   taskRecurrences           TaskRecurrence[]
+  checklistTemplates        ChecklistTemplate[]
+  checklistOccurrences      ChecklistOccurrence[]
 }
 
 model UserEmpresaAccess {
@@ -1085,6 +1093,196 @@ model GoalAttachment {
   fileName  String
   fileUrl   String
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Checklist (subcategoria de Tarefas)
+// ---------------------------------------------------------------------------
+
+enum ChecklistRecurrence {
+  UNICA
+  DIARIA
+  SEMANAL
+  MENSAL
+  PERSONALIZADA
+}
+
+enum ChecklistItemType {
+  CONCLUIDO
+  TEXTO_CURTO
+  TEXTO_LONGO
+  NUMERO
+  TEMPERATURA
+  QUANTIDADE
+  SIM_NAO
+  FOTO
+}
+
+enum ChecklistPhotoRequirement {
+  SEM_FOTO
+  OPCIONAL
+  OBRIGATORIA
+}
+
+enum ChecklistOccurrenceStatus {
+  AGENDADO
+  DISPONIVEL
+  EM_ANDAMENTO
+  CONCLUIDO_NO_PRAZO
+  CONCLUIDO_COM_ATRASO
+  ATRASADO
+  NAO_REALIZADO
+  JUSTIFICADO
+  CANCELADO
+}
+
+enum ChecklistItemResponseStatus {
+  PENDENTE
+  CONCLUIDO
+  PROBLEMA
+}
+
+/**
+ * Modelo (configuração recorrente) do checklist — separado da execução
+ * (`ChecklistOccurrence`). Editar o modelo nunca altera ocorrências já
+ * geradas.
+ */
+model ChecklistTemplate {
+  id          String       @id @default(cuid())
+  empresaId   String
+  empresa     Empresa      @relation(fields: [empresaId], references: [id])
+  name        String
+  description String?
+  setor       GoalCategory
+  categoria   String?
+  turno       String?
+  active      Boolean      @default(true)
+
+  // Programação
+  recurrence  ChecklistRecurrence @default(DIARIA)
+  startDate   DateTime
+  endDate     DateTime?
+  releaseTime String // "HH:mm", sempre America/Sao_Paulo
+  dueTime     String // "HH:mm", sempre America/Sao_Paulo
+  segunda     Boolean             @default(true)
+  terca       Boolean             @default(false)
+  quarta      Boolean             @default(true)
+  quinta      Boolean             @default(true)
+  sexta       Boolean             @default(true)
+  sabado      Boolean             @default(true)
+  domingo     Boolean             @default(true)
+
+  // Responsável
+  responsavelId             String?
+  responsavel               User?   @relation("ChecklistTemplateResponsavel", fields: [responsavelId], references: [id])
+  substitutoId              String?
+  substituto                User?   @relation("ChecklistTemplateSubstituto", fields: [substitutoId], references: [id])
+  substituirAutomaticamente Boolean @default(false)
+
+  // Comprovação
+  fotoChecklist            ChecklistPhotoRequirement @default(SEM_FOTO)
+  exigirObservacaoProblema Boolean                   @default(false)
+
+  // Cobrança automática (configurada, motor de escalonamento em etapa futura)
+  cobrancaAtiva                 Boolean @default(true)
+  avisoAntesMinutos             Int     @default(30)
+  avisoAtrasoResponsavelMinutos Int     @default(10)
+  alertaCriticoMinutos          Int     @default(30)
+  naoRealizadoMinutos           Int     @default(60)
+
+  createdById String
+  createdBy   User     @relation("ChecklistTemplateCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  itens       ChecklistItemTemplate[]
+  ocorrencias ChecklistOccurrence[]
+
+  @@index([empresaId, setor])
+}
+
+model ChecklistItemTemplate {
+  id              String            @id @default(cuid())
+  templateId      String
+  template        ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title           String
+  orientacao      String?
+  tipo            ChecklistItemType @default(CONCLUIDO)
+  obrigatorio     Boolean           @default(true)
+  fotoObrigatoria Boolean           @default(false)
+  ordem           Int               @default(0)
+  createdAt       DateTime          @default(now())
+
+  respostas ChecklistItemResponse[]
+}
+
+/**
+ * Uma execução concreta do template numa data específica (ex.: "Temperatura
+ * dos freezers — 04/09/2026"). Gerada de forma idempotente por data.
+ */
+model ChecklistOccurrence {
+  id         String                    @id @default(cuid())
+  templateId String
+  template   ChecklistTemplate         @relation(fields: [templateId], references: [id])
+  empresaId  String
+  empresa    Empresa                   @relation(fields: [empresaId], references: [id])
+  date       DateTime // dia da ocorrência (00:00 America/Sao_Paulo)
+  releaseAt  DateTime // horário de liberação combinado com `date`
+  dueAt      DateTime // horário limite combinado com `date`
+  status     ChecklistOccurrenceStatus @default(AGENDADO)
+
+  responsavelId String?
+  responsavel   User?   @relation("ChecklistOccurrenceResponsavel", fields: [responsavelId], references: [id])
+
+  startedAt     DateTime?
+  completedAt   DateTime?
+  justificativa String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  respostas ChecklistItemResponse[]
+  fotos     ChecklistPhoto[]
+
+  @@unique([templateId, date])
+  @@index([empresaId, date])
+}
+
+model ChecklistItemResponse {
+  id             String                      @id @default(cuid())
+  occurrenceId   String
+  occurrence     ChecklistOccurrence         @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  itemTemplateId String
+  itemTemplate   ChecklistItemTemplate       @relation(fields: [itemTemplateId], references: [id])
+  status         ChecklistItemResponseStatus @default(PENDENTE)
+  valorTexto     String?
+  valorNumero    Float?
+  valorBooleano  Boolean?
+  observacao     String?
+
+  respondidoPorId String?
+  respondidoPor   User?     @relation(fields: [respondidoPorId], references: [id])
+  respondidoEm    DateTime?
+
+  fotos ChecklistPhoto[]
+
+  @@unique([occurrenceId, itemTemplateId])
+}
+
+model ChecklistPhoto {
+  id             String                 @id @default(cuid())
+  occurrenceId   String
+  occurrence     ChecklistOccurrence    @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  itemResponseId String?
+  itemResponse   ChecklistItemResponse? @relation(fields: [itemResponseId], references: [id])
+  fileUrl        String
+  fileName       String
+  mimeType       String?
+  observacao     String?
+
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
 }
 
 // ---------------------------------------------------------------------------
