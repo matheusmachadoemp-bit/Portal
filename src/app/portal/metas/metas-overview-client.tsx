@@ -6,7 +6,15 @@ import { Award, ChevronRight, Trophy } from "lucide-react";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { pct } from "@/lib/calc";
-import { dateToMonth, GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, GOAL_STATUS_LABEL, GOAL_STATUS_TONE, type GoalCategoryKey } from "@/lib/goals";
+import {
+  dateToMonth,
+  GOAL_CATEGORIES,
+  GOAL_CATEGORY_LABEL,
+  GOAL_CATEGORY_ROUTE,
+  GOAL_STATUS_LABEL,
+  GOAL_STATUS_TONE,
+  type GoalCategoryKey,
+} from "@/lib/goals";
 
 type GoalDTO = {
   id: string;
@@ -21,15 +29,6 @@ type GoalDTO = {
   bonificacao: string | null;
   status: string;
   empresaNome: string;
-};
-
-const CATEGORY_ROUTE: Record<GoalCategoryKey, string> = {
-  GERENCIA: "gerencia",
-  SALAO: "salao",
-  COZINHA: "cozinha",
-  DELIVERY: "delivery",
-  MARKETING: "marketing",
-  ADMINISTRATIVO: "administrativo",
 };
 
 export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
@@ -161,7 +160,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
           {bySector.map((s) => (
             <Link
               key={s.category}
-              href={`/portal/metas/${CATEGORY_ROUTE[s.category]}`}
+              href={`/portal/metas/${GOAL_CATEGORY_ROUTE[s.category]}`}
               className="rounded-lg border border-nord-border p-3 hover:border-nord-blue transition-colors"
             >
               <div className="flex items-center justify-between mb-2">

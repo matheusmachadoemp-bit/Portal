@@ -1,12 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Paperclip, Award, Clock } from "lucide-react";
-import { Badge, ProgressBar } from "@/components/ui/stat-card";
+import Link from "next/link";
+import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle } from "lucide-react";
+import { Badge, Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
+import { RadialProgress } from "@/components/ui/radial-progress";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
-import { formatNumber, pct } from "@/lib/calc";
-import { currentMonth, dateToMonth, GOAL_STATUS_LABEL, GOAL_STATUS_TONE, monthToDateRange } from "@/lib/goals";
-import { differenceInCalendarDays } from "date-fns";
+import { formatNumber, growth, pct } from "@/lib/calc";
+import {
+  currentMonth,
+  dateToMonth,
+  GOAL_CATEGORIES,
+  GOAL_CATEGORY_LABEL,
+  GOAL_CATEGORY_ROUTE,
+  GOAL_STATUS_LABEL,
+  GOAL_STATUS_TONE,
+  monthToDateRange,
+  type GoalCategoryKey,
+} from "@/lib/goals";
+import { previousPeriodo } from "@/lib/reuniao";
 
 type GoalDTO = {
   id: string;
@@ -41,6 +54,19 @@ const emptyForm = {
   planoDeAcao: "",
 };
 
+function goalsOfMonth(goals: GoalDTO[], month: string) {
+  return goals.filter((g) => dateToMonth(g.startDate) === month);
+}
+
+function kpisOf(list: GoalDTO[]) {
+  const total = list.length;
+  const concluidas = list.filter((g) => g.status === "CONCLUIDA").length;
+  const emAndamento = list.filter((g) => g.status === "EM_ANDAMENTO" || g.status === "EM_RISCO").length;
+  const atrasadas = list.filter((g) => g.status === "NAO_ATINGIDA").length;
+  const mediaConclusao = total ? list.reduce((s, g) => s + Math.min(pct(g.valorRealizado, g.valorMeta), 100), 0) / total : 0;
+  return { total, concluidas, emAndamento, atrasadas, mediaConclusao };
+}
+
 export function MetasClient({
   initialGoals,
   category,
@@ -51,7 +77,9 @@ export function MetasClient({
   canCreate?: boolean;
 }) {
   const [goals, setGoals] = useState(initialGoals);
-  const [mesFiltro, setMesFiltro] = useState("");
+  const [mesFiltro, setMesFiltro] = useState(currentMonth());
+  const [filterResponsavel, setFilterResponsavel] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GoalDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -60,18 +88,35 @@ export function MetasClient({
   const [attachName, setAttachName] = useState("");
   const [attachUrl, setAttachUrl] = useState("");
 
+  const responsaveis = useMemo(() => [...new Set(goals.map((g) => g.responsavel))].filter(Boolean).sort(), [goals]);
+
+  const withRefinements = useMemo(
+    () =>
+      (list: GoalDTO[]) =>
+        list.filter((g) => {
+          if (filterResponsavel && g.responsavel !== filterResponsavel) return false;
+          if (filterStatus && g.status !== filterStatus) return false;
+          return true;
+        }),
+    [filterResponsavel, filterStatus]
+  );
+
   const filtered = useMemo(
-    () => (mesFiltro ? goals.filter((g) => dateToMonth(g.startDate) === mesFiltro) : goals),
-    [goals, mesFiltro]
+    () => withRefinements(mesFiltro ? goalsOfMonth(goals, mesFiltro) : goals),
+    [goals, mesFiltro, withRefinements]
   );
 
   const ranked = useMemo(
-    () =>
-      [...filtered].sort(
-        (a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)
-      ),
+    () => [...filtered].sort((a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)),
     [filtered]
   );
+
+  const baseMonth = mesFiltro || currentMonth();
+  const prevMonth = previousPeriodo(baseMonth);
+  const curr = kpisOf(withRefinements(goalsOfMonth(goals, baseMonth)));
+  const prev = kpisOf(withRefinements(goalsOfMonth(goals, prevMonth)));
+
+  const alertas = filtered.filter((g) => g.status === "EM_RISCO" || g.status === "NAO_ATINGIDA");
 
   async function refresh() {
     const res = await fetch(`/api/metas?category=${category}`);
@@ -81,7 +126,7 @@ export function MetasClient({
 
   function openNew() {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, mes: mesFiltro || currentMonth() });
     setShowForm(true);
   }
 
@@ -151,14 +196,45 @@ export function MetasClient({
           ou editar metas.
         </p>
       )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {GOAL_CATEGORIES.map((c) => (
+          <Link
+            key={c}
+            href={`/portal/metas/${GOAL_CATEGORY_ROUTE[c]}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              c === category ? "bg-nord-blue text-white" : "text-nord-gray border border-nord-border hover:text-white hover:border-nord-blue-light"
+            }`}
+          >
+            {GOAL_CATEGORY_LABEL[c]}
+          </Link>
+        ))}
+      </div>
+
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input type="month" value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} className="input w-auto" />
           {mesFiltro && (
             <button onClick={() => setMesFiltro("")} className="text-xs text-nord-blue-light hover:underline">
               Ver todos os meses
             </button>
           )}
+          <select value={filterResponsavel} onChange={(e) => setFilterResponsavel(e.target.value)} className="input w-auto">
+            <option value="">Todos os responsáveis</option>
+            {responsaveis.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input w-auto">
+            <option value="">Todos os status</option>
+            {Object.entries(GOAL_STATUS_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
         </div>
         {canCreate && (
           <button
@@ -170,93 +246,176 @@ export function MetasClient({
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {ranked.map((g, idx) => {
-          const percent = pct(g.valorRealizado, g.valorMeta);
-          const daysLeft = differenceInCalendarDays(new Date(g.endDate), new Date());
-          return (
-            <div
-              key={g.id}
-              className={`nord-card p-4 flex flex-col gap-3 ${
-                g.status === "EM_RISCO" ? "border-amber-500/50 ring-1 ring-amber-500/20" : ""
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    {idx === 0 && <Award size={14} className="text-amber-400" />}
-                    <p className="text-white font-medium text-sm">{g.name}</p>
+      <SortableStatCards
+        storageKey={`metas-${category}-kpi-order`}
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        cards={[
+          {
+            key: "concluidas",
+            label: "Metas concluídas",
+            value: String(curr.concluidas),
+            icon: "CheckCircle2",
+            color: "#22c55e",
+            delta: growth(curr.concluidas, prev.concluidas),
+          },
+          {
+            key: "em-andamento",
+            label: "Em andamento",
+            value: String(curr.emAndamento),
+            icon: "Clock",
+            color: "#2952E3",
+            delta: growth(curr.emAndamento, prev.emAndamento),
+          },
+          {
+            key: "atrasadas",
+            label: "Atrasadas",
+            value: String(curr.atrasadas),
+            icon: "XCircle",
+            color: "#ef4444",
+            delta: growth(curr.atrasadas, prev.atrasadas),
+            invertDeltaColor: true,
+          },
+          {
+            key: "media-conclusao",
+            label: "Média de conclusão",
+            value: `${curr.mediaConclusao.toFixed(1)}%`,
+            icon: "TrendingUp",
+            color: "#f59e0b",
+            delta: growth(curr.mediaConclusao, prev.mediaConclusao),
+          },
+        ]}
+      />
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="xl:col-span-2">
+          <Section title={`Progresso das metas — ${GOAL_CATEGORY_LABEL[category as GoalCategoryKey] ?? category}`}>
+            {ranked.length === 0 ? (
+              <p className="text-sm text-nord-gray text-center py-6">
+                {mesFiltro ? "Nenhuma meta cadastrada nesse mês." : "Nenhuma meta cadastrada nesta categoria ainda."}
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {ranked.map((g) => (
+                  <div key={g.id} className="flex flex-col items-center gap-1">
+                    <RadialProgress
+                      percent={pct(g.valorRealizado, g.valorMeta)}
+                      color={g.status === "CONCLUIDA" ? "#22c55e" : g.status === "NAO_ATINGIDA" ? "#ef4444" : "#1464F4"}
+                      label={g.name}
+                    />
+                    <span className="text-[11px] text-nord-gray text-center">
+                      {formatNumber(g.valorRealizado)} / {formatNumber(g.valorMeta)} {g.unidade}
+                    </span>
                   </div>
-                  <p className="text-xs text-nord-gray">{g.responsavel}</p>
-                </div>
-                <Badge tone={GOAL_STATUS_TONE[g.status]}>{GOAL_STATUS_LABEL[g.status]}</Badge>
+                ))}
               </div>
+            )}
+          </Section>
+        </div>
 
-              <div>
-                <div className="flex justify-between text-xs text-nord-gray mb-1">
-                  <span>
-                    {formatNumber(g.valorRealizado)} / {formatNumber(g.valorMeta)} {g.unidade}
-                  </span>
-                  <span>{percent.toFixed(0)}%</span>
-                </div>
-                <ProgressBar percent={percent} color={percent >= 100 ? "#22c55e" : "#2952E3"} />
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-nord-gray">
-                <span className="flex items-center gap-1">
-                  <Clock size={12} />
-                  {daysLeft >= 0 ? `${daysLeft} dias restantes` : "Prazo encerrado"}
-                </span>
-                {g.bonificacao && <span className="text-emerald-400">{g.bonificacao}</span>}
-              </div>
-
-              {g.description && <p className="text-xs text-nord-gray">{g.description}</p>}
-
-              {g.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {g.attachments.map((a) => (
-                    <a
-                      key={a.id}
-                      href={a.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[11px] flex items-center gap-1 text-nord-blue-light hover:underline"
-                    >
-                      <Paperclip size={10} /> {a.fileName}
-                    </a>
-                  ))}
-                </div>
-              )}
-
-              <div className={`flex items-center gap-2 pt-1 border-t border-nord-border/60 mt-1 ${!canCreate ? "hidden" : ""}`}>
-                <button
-                  onClick={() => openEdit(g)}
-                  className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5"
-                >
-                  <Pencil size={12} /> Editar
-                </button>
-                <button
-                  onClick={() => setAttachGoal(g)}
-                  className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5"
-                >
-                  <Paperclip size={12} /> Anexar
-                </button>
-                <button
-                  onClick={() => setConfirmDeleteId(g.id)}
-                  className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-red-400 py-1.5"
-                >
-                  <Trash2 size={12} /> Excluir
-                </button>
-              </div>
+        <Section title="Alertas">
+          {alertas.length === 0 ? (
+            <p className="text-sm text-nord-gray text-center py-6">Nenhum alerta no momento.</p>
+          ) : (
+            <div className="space-y-2">
+              {alertas.map((g) => {
+                const late = g.status === "NAO_ATINGIDA";
+                return (
+                  <div
+                    key={g.id}
+                    className={`flex items-start gap-2.5 rounded-lg border p-3 ${
+                      late ? "border-red-500/40 bg-red-500/5" : "border-amber-500/40 bg-amber-500/5"
+                    }`}
+                  >
+                    {late ? (
+                      <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-white text-xs font-medium truncate">{g.name}</p>
+                      <p className="text-[11px] text-nord-gray">
+                        {late ? "Prazo encerrado sem atingir a meta." : "Próxima do prazo, ainda abaixo da meta."}
+                      </p>
+                      {canCreate && (
+                        <button onClick={() => openEdit(g)} className="text-[11px] text-nord-blue-light hover:underline mt-1">
+                          Ver meta
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-        {ranked.length === 0 && (
-          <p className="text-sm text-nord-gray col-span-full text-center py-10">
-            {mesFiltro ? "Nenhuma meta cadastrada nesse mês." : "Nenhuma meta cadastrada nesta categoria ainda."}
-          </p>
-        )}
+          )}
+        </Section>
       </div>
+
+      <Section title="Metas individuais">
+        <div className="overflow-x-auto nord-scrollbar">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-white border-b border-nord-border">
+                <th className="py-2 px-3">Meta</th>
+                <th className="py-2 px-3">Responsável</th>
+                <th className="py-2 px-3">Meta / Realizado</th>
+                <th className="py-2 px-3">Progresso</th>
+                <th className="py-2 px-3">Status</th>
+                <th className="py-2 px-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((g) => {
+                const percent = pct(g.valorRealizado, g.valorMeta);
+                return (
+                  <tr key={g.id} className={`border-b border-nord-border/50 ${g.status === "EM_RISCO" ? "bg-amber-500/5" : ""}`}>
+                    <td className="py-2 px-3 text-white">{g.name}</td>
+                    <td className="py-2 px-3 text-nord-gray">{g.responsavel}</td>
+                    <td className="py-2 px-3 text-nord-gray">
+                      {formatNumber(g.valorRealizado)} / {formatNumber(g.valorMeta)} {g.unidade}
+                    </td>
+                    <td className="py-2 px-3 w-40">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 rounded-full bg-nord-border overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${Math.min(100, percent)}%`, backgroundColor: percent >= 100 ? "#22c55e" : "#1464F4" }}
+                          />
+                        </div>
+                        <span className="text-xs text-nord-gray shrink-0">{percent.toFixed(0)}%</span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-3">
+                      <Badge tone={GOAL_STATUS_TONE[g.status]}>{GOAL_STATUS_LABEL[g.status]}</Badge>
+                    </td>
+                    <td className="py-2 px-3">
+                      {canCreate && (
+                        <div className="flex items-center gap-2 justify-end">
+                          <button onClick={() => openEdit(g)} className="text-nord-gray hover:text-white" title="Editar">
+                            <Pencil size={13} />
+                          </button>
+                          <button onClick={() => setAttachGoal(g)} className="text-nord-gray hover:text-white" title="Anexar">
+                            <Paperclip size={13} />
+                          </button>
+                          <button onClick={() => setConfirmDeleteId(g.id)} className="text-nord-gray hover:text-red-400" title="Excluir">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {ranked.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center text-sm text-nord-gray py-8">
+                    {mesFiltro ? "Nenhuma meta cadastrada nesse mês." : "Nenhuma meta cadastrada nesta categoria ainda."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar meta" : "Nova meta"} widthClass="max-w-xl">
         <div className="grid grid-cols-2 gap-3">

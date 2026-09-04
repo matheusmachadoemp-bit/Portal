@@ -27,6 +27,7 @@ export type SortableStatCardConfig = {
   delta?: number | null;
   color?: string;
   hint?: string;
+  invertDeltaColor?: boolean;
 };
 
 function SortableCard({ id, children }: { id: string; children: React.ReactNode }) {
@@ -141,7 +142,15 @@ export function SortableStatCards({
       items={cards.map((card) => ({
         key: card.key,
         content: (
-          <StatCard label={card.label} value={card.value} icon={card.icon} delta={card.delta} color={card.color} hint={card.hint} />
+          <StatCard
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            delta={card.delta}
+            color={card.color}
+            hint={card.hint}
+            invertDeltaColor={card.invertDeltaColor}
+          />
         ),
       }))}
     />
