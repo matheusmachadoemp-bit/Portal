@@ -15,12 +15,85 @@ type SyncableEmpresa = Pick<
   | "metaAdsInstagramAccountId"
 >;
 
+// A Graph API recusa pedidos de insights diários com muitos meses de uma vez
+// ("Please reduce the amount of data you're asking for"). Buscar em pedaços
+// de até 30 dias por vez evita isso — o mesmo tamanho já usado com sucesso
+// na sincronização incremental normal.
+const CHUNK_DAYS = 30;
+
+function chunkDateRange(range: { start: Date; end: Date }): { start: Date; end: Date }[] {
+  const chunks: { start: Date; end: Date }[] = [];
+  let chunkStart = new Date(range.start);
+  while (chunkStart <= range.end) {
+    const chunkEnd = new Date(
+      Math.min(chunkStart.getTime() + (CHUNK_DAYS - 1) * 24 * 60 * 60 * 1000, range.end.getTime())
+    );
+    chunks.push({ start: chunkStart, end: chunkEnd });
+    chunkStart = new Date(chunkEnd.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return chunks;
+}
+
+/** Cria/atualiza as linhas de MetaAdsInsight de um lote já buscado da Graph API. */
+async function upsertMetaAdsInsightRows(empresaId: string, insightsData: ReturnType<typeof toMetaAdsInsightData>[]) {
+  if (insightsData.length === 0) return;
+
+  const compositeKey = (d: (typeof insightsData)[number]) =>
+    [new Date(d.dateStart).getTime(), new Date(d.dateStop).getTime(), d.campaignId, d.publisherPlatform ?? "", d.platformPosition ?? ""].join(
+      "|"
+    );
+
+  const dateStarts = insightsData.map((d) => new Date(d.dateStart).getTime());
+  const existing = await prisma.metaAdsInsight.findMany({
+    where: {
+      empresaId,
+      dateStart: { gte: new Date(Math.min(...dateStarts)), lte: new Date(Math.max(...dateStarts)) },
+    },
+    select: { dateStart: true, dateStop: true, campaignId: true, publisherPlatform: true, platformPosition: true },
+  });
+  const existingKeys = new Set(
+    existing.map((e) =>
+      [e.dateStart.getTime(), e.dateStop.getTime(), e.campaignId, e.publisherPlatform ?? "", e.platformPosition ?? ""].join("|")
+    )
+  );
+
+  const toCreate = insightsData.filter((d) => !existingKeys.has(compositeKey(d)));
+  const toUpdate = insightsData.filter((d) => existingKeys.has(compositeKey(d)));
+
+  if (toCreate.length > 0) {
+    await prisma.metaAdsInsight.createMany({ data: toCreate, skipDuplicates: true });
+  }
+  if (toUpdate.length > 0) {
+    await prisma.$transaction(
+      toUpdate.map((data) =>
+        prisma.metaAdsInsight.update({
+          where: {
+            empresaId_dateStart_dateStop_campaignId_publisherPlatform_platformPosition: {
+              empresaId: data.empresaId,
+              dateStart: data.dateStart,
+              dateStop: data.dateStop,
+              campaignId: data.campaignId,
+              publisherPlatform: data.publisherPlatform ?? "",
+              platformPosition: data.platformPosition ?? "",
+            },
+          },
+          data,
+        })
+      )
+    );
+  }
+}
+
 /**
  * Sincroniza os insights de campanhas do Meta Ads de uma empresa para um
  * intervalo de datas, salva os dados brutos por campanha em MetaAdsInsight
  * e atualiza o lançamento mensal de Tráfego Pago (MarketingEntry) com os
  * totais do mês corrente, sem sobrescrever campos preenchidos manualmente
- * (seguidores, curtidas, comentários, observações etc.).
+ * (seguidores, curtidas, comentários, observações etc.). Períodos longos são
+ * buscados em pedaços de 30 dias, um de cada vez, para não estourar o limite
+ * de volume de dados de uma única chamada da Graph API — o progresso de cada
+ * pedaço é salvo antes de buscar o próximo, então uma falha no meio não perde
+ * o que já foi sincronizado.
  */
 export async function syncEmpresaMetaAdsInsights(
   empresa: SyncableEmpresa,
@@ -35,59 +108,22 @@ export async function syncEmpresaMetaAdsInsights(
   });
 
   const token = decryptSecret(empresa.metaAdsAccessToken);
-  const result = await fetchMetaAdsInsights(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion, range);
+  let totalRecords = 0;
 
-  if (!result.ok) {
-    await prisma.metaAdsSyncLog.update({
-      where: { id: log.id },
-      data: { status: "ERRO", errorMessage: result.error, finishedAt: new Date() },
-    });
-    return { ok: false, error: result.error };
-  }
+  for (const chunk of chunkDateRange(range)) {
+    const result = await fetchMetaAdsInsights(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion, chunk);
 
-  const insightsData = result.rows.map((row) => toMetaAdsInsightData(empresa.id, row));
-
-  if (insightsData.length > 0) {
-    const compositeKey = (d: (typeof insightsData)[number]) =>
-      [new Date(d.dateStart).getTime(), new Date(d.dateStop).getTime(), d.campaignId, d.publisherPlatform ?? "", d.platformPosition ?? ""].join(
-        "|"
-      );
-
-    const existing = await prisma.metaAdsInsight.findMany({
-      where: { empresaId: empresa.id, dateStart: { gte: range.start, lte: range.end } },
-      select: { dateStart: true, dateStop: true, campaignId: true, publisherPlatform: true, platformPosition: true },
-    });
-    const existingKeys = new Set(
-      existing.map((e) =>
-        [e.dateStart.getTime(), e.dateStop.getTime(), e.campaignId, e.publisherPlatform ?? "", e.platformPosition ?? ""].join("|")
-      )
-    );
-
-    const toCreate = insightsData.filter((d) => !existingKeys.has(compositeKey(d)));
-    const toUpdate = insightsData.filter((d) => existingKeys.has(compositeKey(d)));
-
-    if (toCreate.length > 0) {
-      await prisma.metaAdsInsight.createMany({ data: toCreate, skipDuplicates: true });
+    if (!result.ok) {
+      await prisma.metaAdsSyncLog.update({
+        where: { id: log.id },
+        data: { status: "ERRO", errorMessage: result.error, recordsSynced: totalRecords, finishedAt: new Date() },
+      });
+      return { ok: false, error: result.error };
     }
-    if (toUpdate.length > 0) {
-      await prisma.$transaction(
-        toUpdate.map((data) =>
-          prisma.metaAdsInsight.update({
-            where: {
-              empresaId_dateStart_dateStop_campaignId_publisherPlatform_platformPosition: {
-                empresaId: data.empresaId,
-                dateStart: data.dateStart,
-                dateStop: data.dateStop,
-                campaignId: data.campaignId,
-                publisherPlatform: data.publisherPlatform ?? "",
-                platformPosition: data.platformPosition ?? "",
-              },
-            },
-            data,
-          })
-        )
-      );
-    }
+
+    const insightsData = result.rows.map((row) => toMetaAdsInsightData(empresa.id, row));
+    await upsertMetaAdsInsightRows(empresa.id, insightsData);
+    totalRecords += result.rows.length;
   }
 
   await syncMarketingEntryFromMetaAds(empresa.id, range);
@@ -99,12 +135,12 @@ export async function syncEmpresaMetaAdsInsights(
   await prisma.$transaction([
     prisma.metaAdsSyncLog.update({
       where: { id: log.id },
-      data: { status: "SUCESSO", recordsSynced: result.rows.length, finishedAt: new Date() },
+      data: { status: "SUCESSO", recordsSynced: totalRecords, finishedAt: new Date() },
     }),
     prisma.empresa.update({ where: { id: empresa.id }, data: { metaAdsLastSyncAt: new Date() } }),
   ]);
 
-  return { ok: true, recordsSynced: result.rows.length };
+  return { ok: true, recordsSynced: totalRecords };
 }
 
 function startOfMonthUtc(date: Date): Date {
