@@ -122,6 +122,7 @@ model User {
   checklistOccurrences          ChecklistOccurrence[]      @relation("ChecklistOccurrenceResponsavel")
   checklistItemResponses        ChecklistItemResponse[]
   checklistPhotos               ChecklistPhoto[]
+  checklistEscalationLogs       ChecklistEscalationLog[]
 }
 
 model UserPermission {
@@ -1241,11 +1242,41 @@ model ChecklistOccurrence {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  respostas ChecklistItemResponse[]
-  fotos     ChecklistPhoto[]
+  respostas      ChecklistItemResponse[]
+  fotos          ChecklistPhoto[]
+  notifications  Notification[]
+  escalationLogs ChecklistEscalationLog[]
 
   @@unique([templateId, date])
   @@index([empresaId, date])
+}
+
+enum ChecklistEscalationType {
+  AVISO_ANTES
+  NO_LIMITE
+  ATRASO_RESPONSAVEL
+  ALERTA_CRITICO
+  NAO_REALIZADO
+}
+
+/**
+ * Registro permanente de cada cobrança automática disparada — a chave única
+ * garante idempotência (nunca notifica o mesmo destinatário duas vezes para
+ * o mesmo nível de escalonamento da mesma ocorrência), e o histórico não é
+ * apagado quando a notificação correspondente é marcada como lida.
+ */
+model ChecklistEscalationLog {
+  id             String                  @id @default(cuid())
+  occurrenceId   String
+  occurrence     ChecklistOccurrence     @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  tipo           ChecklistEscalationType
+  destinatarioId String
+  destinatario   User                    @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+  notificationId String?
+  createdAt      DateTime                @default(now())
+
+  @@unique([occurrenceId, tipo, destinatarioId])
+  @@index([occurrenceId])
 }
 
 model ChecklistItemResponse {
@@ -2981,17 +3012,26 @@ model TaskRecurrence {
   occurrences Task[]
 }
 
+enum NotificationPriority {
+  INFORMACAO
+  ATENCAO
+  CRITICA
+}
+
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String
-  title     String
-  body      String?
-  taskId    String?
-  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id                    String                @id @default(cuid())
+  userId                String
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                  String
+  title                 String
+  body                  String?
+  priority              NotificationPriority?
+  taskId                String?
+  task                  Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  checklistOccurrenceId String?
+  checklistOccurrence   ChecklistOccurrence?  @relation(fields: [checklistOccurrenceId], references: [id], onDelete: Cascade)
+  read                  Boolean               @default(false)
+  createdAt             DateTime              @default(now())
 
   @@index([userId, read])
 }

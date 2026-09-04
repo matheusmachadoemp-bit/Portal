@@ -7,6 +7,10 @@
     {
       "path": "/api/integracoes/meta-ads/sync",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/checklist/escalations/run",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

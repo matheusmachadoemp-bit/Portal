@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
 
@@ -9,16 +9,55 @@ type NotificationDTO = {
   type: string;
   title: string;
   body: string | null;
+  priority: "INFORMACAO" | "ATENCAO" | "CRITICA" | null;
   taskId: string | null;
+  checklistOccurrenceId: string | null;
   read: boolean;
   createdAt: string;
 };
+
+const PRIORITY_BORDER: Record<string, string> = {
+  INFORMACAO: "border-nord-blue",
+  ATENCAO: "border-amber-400",
+  CRITICA: "border-red-500",
+};
+
+const PANEL_WIDTH = 320;
+const PANEL_MARGIN = 8;
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
+
+  function computePanelPos() {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(PANEL_WIDTH, window.innerWidth - PANEL_MARGIN * 2);
+    const left = Math.min(Math.max(PANEL_MARGIN, rect.right - width), window.innerWidth - width - PANEL_MARGIN);
+    const top = rect.bottom + 4;
+    setPanelPos({ top, left, width });
+  }
+
+  function toggleOpen() {
+    setOpen((v) => {
+      const next = !v;
+      if (next) computePanelPos();
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onResize() {
+      computePanelPos();
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [open]);
 
   async function load() {
     const res = await fetch("/api/notificacoes");
@@ -29,6 +68,7 @@ export function NotificationBell() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega notificações no mount e a cada 60s
     load();
     const interval = setInterval(load, 60000);
     return () => clearInterval(interval);
@@ -49,13 +89,15 @@ export function NotificationBell() {
     }
     setOpen(false);
     load();
-    if (n.taskId) router.push("/portal/tarefas");
+    if (n.checklistOccurrenceId) router.push(`/portal/tarefas/checklist/executar/${n.checklistOccurrenceId}`);
+    else if (n.taskId) router.push("/portal/tarefas");
   }
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={btnRef}
+        onClick={toggleOpen}
         className="relative w-8 h-8 rounded-lg flex items-center justify-center text-nord-gray hover:text-white hover:bg-white/5 transition"
       >
         <Bell size={17} />
@@ -66,10 +108,13 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
+      {open && panelPos && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute z-50 top-full mt-1 right-0 w-80 nord-card bg-nord-card shadow-xl py-1.5 max-h-96 overflow-y-auto nord-scrollbar">
+          <div
+            className="fixed z-50 nord-card bg-nord-card shadow-xl py-1.5 max-h-96 overflow-y-auto nord-scrollbar"
+            style={{ top: panelPos.top, left: panelPos.left, width: panelPos.width }}
+          >
             <div className="flex items-center justify-between px-3 py-1.5">
               <p className="text-[10px] uppercase tracking-wide text-nord-gray/70">Notificações</p>
               {unreadCount > 0 && (
@@ -86,7 +131,7 @@ export function NotificationBell() {
                   key={n.id}
                   onClick={() => handleOpenNotification(n)}
                   className={`w-full text-left px-3 py-2 hover:bg-white/5 border-l-2 ${
-                    n.read ? "border-transparent" : "border-nord-blue"
+                    n.read ? "border-transparent" : PRIORITY_BORDER[n.priority ?? ""] ?? "border-nord-blue"
                   }`}
                 >
                   <p className={`text-xs ${n.read ? "text-nord-gray" : "text-white font-medium"}`}>{n.title}</p>

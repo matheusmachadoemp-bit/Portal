@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { generateChecklistOccurrences, refreshOccurrenceStatuses } from "@/lib/checklist-server";
+import { generateChecklistOccurrences, processChecklistEscalations, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { spDateKey, spStartOfDay } from "@/lib/checklist";
 
 const OCCURRENCE_INCLUDE = {
@@ -38,6 +38,7 @@ export async function GET(req: Request) {
     select: { id: true },
   });
   await refreshOccurrenceStatuses(existing.map((o) => o.id));
+  await processChecklistEscalations(existing.map((o) => o.id));
 
   const occurrences = await prisma.checklistOccurrence.findMany({
     where: { empresaId: { in: empresaIds }, date: day },
