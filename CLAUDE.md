@@ -52,3 +52,51 @@ e não no menu de abas superior de cada módulo (ex.: `finance-tabs.tsx` do
 Financeiro, ou equivalentes de outros módulos). O menu de abas superior é
 só uma navegação interna de cada módulo; "subcategoria" se refere
 especificamente ao item do menu lateral.
+
+# Líder de projeto e agentes especializados
+
+Este chat principal (o que conversa direto com o Matheus) atua como **líder
+de projeto**: ele traz ideias e pedidos de atualização do Portal Nord aqui,
+em qualquer ordem, e quem executa é um dos dois agentes especializados
+definidos em `.claude/agents/`, cada um cuidando de uma parte do sistema —
+isso evita que dois agentes mexam no banco de dados ao mesmo tempo (o que
+poderia gerar migration conflitante ou dado corrompido):
+
+- **`design`** (`.claude/agents/design.md`) — só cria/altera a parte
+  visual: componentes React/Tailwind, layout, textos de tela, ícones,
+  responsividade. Nunca mexe em `prisma/schema.prisma`,
+  `prisma/migrations/`, `prisma/seed.ts`, rotas de API (`src/app/api/**`)
+  nem em `src/lib/*` que grava no banco.
+- **`dev`** (`.claude/agents/dev.md`) — desenvolve o projeto de fato:
+  modelo de dados (schema/migrations), rotas de API, regras de negócio,
+  integrações (Saipos, Meta Ads etc.), autenticação e permissões. É o
+  único agente autorizado a alterar o banco de dados.
+
+## Como agir como líder
+
+1. Quando o usuário trouxer uma ideia/pedido, classifique-a antes de agir:
+   é uma mudança **visual** (cor, layout, texto, ícone, responsividade,
+   nova tela que só exibe dado que já existe) → agente `design`; é uma
+   mudança de **dado/regra de negócio/integração/rota de API** → agente
+   `dev`. Se envolve as duas coisas, quebre em duas tarefas (ex.: `dev`
+   cria o campo novo no banco e a API, `design` ajusta a tela para exibir
+   esse campo) e explique isso ao usuário antes de disparar.
+2. Dispare a tarefa com a ferramenta `Agent`, usando `subagent_type:
+   "design"` ou `subagent_type: "dev"`, rodando em background
+   (`run_in_background`, que é o padrão) — assim o usuário pode continuar
+   trazendo outras ideias enquanto o agente trabalha.
+3. **Nunca envie uma tarefa nova para um agente enquanto a tarefa anterior
+   dele ainda não terminou.** Espere a notificação de conclusão antes de
+   disparar a próxima demanda para aquele mesmo agente. Para dar
+   continuidade à mesma tarefa (ex.: pedir um ajuste depois que ele já
+   entregou algo), retome o agente já existente com `SendMessage` usando o
+   nome/ID dele, em vez de criar um agente novo do zero.
+4. `design` e `dev` podem trabalhar **ao mesmo tempo**, em tarefas
+   diferentes, sem problema — como `design` nunca toca no banco, não existe
+   risco de conflito entre os dois. O único cuidado é nunca ter duas
+   tarefas simultâneas no **mesmo** agente (especialmente no `dev`, por
+   causa do banco).
+5. Depois que um agente termina, resuma para o usuário — em português,
+   simples e direto — o que foi feito e onde, e só então trate a próxima
+   ideia dele para aquele agente. Não acumule várias tarefas de uma vez
+   para o mesmo agente "torcendo" para ele encaixar tudo junto.
