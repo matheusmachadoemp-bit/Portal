@@ -269,6 +269,7 @@ model Empresa {
   satisfactionAudiences     SatisfactionAudience[]
   lojaNordRedemptions       LojaNordRedemption[]
   lojaNordTransactions      LojaNordPointTransaction[]
+  satisfactionResponses     SatisfactionResponse[]
 }
 
 model UserEmpresaAccess {
@@ -1384,15 +1385,16 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  occurrences         Occurrence[]
-  waiterSales         WaiterSaleEntry[]
-  sales               Sale[]
-  importedGarcomItems ImportedGarcomItem[]
-  financeEntries      EmployeeFinanceEntry[]
-  timeEntries         TimeEntry[]
-  vacations           Vacation[]
-  uniformDeliveries   UniformDelivery[]
-  documents           EmployeeDocument[]
+  occurrences             Occurrence[]
+  waiterSales             WaiterSaleEntry[]
+  sales                   Sale[]
+  importedGarcomItems     ImportedGarcomItem[]
+  financeEntries          EmployeeFinanceEntry[]
+  timeEntries             TimeEntry[]
+  vacations               Vacation[]
+  uniformDeliveries       UniformDelivery[]
+  documents               EmployeeDocument[]
+  satisfactionInvitations SatisfactionInvitation[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1682,6 +1684,8 @@ model SatisfactionSurvey {
 
   perguntas SatisfactionQuestion[]
   publico   SatisfactionAudience[]
+  convites  SatisfactionInvitation[]
+  respostas SatisfactionResponse[]
 
   @@index([status])
 }
@@ -1709,8 +1713,12 @@ model SatisfactionQuestion {
   orientacao  String?
   obrigatoria Boolean                  @default(true)
   ordem       Int                      @default(0)
+  /// Perguntas removidas do formulário que já têm respostas são desativadas
+  /// (não excluídas), para nunca apagar histórico — mesma lição do Checklist.
+  ativo       Boolean                  @default(true)
 
-  opcoes SatisfactionQuestionOption[]
+  opcoes    SatisfactionQuestionOption[]
+  respostas SatisfactionAnswer[]
 
   @@index([surveyId])
 }
@@ -1721,6 +1729,77 @@ model SatisfactionQuestionOption {
   question   SatisfactionQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   texto      String
   ordem      Int                  @default(0)
+
+  respostasUnicas    SatisfactionAnswer[]
+  respostasMultiplas SatisfactionAnswerOption[]
+}
+
+/**
+ * Convite individual para um colaborador responder — guarda o token e se já
+ * respondeu, mas NUNCA se liga à resposta em si. É essa separação que deixa
+ * uma pesquisa anônima sem ter como relacionar resposta a convite.
+ */
+model SatisfactionInvitation {
+  id           String             @id @default(cuid())
+  surveyId     String
+  survey       SatisfactionSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  token        String             @unique
+  respondido   Boolean            @default(false)
+  respondidoEm DateTime?
+  createdAt    DateTime           @default(now())
+
+  @@unique([surveyId, employeeId])
+  @@index([surveyId])
+}
+
+/**
+ * Uma submissão da pesquisa. Não tem nenhuma coluna que aponte para convite,
+ * colaborador ou usuário — só o suficiente para segmentar (loja/setor).
+ */
+model SatisfactionResponse {
+  id                  String             @id @default(cuid())
+  surveyId            String
+  survey              SatisfactionSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
+  setor               String?
+  comentarioAdicional String?
+  submittedAt         DateTime           @default(now())
+
+  respostas SatisfactionAnswer[]
+
+  @@index([surveyId])
+  @@index([empresaId, setor])
+}
+
+model SatisfactionAnswer {
+  id            String                      @id @default(cuid())
+  responseId    String
+  response      SatisfactionResponse        @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      SatisfactionQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  valorNumero   Int?
+  valorTexto    String?
+  valorBooleano Boolean?
+  optionId      String?
+  opcao         SatisfactionQuestionOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  opcoesMultiplas SatisfactionAnswerOption[]
+
+  @@unique([responseId, questionId])
+  @@index([questionId])
+}
+
+model SatisfactionAnswerOption {
+  id       String                     @id @default(cuid())
+  answerId String
+  answer   SatisfactionAnswer         @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  optionId String
+  option   SatisfactionQuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([answerId, optionId])
 }
 
 // ---------------------------------------------------------------------------

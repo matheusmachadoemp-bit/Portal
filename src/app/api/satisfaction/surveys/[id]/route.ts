@@ -59,15 +59,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const incomingQuestions: Record<string, unknown>[] = body.perguntas || [];
-    const existingQuestions = await prisma.satisfactionQuestion.findMany({ where: { surveyId: id }, select: { id: true } });
+    const existingQuestions = await prisma.satisfactionQuestion.findMany({
+      where: { surveyId: id },
+      select: { id: true, _count: { select: { respostas: true } } },
+    });
+    const answeredIds = new Set(existingQuestions.filter((q) => q._count.respostas > 0).map((q) => q.id));
     const incomingIds = new Set(incomingQuestions.map((q) => q.id).filter(Boolean));
-    const removedIds = existingQuestions.filter((q) => !incomingIds.has(q.id)).map((q) => q.id);
+    const removedQuestions = existingQuestions.filter((q) => !incomingIds.has(q.id));
+    const removedIdsToDelete = removedQuestions.filter((q) => !answeredIds.has(q.id)).map((q) => q.id);
+    const removedIdsToDeactivate = removedQuestions.filter((q) => answeredIds.has(q.id)).map((q) => q.id);
     const startDate = body.startDate ? new Date(body.startDate) : survey.startDate;
     const endDate = body.endDate ? new Date(body.endDate) : survey.endDate;
     const status = computeSurveyStatus({ startDate, endDate, currentStatus: survey.status, publish: body.publish === true });
 
     await prisma.$transaction([
-      ...(removedIds.length ? [prisma.satisfactionQuestion.deleteMany({ where: { id: { in: removedIds } } })] : []),
+      // Perguntas sem resposta alguma podem ser removidas de verdade; perguntas já
+      // respondidas são só desativadas, para nunca apagar o histórico de respostas.
+      ...(removedIdsToDelete.length ? [prisma.satisfactionQuestion.deleteMany({ where: { id: { in: removedIdsToDelete } } })] : []),
+      ...(removedIdsToDeactivate.length
+        ? [prisma.satisfactionQuestion.updateMany({ where: { id: { in: removedIdsToDeactivate } }, data: { ativo: false } })]
+        : []),
       prisma.satisfactionAudience.deleteMany({ where: { surveyId: id } }),
       ...(publico.length
         ? [
@@ -84,6 +95,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           orientacao: (q.orientacao as string) || null,
           obrigatoria: (q.obrigatoria as boolean) ?? true,
           ordem: idx,
+          ativo: true,
         };
         return q.id
           ? prisma.satisfactionQuestion.update({ where: { id: q.id as string }, data })
@@ -114,10 +126,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }),
     ]);
 
-    // Opções de perguntas que já existiam são substituídas por completo (perguntas
-    // novas já nasceram com as opções certas via nested create, acima).
+    // Opções só são substituídas por completo para perguntas que ainda não têm
+    // nenhuma resposta — uma vez respondida, a pergunta já nasceu com as opções
+    // certas (nested create) ou mantém as que já tinha, para não corromper
+    // respostas de múltipla escolha já registradas.
     for (const q of incomingQuestions) {
-      if (!q.id) continue;
+      if (!q.id || answeredIds.has(q.id as string)) continue;
       const opcoes = (q.opcoes as { texto: string }[]) || [];
       await prisma.satisfactionQuestionOption.deleteMany({ where: { questionId: q.id as string } });
       if (opcoes.length) {
