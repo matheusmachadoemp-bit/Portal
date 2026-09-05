@@ -236,6 +236,21 @@ const CATEGORIES = [
     contentType: "tarefas",
     subs: [{ key: "checklist", name: "Checklist", icon: "ClipboardCheck" }],
   },
+  {
+    key: "loja-nord",
+    name: "Loja Nord",
+    icon: "Gift",
+    order: 16,
+    contentType: "loja-nord",
+    subs: [
+      { key: "loja", name: "Loja", icon: "ShoppingBag" },
+      { key: "meus-pontos", name: "Meus Pontos", icon: "Coins" },
+      { key: "ranking", name: "Ranking", icon: "Trophy" },
+      { key: "meus-resgates", name: "Meus Resgates", icon: "PackageCheck" },
+      { key: "gestao", name: "Gestão", icon: "Settings" },
+      { key: "regras", name: "Regras de Pontuação", icon: "BookOpen" },
+    ],
+  },
 ];
 
 async function main() {

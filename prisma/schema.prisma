@@ -125,6 +125,10 @@ model User {
   checklistEscalationLogs       ChecklistEscalationLog[]
   checklistPontos               ChecklistPontos[]
   satisfactionSurveysCreated    SatisfactionSurvey[]       @relation("SatisfactionSurveyCreatedBy")
+  lojaNordTransactions          LojaNordPointTransaction[] @relation("LojaNordTransactionUser")
+  lojaNordTransactionsLancadas  LojaNordPointTransaction[] @relation("LojaNordTransactionCriador")
+  lojaNordRedemptions           LojaNordRedemption[]       @relation("LojaNordRedemptionUser")
+  lojaNordRedemptionsAprovadas  LojaNordRedemption[]       @relation("LojaNordRedemptionAprovador")
 }
 
 model UserPermission {
@@ -263,6 +267,8 @@ model Empresa {
   checklistTemplates        ChecklistTemplate[]
   checklistOccurrences      ChecklistOccurrence[]
   satisfactionAudiences     SatisfactionAudience[]
+  lojaNordRedemptions       LojaNordRedemption[]
+  lojaNordTransactions      LojaNordPointTransaction[]
 }
 
 model UserEmpresaAccess {
@@ -3151,4 +3157,139 @@ model Notification {
   createdAt             DateTime              @default(now())
 
   @@index([userId, read])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Loja Nord — sistema de pontos e recompensas dos colaboradores. O saldo de
+// um colaborador nunca é armazenado num campo próprio: é sempre a soma de
+// `LojaNordPointTransaction.pontos` (valor já com sinal — positivo para
+// ganhos/bonificações/ajustes a favor, negativo para resgates, ajustes
+// contra e expiração), o mesmo padrão de "somar o ledger" já usado por
+// ChecklistPontos/TrainingXpEvent no restante do Portal.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum LojaNordRewardCategory {
+  EXPERIENCIAS
+  FOLGAS_BENEFICIOS
+  BEBIDAS
+  ELETRONICOS
+  PRODUTOS_NORD
+  VALE_CONSUMO
+}
+
+enum LojaNordTransactionKind {
+  GANHO
+  BONIFICACAO
+  RESGATE
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  ESTORNO
+  EXPIRACAO
+}
+
+enum LojaNordRedemptionStatus {
+  AGUARDANDO_APROVACAO
+  APROVADO
+  DISPONIVEL_RETIRADA
+  ENTREGUE
+  RECUSADO
+  CANCELADO
+}
+
+/// Regra configurável de pontuação por tipo de atividade (Tela "Regras de
+/// pontuação"). `activityType` é uma chave livre (não enum) para permitir
+/// cadastrar novos tipos de atividade sem migração — a lógica de crédito
+/// automático (integração com Tarefas/Checklist/Cursos) busca a regra pelo
+/// `activityType` correspondente.
+model LojaNordPointRule {
+  id             String    @id @default(cuid())
+  activityType   String    @unique
+  label          String
+  pontos         Int
+  limiteDiario   Int?
+  limiteMensal   Int?
+  exigeValidacao Boolean   @default(false)
+  setores        String[]  @default([])
+  empresaIds     String[]  @default([])
+  validoDe       DateTime?
+  validoAte      DateTime?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  transactions LojaNordPointTransaction[]
+}
+
+/// Catálogo de brindes/benefícios resgatáveis. `estoque: null` representa
+/// estoque ilimitado (folgas e benefícios digitais). `empresaIds` vazio
+/// significa "disponível em todas as lojas".
+model LojaNordReward {
+  id                   String                 @id @default(cuid())
+  nome                 String
+  descricao            String?
+  categoria            LojaNordRewardCategory
+  imagemUrl            String?
+  pontos               Int
+  estoque              Int?
+  estoqueMinimo        Int?
+  limitePorColaborador Int?
+  disponivelDe         DateTime?
+  disponivelAte        DateTime?
+  empresaIds           String[]               @default([])
+  exigeAprovacao       Boolean                @default(true)
+  regras               String?
+  active               Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  redemptions LojaNordRedemption[]
+}
+
+model LojaNordRedemption {
+  id            String                   @id @default(cuid())
+  userId        String
+  user          User                     @relation("LojaNordRedemptionUser", fields: [userId], references: [id])
+  empresaId     String
+  empresa       Empresa                  @relation(fields: [empresaId], references: [id])
+  rewardId      String
+  reward        LojaNordReward           @relation(fields: [rewardId], references: [id])
+  pontos        Int
+  status        LojaNordRedemptionStatus @default(AGUARDANDO_APROVACAO)
+  dataPrevista  DateTime?
+  aprovadoPorId String?
+  aprovadoPor   User?                    @relation("LojaNordRedemptionAprovador", fields: [aprovadoPorId], references: [id])
+  motivoRecusa  String?
+  observacoes   String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  transactions LojaNordPointTransaction[]
+
+  @@index([userId, createdAt])
+  @@index([empresaId, status])
+}
+
+model LojaNordPointTransaction {
+  id            String                  @id @default(cuid())
+  userId        String
+  user          User                    @relation("LojaNordTransactionUser", fields: [userId], references: [id])
+  empresaId     String
+  empresa       Empresa                 @relation(fields: [empresaId], references: [id])
+  kind          LojaNordTransactionKind
+  pontos        Int
+  origem        String
+  descricao     String
+  setor         String?
+  ruleId        String?
+  rule          LojaNordPointRule?      @relation(fields: [ruleId], references: [id])
+  redemptionId  String?
+  redemption    LojaNordRedemption?     @relation(fields: [redemptionId], references: [id])
+  criadoPorId   String?
+  criadoPor     User?                   @relation("LojaNordTransactionCriador", fields: [criadoPorId], references: [id])
+  justificativa String?
+  validoAte     DateTime?
+  createdAt     DateTime                @default(now())
+
+  @@index([userId, createdAt])
+  @@index([empresaId, createdAt])
 }
