@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { upload } from "@vercel/blob/client";
+import { sanitizeFileName } from "@/lib/upload";
 import { Modal } from "@/components/ui/modal";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical, Upload } from "lucide-react";
 import { COURSE_CATEGORY_OPTIONS, COURSE_STATUS_OPTIONS, MODULE_TYPE_OPTIONS, QUESTION_TYPE_OPTIONS } from "@/lib/university";
 import type { CourseDTO } from "./university-types";
 
@@ -82,9 +84,27 @@ export function CourseBuilderModal({
   );
 
   const [saving, setSaving] = useState(false);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   function updateModule(idx: number, patch: Partial<ModuleForm>) {
     setModules((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  }
+
+  async function handleVideoUpload(idx: number, input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setUploadingIdx(idx);
+    try {
+      const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
+      updateModule(idx, { videoUrl: blob.url });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Falha ao enviar o vídeo.");
+    } finally {
+      setUploadingIdx(null);
+      input.value = "";
+    }
   }
   function addModule() {
     setModules((prev) => [...prev, { ...emptyModule }]);
@@ -288,12 +308,38 @@ export function CourseBuilderModal({
               </div>
               {m.type === "VIDEO" && (
                 <div className="grid grid-cols-3 gap-2">
-                  <input
-                    value={m.videoUrl}
-                    onChange={(e) => updateModule(idx, { videoUrl: e.target.value })}
-                    placeholder="URL do vídeo (mp4, YouTube embed...)"
-                    className="input col-span-2"
-                  />
+                  {m.videoUrl ? (
+                    <div className="input col-span-2 flex items-center justify-between gap-2 text-nord-gray">
+                      <span className="truncate">{m.videoUrl}</span>
+                      <button
+                        type="button"
+                        onClick={() => updateModule(idx, { videoUrl: "" })}
+                        className="text-nord-gray hover:text-red-400 shrink-0"
+                        title="Remover vídeo"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="col-span-2 flex gap-2">
+                      <label className="input flex-1 flex items-center justify-center gap-1.5 cursor-pointer text-nord-blue-light hover:text-white">
+                        <Upload size={13} />
+                        {uploadingIdx === idx ? "Enviando..." : "Enviar vídeo"}
+                        <input
+                          type="file"
+                          accept="video/*"
+                          hidden
+                          disabled={uploadingIdx === idx}
+                          onChange={(e) => handleVideoUpload(idx, e.target)}
+                        />
+                      </label>
+                      <input
+                        onChange={(e) => updateModule(idx, { videoUrl: e.target.value })}
+                        placeholder="ou cole um link (YouTube embed...)"
+                        className="input flex-1"
+                      />
+                    </div>
+                  )}
                   <input
                     type="number"
                     value={m.durationSeconds}
@@ -319,6 +365,7 @@ export function CourseBuilderModal({
           <button onClick={addModule} className="flex items-center gap-1.5 text-xs text-nord-blue-light hover:text-white">
             <Plus size={13} /> Adicionar módulo
           </button>
+          {uploadError && <p className="text-xs text-red-400">{uploadError}</p>}
         </div>
       )}
 
