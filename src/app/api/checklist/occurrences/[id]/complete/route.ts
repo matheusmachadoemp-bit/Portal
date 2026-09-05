@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
+import { CHECKLIST_PONTOS_POR_CONCLUSAO } from "@/lib/checklist";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -21,6 +22,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     },
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
+  if (occurrence.completedAt) {
+    return NextResponse.json({ error: "Esse checklist já foi concluído." }, { status: 400 });
+  }
 
   const responseByItem = new Map(occurrence.respostas.map((r) => [r.itemTemplateId, r]));
   const itensAtivos = occurrence.template.itens.filter((item) => item.ativo);
@@ -56,10 +60,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const now = new Date();
   const status = now.getTime() <= occurrence.dueAt.getTime() ? "CONCLUIDO_NO_PRAZO" : "CONCLUIDO_COM_ATRASO";
 
-  const updated = await prisma.checklistOccurrence.update({
-    where: { id },
-    data: { completedAt: now, status },
-  });
+  const [updated] = await prisma.$transaction([
+    prisma.checklistOccurrence.update({
+      where: { id },
+      data: { completedAt: now, status },
+    }),
+    ...(occurrence.responsavelId
+      ? [
+          prisma.checklistPontos.create({
+            data: { userId: occurrence.responsavelId, occurrenceId: id, pontos: CHECKLIST_PONTOS_POR_CONCLUSAO },
+          }),
+        ]
+      : []),
+  ]);
 
-  return NextResponse.json({ occurrence: updated });
+  return NextResponse.json({
+    occurrence: updated,
+    pontosGanhos: occurrence.responsavelId ? CHECKLIST_PONTOS_POR_CONCLUSAO : 0,
+  });
 }

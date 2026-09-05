@@ -18,6 +18,7 @@ import {
   MessageSquareWarning,
   Images,
   History,
+  Trophy,
 } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -263,6 +264,13 @@ export function ChecklistClient({
   const [viewingHistoricoId, setViewingHistoricoId] = useState<string | null>(null);
   const [detail, setDetail] = useState<OccurrenceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [ranking, setRanking] = useState<{ userId: string; name: string; pontos: number }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/checklist/pontos")
+      .then((res) => res.json())
+      .then((data) => setRanking(data.ranking ?? []));
+  }, []);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -767,6 +775,21 @@ export function ChecklistClient({
           </table>
         </div>
       </Section>
+
+      {ranking.length > 0 && (
+        <Section title="Ranking de pontos">
+          <div className="space-y-1.5">
+            {ranking.map((r, idx) => (
+              <div key={r.userId} className="flex items-center gap-3 text-sm">
+                <span className="w-5 text-nord-gray text-xs">{idx + 1}º</span>
+                {idx === 0 && <Trophy size={14} className="text-amber-400" />}
+                <span className="flex-1 text-white truncate">{r.name}</span>
+                <span className="text-nord-gray font-mono">{r.pontos} pts</span>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* Modal: Nova/Editar checklist */}
       <Modal
