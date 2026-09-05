@@ -94,6 +94,7 @@ const CATEGORIES = [
       { key: "ferias", name: "Férias", icon: "Palmtree" },
       { key: "uniformes", name: "Uniformes", icon: "Shirt" },
       { key: "documentos", name: "Documentos", icon: "FolderOpen" },
+      { key: "pesquisa-satisfacao", name: "Pesquisa de Satisfação", icon: "Smile" },
       { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
     ],
   },
