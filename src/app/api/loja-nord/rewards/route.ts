@@ -38,3 +38,44 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ rewards: visiveis });
 }
+
+/** Cadastra um novo brinde no catálogo (Administrador/Gestor). */
+export async function POST(req: Request) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return NextResponse.json({ error: "Sem permissão para cadastrar brindes." }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body?.nome || !body?.categoria || !Number.isFinite(body?.pontos)) {
+    return NextResponse.json({ error: "Preencha nome, categoria e quantidade de pontos." }, { status: 400 });
+  }
+
+  const reward = await prisma.lojaNordReward.create({
+    data: {
+      nome: body.nome,
+      descricao: body.descricao || null,
+      categoria: body.categoria,
+      imagemUrl: body.imagemUrl || null,
+      pontos: Math.max(0, Math.round(body.pontos)),
+      estoque: body.estoque === null || body.estoque === "" || body.estoque === undefined ? null : Math.max(0, Math.round(body.estoque)),
+      estoqueMinimo:
+        body.estoqueMinimo === null || body.estoqueMinimo === "" || body.estoqueMinimo === undefined
+          ? null
+          : Math.max(0, Math.round(body.estoqueMinimo)),
+      limitePorColaborador:
+        body.limitePorColaborador === null || body.limitePorColaborador === "" || body.limitePorColaborador === undefined
+          ? null
+          : Math.max(1, Math.round(body.limitePorColaborador)),
+      disponivelDe: body.disponivelDe ? new Date(body.disponivelDe) : null,
+      disponivelAte: body.disponivelAte ? new Date(body.disponivelAte) : null,
+      empresaIds: Array.isArray(body.empresaIds) ? body.empresaIds : [],
+      exigeAprovacao: body.exigeAprovacao !== false,
+      regras: body.regras || null,
+      active: body.active !== false,
+    },
+  });
+
+  return NextResponse.json({ reward });
+}
