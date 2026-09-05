@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { TASK_PRIORITY_LABEL, TASK_PRIORITY_COLOR } from "@/lib/tarefas";
 import type { TaskDTO } from "./types";
 
@@ -57,18 +57,23 @@ export function TaskDashboardCards({ tasks }: { tasks: TaskDTO[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Tarefas hoje" value={String(stats.hoje.length)} icon="CalendarClock" color="#2952E3" />
-        <StatCard
-          label="Concluídas"
-          value={String(stats.concluidas.length)}
-          icon="CheckCircle2"
-          color="#22c55e"
-          hint={`${tasks.length ? Math.round((stats.concluidas.length / tasks.length) * 100) : 0}% do total`}
-        />
-        <StatCard label="Em andamento" value={String(stats.emAndamento.length)} icon="Clock" color="#eab308" />
-        <StatCard label="Atrasadas" value={String(stats.atrasadas.length)} icon="AlertTriangle" color="#ef4444" />
-      </div>
+      <SortableStatCards
+        storageKey="tarefas-dashboard-kpi-order"
+        className="grid grid-cols-2 md:grid-cols-4 gap-3"
+        cards={[
+          { key: "tarefas-hoje", label: "Tarefas hoje", value: String(stats.hoje.length), icon: "CalendarClock", color: "#2952E3" },
+          {
+            key: "concluidas",
+            label: "Concluídas",
+            value: String(stats.concluidas.length),
+            icon: "CheckCircle2",
+            color: "#22c55e",
+            hint: `${tasks.length ? Math.round((stats.concluidas.length / tasks.length) * 100) : 0}% do total`,
+          },
+          { key: "em-andamento", label: "Em andamento", value: String(stats.emAndamento.length), icon: "Clock", color: "#eab308" },
+          { key: "atrasadas", label: "Atrasadas", value: String(stats.atrasadas.length), icon: "AlertTriangle", color: "#ef4444" },
+        ]}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="nord-card p-4 flex items-center gap-4">
