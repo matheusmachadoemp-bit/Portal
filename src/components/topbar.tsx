@@ -1,7 +1,8 @@
 "use client";
 
-import { Bell, Search, Building2 } from "lucide-react";
+import { Bell, Search, Building2, Menu } from "lucide-react";
 import { useState } from "react";
+import { useMobileSidebar } from "@/components/sidebar/mobile-sidebar-context";
 
 export function Topbar({
   title,
@@ -15,12 +16,22 @@ export function Topbar({
   empresaColor?: string;
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
+  const { setOpen: setMobileMenuOpen } = useMobileSidebar();
 
   return (
-    <header className="h-16 border-b border-nord-border bg-nord-panel/60 backdrop-blur sticky top-0 z-30 flex items-center justify-between px-6">
-      <div>
-        <h1 className="text-white font-semibold text-lg leading-tight">{title}</h1>
-        {subtitle && <p className="text-nord-gray text-xs">{subtitle}</p>}
+    <header className="h-16 border-b border-nord-border bg-nord-panel/60 backdrop-blur sticky top-0 z-30 flex items-center justify-between px-4 md:px-6 gap-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="md:hidden shrink-0 text-nord-gray hover:text-white p-2 -ml-2 rounded-lg hover:bg-white/5"
+          aria-label="Abrir menu"
+        >
+          <Menu size={20} />
+        </button>
+        <div className="min-w-0">
+          <h1 className="text-white font-semibold text-lg leading-tight truncate">{title}</h1>
+          {subtitle && <p className="text-nord-gray text-xs truncate">{subtitle}</p>}
+        </div>
       </div>
       <div className="flex items-center gap-3">
         {empresaLabel && (
