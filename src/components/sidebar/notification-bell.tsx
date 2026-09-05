@@ -12,6 +12,7 @@ type NotificationDTO = {
   priority: "INFORMACAO" | "ATENCAO" | "CRITICA" | null;
   taskId: string | null;
   checklistOccurrenceId: string | null;
+  chamadoId: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -91,6 +92,7 @@ export function NotificationBell() {
     load();
     if (n.checklistOccurrenceId) router.push(`/portal/tarefas/checklist/executar/${n.checklistOccurrenceId}`);
     else if (n.taskId) router.push("/portal/tarefas");
+    else if (n.chamadoId) router.push(`/portal/manutencao/chamados/${n.chamadoId}`);
   }
 
   return (
