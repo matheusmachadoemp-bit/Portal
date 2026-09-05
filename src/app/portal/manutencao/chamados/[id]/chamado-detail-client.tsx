@@ -15,28 +15,38 @@ import {
   CHAMADO_STATUS_COLOR,
   CHAMADO_STATUS_LABEL,
   KANBAN_COLUMNS,
+  ORCAMENTO_STATUS_LABEL,
+  ORCAMENTO_STATUS_TONE,
   describeChamadoHistoricoAction,
 } from "@/lib/manutencao";
+import { formatCurrency } from "@/lib/calc";
 import { ManutencaoRegistroModal } from "../../manutencao-registro-modal";
+import { OrcamentoFormModal } from "../../orcamento-form-modal";
 import type { ChamadoDTO, AnexoDraft } from "../../types";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
 type UserOption = { id: string; name: string };
+type PrestadorOption = { id: string; nome: string };
 
 export function ChamadoDetailClient({
   chamado,
   teamMembers,
+  prestadores,
   currentUserId,
   currentUserRole,
 }: {
   chamado: ChamadoDTO;
   teamMembers: UserOption[];
+  prestadores: PrestadorOption[];
   currentUserId: string;
   currentUserRole: string;
 }) {
   const [comentarios, setComentarios] = useState(chamado.comentarios ?? []);
   const [anexos, setAnexos] = useState(chamado.anexos ?? []);
+  const [orcamentos, setOrcamentos] = useState(chamado.orcamentos ?? []);
+  const [showOrcamentoModal, setShowOrcamentoModal] = useState(false);
+  const [recusaDraft, setRecusaDraft] = useState<Record<string, string>>({});
   const [comentario, setComentario] = useState("");
   const [descricaoSolucao, setDescricaoSolucao] = useState(chamado.descricaoSolucao ?? "");
   const [responsavelId, setResponsavelId] = useState(chamado.responsavelId ?? "");
@@ -137,6 +147,29 @@ export function ChamadoDetailClient({
     }
   }
 
+  async function updateOrcamentoStatus(orcamentoId: string, status: string, motivoRecusa?: string) {
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/manutencao/orcamentos/${orcamentoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, motivoRecusa }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Erro ao atualizar orçamento.");
+      }
+      const data = await res.json();
+      setOrcamentos((prev) => prev.map((o) => (o.id === orcamentoId ? { ...o, ...data.orcamento } : o)));
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar orçamento.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
       <div className="xl:col-span-2 space-y-6">
@@ -232,6 +265,73 @@ export function ChamadoDetailClient({
           </div>
         </Section>
 
+        <Section
+          title="Orçamentos"
+          action={
+            canManage && (
+              <button className="text-xs text-nord-blue-light hover:underline" onClick={() => setShowOrcamentoModal(true)}>
+                + Adicionar orçamento
+              </button>
+            )
+          }
+        >
+          <div className="space-y-3">
+            {orcamentos.map((o) => (
+              <div key={o.id} className="border-b border-nord-border/50 pb-3 last:border-0">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-white font-medium">{o.prestador.nome}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white">{formatCurrency(o.valorTotal)}</span>
+                    <Badge tone={ORCAMENTO_STATUS_TONE[o.status]}>{ORCAMENTO_STATUS_LABEL[o.status] ?? o.status}</Badge>
+                  </div>
+                </div>
+                {o.descricao && <p className="text-xs text-nord-gray mt-1">{o.descricao}</p>}
+                <div className="flex items-center gap-3 text-[11px] text-nord-gray mt-1">
+                  {o.prazo && <span>Prazo: {o.prazo}</span>}
+                  {o.garantia && <span>Garantia: {o.garantia}</span>}
+                </div>
+                {o.anexos && o.anexos.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {o.anexos.map((a) => (
+                      <a key={a.id} href={a.fileUrl} target="_blank" rel="noreferrer" className="text-[11px] text-nord-blue-light hover:underline">
+                        {a.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {o.status === "RECUSADO" && o.motivoRecusa && (
+                  <p className="text-xs text-nord-danger mt-1">Motivo: {o.motivoRecusa}</p>
+                )}
+                {canManage && (o.status === "RECEBIDO" || o.status === "EM_ANALISE") && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      className="text-xs px-2.5 py-1 rounded-lg bg-nord-success/15 text-nord-success hover:bg-nord-success/25"
+                      onClick={() => updateOrcamentoStatus(o.id, "APROVADO")}
+                      disabled={saving}
+                    >
+                      Aprovar
+                    </button>
+                    <input
+                      className="input flex-1 text-xs py-1"
+                      placeholder="Motivo da recusa (obrigatório)"
+                      value={recusaDraft[o.id] ?? ""}
+                      onChange={(e) => setRecusaDraft((prev) => ({ ...prev, [o.id]: e.target.value }))}
+                    />
+                    <button
+                      className="text-xs px-2.5 py-1 rounded-lg bg-nord-danger/15 text-nord-danger hover:bg-nord-danger/25"
+                      onClick={() => updateOrcamentoStatus(o.id, "RECUSADO", recusaDraft[o.id])}
+                      disabled={saving || !recusaDraft[o.id]?.trim()}
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {orcamentos.length === 0 && <p className="text-sm text-nord-gray text-center py-4">Nenhum orçamento registrado ainda.</p>}
+          </div>
+        </Section>
+
         {(chamado.registros ?? []).length > 0 && (
           <Section title="Manutenções registradas para este chamado">
             <div className="space-y-2">
@@ -317,6 +417,17 @@ export function ChamadoDetailClient({
           }}
         />
       )}
+
+      <OrcamentoFormModal
+        open={showOrcamentoModal}
+        onClose={() => setShowOrcamentoModal(false)}
+        chamadoId={chamado.id}
+        prestadores={prestadores}
+        onSaved={() => {
+          setShowOrcamentoModal(false);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

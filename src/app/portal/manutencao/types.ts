@@ -87,7 +87,46 @@ export type ChamadoDTO = {
   comentarios?: ComentarioDTO[];
   historico?: ChamadoHistoricoDTO[];
   registros?: ManutencaoRegistroDTO[];
+  orcamentos?: OrcamentoDTO[];
   _count?: { comentarios: number };
+};
+
+export type PrestadorDTO = {
+  id: string;
+  nome: string;
+  nomeContato: string | null;
+  especialidade: string | null;
+  telefone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  documento: string | null;
+  endereco: string | null;
+  empresaIds: string[];
+  avaliacao: number | null;
+  observacoes: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { orcamentos: number; registros: number };
+  valorTotalGasto?: number;
+};
+
+export type OrcamentoDTO = {
+  id: string;
+  chamadoId: string;
+  prestadorId: string;
+  prestador: PrestadorDTO;
+  descricao: string | null;
+  valorMaoDeObra: number;
+  valorPecas: number;
+  valorTotal: number;
+  prazo: string | null;
+  garantia: string | null;
+  status: "RECEBIDO" | "EM_ANALISE" | "APROVADO" | "RECUSADO" | "EXPIRADO";
+  motivoRecusa: string | null;
+  createdAt: string;
+  updatedAt: string;
+  anexos?: AnexoDTO[];
 };
 
 export type ManutencaoRegistroDTO = {

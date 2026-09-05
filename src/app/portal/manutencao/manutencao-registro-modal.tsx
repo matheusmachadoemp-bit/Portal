@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Upload as UploadIcon, X } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { Modal, FormError } from "@/components/ui/modal";
 import { MANUTENCAO_TIPO_OPTIONS } from "@/lib/manutencao";
 import type { AnexoDraft } from "./types";
+
+type PrestadorOption = { id: string; nome: string };
 
 const emptyForm = () => ({
   tipo: "CORRETIVA",
@@ -17,6 +19,7 @@ const emptyForm = () => ({
   problemaEncontrado: "",
   solucaoAplicada: "",
   pecasTrocadas: "",
+  prestadorId: "",
   prestador: "",
   valorMaoDeObra: "",
   valorPecas: "",
@@ -42,9 +45,18 @@ export function ManutencaoRegistroModal({
   const [form, setForm] = useState(emptyForm());
   const [anexosAntes, setAnexosAntes] = useState<AnexoDraft[]>([]);
   const [anexosDepois, setAnexosDepois] = useState<AnexoDraft[]>([]);
+  const [prestadores, setPrestadores] = useState<PrestadorOption[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/manutencao/prestadores?active=true")
+      .then((res) => res.json())
+      .then((data) => setPrestadores(data.prestadores ?? []))
+      .catch(() => {});
+  }, [open]);
 
   function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -167,7 +179,30 @@ export function ManutencaoRegistroModal({
           </div>
           <div>
             <label className="text-xs text-nord-gray mb-1 block">Prestador</label>
-            <input className="input w-full" value={form.prestador} onChange={(e) => set("prestador", e.target.value)} />
+            {prestadores.length > 0 ? (
+              <select
+                className="input w-full"
+                value={form.prestadorId}
+                onChange={(e) => {
+                  const p = prestadores.find((pr) => pr.id === e.target.value);
+                  set("prestadorId", e.target.value);
+                  set("prestador", p?.nome ?? "");
+                }}
+              >
+                <option value="">Digitar manualmente...</option>
+                {prestadores.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            ) : null}
+            {!form.prestadorId && (
+              <input
+                className="input w-full mt-2"
+                placeholder="Nome do prestador"
+                value={form.prestador}
+                onChange={(e) => set("prestador", e.target.value)}
+              />
+            )}
           </div>
         </div>
 
