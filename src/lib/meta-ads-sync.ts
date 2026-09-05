@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
 import { fetchMetaAdsInsights, fetchInstagramFollowers } from "@/lib/meta-ads-client";
@@ -15,54 +16,69 @@ type SyncableEmpresa = Pick<
   | "metaAdsInstagramAccountId"
 >;
 
-/** Cria/atualiza as linhas de MetaAdsInsight de um lote já buscado da Graph API. */
+/**
+ * Cria/atualiza as linhas de MetaAdsInsight de um lote já buscado da Graph
+ * API, numa única instrução SQL (INSERT ... ON CONFLICT DO UPDATE via
+ * UNNEST). Uma versão anterior fazia isso com um SELECT de "já existe?" e
+ * depois um `$transaction` com um `update()` por linha — rápido na primeira
+ * sincronização (tudo era `create`), mas ao rodar de novo sobre um período já
+ * sincronizado (centenas de `update()` sequenciais, cada um uma viagem
+ * separada ao banco) ficava lento a ponto de estourar o tempo da função
+ * serverless. O upsert em lote resolve tudo numa única ida ao banco,
+ * independente de quantas linhas já existirem.
+ */
 async function upsertMetaAdsInsightRows(empresaId: string, insightsData: ReturnType<typeof toMetaAdsInsightData>[]) {
   if (insightsData.length === 0) return;
 
-  const compositeKey = (d: (typeof insightsData)[number]) =>
-    [new Date(d.dateStart).getTime(), new Date(d.dateStop).getTime(), d.campaignId, d.publisherPlatform ?? "", d.platformPosition ?? ""].join(
-      "|"
-    );
+  const n = insightsData.length;
+  const ids = insightsData.map(() => randomUUID());
+  const empresaIds = new Array(n).fill(empresaId);
+  const dateStarts = insightsData.map((d) => new Date(d.dateStart));
+  const dateStops = insightsData.map((d) => new Date(d.dateStop));
+  const campaignIds = insightsData.map((d) => d.campaignId);
+  const campaignNames = insightsData.map((d) => d.campaignName);
+  const publisherPlatforms = insightsData.map((d) => d.publisherPlatform ?? "");
+  const platformPositions = insightsData.map((d) => d.platformPosition ?? "");
+  const spends = insightsData.map((d) => d.spend ?? 0);
+  const impressions = insightsData.map((d) => d.impressions ?? 0);
+  const reach = insightsData.map((d) => d.reach ?? 0);
+  const clicks = insightsData.map((d) => d.clicks ?? 0);
+  const linkClicks = insightsData.map((d) => d.linkClicks ?? 0);
+  const landingPageViews = insightsData.map((d) => d.landingPageViews ?? 0);
+  const purchases = insightsData.map((d) => d.purchases ?? 0);
+  const purchaseValues = insightsData.map((d) => d.purchaseValue ?? 0);
+  const raws = insightsData.map((d) => JSON.stringify(d.raw ?? null));
 
-  const dateStarts = insightsData.map((d) => new Date(d.dateStart).getTime());
-  const existing = await prisma.metaAdsInsight.findMany({
-    where: {
-      empresaId,
-      dateStart: { gte: new Date(Math.min(...dateStarts)), lte: new Date(Math.max(...dateStarts)) },
-    },
-    select: { dateStart: true, dateStop: true, campaignId: true, publisherPlatform: true, platformPosition: true },
-  });
-  const existingKeys = new Set(
-    existing.map((e) =>
-      [e.dateStart.getTime(), e.dateStop.getTime(), e.campaignId, e.publisherPlatform ?? "", e.platformPosition ?? ""].join("|")
+  await prisma.$executeRaw`
+    INSERT INTO "MetaAdsInsight" (
+      id, "empresaId", "dateStart", "dateStop", "campaignId", "campaignName",
+      "publisherPlatform", "platformPosition", spend, impressions, reach, clicks,
+      "linkClicks", "landingPageViews", purchases, "purchaseValue", raw
     )
-  );
-
-  const toCreate = insightsData.filter((d) => !existingKeys.has(compositeKey(d)));
-  const toUpdate = insightsData.filter((d) => existingKeys.has(compositeKey(d)));
-
-  if (toCreate.length > 0) {
-    await prisma.metaAdsInsight.createMany({ data: toCreate, skipDuplicates: true });
-  }
-  if (toUpdate.length > 0) {
-    await prisma.$transaction(
-      toUpdate.map((data) =>
-        prisma.metaAdsInsight.update({
-          where: {
-            empresaId_dateStart_dateStop_campaignId_publisherPlatform_platformPosition: {
-              empresaId: data.empresaId,
-              dateStart: data.dateStart,
-              dateStop: data.dateStop,
-              campaignId: data.campaignId,
-              publisherPlatform: data.publisherPlatform ?? "",
-              platformPosition: data.platformPosition ?? "",
-            },
-          },
-          data,
-        })
-      )
-    );
-  }
+    SELECT id, empresa_id, date_start, date_stop, campaign_id, campaign_name,
+           publisher_platform, platform_position, spend, impressions, reach, clicks,
+           link_clicks, landing_page_views, purchases, purchase_value, raw_txt::jsonb
+    FROM UNNEST(
+      ${ids}::text[], ${empresaIds}::text[], ${dateStarts}::timestamp[], ${dateStops}::timestamp[],
+      ${campaignIds}::text[], ${campaignNames}::text[], ${publisherPlatforms}::text[], ${platformPositions}::text[],
+      ${spends}::float8[], ${impressions}::int[], ${reach}::int[], ${clicks}::int[],
+      ${linkClicks}::int[], ${landingPageViews}::int[], ${purchases}::int[], ${purchaseValues}::float8[], ${raws}::text[]
+    ) AS t(id, empresa_id, date_start, date_stop, campaign_id, campaign_name,
+           publisher_platform, platform_position, spend, impressions, reach, clicks,
+           link_clicks, landing_page_views, purchases, purchase_value, raw_txt)
+    ON CONFLICT ("empresaId", "dateStart", "dateStop", "campaignId", "publisherPlatform", "platformPosition")
+    DO UPDATE SET
+      "campaignName" = EXCLUDED."campaignName",
+      spend = EXCLUDED.spend,
+      impressions = EXCLUDED.impressions,
+      reach = EXCLUDED.reach,
+      clicks = EXCLUDED.clicks,
+      "linkClicks" = EXCLUDED."linkClicks",
+      "landingPageViews" = EXCLUDED."landingPageViews",
+      purchases = EXCLUDED.purchases,
+      "purchaseValue" = EXCLUDED."purchaseValue",
+      raw = EXCLUDED.raw
+  `;
 }
 
 /**
