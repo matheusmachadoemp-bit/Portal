@@ -4,7 +4,13 @@ import { authConfig } from "@/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC_PATHS = ["/login", "/esqueci-senha"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/esqueci-senha",
+  "/certificado",
+  "/pesquisa",
+  "/api/satisfaction/responder",
+];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -20,6 +26,8 @@ export default auth((req) => {
     isCronRequest ||
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/internal/diag-loja-nord-menu") ||
+    pathname.startsWith("/api/internal/revalidate-menu-cache") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
     pathname === "/favicon.ico";
