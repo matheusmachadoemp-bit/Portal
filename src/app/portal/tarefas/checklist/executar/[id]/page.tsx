@@ -6,7 +6,7 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { refreshOccurrenceStatuses } from "@/lib/checklist-server";
 
 const DETAIL_INCLUDE = {
-  template: { include: { itens: { orderBy: { ordem: "asc" as const } } } },
+  template: { include: { itens: { where: { ativo: true }, orderBy: { ordem: "asc" as const } } } },
   empresa: { select: { id: true, name: true } },
   responsavel: { select: { id: true, name: true } },
   respostas: { include: { fotos: true } },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
+import type { ChecklistItemType } from "@prisma/client";
 
 const WEEKDAYS = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"] as const;
 
@@ -21,9 +22,52 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
 
   const weekdayData = Object.fromEntries(WEEKDAYS.map((d) => [d, Boolean(body[d])]));
+  const incomingItens: Record<string, unknown>[] = body.itens || [];
+
+  const existingItens = await prisma.checklistItemTemplate.findMany({
+    where: { templateId: id },
+    select: { id: true, _count: { select: { respostas: true } } },
+  });
+  const incomingIds = new Set(incomingItens.map((item) => item.id).filter(Boolean));
+  const removedItens = existingItens.filter((item) => !incomingIds.has(item.id));
+  const removedIdsToDelete = removedItens.filter((item) => item._count.respostas === 0).map((item) => item.id);
+  const removedIdsToDeactivate = removedItens.filter((item) => item._count.respostas > 0).map((item) => item.id);
 
   await prisma.$transaction([
-    prisma.checklistItemTemplate.deleteMany({ where: { templateId: id } }),
+    // Itens sem histórico podem ser removidos de verdade; itens já respondidos
+    // em alguma execução são só desativados, para nunca apagar o histórico.
+    ...(removedIdsToDelete.length
+      ? [prisma.checklistItemTemplate.deleteMany({ where: { id: { in: removedIdsToDelete } } })]
+      : []),
+    ...(removedIdsToDeactivate.length
+      ? [prisma.checklistItemTemplate.updateMany({ where: { id: { in: removedIdsToDeactivate } }, data: { ativo: false } })]
+      : []),
+    ...incomingItens.map((item, idx) =>
+      item.id
+        ? prisma.checklistItemTemplate.update({
+            where: { id: item.id as string },
+            data: {
+              title: item.title as string,
+              orientacao: (item.orientacao as string) || null,
+              tipo: ((item.tipo as string) || "CONCLUIDO") as ChecklistItemType,
+              obrigatorio: (item.obrigatorio as boolean) ?? true,
+              fotoObrigatoria: Boolean(item.fotoObrigatoria),
+              ordem: idx,
+              ativo: true,
+            },
+          })
+        : prisma.checklistItemTemplate.create({
+            data: {
+              templateId: id,
+              title: item.title as string,
+              orientacao: (item.orientacao as string) || null,
+              tipo: ((item.tipo as string) || "CONCLUIDO") as ChecklistItemType,
+              obrigatorio: (item.obrigatorio as boolean) ?? true,
+              fotoObrigatoria: Boolean(item.fotoObrigatoria),
+              ordem: idx,
+            },
+          })
+    ),
     prisma.checklistTemplate.update({
       where: { id, empresaId: empresa.id },
       data: {
@@ -49,23 +93,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         avisoAtrasoResponsavelMinutos: Number(body.avisoAtrasoResponsavelMinutos) || 10,
         alertaCriticoMinutos: Number(body.alertaCriticoMinutos) || 30,
         naoRealizadoMinutos: Number(body.naoRealizadoMinutos) || 60,
-        itens: {
-          create: (body.itens || []).map((item: Record<string, unknown>, idx: number) => ({
-            title: item.title,
-            orientacao: item.orientacao || null,
-            tipo: item.tipo || "CONCLUIDO",
-            obrigatorio: item.obrigatorio ?? true,
-            fotoObrigatoria: Boolean(item.fotoObrigatoria),
-            ordem: idx,
-          })),
-        },
       },
     }),
   ]);
 
   const updated = await prisma.checklistTemplate.findUnique({
     where: { id },
-    include: { itens: { orderBy: { ordem: "asc" } } },
+    include: { itens: { where: { ativo: true }, orderBy: { ordem: "asc" } } },
   });
 
   return NextResponse.json({ template: updated });

@@ -23,8 +23,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
 
   const responseByItem = new Map(occurrence.respostas.map((r) => [r.itemTemplateId, r]));
+  const itensAtivos = occurrence.template.itens.filter((item) => item.ativo);
 
-  const pendentes = occurrence.template.itens.filter((item) => {
+  const pendentes = itensAtivos.filter((item) => {
     if (!item.obrigatorio) return false;
     const resp = responseByItem.get(item.id);
     return !resp || resp.status === "PENDENTE";
@@ -36,7 +37,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const semFotoObrigatoria = occurrence.template.itens.filter((item) => {
+  const semFotoObrigatoria = itensAtivos.filter((item) => {
     if (!item.fotoObrigatoria) return false;
     const resp = responseByItem.get(item.id);
     return !resp || resp.fotos.length === 0;

@@ -1212,6 +1212,9 @@ model ChecklistItemTemplate {
   obrigatorio     Boolean           @default(true)
   fotoObrigatoria Boolean           @default(false)
   ordem           Int               @default(0)
+  /// Itens removidos por edição do template são desativados (não excluídos)
+  /// quando já têm respostas registradas, para preservar o histórico.
+  ativo           Boolean           @default(true)
   createdAt       DateTime          @default(now())
 
   respostas ChecklistItemResponse[]
