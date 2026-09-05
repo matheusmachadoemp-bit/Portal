@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { SATISFACTION_STATUS_LABEL } from "@/lib/satisfaction";
+import { ResultadosClient } from "./resultados-client";
 
 export default async function ResultadosPesquisaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,16 +26,13 @@ export default async function ResultadosPesquisaPage({ params }: { params: Promi
       backHref="/portal/rh/pesquisa-satisfacao"
       backLabel="Voltar para Pesquisa de Satisfação"
     >
-      <div className="nord-card p-4 space-y-1 text-sm">
+      <div className="nord-card p-4 space-y-1 text-sm mb-4">
         <p className="text-white font-medium">{survey.title}</p>
         <p className="text-nord-gray text-xs">{survey.publico.map((p) => p.empresa.name).join(", ")}</p>
         <p className="text-nord-gray text-xs">Status: {SATISFACTION_STATUS_LABEL[survey.status]}</p>
         <p className="text-nord-gray text-xs">{survey.perguntas.length} pergunta(s) configurada(s)</p>
       </div>
-      <div className="nord-card p-6 text-center text-sm text-nord-gray mt-4">
-        Ainda não há respostas para essa pesquisa. Os indicadores (eNPS, satisfação, participação e comentários) aparecerão
-        aqui assim que as respostas começarem a chegar.
-      </div>
+      <ResultadosClient surveyId={survey.id} />
     </PageContainer>
   );
 }

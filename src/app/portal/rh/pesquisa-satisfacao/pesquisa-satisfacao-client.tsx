@@ -29,10 +29,12 @@ export function PesquisaSatisfacaoClient({
   initialSurveys,
   empresas,
   canCreate,
+  enpsGeral,
 }: {
   initialSurveys: Survey[];
   empresas: { id: string; name: string }[];
   canCreate: boolean;
+  enpsGeral: number | null;
 }) {
   const router = useRouter();
   const [surveys, setSurveys] = useState(initialSurveys);
@@ -210,7 +212,13 @@ export function PesquisaSatisfacaoClient({
           { key: "ativas", label: "Pesquisas em andamento", value: String(kpis.ativas), icon: "PlayCircle", color: "#1464F4" },
           { key: "total", label: "Total de pesquisas", value: String(kpis.total), icon: "ListChecks", color: "#3B82F6" },
           { key: "lojas", label: "Lojas alcançadas", value: String(kpis.lojasAlcancadas), icon: "Building2", color: "#22c55e" },
-          { key: "enps", label: "eNPS da equipe", value: "—", icon: "Smile", color: "#f59e0b" },
+          {
+            key: "enps",
+            label: "eNPS da equipe",
+            value: enpsGeral != null ? String(enpsGeral) : "—",
+            icon: "Smile",
+            color: enpsGeral == null ? "#9AA4B2" : enpsGeral >= 0 ? "#22c55e" : "#ef4444",
+          },
         ]}
       />
 
