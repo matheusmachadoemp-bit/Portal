@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ChecklistClient } from "./checklist-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { generateChecklistOccurrences, refreshOccurrenceStatuses } from "@/lib/checklist-server";
+import { generateChecklistOccurrences, processChecklistEscalations, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { spDateKey, spStartOfDay } from "@/lib/checklist";
 
 const OCCURRENCE_INCLUDE = {
@@ -32,6 +32,7 @@ export default async function ChecklistPage() {
     select: { id: true },
   });
   await refreshOccurrenceStatuses(existing.map((o) => o.id));
+  await processChecklistEscalations(existing.map((o) => o.id));
 
   const [occurrences, templates, users] = await Promise.all([
     prisma.checklistOccurrence.findMany({
@@ -42,7 +43,7 @@ export default async function ChecklistPage() {
     prisma.checklistTemplate.findMany({
       where: { empresaId: { in: empresaIds } },
       include: {
-        itens: { orderBy: { ordem: "asc" } },
+        itens: { where: { ativo: true }, orderBy: { ordem: "asc" } },
         responsavel: { select: { id: true, name: true } },
         substituto: { select: { id: true, name: true } },
         empresa: { select: { id: true, name: true } },

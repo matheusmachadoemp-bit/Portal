@@ -1,4 +1,4 @@
-import type { ChecklistOccurrenceStatus } from "@prisma/client";
+import type { ChecklistEscalationType, ChecklistOccurrenceStatus, NotificationPriority } from "@prisma/client";
 
 /**
  * Brasil não observa horário de verão desde 2019 — America/Sao_Paulo é
@@ -34,6 +34,9 @@ const WEEKDAY_FIELDS = ["domingo", "segunda", "terca", "quarta", "quinta", "sext
 export function weekdayFieldFor(dateKey: string): (typeof WEEKDAY_FIELDS)[number] {
   return WEEKDAY_FIELDS[spWeekday(dateKey)];
 }
+
+/** Pontos ganhos pelo responsável a cada checklist concluído. */
+export const CHECKLIST_PONTOS_POR_CONCLUSAO = 10;
 
 export const CHECKLIST_STATUS_LABEL: Record<ChecklistOccurrenceStatus, string> = {
   AGENDADO: "Agendado",
@@ -84,4 +87,63 @@ export function computeOccurrenceStatus(params: {
   if (now.getTime() >= dueAt.getTime()) return "ATRASADO";
   if (startedAt) return "EM_ANDAMENTO";
   return "DISPONIVEL";
+}
+
+/** Estados finais — uma vez atingidos, uma ocorrência nunca mais gera cobrança. */
+export const CHECKLIST_TERMINAL_STATUSES: ChecklistOccurrenceStatus[] = [
+  "CONCLUIDO_NO_PRAZO",
+  "CONCLUIDO_COM_ATRASO",
+  "JUSTIFICADO",
+  "CANCELADO",
+  "NAO_REALIZADO",
+];
+
+export const CHECKLIST_ESCALATION_PRIORITY: Record<ChecklistEscalationType, NotificationPriority> = {
+  AVISO_ANTES: "INFORMACAO",
+  NO_LIMITE: "ATENCAO",
+  ATRASO_RESPONSAVEL: "ATENCAO",
+  ALERTA_CRITICO: "CRITICA",
+  NAO_REALIZADO: "CRITICA",
+};
+
+/**
+ * Quais níveis de cobrança já deveriam ter disparado para uma ocorrência,
+ * dado o instante atual — puro, sem tocar no banco. O chamador cruza isso
+ * com o histórico de cobranças já enviadas (idempotência) para saber o que
+ * falta notificar. Uma ocorrência concluída ou num estado terminal nunca
+ * gera novos níveis (cobranças futuras são "canceladas" por construção).
+ */
+export function dueEscalationLevels(params: {
+  dueAt: Date;
+  completedAt: Date | null;
+  currentStatus: ChecklistOccurrenceStatus;
+  avisoAntesMinutos: number;
+  avisoAtrasoResponsavelMinutos: number;
+  alertaCriticoMinutos: number;
+  naoRealizadoMinutos: number;
+  now?: Date;
+}): ChecklistEscalationType[] {
+  const {
+    dueAt,
+    completedAt,
+    currentStatus,
+    avisoAntesMinutos,
+    avisoAtrasoResponsavelMinutos,
+    alertaCriticoMinutos,
+    naoRealizadoMinutos,
+    now = new Date(),
+  } = params;
+
+  if (completedAt || currentStatus === "JUSTIFICADO" || currentStatus === "CANCELADO" || currentStatus === "NAO_REALIZADO") {
+    return [];
+  }
+
+  const minutesFromDue = (now.getTime() - dueAt.getTime()) / 60000;
+  const levels: ChecklistEscalationType[] = [];
+  if (minutesFromDue >= -avisoAntesMinutos && minutesFromDue < 0) levels.push("AVISO_ANTES");
+  if (minutesFromDue >= 0) levels.push("NO_LIMITE");
+  if (minutesFromDue >= avisoAtrasoResponsavelMinutos) levels.push("ATRASO_RESPONSAVEL");
+  if (minutesFromDue >= alertaCriticoMinutos) levels.push("ALERTA_CRITICO");
+  if (minutesFromDue >= naoRealizadoMinutos) levels.push("NAO_REALIZADO");
+  return levels;
 }

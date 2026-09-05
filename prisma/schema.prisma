@@ -122,6 +122,13 @@ model User {
   checklistOccurrences          ChecklistOccurrence[]      @relation("ChecklistOccurrenceResponsavel")
   checklistItemResponses        ChecklistItemResponse[]
   checklistPhotos               ChecklistPhoto[]
+  checklistEscalationLogs       ChecklistEscalationLog[]
+  checklistPontos               ChecklistPontos[]
+  satisfactionSurveysCreated    SatisfactionSurvey[]       @relation("SatisfactionSurveyCreatedBy")
+  lojaNordTransactions          LojaNordPointTransaction[] @relation("LojaNordTransactionUser")
+  lojaNordTransactionsLancadas  LojaNordPointTransaction[] @relation("LojaNordTransactionCriador")
+  lojaNordRedemptions           LojaNordRedemption[]       @relation("LojaNordRedemptionUser")
+  lojaNordRedemptionsAprovadas  LojaNordRedemption[]       @relation("LojaNordRedemptionAprovador")
 }
 
 model UserPermission {
@@ -259,6 +266,10 @@ model Empresa {
   taskRecurrences           TaskRecurrence[]
   checklistTemplates        ChecklistTemplate[]
   checklistOccurrences      ChecklistOccurrence[]
+  satisfactionAudiences     SatisfactionAudience[]
+  lojaNordRedemptions       LojaNordRedemption[]
+  lojaNordTransactions      LojaNordPointTransaction[]
+  satisfactionResponses     SatisfactionResponse[]
 }
 
 model UserEmpresaAccess {
@@ -1211,6 +1222,9 @@ model ChecklistItemTemplate {
   obrigatorio     Boolean           @default(true)
   fotoObrigatoria Boolean           @default(false)
   ordem           Int               @default(0)
+  /// Itens removidos por edição do template são desativados (não excluídos)
+  /// quando já têm respostas registradas, para preservar o histórico.
+  ativo           Boolean           @default(true)
   createdAt       DateTime          @default(now())
 
   respostas ChecklistItemResponse[]
@@ -1241,11 +1255,59 @@ model ChecklistOccurrence {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  respostas ChecklistItemResponse[]
-  fotos     ChecklistPhoto[]
+  respostas      ChecklistItemResponse[]
+  fotos          ChecklistPhoto[]
+  notifications  Notification[]
+  escalationLogs ChecklistEscalationLog[]
+  pontos         ChecklistPontos?
 
   @@unique([templateId, date])
   @@index([empresaId, date])
+}
+
+/**
+ * Pontos ganhos pelo responsável ao concluir um checklist. Um registro por
+ * ocorrência (nunca dois, mesmo que a conclusão seja tentada de novo) — é o
+ * próprio histórico de pontos, não só um contador.
+ */
+model ChecklistPontos {
+  id           String              @id @default(cuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occurrenceId String              @unique
+  occurrence   ChecklistOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  pontos       Int
+  createdAt    DateTime            @default(now())
+
+  @@index([userId])
+}
+
+enum ChecklistEscalationType {
+  AVISO_ANTES
+  NO_LIMITE
+  ATRASO_RESPONSAVEL
+  ALERTA_CRITICO
+  NAO_REALIZADO
+}
+
+/**
+ * Registro permanente de cada cobrança automática disparada — a chave única
+ * garante idempotência (nunca notifica o mesmo destinatário duas vezes para
+ * o mesmo nível de escalonamento da mesma ocorrência), e o histórico não é
+ * apagado quando a notificação correspondente é marcada como lida.
+ */
+model ChecklistEscalationLog {
+  id             String                  @id @default(cuid())
+  occurrenceId   String
+  occurrence     ChecklistOccurrence     @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  tipo           ChecklistEscalationType
+  destinatarioId String
+  destinatario   User                    @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+  notificationId String?
+  createdAt      DateTime                @default(now())
+
+  @@unique([occurrenceId, tipo, destinatarioId])
+  @@index([occurrenceId])
 }
 
 model ChecklistItemResponse {
@@ -1323,15 +1385,16 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  occurrences         Occurrence[]
-  waiterSales         WaiterSaleEntry[]
-  sales               Sale[]
-  importedGarcomItems ImportedGarcomItem[]
-  financeEntries      EmployeeFinanceEntry[]
-  timeEntries         TimeEntry[]
-  vacations           Vacation[]
-  uniformDeliveries   UniformDelivery[]
-  documents           EmployeeDocument[]
+  occurrences             Occurrence[]
+  waiterSales             WaiterSaleEntry[]
+  sales                   Sale[]
+  importedGarcomItems     ImportedGarcomItem[]
+  financeEntries          EmployeeFinanceEntry[]
+  timeEntries             TimeEntry[]
+  vacations               Vacation[]
+  uniformDeliveries       UniformDelivery[]
+  documents               EmployeeDocument[]
+  satisfactionInvitations SatisfactionInvitation[]
 }
 
 // ---------------------------------------------------------------------------
@@ -1567,6 +1630,176 @@ model EmployeeDocument {
 
   @@index([employeeId])
   @@index([empresaId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// RH — PESQUISA DE SATISFAÇÃO (eNPS, clima organizacional)
+// ---------------------------------------------------------------------------
+
+enum SatisfactionSurveyStatus {
+  RASCUNHO
+  PROGRAMADA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum SatisfactionQuestionType {
+  ENPS
+  AVALIACAO
+  ESCOLHA_UNICA
+  MULTIPLA_ESCOLHA
+  SIM_NAO
+  ABERTA
+}
+
+/// Tema usado para agrupar perguntas nos gráficos de resultado (Liderança,
+/// Ambiente, Comunicação, Reconhecimento, Treinamento, Bem-estar, Escala).
+enum SatisfactionTheme {
+  LIDERANCA
+  AMBIENTE
+  COMUNICACAO
+  RECONHECIMENTO
+  TREINAMENTO
+  BEM_ESTAR
+  ESCALA_FOLGAS
+}
+
+model SatisfactionSurvey {
+  id                          String                   @id @default(cuid())
+  title                       String
+  description                 String?
+  startDate                   DateTime
+  endDate                     DateTime
+  status                      SatisfactionSurveyStatus @default(RASCUNHO)
+  anonima                     Boolean                  @default(true)
+  permitirApenasUmaResposta   Boolean                  @default(true)
+  exibirResultadoColaborador  Boolean                  @default(false)
+  permitirComentarioAdicional Boolean                  @default(true)
+  embaralharPerguntas         Boolean                  @default(false)
+  createdById                 String
+  createdBy                   User                     @relation("SatisfactionSurveyCreatedBy", fields: [createdById], references: [id])
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+
+  perguntas SatisfactionQuestion[]
+  publico   SatisfactionAudience[]
+  convites  SatisfactionInvitation[]
+  respostas SatisfactionResponse[]
+
+  @@index([status])
+}
+
+/// Uma loja+setor incluído no público-alvo da pesquisa (setor null = loja
+/// inteira). `setor` guarda a mesma label usada em `Employee.setor`.
+model SatisfactionAudience {
+  id        String             @id @default(cuid())
+  surveyId  String
+  survey    SatisfactionSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  empresaId String
+  empresa   Empresa            @relation(fields: [empresaId], references: [id])
+  setor     String?
+
+  @@unique([surveyId, empresaId, setor])
+}
+
+model SatisfactionQuestion {
+  id          String                   @id @default(cuid())
+  surveyId    String
+  survey      SatisfactionSurvey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  tipo        SatisfactionQuestionType @default(AVALIACAO)
+  tema        SatisfactionTheme?
+  titulo      String
+  orientacao  String?
+  obrigatoria Boolean                  @default(true)
+  ordem       Int                      @default(0)
+  /// Perguntas removidas do formulário que já têm respostas são desativadas
+  /// (não excluídas), para nunca apagar histórico — mesma lição do Checklist.
+  ativo       Boolean                  @default(true)
+
+  opcoes    SatisfactionQuestionOption[]
+  respostas SatisfactionAnswer[]
+
+  @@index([surveyId])
+}
+
+model SatisfactionQuestionOption {
+  id         String               @id @default(cuid())
+  questionId String
+  question   SatisfactionQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  texto      String
+  ordem      Int                  @default(0)
+
+  respostasUnicas    SatisfactionAnswer[]
+  respostasMultiplas SatisfactionAnswerOption[]
+}
+
+/**
+ * Convite individual para um colaborador responder — guarda o token e se já
+ * respondeu, mas NUNCA se liga à resposta em si. É essa separação que deixa
+ * uma pesquisa anônima sem ter como relacionar resposta a convite.
+ */
+model SatisfactionInvitation {
+  id           String             @id @default(cuid())
+  surveyId     String
+  survey       SatisfactionSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  token        String             @unique
+  respondido   Boolean            @default(false)
+  respondidoEm DateTime?
+  createdAt    DateTime           @default(now())
+
+  @@unique([surveyId, employeeId])
+  @@index([surveyId])
+}
+
+/**
+ * Uma submissão da pesquisa. Não tem nenhuma coluna que aponte para convite,
+ * colaborador ou usuário — só o suficiente para segmentar (loja/setor).
+ */
+model SatisfactionResponse {
+  id                  String             @id @default(cuid())
+  surveyId            String
+  survey              SatisfactionSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
+  setor               String?
+  comentarioAdicional String?
+  submittedAt         DateTime           @default(now())
+
+  respostas SatisfactionAnswer[]
+
+  @@index([surveyId])
+  @@index([empresaId, setor])
+}
+
+model SatisfactionAnswer {
+  id            String                      @id @default(cuid())
+  responseId    String
+  response      SatisfactionResponse        @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      SatisfactionQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  valorNumero   Int?
+  valorTexto    String?
+  valorBooleano Boolean?
+  optionId      String?
+  opcao         SatisfactionQuestionOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  opcoesMultiplas SatisfactionAnswerOption[]
+
+  @@unique([responseId, questionId])
+  @@index([questionId])
+}
+
+model SatisfactionAnswerOption {
+  id       String                     @id @default(cuid())
+  answerId String
+  answer   SatisfactionAnswer         @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  optionId String
+  option   SatisfactionQuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([answerId, optionId])
 }
 
 // ---------------------------------------------------------------------------
@@ -2981,17 +3214,161 @@ model TaskRecurrence {
   occurrences Task[]
 }
 
+enum NotificationPriority {
+  INFORMACAO
+  ATENCAO
+  CRITICA
+}
+
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String
-  title     String
-  body      String?
-  taskId    String?
-  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id                    String                @id @default(cuid())
+  userId                String
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                  String
+  title                 String
+  body                  String?
+  priority              NotificationPriority?
+  taskId                String?
+  task                  Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  checklistOccurrenceId String?
+  checklistOccurrence   ChecklistOccurrence?  @relation(fields: [checklistOccurrenceId], references: [id], onDelete: Cascade)
+  read                  Boolean               @default(false)
+  createdAt             DateTime              @default(now())
 
   @@index([userId, read])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Loja Nord — sistema de pontos e recompensas dos colaboradores. O saldo de
+// um colaborador nunca é armazenado num campo próprio: é sempre a soma de
+// `LojaNordPointTransaction.pontos` (valor já com sinal — positivo para
+// ganhos/bonificações/ajustes a favor, negativo para resgates, ajustes
+// contra e expiração), o mesmo padrão de "somar o ledger" já usado por
+// ChecklistPontos/TrainingXpEvent no restante do Portal.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum LojaNordRewardCategory {
+  EXPERIENCIAS
+  FOLGAS_BENEFICIOS
+  BEBIDAS
+  ELETRONICOS
+  PRODUTOS_NORD
+  VALE_CONSUMO
+}
+
+enum LojaNordTransactionKind {
+  GANHO
+  BONIFICACAO
+  RESGATE
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  ESTORNO
+  EXPIRACAO
+}
+
+enum LojaNordRedemptionStatus {
+  AGUARDANDO_APROVACAO
+  APROVADO
+  DISPONIVEL_RETIRADA
+  ENTREGUE
+  RECUSADO
+  CANCELADO
+}
+
+/// Regra configurável de pontuação por tipo de atividade (Tela "Regras de
+/// pontuação"). `activityType` é uma chave livre (não enum) para permitir
+/// cadastrar novos tipos de atividade sem migração — a lógica de crédito
+/// automático (integração com Tarefas/Checklist/Cursos) busca a regra pelo
+/// `activityType` correspondente.
+model LojaNordPointRule {
+  id             String    @id @default(cuid())
+  activityType   String    @unique
+  label          String
+  pontos         Int
+  limiteDiario   Int?
+  limiteMensal   Int?
+  exigeValidacao Boolean   @default(false)
+  setores        String[]  @default([])
+  empresaIds     String[]  @default([])
+  validoDe       DateTime?
+  validoAte      DateTime?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  transactions LojaNordPointTransaction[]
+}
+
+/// Catálogo de brindes/benefícios resgatáveis. `estoque: null` representa
+/// estoque ilimitado (folgas e benefícios digitais). `empresaIds` vazio
+/// significa "disponível em todas as lojas".
+model LojaNordReward {
+  id                   String                 @id @default(cuid())
+  nome                 String
+  descricao            String?
+  categoria            LojaNordRewardCategory
+  imagemUrl            String?
+  pontos               Int
+  estoque              Int?
+  estoqueMinimo        Int?
+  limitePorColaborador Int?
+  disponivelDe         DateTime?
+  disponivelAte        DateTime?
+  empresaIds           String[]               @default([])
+  exigeAprovacao       Boolean                @default(true)
+  regras               String?
+  active               Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  redemptions LojaNordRedemption[]
+}
+
+model LojaNordRedemption {
+  id            String                   @id @default(cuid())
+  userId        String
+  user          User                     @relation("LojaNordRedemptionUser", fields: [userId], references: [id])
+  empresaId     String
+  empresa       Empresa                  @relation(fields: [empresaId], references: [id])
+  rewardId      String
+  reward        LojaNordReward           @relation(fields: [rewardId], references: [id])
+  pontos        Int
+  status        LojaNordRedemptionStatus @default(AGUARDANDO_APROVACAO)
+  dataPrevista  DateTime?
+  aprovadoPorId String?
+  aprovadoPor   User?                    @relation("LojaNordRedemptionAprovador", fields: [aprovadoPorId], references: [id])
+  motivoRecusa  String?
+  observacoes   String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  transactions LojaNordPointTransaction[]
+
+  @@index([userId, createdAt])
+  @@index([empresaId, status])
+}
+
+model LojaNordPointTransaction {
+  id            String                  @id @default(cuid())
+  userId        String
+  user          User                    @relation("LojaNordTransactionUser", fields: [userId], references: [id])
+  empresaId     String
+  empresa       Empresa                 @relation(fields: [empresaId], references: [id])
+  kind          LojaNordTransactionKind
+  pontos        Int
+  origem        String
+  descricao     String
+  setor         String?
+  ruleId        String?
+  rule          LojaNordPointRule?      @relation(fields: [ruleId], references: [id])
+  redemptionId  String?
+  redemption    LojaNordRedemption?     @relation(fields: [redemptionId], references: [id])
+  criadoPorId   String?
+  criadoPor     User?                   @relation("LojaNordTransactionCriador", fields: [criadoPorId], references: [id])
+  justificativa String?
+  validoAte     DateTime?
+  createdAt     DateTime                @default(now())
+
+  @@index([userId, createdAt])
+  @@index([empresaId, createdAt])
 }

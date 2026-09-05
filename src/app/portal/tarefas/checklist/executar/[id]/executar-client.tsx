@@ -27,6 +27,7 @@ type ItemTemplate = {
   tipo: string;
   obrigatorio: boolean;
   fotoObrigatoria: boolean;
+  ativo?: boolean;
 };
 type Occurrence = {
   id: string;
@@ -62,13 +63,15 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
   const [observacaoDraft, setObservacaoDraft] = useState("");
   const [uploadingItem, setUploadingItem] = useState<string | null>(null);
   const [uploadingGeral, setUploadingGeral] = useState(false);
+  const [pontosGanhos, setPontosGanhos] = useState<number | null>(null);
 
   const responseByItem = useMemo(() => new Map(occurrence.respostas.map((r) => [r.itemTemplateId, r])), [occurrence.respostas]);
-  const answeredCount = occurrence.template.itens.filter((i) => {
+  const visibleItens = useMemo(() => occurrence.template.itens.filter((i) => i.ativo !== false), [occurrence.template.itens]);
+  const answeredCount = visibleItens.filter((i) => {
     const r = responseByItem.get(i.id);
     return r && r.status !== "PENDENTE";
   }).length;
-  const totalItens = occurrence.template.itens.length;
+  const totalItens = visibleItens.length;
   const remaining = Math.round((new Date(occurrence.dueAt).getTime() - new Date().getTime()) / 60000);
   const isDone = !!occurrence.completedAt;
 
@@ -165,6 +168,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setOccurrence((o) => ({ ...o, ...data.occurrence }));
+      if (data.pontosGanhos > 0) setPontosGanhos(data.pontosGanhos);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível concluir o checklist.");
     } finally {
@@ -246,6 +250,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
           <p className="text-white font-medium">
             {occurrence.status === "CONCLUIDO_NO_PRAZO" ? "Checklist concluído no prazo" : "Checklist concluído com atraso"}
           </p>
+          {pontosGanhos != null && pontosGanhos > 0 && <p className="text-xs text-nord-blue-light mt-1">+{pontosGanhos} pontos</p>}
         </div>
       )}
 
@@ -257,7 +262,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
       )}
 
       <div className="space-y-3">
-        {occurrence.template.itens.map((item) => {
+        {visibleItens.map((item) => {
           const resp = responseByItem.get(item.id);
           const status = resp?.status ?? "PENDENTE";
           const itemPhotos = resp?.fotos ?? [];
