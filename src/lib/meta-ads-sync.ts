@@ -15,25 +15,6 @@ type SyncableEmpresa = Pick<
   | "metaAdsInstagramAccountId"
 >;
 
-// A Graph API recusa pedidos de insights diários com muitos meses de uma vez
-// ("Please reduce the amount of data you're asking for"). Buscar em pedaços
-// de até 30 dias por vez evita isso — o mesmo tamanho já usado com sucesso
-// na sincronização incremental normal.
-const CHUNK_DAYS = 30;
-
-function chunkDateRange(range: { start: Date; end: Date }): { start: Date; end: Date }[] {
-  const chunks: { start: Date; end: Date }[] = [];
-  let chunkStart = new Date(range.start);
-  while (chunkStart <= range.end) {
-    const chunkEnd = new Date(
-      Math.min(chunkStart.getTime() + (CHUNK_DAYS - 1) * 24 * 60 * 60 * 1000, range.end.getTime())
-    );
-    chunks.push({ start: chunkStart, end: chunkEnd });
-    chunkStart = new Date(chunkEnd.getTime() + 24 * 60 * 60 * 1000);
-  }
-  return chunks;
-}
-
 /** Cria/atualiza as linhas de MetaAdsInsight de um lote já buscado da Graph API. */
 async function upsertMetaAdsInsightRows(empresaId: string, insightsData: ReturnType<typeof toMetaAdsInsightData>[]) {
   if (insightsData.length === 0) return;
@@ -89,11 +70,14 @@ async function upsertMetaAdsInsightRows(empresaId: string, insightsData: ReturnT
  * intervalo de datas, salva os dados brutos por campanha em MetaAdsInsight
  * e atualiza o lançamento mensal de Tráfego Pago (MarketingEntry) com os
  * totais do mês corrente, sem sobrescrever campos preenchidos manualmente
- * (seguidores, curtidas, comentários, observações etc.). Períodos longos são
- * buscados em pedaços de 30 dias, um de cada vez, para não estourar o limite
- * de volume de dados de uma única chamada da Graph API — o progresso de cada
- * pedaço é salvo antes de buscar o próximo, então uma falha no meio não perde
- * o que já foi sincronizado.
+ * (seguidores, curtidas, comentários, observações etc.).
+ *
+ * O período pedido deve caber numa única chamada da Graph API (até ~30 dias
+ * com granularidade diária) — tanto pelo limite de volume de dados da própria
+ * Graph API quanto pelo tempo de execução da função serverless. Para trazer
+ * um histórico maior, o chamador (rota de sync) deve fazer várias chamadas
+ * menores em sequência; ver o botão "Sincronizar histórico completo" em
+ * Configurações, que faz esse loop no navegador.
  */
 export async function syncEmpresaMetaAdsInsights(
   empresa: SyncableEmpresa,
@@ -108,23 +92,18 @@ export async function syncEmpresaMetaAdsInsights(
   });
 
   const token = decryptSecret(empresa.metaAdsAccessToken);
-  let totalRecords = 0;
+  const result = await fetchMetaAdsInsights(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion, range);
 
-  for (const chunk of chunkDateRange(range)) {
-    const result = await fetchMetaAdsInsights(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion, chunk);
-
-    if (!result.ok) {
-      await prisma.metaAdsSyncLog.update({
-        where: { id: log.id },
-        data: { status: "ERRO", errorMessage: result.error, recordsSynced: totalRecords, finishedAt: new Date() },
-      });
-      return { ok: false, error: result.error };
-    }
-
-    const insightsData = result.rows.map((row) => toMetaAdsInsightData(empresa.id, row));
-    await upsertMetaAdsInsightRows(empresa.id, insightsData);
-    totalRecords += result.rows.length;
+  if (!result.ok) {
+    await prisma.metaAdsSyncLog.update({
+      where: { id: log.id },
+      data: { status: "ERRO", errorMessage: result.error, finishedAt: new Date() },
+    });
+    return { ok: false, error: result.error };
   }
+
+  const insightsData = result.rows.map((row) => toMetaAdsInsightData(empresa.id, row));
+  await upsertMetaAdsInsightRows(empresa.id, insightsData);
 
   await syncMarketingEntryFromMetaAds(empresa.id, range);
 
@@ -135,12 +114,12 @@ export async function syncEmpresaMetaAdsInsights(
   await prisma.$transaction([
     prisma.metaAdsSyncLog.update({
       where: { id: log.id },
-      data: { status: "SUCESSO", recordsSynced: totalRecords, finishedAt: new Date() },
+      data: { status: "SUCESSO", recordsSynced: result.rows.length, finishedAt: new Date() },
     }),
     prisma.empresa.update({ where: { id: empresa.id }, data: { metaAdsLastSyncAt: new Date() } }),
   ]);
 
-  return { ok: true, recordsSynced: totalRecords };
+  return { ok: true, recordsSynced: result.rows.length };
 }
 
 function startOfMonthUtc(date: Date): Date {
