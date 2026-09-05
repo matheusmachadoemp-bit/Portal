@@ -9,11 +9,12 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 const CATEGORIES = [
-  { key: "inicio", name: "Início", icon: "Home", order: 0, contentType: "dashboard", subs: [] },
+  { key: "inicio", name: "Início", icon: "Home", color: "#1464F4", order: 0, contentType: "dashboard", subs: [] },
   {
     key: "vendas",
     name: "Vendas",
     icon: "ShoppingCart",
+    color: "#22c55e",
     order: 1,
     contentType: "vendas",
     subs: [
@@ -28,6 +29,7 @@ const CATEGORIES = [
     key: "marketing",
     name: "Marketing",
     icon: "Megaphone",
+    color: "#ec4899",
     order: 2,
     contentType: "marketing",
     subs: [
@@ -48,6 +50,7 @@ const CATEGORIES = [
     key: "universidade",
     name: "Universidade Grupo Nord",
     icon: "GraduationCap",
+    color: "#6366f1",
     order: 3,
     contentType: "universidade",
     subs: [
@@ -68,6 +71,7 @@ const CATEGORIES = [
     key: "metas",
     name: "Metas",
     icon: "Target",
+    color: "#f59e0b",
     order: 4,
     contentType: "metas",
     subs: [
@@ -84,6 +88,7 @@ const CATEGORIES = [
     key: "rh",
     name: "RH",
     icon: "Users",
+    color: "#a855f7",
     order: 5,
     contentType: "rh",
     subs: [
@@ -102,6 +107,7 @@ const CATEGORIES = [
     key: "administrativo",
     name: "Administrativo",
     icon: "Building2",
+    color: "#64748b",
     order: 6,
     contentType: "administrativo",
     subs: [
@@ -116,6 +122,7 @@ const CATEGORIES = [
     key: "ficha-tecnica",
     name: "Ficha Técnica",
     icon: "ClipboardList",
+    color: "#ef4444",
     order: 7,
     contentType: "ficha-tecnica",
     subs: [
@@ -135,6 +142,7 @@ const CATEGORIES = [
     key: "financeiro",
     name: "Financeiro",
     icon: "Wallet",
+    color: "#059669",
     order: 8,
     contentType: "financeiro",
     subs: [
@@ -154,15 +162,25 @@ const CATEGORIES = [
     key: "configuracoes",
     name: "Configurações",
     icon: "Settings",
+    color: "#9aa4b2",
     order: 9,
     contentType: "configuracoes",
     subs: [],
   },
-  { key: "usuarios", name: "Usuários", icon: "UserCog", order: 10, contentType: "usuarios", subs: [] },
+  {
+    key: "usuarios",
+    name: "Usuários",
+    icon: "UserCog",
+    color: "#9aa4b2",
+    order: 10,
+    contentType: "usuarios",
+    subs: [],
+  },
   {
     key: "estoque",
     name: "Estoque",
     icon: "Boxes",
+    color: "#eab308",
     order: 11,
     contentType: "estoque",
     subs: [
@@ -186,6 +204,7 @@ const CATEGORIES = [
     key: "cmv",
     name: "CMV",
     icon: "Percent",
+    color: "#f97316",
     order: 12,
     contentType: "cmv",
     subs: [
@@ -198,6 +217,7 @@ const CATEGORIES = [
     key: "crm",
     name: "CRM",
     icon: "Contact",
+    color: "#06b6d4",
     order: 13,
     contentType: "crm",
     subs: [
@@ -218,6 +238,7 @@ const CATEGORIES = [
     key: "reuniao",
     name: "Reunião",
     icon: "Presentation",
+    color: "#8b5cf6",
     order: 14,
     contentType: "reuniao",
     subs: [
@@ -232,6 +253,7 @@ const CATEGORIES = [
     key: "tarefas",
     name: "Tarefas",
     icon: "ListChecks",
+    color: "#3b82f6",
     order: 15,
     contentType: "tarefas",
     subs: [{ key: "checklist", name: "Checklist", icon: "ClipboardCheck" }],
@@ -240,6 +262,7 @@ const CATEGORIES = [
     key: "manutencao",
     name: "Manutenção",
     icon: "Wrench",
+    color: "#dc2626",
     order: 16,
     contentType: "manutencao",
     subs: [
@@ -256,6 +279,7 @@ const CATEGORIES = [
     key: "loja-nord",
     name: "Loja Nord",
     icon: "Gift",
+    color: "#e91e63",
     order: 17,
     contentType: "loja-nord",
     subs: [
@@ -329,11 +353,12 @@ async function main() {
   for (const cat of CATEGORIES) {
     const category = await prisma.category.upsert({
       where: { key: cat.key },
-      update: { name: cat.name, icon: cat.icon, order: cat.order, contentType: cat.contentType },
+      update: { name: cat.name, icon: cat.icon, color: cat.color, order: cat.order, contentType: cat.contentType },
       create: {
         key: cat.key,
         name: cat.name,
         icon: cat.icon,
+        color: cat.color,
         order: cat.order,
         contentType: cat.contentType,
         isSystem: true,
