@@ -16,12 +16,14 @@ import {
   Ban,
   ExternalLink,
   MessageSquareWarning,
+  Images,
+  History,
 } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
-import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE } from "@/lib/checklist";
+import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, spDateKey } from "@/lib/checklist";
 
 type ItemTemplate = {
   id: string;
@@ -127,7 +129,10 @@ const FOTO_LABEL: Record<string, string> = {
 };
 
 function todayInputDate() {
-  return new Date().toISOString().slice(0, 10);
+  // `spDateKey`, não `toISOString()` puro — perto da meia-noite UTC (21h em
+  // São Paulo), o dia UTC já virou "amanhã" enquanto ainda é "hoje" aqui,
+  // o que fazia o checklist recém-criado não gerar execução nenhuma no dia.
+  return spDateKey();
 }
 
 function emptyForm() {
@@ -160,13 +165,60 @@ function emptyForm() {
     avisoAtrasoResponsavelMinutos: "10",
     alertaCriticoMinutos: "30",
     naoRealizadoMinutos: "60",
-    itens: [] as { title: string; orientacao: string; tipo: string; obrigatorio: boolean; fotoObrigatoria: boolean }[],
+    itens: [] as { id?: string; title: string; orientacao: string; tipo: string; obrigatorio: boolean; fotoObrigatoria: boolean }[],
   };
 }
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 }
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+const ESCALATION_LABEL: Record<string, string> = {
+  AVISO_ANTES: "Aviso antes do prazo",
+  NO_LIMITE: "Aviso no horário limite",
+  ATRASO_RESPONSAVEL: "Cobrança de atraso",
+  ALERTA_CRITICO: "Alerta crítico",
+  NAO_REALIZADO: "Marcado como não realizado",
+};
+
+const ITEM_RESPONSE_STATUS_LABEL: Record<string, string> = {
+  PENDENTE: "Pendente",
+  CONCLUIDO: "Concluído",
+  PROBLEMA: "Problema",
+};
+
+type DetailPhoto = { id: string; fileUrl: string; fileName: string; uploadedBy: { name: string } | null; createdAt: string };
+type DetailResponse = {
+  id: string;
+  itemTemplateId: string;
+  status: string;
+  valorTexto: string | null;
+  valorNumero: number | null;
+  valorBooleano: boolean | null;
+  observacao: string | null;
+  respondidoPor: { name: string } | null;
+  respondidoEm: string | null;
+  fotos: DetailPhoto[];
+};
+type OccurrenceDetail = {
+  id: string;
+  status: string;
+  releaseAt: string;
+  dueAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  justificativa: string | null;
+  createdAt: string;
+  responsavel: { name: string } | null;
+  template: { name: string; itens: { id: string; title: string; ativo?: boolean }[] };
+  respostas: DetailResponse[];
+  fotos: DetailPhoto[];
+  escalationLogs: { id: string; tipo: string; destinatario: { name: string }; createdAt: string }[];
+};
 
 function minutesDiff(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / 60000);
@@ -207,6 +259,10 @@ export function ChecklistClient({
   const [reassignUserId, setReassignUserId] = useState("");
   const [justifying, setJustifying] = useState<Occurrence | null>(null);
   const [justificativa, setJustificativa] = useState("");
+  const [viewingFotosId, setViewingFotosId] = useState<string | null>(null);
+  const [viewingHistoricoId, setViewingHistoricoId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<OccurrenceDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -238,6 +294,28 @@ export function ChecklistClient({
     const res = await fetch("/api/checklist/templates");
     const data = await res.json();
     setTemplates(data.templates);
+  }
+
+  async function loadDetail(occurrenceId: string) {
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/checklist/occurrences/${occurrenceId}`);
+      const data = await res.json();
+      setDetail(data.occurrence);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function openFotos(occurrenceId: string) {
+    setViewingFotosId(occurrenceId);
+    loadDetail(occurrenceId);
+  }
+
+  function openHistorico(occurrenceId: string) {
+    setViewingHistoricoId(occurrenceId);
+    loadDetail(occurrenceId);
   }
 
   const filtered = useMemo(() => {
@@ -303,6 +381,7 @@ export function ChecklistClient({
       alertaCriticoMinutos: String(t.alertaCriticoMinutos),
       naoRealizadoMinutos: String(t.naoRealizadoMinutos),
       itens: t.itens.map((i) => ({
+        id: i.id,
         title: i.title,
         orientacao: i.orientacao ?? "",
         tipo: i.tipo,
@@ -422,7 +501,7 @@ export function ChecklistClient({
   }
   function duplicateItem(idx: number) {
     setForm((f) => {
-      const copy = { ...f.itens[idx] };
+      const copy = { ...f.itens[idx], id: undefined };
       const next = [...f.itens];
       next.splice(idx + 1, 0, copy);
       return { ...f, itens: next };
@@ -636,6 +715,12 @@ export function ChecklistClient({
                             title="Reatribuir"
                           >
                             <UserCog size={13} />
+                          </button>
+                          <button onClick={() => openFotos(o.id)} className="text-nord-gray hover:text-white" title="Ver fotos">
+                            <Images size={13} />
+                          </button>
+                          <button onClick={() => openHistorico(o.id)} className="text-nord-gray hover:text-white" title="Ver histórico">
+                            <History size={13} />
                           </button>
                           {template && (
                             <>
@@ -948,6 +1033,115 @@ export function ChecklistClient({
             Registrar justificativa
           </button>
         </div>
+      </Modal>
+
+      {/* Ver fotos */}
+      <Modal
+        open={!!viewingFotosId}
+        onClose={() => {
+          setViewingFotosId(null);
+          setDetail(null);
+        }}
+        title="Fotos do checklist"
+        widthClass="max-w-lg"
+      >
+        {detailLoading && <p className="text-sm text-nord-gray text-center py-6">Carregando...</p>}
+        {!detailLoading && detail && (
+          <div className="space-y-3">
+            {(() => {
+              const itemById = new Map(detail.template.itens.map((i) => [i.id, i.title]));
+              const geral = detail.fotos.filter((f) => !detail.respostas.some((r) => r.fotos.some((rf) => rf.id === f.id)));
+              const porItem = detail.respostas
+                .filter((r) => r.fotos.length > 0)
+                .map((r) => ({ titulo: itemById.get(r.itemTemplateId) ?? "Item removido", fotos: r.fotos }));
+              const grupos = [...(geral.length ? [{ titulo: "Foto geral do checklist", fotos: geral }] : []), ...porItem];
+              if (grupos.length === 0) {
+                return <p className="text-sm text-nord-gray text-center py-6">Nenhuma foto enviada para esse checklist ainda.</p>;
+              }
+              return grupos.map((g, idx) => (
+                <div key={idx}>
+                  <p className="text-xs text-nord-gray mb-1.5">{g.titulo}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {g.fotos.map((f) => (
+                      <a key={f.id} href={f.fileUrl} target="_blank" rel="noreferrer" title={`${f.uploadedBy?.name ?? "-"} · ${formatDateTime(f.createdAt)}`}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={f.fileUrl} alt={f.fileName} className="w-20 h-20 object-cover rounded-lg border border-nord-border" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        )}
+      </Modal>
+
+      {/* Ver histórico */}
+      <Modal
+        open={!!viewingHistoricoId}
+        onClose={() => {
+          setViewingHistoricoId(null);
+          setDetail(null);
+        }}
+        title="Histórico do checklist"
+        widthClass="max-w-lg"
+      >
+        {detailLoading && <p className="text-sm text-nord-gray text-center py-6">Carregando...</p>}
+        {!detailLoading && detail && (
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto nord-scrollbar pr-1">
+            <div className="text-xs text-nord-gray space-y-1 pb-2 border-b border-nord-border/60">
+              <p>
+                <span className="text-white">{detail.template.name}</span> · Liberação {formatTime(detail.releaseAt)} · Limite{" "}
+                {formatTime(detail.dueAt)}
+              </p>
+              <p>Responsável: {detail.responsavel?.name ?? "-"}</p>
+              {detail.startedAt && <p>Iniciado em: {formatDateTime(detail.startedAt)}</p>}
+              {detail.completedAt && (
+                <p>
+                  Concluído em: {formatDateTime(detail.completedAt)} ({CHECKLIST_STATUS_LABEL[detail.status as keyof typeof CHECKLIST_STATUS_LABEL]})
+                </p>
+              )}
+              {detail.justificativa && <p>Justificativa: {detail.justificativa}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs text-nord-gray font-medium">Itens respondidos</p>
+              {detail.respostas.length === 0 && <p className="text-xs text-nord-gray">Nenhum item respondido ainda.</p>}
+              {[...detail.respostas]
+                .sort((a, b) => new Date(a.respondidoEm ?? 0).getTime() - new Date(b.respondidoEm ?? 0).getTime())
+                .map((r) => {
+                  const item = detail.template.itens.find((i) => i.id === r.itemTemplateId);
+                  const valor = r.valorTexto ?? (r.valorNumero != null ? String(r.valorNumero) : r.valorBooleano != null ? (r.valorBooleano ? "Sim" : "Não") : null);
+                  return (
+                    <div key={r.id} className="rounded-lg border border-nord-border/60 p-2.5 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-white">{item?.title ?? "Item removido"}</span>
+                        <Badge tone={r.status === "PROBLEMA" ? "danger" : r.status === "CONCLUIDO" ? "success" : "default"}>
+                          {ITEM_RESPONSE_STATUS_LABEL[r.status] ?? r.status}
+                        </Badge>
+                      </div>
+                      {valor && <p className="text-nord-gray mt-1">Valor: {valor}</p>}
+                      {r.observacao && <p className="text-amber-300 mt-1">Observação: {r.observacao}</p>}
+                      <p className="text-nord-gray/70 mt-1">
+                        {r.respondidoPor?.name ?? "-"} {r.respondidoEm && `· ${formatDateTime(r.respondidoEm)}`}
+                      </p>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {detail.escalationLogs.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-nord-border/60">
+                <p className="text-xs text-nord-gray font-medium">Cobranças enviadas</p>
+                {detail.escalationLogs.map((l) => (
+                  <p key={l.id} className="text-xs text-nord-gray">
+                    {ESCALATION_LABEL[l.tipo] ?? l.tipo} → {l.destinatario.name} · {formatDateTime(l.createdAt)}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog

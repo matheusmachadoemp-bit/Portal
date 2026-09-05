@@ -43,7 +43,7 @@ export default async function ChecklistPage() {
     prisma.checklistTemplate.findMany({
       where: { empresaId: { in: empresaIds } },
       include: {
-        itens: { orderBy: { ordem: "asc" } },
+        itens: { where: { ativo: true }, orderBy: { ordem: "asc" } },
         responsavel: { select: { id: true, name: true } },
         substituto: { select: { id: true, name: true } },
         empresa: { select: { id: true, name: true } },

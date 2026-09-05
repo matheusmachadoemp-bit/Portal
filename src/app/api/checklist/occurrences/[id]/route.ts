@@ -5,11 +5,24 @@ import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
 import { refreshOccurrenceStatuses } from "@/lib/checklist-server";
 
 const DETAIL_INCLUDE = {
+  // Itens são retornados sem filtrar por `ativo` de propósito: uma resposta
+  // registrada num item depois removido do template ainda precisa exibir o
+  // título certo no histórico. A execução ativa filtra por `ativo` na sua
+  // própria consulta (página de execução), não aqui.
   template: { include: { itens: { orderBy: { ordem: "asc" as const } } } },
   empresa: { select: { id: true, name: true } },
   responsavel: { select: { id: true, name: true } },
-  respostas: { include: { fotos: true } },
-  fotos: true,
+  respostas: {
+    include: {
+      fotos: { include: { uploadedBy: { select: { id: true, name: true } } } },
+      respondidoPor: { select: { id: true, name: true } },
+    },
+  },
+  fotos: { include: { uploadedBy: { select: { id: true, name: true } } } },
+  escalationLogs: {
+    include: { destinatario: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "asc" as const },
+  },
 };
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
