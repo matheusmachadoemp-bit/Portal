@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, MessageSquare } from "lucide-react";
+import { AlertTriangle, FileText, MessageSquare, Sheet, FileDown } from "lucide-react";
 import { Badge, ProgressBar, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { SATISFACTION_THEME_LABEL } from "@/lib/satisfaction";
+import { exportRowsToCsv, exportRowsToExcel } from "@/lib/export-utils";
+import { exportKpiReportToPdf } from "@/lib/pdf-export";
 import type { SatisfactionTheme } from "@prisma/client";
 
 type Results = {
@@ -26,7 +28,7 @@ function enpsColor(enps: number) {
   return "#ef4444";
 }
 
-export function ResultadosClient({ surveyId }: { surveyId: string }) {
+export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; surveyTitle: string }) {
   const [data, setData] = useState<Results | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterSetor, setFilterSetor] = useState("");
@@ -71,8 +73,59 @@ export function ResultadosClient({ surveyId }: { surveyId: string }) {
   const setoresDisponiveis = Array.from(new Set(data.porSetor.map((s) => s.setor)));
   const temasDisponiveis = Array.from(new Set(data.comentarios.map((c) => c.tema).filter((t): t is SatisfactionTheme => !!t)));
 
+  const setorRows = data.porSetor.map((s) => ({
+    Setor: s.setor,
+    Respostas: s.totalRespostas,
+    eNPS: s.protegido ? "Protegido (k-anonimato)" : String(s.enps),
+    "Satisfação (%)": s.protegido ? "Protegido (k-anonimato)" : s.satisfacaoPercent != null ? s.satisfacaoPercent : "—",
+  }));
+  const fileBase = surveyTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+  function exportPdf() {
+    exportKpiReportToPdf(surveyTitle, "Resultados da pesquisa de satisfação", [
+      {
+        title: "Resumo",
+        rows: [
+          ["eNPS da pesquisa", String(data!.enpsGeral.enps)],
+          ["Satisfação geral", data!.satisfacaoGeralPercent != null ? `${data!.satisfacaoGeralPercent}%` : "—"],
+          ["Participação", data!.participacaoPercent != null ? `${data!.participacaoPercent}%` : "—"],
+          ["Alertas críticos", String(data!.alerts.length)],
+        ],
+      },
+      {
+        title: "Comparação por setor",
+        rows: setorRows.map((r) => [r.Setor, `${r.Respostas} resposta(s) — eNPS ${r.eNPS} — Satisfação ${r["Satisfação (%)"]}`]),
+      },
+      {
+        title: "Satisfação por tema",
+        rows: data!.porTema.map((t) => [SATISFACTION_THEME_LABEL[t.tema], `${t.satisfacaoPercent}%`]),
+      },
+    ]);
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={exportPdf}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-panel border border-nord-border text-white hover:border-white/30"
+        >
+          <FileText size={13} /> PDF executivo
+        </button>
+        <button
+          onClick={() => exportRowsToExcel(fileBase, "Comparação por setor", setorRows)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-panel border border-nord-border text-white hover:border-white/30"
+        >
+          <Sheet size={13} /> Excel
+        </button>
+        <button
+          onClick={() => exportRowsToCsv(fileBase, setorRows)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-panel border border-nord-border text-white hover:border-white/30"
+        >
+          <FileDown size={13} /> CSV agregado
+        </button>
+      </div>
+
       <SortableStatCards
         storageKey="satisfaction-results-kpi-order"
         className="grid grid-cols-2 md:grid-cols-4 gap-4"

@@ -27,6 +27,7 @@ import {
   LogOut,
   MoreVertical,
   Search,
+  X,
 } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -34,6 +35,7 @@ import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { logoutAction } from "@/app/actions/logout";
 import { StoreSwitcher } from "./store-switcher";
 import { NotificationBell } from "./notification-bell";
+import { useMobileSidebar } from "./mobile-sidebar-context";
 import type { CategoryDTO, SubcategoryDTO } from "./types";
 
 export function Sidebar({
@@ -67,6 +69,7 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const isAdmin = userRole === "ADMINISTRADOR" || userRole === "GESTOR";
+  const { open: mobileOpen, setOpen: setMobileOpen } = useMobileSidebar();
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -203,11 +206,15 @@ export function Sidebar({
   }
 
   return (
-    <aside
-      className={`h-screen sticky top-0 flex flex-col bg-nord-panel border-r border-nord-border transition-all duration-200 ${
-        collapsed ? "w-[76px]" : "w-72"
-      }`}
-    >
+    <>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setMobileOpen(false)} />
+      )}
+      <aside
+        className={`h-screen fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:translate-x-0 flex flex-col bg-nord-panel border-r border-nord-border transition-all duration-200 ${
+          collapsed ? "w-72 md:w-[76px]" : "w-72"
+        } ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
       <div className="flex items-center justify-between px-4 h-16 border-b border-nord-border">
         {!collapsed ? (
           <Link href="/portal">
@@ -222,9 +229,12 @@ export function Sidebar({
           {!collapsed && <NotificationBell />}
           <button
             onClick={() => setCollapsed((v) => !v)}
-            className="text-nord-gray hover:text-white"
+            className="hidden md:block text-nord-gray hover:text-white"
           >
             {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+          </button>
+          <button onClick={() => setMobileOpen(false)} className="md:hidden text-nord-gray hover:text-white">
+            <X size={20} />
           </button>
         </div>
       </div>
@@ -371,7 +381,8 @@ export function Sidebar({
         confirmLabel={deleteError ? "Tentar novamente" : "Excluir"}
         danger
       />
-    </aside>
+      </aside>
+    </>
   );
 }
 
