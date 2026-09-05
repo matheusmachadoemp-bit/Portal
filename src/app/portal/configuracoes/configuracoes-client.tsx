@@ -133,14 +133,53 @@ export function ConfiguracoesClient({
   async function syncMetaAdsFullHistory() {
     setMetaSyncingFull(true);
     setMetaMessage(null);
-    const res = await fetch("/api/integracoes/meta-ads/sync?range=all", { method: "POST" });
-    const data = await res.json().catch(() => ({}));
+
+    // Busca em pedaços de 30 dias, um de cada vez, chamando a API várias
+    // vezes em sequência a partir do navegador — uma única chamada com 36
+    // meses de uma vez estoura tanto o limite de dados da Graph API quanto
+    // o tempo de execução da função no servidor.
+    const HISTORY_MONTHS = 36;
+    const CHUNK_DAYS = 30;
+    const oldestStart = new Date();
+    oldestStart.setMonth(oldestStart.getMonth() - HISTORY_MONTHS);
+
+    let chunkEnd = new Date();
+    let totalRecords = 0;
+    let chunkNumber = 0;
+    const totalChunks = Math.ceil((HISTORY_MONTHS * 30) / CHUNK_DAYS);
+
+    while (chunkEnd > oldestStart) {
+      chunkNumber++;
+      const chunkStart = new Date(Math.max(chunkEnd.getTime() - CHUNK_DAYS * 24 * 60 * 60 * 1000, oldestStart.getTime()));
+      setMetaMessage(`Sincronizando histórico... período ${chunkNumber} de ~${totalChunks}.`);
+
+      let res: Response;
+      try {
+        res = await fetch(
+          `/api/integracoes/meta-ads/sync?start=${chunkStart.toISOString()}&end=${chunkEnd.toISOString()}`,
+          { method: "POST" }
+        );
+      } catch {
+        setMetaSyncingFull(false);
+        setMetaMessage(
+          `Falha de conexão ao sincronizar o histórico (parou no período ${chunkNumber} de ~${totalChunks}). ${totalRecords} registro(s) já foram salvos — pode clicar em "Sincronizar histórico completo" de novo para continuar de onde parou.`
+        );
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMetaSyncingFull(false);
+        setMetaMessage(
+          `${data.error ?? "Falha ao sincronizar"} (parou no período ${chunkNumber} de ~${totalChunks}). ${totalRecords} registro(s) já foram salvos.`
+        );
+        return;
+      }
+      totalRecords += data.recordsSynced ?? 0;
+      chunkEnd = new Date(chunkStart.getTime() - 24 * 60 * 60 * 1000);
+    }
+
     setMetaSyncingFull(false);
-    setMetaMessage(
-      res.ok
-        ? `Histórico completo sincronizado: ${data.recordsSynced} registro(s) importado(s).`
-        : data.error ?? "Falha ao sincronizar o histórico completo."
-    );
+    setMetaMessage(`Histórico completo sincronizado: ${totalRecords} registro(s) importado(s) em ${chunkNumber} período(s).`);
   }
 
   async function saveIfoodRate() {
@@ -394,7 +433,7 @@ export function ConfiguracoesClient({
                 <button
                   onClick={syncMetaAdsFullHistory}
                   disabled={metaSyncing || metaSyncingFull || !metaHasToken}
-                  title="Busca todos os meses com campanhas desde o início da conta (pode levar alguns minutos)"
+                  title="Busca todos os meses com campanhas desde o início da conta, um mês de cada vez (pode levar alguns minutos)"
                   className="bg-nord-panel border border-nord-border hover:border-nord-blue disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
                 >
                   {metaSyncingFull ? "Sincronizando histórico..." : "Sincronizar histórico completo"}
@@ -407,8 +446,10 @@ export function ConfiguracoesClient({
               </div>
               <p className="text-[11px] text-nord-gray mt-2">
                 &quot;Sincronizar histórico completo&quot; busca todos os dados de campanhas desde até 36 meses atrás
-                (o máximo permitido pelo Meta), não só os últimos 30 dias. Use uma vez para trazer o histórico
-                antigo — pode levar alguns minutos.
+                (o máximo permitido pelo Meta), não só os últimos 30 dias. Ela busca um mês de cada vez e mostra
+                o progresso — não feche esta página enquanto estiver rodando. Se parar no meio por algum motivo,
+                o que já foi sincronizado fica salvo; é só clicar de novo (ela recomeça do mês mais recente e
+                segue voltando no tempo).
               </p>
               {metaMessage && <p className="text-xs text-emerald-400 mt-2">{metaMessage}</p>}
             </>

@@ -4,15 +4,16 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { syncEmpresaMetaAdsInsights } from "@/lib/meta-ads-sync";
 
-// O histórico completo (36 meses, granularidade diária) é buscado em vários
-// pedaços sequenciais de 30 dias (ver CHUNK_DAYS em meta-ads-sync.ts), o que
-// leva bem mais tempo que a sincronização incremental de 30 dias.
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 const DEFAULT_SYNC_WINDOW_DAYS = 30;
-// A Graph API rejeita ranges de insights maiores que ~37 meses; 36 cobre
-// "desde o primeiro dia" com folga para qualquer conta já configurada.
-const FULL_HISTORY_MONTHS = 36;
+// Teto de segurança para um `start`/`end` explícito: uma chamada maior que
+// isso arrisca estourar tanto o limite de volume de dados da Graph API
+// quanto o tempo de execução da função. Para históricos maiores, o
+// chamador deve fazer várias chamadas menores em sequência (ver o botão
+// "Sincronizar histórico completo" em Configurações, que faz esse loop no
+// navegador em pedaços de 30 dias).
+const MAX_CUSTOM_RANGE_DAYS = 31;
 
 function defaultRange() {
   const end = new Date();
@@ -20,17 +21,11 @@ function defaultRange() {
   return { start, end };
 }
 
-function fullHistoryRange() {
-  const end = new Date();
-  const start = new Date(end);
-  start.setMonth(start.getMonth() - FULL_HISTORY_MONTHS);
-  return { start, end };
-}
-
 /**
  * Disparo manual (botão "Sincronizar agora" nas configurações).
- * Com `?range=all`, busca todo o histórico disponível (até 36 meses) em vez
- * dos últimos 30 dias — usado pelo botão "Sincronizar histórico completo".
+ * Com `?start=` e `?end=` (datas ISO), sincroniza esse período específico em
+ * vez dos últimos 30 dias — usado pelo botão "Sincronizar histórico
+ * completo", que chama isso várias vezes em sequência, um mês de cada vez.
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -47,8 +42,28 @@ export async function POST(req: Request) {
     );
   }
 
-  const full = new URL(req.url).searchParams.get("range") === "all";
-  const result = await syncEmpresaMetaAdsInsights(empresa, full ? fullHistoryRange() : defaultRange());
+  const { searchParams } = new URL(req.url);
+  const startParam = searchParams.get("start");
+  const endParam = searchParams.get("end");
+
+  let range = defaultRange();
+  if (startParam && endParam) {
+    const start = new Date(startParam);
+    const end = new Date(endParam);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+      return NextResponse.json({ error: "Período inválido." }, { status: 400 });
+    }
+    const days = (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000);
+    if (days > MAX_CUSTOM_RANGE_DAYS) {
+      return NextResponse.json(
+        { error: `Período máximo por chamada é de ${MAX_CUSTOM_RANGE_DAYS} dias.` },
+        { status: 400 }
+      );
+    }
+    range = { start, end };
+  }
+
+  const result = await syncEmpresaMetaAdsInsights(empresa, range);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
   return NextResponse.json({ recordsSynced: result.recordsSynced });
 }
