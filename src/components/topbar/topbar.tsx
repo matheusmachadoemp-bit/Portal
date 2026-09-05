@@ -2,17 +2,20 @@
 
 import { Bell, Search, Building2 } from "lucide-react";
 import { useState } from "react";
+import { UserMenu, type UserProfile } from "./user-menu";
 
 export function Topbar({
   title,
   subtitle,
   empresaLabel,
   empresaColor = "#2952E3",
+  user = null,
 }: {
   title: string;
   subtitle?: string;
   empresaLabel?: string;
   empresaColor?: string;
+  user?: UserProfile | null;
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -60,6 +63,7 @@ export function Topbar({
             </>
           )}
         </div>
+        <UserMenu user={user} />
       </div>
     </header>
   );
