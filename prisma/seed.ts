@@ -235,6 +235,22 @@ const CATEGORIES = [
     contentType: "tarefas",
     subs: [{ key: "checklist", name: "Checklist", icon: "ClipboardCheck" }],
   },
+  {
+    key: "manutencao",
+    name: "Manutenção",
+    icon: "Wrench",
+    order: 16,
+    contentType: "manutencao",
+    subs: [
+      { key: "visao-geral", name: "Visão geral", icon: "LayoutDashboard" },
+      { key: "chamados", name: "Chamados", icon: "ClipboardList" },
+      { key: "equipamentos", name: "Equipamentos", icon: "Boxes" },
+      { key: "calendario", name: "Calendário preventivo", icon: "CalendarClock" },
+      { key: "prestadores", name: "Prestadores", icon: "Users" },
+      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
+      { key: "configuracoes", name: "Configurações", icon: "Settings" },
+    ],
+  },
 ];
 
 async function main() {
