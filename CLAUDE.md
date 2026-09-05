@@ -101,3 +101,30 @@ poderia gerar migration conflitante ou dado corrompido):
    simples e direto — o que foi feito e onde, e só então trate a próxima
    ideia dele para aquele agente. Não acumule várias tarefas de uma vez
    para o mesmo agente "torcendo" para ele encaixar tudo junto.
+
+## Isolar cada tarefa em uma branch/worktree própria
+
+Depois de um episódio em que Caio e Mylon, rodando ao mesmo tempo, editaram
+arquivos direto na pasta principal do líder — a mesma pasta da branch do
+PR de setup dos agentes, sem nenhuma relação com o que os dois estavam
+construindo — misturando features sem relação numa branch só, ficou
+definido: **toda tarefa de produto (visual ou de banco) nasce numa branch
+própria, isolada num `git worktree` separado da pasta principal**, nunca
+direto na pasta onde o líder está.
+
+- Antes de disparar a tarefa, o líder cria a branch/worktree (a partir da
+  branch de produção `claude/portal-nord-pizzaria-j180q7` — ou a partir da
+  branch de uma tarefa relacionada/dependente já publicada, quando fizer
+  sentido; ex.: a tela que consome uma rota nova nasce a partir da branch
+  dessa rota, para o agente poder testar a integração de verdade) e informa
+  esse caminho no prompt da tarefa, deixando claro que o agente deve ler,
+  editar e criar arquivos ali — nunca na pasta principal do líder.
+- Só arquivos do próprio fluxo de trabalho (`CLAUDE.md`, `.claude/agents/**`)
+  continuam sendo editados direto pelo líder, na pasta principal — não são
+  código do Portal Nord, então não têm risco de conflito com Caio/Mylon.
+- Depois que o agente termina e o líder confere o resultado, é o **líder**
+  quem commita e publica (`git push`) a branch daquela tarefa — Caio e
+  Mylon não commitam nem publicam nada por conta própria.
+- Cada branch de tarefa vira, quando fizer sentido e o usuário pedir, um
+  Pull Request próprio e focado — sem misturar features sem relação num
+  PR só.
