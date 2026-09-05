@@ -534,19 +534,15 @@ export function ChecklistClient({
         </p>
       )}
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="input w-auto" />
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nord-gray" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar checklist..."
-              className="input pl-8 w-48"
-            />
-          </div>
-          <select value={filterSetor} onChange={(e) => setFilterSetor(e.target.value)} className="input w-auto">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="input date-input"
+          />
+          <select value={filterSetor} onChange={(e) => setFilterSetor(e.target.value)} className="input input-compact">
             <option value="">Todos os setores</option>
             {GOAL_CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -554,7 +550,7 @@ export function ChecklistClient({
               </option>
             ))}
           </select>
-          <select value={filterResponsavel} onChange={(e) => setFilterResponsavel(e.target.value)} className="input w-auto">
+          <select value={filterResponsavel} onChange={(e) => setFilterResponsavel(e.target.value)} className="input input-compact">
             <option value="">Todos os responsáveis</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
@@ -562,7 +558,7 @@ export function ChecklistClient({
               </option>
             ))}
           </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input w-auto">
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input input-compact">
             <option value="">Todos os status</option>
             {Object.entries(CHECKLIST_STATUS_LABEL).map(([k, v]) => (
               <option key={k} value={k}>
@@ -571,7 +567,7 @@ export function ChecklistClient({
             ))}
           </select>
           {turnos.length > 0 && (
-            <select value={filterTurno} onChange={(e) => setFilterTurno(e.target.value)} className="input w-auto">
+            <select value={filterTurno} onChange={(e) => setFilterTurno(e.target.value)} className="input input-compact">
               <option value="">Todos os turnos</option>
               {turnos.map((t) => (
                 <option key={t} value={t}>
@@ -582,14 +578,25 @@ export function ChecklistClient({
           )}
           {loading && <span className="text-xs text-nord-gray">Carregando...</span>}
         </div>
-        {canCreate && (
-          <button
-            onClick={openNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-          >
-            <Plus size={13} /> Novo checklist
-          </button>
-        )}
+        <div className="flex flex-col gap-2 items-stretch">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nord-gray" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar checklist..."
+              className="input pl-8 w-48"
+            />
+          </div>
+          {canCreate && (
+            <button
+              onClick={openNew}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+            >
+              <Plus size={13} /> Novo checklist
+            </button>
+          )}
+        </div>
       </div>
 
       <SortableStatCards
@@ -1204,6 +1211,18 @@ export function ChecklistClient({
         }
         .input:focus {
           border-color: var(--nord-blue);
+        }
+        .input-compact {
+          width: auto;
+        }
+        .date-input {
+          width: 128px;
+          cursor: pointer;
+        }
+        .date-input::-webkit-calendar-picker-indicator {
+          filter: invert(35%) sepia(90%) saturate(2000%) hue-rotate(211deg) brightness(100%) contrast(101%);
+          cursor: pointer;
+          opacity: 1;
         }
       `}</style>
     </div>
