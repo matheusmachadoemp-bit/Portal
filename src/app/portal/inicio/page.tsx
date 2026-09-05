@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { PageContainer } from "@/components/page-container";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -7,9 +8,95 @@ import { startOfMonth, endOfMonth, subMonths, startOfDay, endOfDay, format } fro
 import { ptBR } from "date-fns/locale";
 import { DashboardCharts } from "./charts";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight } from "lucide-react";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { AlertTriangle, ArrowRight, Store } from "lucide-react";
+import { StoreSwitcher } from "@/components/sidebar/store-switcher";
+import { empresaIdsForContext, getActiveEmpresaContext, GRUPO_SENTINEL } from "@/lib/empresa";
+import { perfilInicioForRole, perfilPodeVerPainelGerencial } from "@/lib/inicio";
+import { GerencialDashboardClient } from "./gerencial-dashboard-client";
 import type { Empresa } from "@prisma/client";
+
+// ---------------------------------------------------------------------------
+// Saudação dinâmica (Bom dia/Boa tarde/Boa noite) — sempre no horário de São
+// Paulo (UTC-3 fixo, sem horário de verão), mesma convenção já usada em
+// src/lib/inicio.ts (ex.: formatSpHm) para "hora local" no Portal.
+// ---------------------------------------------------------------------------
+
+function saudacaoPara(nomeCompleto: string): string {
+  const horaSp = new Date(Date.now() - 3 * 60 * 60 * 1000).getUTCHours();
+  const saudacao = horaSp < 5 ? "Boa noite" : horaSp < 12 ? "Bom dia" : horaSp < 18 ? "Boa tarde" : "Boa noite";
+  const primeiroNome = nomeCompleto.trim().split(/\s+/)[0] || nomeCompleto;
+  return `${saudacao}, ${primeiroNome}`;
+}
+
+const SUBTITULO_INICIO = "Veja o resumo da sua operação e suas prioridades de hoje.";
+
+/**
+ * Painel novo (indicadores + desempenho da loja) — só para Proprietário e
+ * Gerente, uma loja por vez. "Grupo Nord (consolidado)" não é suportado
+ * aqui: se o usuário estiver nesse modo, pedimos para escolher uma loja.
+ */
+async function InicioGerencial({ userName }: { userName: string }) {
+  const ctx = await getActiveEmpresaContext();
+  const title = saudacaoPara(userName);
+
+  if (!ctx || ctx.mode === "grupo") {
+    return (
+      <PageContainer title={title} subtitle={SUBTITULO_INICIO}>
+        <div className="nord-card p-10 flex flex-col items-center text-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-nord-blue/15 flex items-center justify-center">
+            <Store size={26} className="text-nord-blue-light" />
+          </div>
+          <div>
+            <p className="text-white font-medium text-base mb-1">Escolha uma loja para ver o painel</p>
+            <p className="text-nord-gray text-sm max-w-md mx-auto">
+              Este painel mostra os indicadores de uma loja por vez e não compara lojas entre si. Você está no
+              modo &quot;Grupo Nord (consolidado)&quot; — selecione uma loja abaixo para continuar.
+            </p>
+          </div>
+          {ctx && ctx.empresas.length > 0 && (
+            <div className="w-full max-w-xs">
+              <StoreSwitcher
+                empresas={ctx.empresas}
+                activeEmpresaId={GRUPO_SENTINEL}
+                canViewGrupoNord={ctx.canViewGrupoNord}
+                collapsed={false}
+              />
+            </div>
+          )}
+        </div>
+      </PageContainer>
+    );
+  }
+
+  return (
+    <PageContainer title={title} subtitle={SUBTITULO_INICIO}>
+      <GerencialDashboardClient
+        empresaId={ctx.empresa.id}
+        empresas={ctx.empresas}
+        canViewGrupoNord={ctx.canViewGrupoNord}
+      />
+    </PageContainer>
+  );
+}
+
+export default async function InicioPage() {
+  const session = await auth();
+  const perfil = session?.user ? perfilInicioForRole(session.user.role) : "COLABORADOR";
+
+  if (session?.user && perfilPodeVerPainelGerencial(perfil)) {
+    const userName = session.user.name?.trim() || session.user.email || "usuário";
+    return <InicioGerencial userName={userName} />;
+  }
+
+  return <InicioClassico />;
+}
+
+// ---------------------------------------------------------------------------
+// Painel clássico (Líder/Colaborador) — inalterado nesta etapa. A
+// reconstrução da Tela de Início por enquanto só vale para Proprietário e
+// Gerente (ver InicioGerencial acima); os demais perfis continuam vendo
+// exatamente esta mesma tela até a fase deles ser construída.
+// ---------------------------------------------------------------------------
 
 async function getData(empresaIds: string[]) {
   const now = new Date();
@@ -167,7 +254,7 @@ async function getComparisonRow(empresa: Empresa) {
   };
 }
 
-export default async function InicioPage() {
+async function InicioClassico() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const d = await getData(empresaIds);
