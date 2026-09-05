@@ -20,7 +20,6 @@ export default auth((req) => {
     isCronRequest ||
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/internal/diag-meta-ads-sync-log") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
     pathname === "/favicon.ico";
