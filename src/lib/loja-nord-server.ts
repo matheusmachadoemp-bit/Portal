@@ -34,6 +34,29 @@ export async function getPontosNoPeriodo(userId: string, start: Date, end: Date,
   return agg._sum.pontos ?? 0;
 }
 
+/**
+ * Ranking de pontos ganhos (soma só das transações positivas) agrupado por
+ * usuário, para um filtro `where` arbitrário sobre `LojaNordPointTransaction`
+ * — quem tem mais pontos primeiro, com a posição (1-based) já calculada.
+ * Extraído de src/app/api/loja-nord/ranking/route.ts (que também passou a
+ * importar daqui) para não duplicar a mesma consulta: usado tanto pelo
+ * ranking geral/por período/por loja quanto pelo card "Loja Nord" da Tela de
+ * Início (posição do usuário logado e top 3 de uma loja).
+ */
+export async function rankForRange(
+  where: object
+): Promise<{ userId: string; pontos: number; posicao: number }[]> {
+  const rows = await prisma.lojaNordPointTransaction.groupBy({
+    by: ["userId"],
+    where: { ...where, pontos: { gt: 0 } },
+    _sum: { pontos: true },
+  });
+  return rows
+    .map((r) => ({ userId: r.userId, pontos: r._sum.pontos ?? 0 }))
+    .sort((a, b) => b.pontos - a.pontos)
+    .map((r, idx) => ({ ...r, posicao: idx + 1 }));
+}
+
 /** Pontos já debitados em resgates que ainda aguardam aprovação (reservados, podem voltar se recusado). */
 export async function getPontosPendentesAprovacao(userId: string): Promise<number> {
   const agg = await prisma.lojaNordRedemption.aggregate({

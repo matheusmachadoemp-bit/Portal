@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { endOfWeek, endOfMonth, endOfYear, startOfWeek, startOfMonth, startOfYear, subDays } from "date-fns";
+import { rankForRange } from "@/lib/loja-nord-server";
 
 type Periodo = "semana" | "mes" | "ano" | "geral";
 
@@ -15,18 +16,6 @@ function rangeForPeriodo(periodo: Periodo, now: Date): { start: Date; end: Date 
 function previousRange(range: { start: Date; end: Date }) {
   const durationMs = range.end.getTime() - range.start.getTime();
   return { start: subDays(range.start, Math.round(durationMs / (24 * 60 * 60 * 1000)) + 1), end: subDays(range.start, 1) };
-}
-
-async function rankForRange(where: object) {
-  const rows = await prisma.lojaNordPointTransaction.groupBy({
-    by: ["userId"],
-    where: { ...where, pontos: { gt: 0 } },
-    _sum: { pontos: true },
-  });
-  return rows
-    .map((r) => ({ userId: r.userId, pontos: r._sum.pontos ?? 0 }))
-    .sort((a, b) => b.pontos - a.pontos)
-    .map((r, idx) => ({ ...r, posicao: idx + 1 }));
 }
 
 export async function GET(req: NextRequest) {
