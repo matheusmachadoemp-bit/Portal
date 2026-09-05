@@ -124,6 +124,7 @@ model User {
   checklistPhotos               ChecklistPhoto[]
   checklistEscalationLogs       ChecklistEscalationLog[]
   checklistPontos               ChecklistPontos[]
+  satisfactionSurveysCreated    SatisfactionSurvey[]       @relation("SatisfactionSurveyCreatedBy")
 }
 
 model UserPermission {
@@ -261,6 +262,7 @@ model Empresa {
   taskRecurrences           TaskRecurrence[]
   checklistTemplates        ChecklistTemplate[]
   checklistOccurrences      ChecklistOccurrence[]
+  satisfactionAudiences     SatisfactionAudience[]
 }
 
 model UserEmpresaAccess {
@@ -1620,6 +1622,99 @@ model EmployeeDocument {
 
   @@index([employeeId])
   @@index([empresaId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// RH — PESQUISA DE SATISFAÇÃO (eNPS, clima organizacional)
+// ---------------------------------------------------------------------------
+
+enum SatisfactionSurveyStatus {
+  RASCUNHO
+  PROGRAMADA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum SatisfactionQuestionType {
+  ENPS
+  AVALIACAO
+  ESCOLHA_UNICA
+  MULTIPLA_ESCOLHA
+  SIM_NAO
+  ABERTA
+}
+
+/// Tema usado para agrupar perguntas nos gráficos de resultado (Liderança,
+/// Ambiente, Comunicação, Reconhecimento, Treinamento, Bem-estar, Escala).
+enum SatisfactionTheme {
+  LIDERANCA
+  AMBIENTE
+  COMUNICACAO
+  RECONHECIMENTO
+  TREINAMENTO
+  BEM_ESTAR
+  ESCALA_FOLGAS
+}
+
+model SatisfactionSurvey {
+  id                          String                   @id @default(cuid())
+  title                       String
+  description                 String?
+  startDate                   DateTime
+  endDate                     DateTime
+  status                      SatisfactionSurveyStatus @default(RASCUNHO)
+  anonima                     Boolean                  @default(true)
+  permitirApenasUmaResposta   Boolean                  @default(true)
+  exibirResultadoColaborador  Boolean                  @default(false)
+  permitirComentarioAdicional Boolean                  @default(true)
+  embaralharPerguntas         Boolean                  @default(false)
+  createdById                 String
+  createdBy                   User                     @relation("SatisfactionSurveyCreatedBy", fields: [createdById], references: [id])
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+
+  perguntas SatisfactionQuestion[]
+  publico   SatisfactionAudience[]
+
+  @@index([status])
+}
+
+/// Uma loja+setor incluído no público-alvo da pesquisa (setor null = loja
+/// inteira). `setor` guarda a mesma label usada em `Employee.setor`.
+model SatisfactionAudience {
+  id        String             @id @default(cuid())
+  surveyId  String
+  survey    SatisfactionSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  empresaId String
+  empresa   Empresa            @relation(fields: [empresaId], references: [id])
+  setor     String?
+
+  @@unique([surveyId, empresaId, setor])
+}
+
+model SatisfactionQuestion {
+  id          String                   @id @default(cuid())
+  surveyId    String
+  survey      SatisfactionSurvey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  tipo        SatisfactionQuestionType @default(AVALIACAO)
+  tema        SatisfactionTheme?
+  titulo      String
+  orientacao  String?
+  obrigatoria Boolean                  @default(true)
+  ordem       Int                      @default(0)
+
+  opcoes SatisfactionQuestionOption[]
+
+  @@index([surveyId])
+}
+
+model SatisfactionQuestionOption {
+  id         String               @id @default(cuid())
+  questionId String
+  question   SatisfactionQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  texto      String
+  ordem      Int                  @default(0)
 }
 
 // ---------------------------------------------------------------------------
