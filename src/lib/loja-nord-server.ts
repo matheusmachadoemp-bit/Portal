@@ -250,7 +250,9 @@ export async function lancarAjusteManual(params: {
   criadoPorId: string;
 }): Promise<LojaNordActionResult> {
   const { userId, empresaId, kind, descricao, justificativa, criadoPorId } = params;
-  if (!justificativa.trim()) return { ok: false, error: "Todo ajuste manual exige uma justificativa." };
+  if (kind !== "BONIFICACAO" && !justificativa.trim()) {
+    return { ok: false, error: "Todo ajuste manual exige uma justificativa." };
+  }
   if (params.pontos <= 0) return { ok: false, error: "Informe uma quantidade de pontos maior que zero." };
 
   const sinal = kind === "AJUSTE_NEGATIVO" ? -1 : 1;
