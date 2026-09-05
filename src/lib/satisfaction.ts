@@ -77,3 +77,22 @@ export function computeENPS(notas: number[]): { enps: number; promotores: number
   const enps = Math.round(((promotores - detratores) / total) * 100);
   return { enps, promotores, neutros, detratores, total };
 }
+
+/**
+ * Normaliza uma resposta numérica/booleana de um tipo "escalável" (eNPS,
+ * avaliação, sim/não) para uma escala 0-100, para permitir comparar/agregar
+ * perguntas de tipos diferentes num mesmo indicador de satisfação (ex.: por
+ * tema, por setor).
+ */
+export function scorableValueToPercent(
+  tipo: SatisfactionQuestionType,
+  valorNumero: number | null,
+  valorBooleano: boolean | null
+): number | null {
+  if (tipo === "ENPS" && valorNumero != null) return (valorNumero / 10) * 100;
+  if (tipo === "AVALIACAO" && valorNumero != null) return ((valorNumero - 1) / 4) * 100;
+  if (tipo === "SIM_NAO" && valorBooleano != null) return valorBooleano ? 100 : 0;
+  return null;
+}
+
+export const SATISFACTION_SCORABLE_TYPES: SatisfactionQuestionType[] = ["ENPS", "AVALIACAO", "SIM_NAO"];
