@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Pencil, Copy, Ban, Trash2, BarChart3 } from "lucide-react";
+import { Search, Pencil, Copy, Ban, Trash2, BarChart3, Send, CheckCheck } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { ConfirmDialog } from "@/components/ui/modal";
+import { ConfirmDialog, Modal } from "@/components/ui/modal";
 import { SATISFACTION_STATUS_LABEL, SATISFACTION_STATUS_TONE } from "@/lib/satisfaction";
+
+type Invitation = { id: string; token: string; respondido: boolean; employee: { id: string; name: string; setor: string } };
 
 type Survey = {
   id: string;
@@ -39,6 +41,10 @@ export function PesquisaSatisfacaoClient({
   const [filterStatus, setFilterStatus] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [sendingSurvey, setSendingSurvey] = useState<Survey | null>(null);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [invitationsLoading, setInvitationsLoading] = useState(false);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return surveys.filter((s) => {
@@ -79,7 +85,9 @@ export function PesquisaSatisfacaoClient({
         permitirComentarioAdicional: survey.permitirComentarioAdicional,
         embaralharPerguntas: survey.embaralharPerguntas,
         publico: survey.publico.map((p: { empresaId: string; setor: string | null }) => ({ empresaId: p.empresaId, setor: p.setor })),
-        perguntas: survey.perguntas.map((q: { tipo: string; tema: string | null; titulo: string; orientacao: string | null; obrigatoria: boolean; opcoes: { texto: string }[] }) => ({
+        perguntas: survey.perguntas
+          .filter((q: { ativo: boolean }) => q.ativo)
+          .map((q: { tipo: string; tema: string | null; titulo: string; orientacao: string | null; obrigatoria: boolean; opcoes: { texto: string }[] }) => ({
           tipo: q.tipo,
           tema: q.tema,
           titulo: q.titulo,
@@ -101,6 +109,45 @@ export function PesquisaSatisfacaoClient({
     });
     setConfirmCancelId(null);
     await refresh();
+  }
+
+  async function loadInvitations(surveyId: string) {
+    setInvitationsLoading(true);
+    try {
+      const res = await fetch(`/api/satisfaction/surveys/${surveyId}/invitations`);
+      const data = await res.json();
+      setInvitations(data.invitations ?? []);
+    } finally {
+      setInvitationsLoading(false);
+    }
+  }
+
+  async function openSend(s: Survey) {
+    setSendingSurvey(s);
+    await loadInvitations(s.id);
+  }
+
+  async function generateInvitations() {
+    if (!sendingSurvey) return;
+    setInvitationsLoading(true);
+    const res = await fetch(`/api/satisfaction/surveys/${sendingSurvey.id}/invitations`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "Não foi possível gerar os convites.");
+      setInvitationsLoading(false);
+      return;
+    }
+    await loadInvitations(sendingSurvey.id);
+  }
+
+  function linkFor(token: string) {
+    return `${window.location.origin}/pesquisa/${token}`;
+  }
+
+  async function copyLink(token: string) {
+    await navigator.clipboard.writeText(linkFor(token));
+    setCopiedToken(token);
+    setTimeout(() => setCopiedToken(null), 1500);
   }
 
   async function doDelete() {
@@ -205,6 +252,11 @@ export function PesquisaSatisfacaoClient({
                       </button>
                       {canCreate && (
                         <>
+                          {s.status !== "RASCUNHO" && (
+                            <button onClick={() => openSend(s)} className="text-nord-gray hover:text-white" title="Enviar">
+                              <Send size={13} />
+                            </button>
+                          )}
                           <button
                             onClick={() => router.push(`/portal/rh/pesquisa-satisfacao/criar?id=${s.id}`)}
                             className="text-nord-gray hover:text-white"
@@ -250,6 +302,66 @@ export function PesquisaSatisfacaoClient({
           </table>
         </div>
       </Section>
+
+      <Modal
+        open={!!sendingSurvey}
+        onClose={() => setSendingSurvey(null)}
+        title={`Enviar: ${sendingSurvey?.title ?? ""}`}
+        widthClass="max-w-lg"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-nord-gray">
+              {invitations.length === 0
+                ? "Nenhum convite gerado ainda."
+                : `${invitations.filter((i) => i.respondido).length} de ${invitations.length} colaborador(es) já respondeu(ram).`}
+            </p>
+            <button
+              onClick={generateInvitations}
+              disabled={invitationsLoading}
+              className="text-xs text-nord-blue-light hover:underline disabled:opacity-50"
+            >
+              Gerar convites
+            </button>
+          </div>
+          {invitationsLoading && <p className="text-xs text-nord-gray text-center py-4">Carregando...</p>}
+          {!invitationsLoading && invitations.length > 0 && (
+            <div className="space-y-1.5 max-h-96 overflow-y-auto nord-scrollbar pr-1">
+              {invitations.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between gap-2 rounded-lg border border-nord-border/60 p-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm text-white truncate">{inv.employee.name}</p>
+                    <p className="text-xs text-nord-gray">{inv.employee.setor}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {inv.respondido ? (
+                      <Badge tone="success">Respondeu</Badge>
+                    ) : (
+                      <>
+                        <a
+                          href={`https://wa.me/?text=${encodeURIComponent(`${sendingSurvey?.title}: ${typeof window !== "undefined" ? linkFor(inv.token) : ""}`)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-nord-blue-light hover:underline"
+                        >
+                          WhatsApp
+                        </a>
+                        <button
+                          onClick={() => copyLink(inv.token)}
+                          className="text-nord-gray hover:text-white flex items-center gap-1 text-xs"
+                          title="Copiar link"
+                        >
+                          {copiedToken === inv.token ? <CheckCheck size={13} /> : <Copy size={13} />}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <ConfirmDialog
         open={!!confirmDeleteId}

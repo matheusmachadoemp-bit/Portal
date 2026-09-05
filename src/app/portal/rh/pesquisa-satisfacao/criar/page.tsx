@@ -6,7 +6,11 @@ import { CriarPesquisaClient } from "./criar-client";
 
 const DETAIL_INCLUDE = {
   publico: true,
-  perguntas: { include: { opcoes: { orderBy: { ordem: "asc" as const } } }, orderBy: { ordem: "asc" as const } },
+  perguntas: {
+    where: { ativo: true },
+    include: { opcoes: { orderBy: { ordem: "asc" as const } } },
+    orderBy: { ordem: "asc" as const },
+  },
 };
 
 export default async function CriarPesquisaPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
