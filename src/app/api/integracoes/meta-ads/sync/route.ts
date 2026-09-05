@@ -4,9 +4,10 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { syncEmpresaMetaAdsInsights } from "@/lib/meta-ads-sync";
 
-// O histórico completo (36 meses, granularidade diária) busca e grava muito
-// mais linhas que a sincronização incremental de 30 dias.
-export const maxDuration = 60;
+// O histórico completo (36 meses, granularidade diária) é buscado em vários
+// pedaços sequenciais de 30 dias (ver CHUNK_DAYS em meta-ads-sync.ts), o que
+// leva bem mais tempo que a sincronização incremental de 30 dias.
+export const maxDuration = 300;
 
 const DEFAULT_SYNC_WINDOW_DAYS = 30;
 // A Graph API rejeita ranges de insights maiores que ~37 meses; 36 cobre
