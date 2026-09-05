@@ -16,16 +16,13 @@ import { GerencialDashboardClient } from "./gerencial-dashboard-client";
 import type { Empresa } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
-// Saudação dinâmica (Bom dia/Boa tarde/Boa noite) — sempre no horário de São
-// Paulo (UTC-3 fixo, sem horário de verão), mesma convenção já usada em
-// src/lib/inicio.ts (ex.: formatSpHm) para "hora local" no Portal.
+// Saudação fixa (não varia por horário) usada como título da Tela de Início
+// gerencial.
 // ---------------------------------------------------------------------------
 
 function saudacaoPara(nomeCompleto: string): string {
-  const horaSp = new Date(Date.now() - 3 * 60 * 60 * 1000).getUTCHours();
-  const saudacao = horaSp < 5 ? "Boa noite" : horaSp < 12 ? "Bom dia" : horaSp < 18 ? "Boa tarde" : "Boa noite";
   const primeiroNome = nomeCompleto.trim().split(/\s+/)[0] || nomeCompleto;
-  return `${saudacao}, ${primeiroNome}`;
+  return `Bem-vindo(a) de volta, ${primeiroNome}`;
 }
 
 const SUBTITULO_INICIO = "Veja o resumo da sua operação e suas prioridades de hoje.";
