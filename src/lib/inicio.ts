@@ -211,18 +211,41 @@ export async function countTarefasPendentes(empresaId: string): Promise<number> 
 // Equipe presente hoje — quem bateu ponto (tem `entrada` registrada e não
 // está marcado `falta`) hoje nesta loja. Sempre "hoje", independente do
 // período selecionado no painel.
+//
+// `loadEquipePresenteHoje` traz a lista completa (nome + foto), usada pelo
+// painel "Equipe de hoje" (Fase 2, GET /api/inicio/equipe-hoje) para montar
+// os avatares; `countEquipePresenteHoje` (usada por /api/inicio/indicadores)
+// reaproveita a mesma consulta e só devolve o tamanho da lista. O
+// `avatarUrl` da resposta vem de `Employee.photoUrl`: `TimeEntry` só se
+// relaciona com `Employee`, nunca com `User` (que é quem tem o campo
+// `avatarUrl` de fato, mas não tem relação nenhuma com `Employee` no
+// schema) — por isso não é a foto de perfil de login, e sim a foto
+// cadastrada na ficha de RH do colaborador.
 // ---------------------------------------------------------------------------
 
-export async function countEquipePresenteHoje(empresaId: string): Promise<number> {
-  const now = new Date();
-  return prisma.timeEntry.count({
+export type EquipeHojePessoa = { id: string; nome: string; avatarUrl: string | null };
+
+export async function loadEquipePresenteHoje(
+  empresaId: string,
+  now: Date = new Date()
+): Promise<EquipeHojePessoa[]> {
+  const presentes = await prisma.timeEntry.findMany({
     where: {
       empresaId,
       date: { gte: startOfDay(now), lte: endOfDay(now) },
       falta: false,
       entrada: { not: null },
     },
+    include: { employee: { select: { id: true, name: true, photoUrl: true } } },
   });
+
+  return presentes
+    .map((p): EquipeHojePessoa => ({ id: p.employee.id, nome: p.employee.name, avatarUrl: p.employee.photoUrl }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+export async function countEquipePresenteHoje(empresaId: string): Promise<number> {
+  return (await loadEquipePresenteHoje(empresaId)).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -863,4 +886,66 @@ export function sortAlertas(alertas: AlertaItem[]): AlertaItem[] {
       return diff !== 0 ? diff : a.index - b.index;
     })
     .map(({ item }) => item);
+}
+
+// ---------------------------------------------------------------------------
+// "Equipe de hoje" (GET /api/inicio/equipe-hoje, Fase 2) — painel de
+// Proprietário e Gerente (`perfilPodeVerPainelGerencial`, mesma restrição de
+// /api/inicio/indicadores). Visão da LOJA INTEIRA, sem filtro de setor (fica
+// para quando o Líder tiver sua própria versão desta tela).
+//
+// "Presentes" vem de `loadEquipePresenteHoje` (seção acima, TimeEntry de
+// hoje). "Ausências"/"Atestados"/"Atrasos" vêm de `Occurrence` de HOJE —
+// mesmo model que src/app/portal/inicio/page.tsx (`InicioClassico`) já usa
+// para contar `type === "FALTA"` e `type === "ATRASO"`, mas ali é do mês
+// inteiro; aqui é só do dia. `OccurrenceType` também tem ADVERTENCIA,
+// SUSPENSAO, ELOGIO, ACIDENTE, RECLAMACAO, CONFLITO_INTERNO e FEEDBACK, que
+// ficam de fora de propósito: são ocorrências disciplinares/de
+// relacionamento (nenhuma delas significa que o colaborador está ausente
+// hoje), e nenhum outro lugar do app os trata como "ausência" — ver
+// src/lib/rh-insights.ts, que também os mantém sempre separados de
+// FALTA/ATRASO/ATESTADO.
+//
+// "De folga" não tem função aqui (a rota devolve essa lista vazia direto):
+// não existe no schema nenhuma escala/tabela de turno que diga quem está
+// programado pra folgar num dia específico. `Employee.escala` é um campo de
+// texto livre (ex. "6x1", "Seg a sex") sem estrutura pra calcular isso sem
+// inventar uma regra de negócio nova.
+// ---------------------------------------------------------------------------
+
+export type EquipeHojeOcorrencia = { id: string; nome: string; tipo: string };
+export type EquipeHojeAtestado = { id: string; nome: string };
+export type EquipeHojeAtraso = { id: string; nome: string; minutosAtraso: number };
+
+/**
+ * Ocorrências de HOJE do tipo FALTA, ATESTADO e ATRASO desta loja, já
+ * separadas nos três grupos do painel. `id` é o id da própria `Occurrence`
+ * (não do colaborador — um mesmo colaborador pode, em tese, ter mais de uma
+ * ocorrência do mesmo tipo no dia).
+ */
+export async function loadEquipeOcorrenciasHoje(
+  empresaId: string,
+  now: Date = new Date()
+): Promise<{ ausencias: EquipeHojeOcorrencia[]; atestados: EquipeHojeAtestado[]; atrasos: EquipeHojeAtraso[] }> {
+  const occurrences = await prisma.occurrence.findMany({
+    where: {
+      employee: { empresaId },
+      date: { gte: startOfDay(now), lte: endOfDay(now) },
+      type: { in: ["FALTA", "ATESTADO", "ATRASO"] },
+    },
+    include: { employee: { select: { name: true } } },
+  });
+  occurrences.sort((a, b) => a.employee.name.localeCompare(b.employee.name));
+
+  return {
+    ausencias: occurrences
+      .filter((o) => o.type === "FALTA")
+      .map((o): EquipeHojeOcorrencia => ({ id: o.id, nome: o.employee.name, tipo: o.type })),
+    atestados: occurrences
+      .filter((o) => o.type === "ATESTADO")
+      .map((o): EquipeHojeAtestado => ({ id: o.id, nome: o.employee.name })),
+    atrasos: occurrences
+      .filter((o) => o.type === "ATRASO")
+      .map((o): EquipeHojeAtraso => ({ id: o.id, nome: o.employee.name, minutosAtraso: o.minutosAtraso })),
+  };
 }
