@@ -27,6 +27,7 @@ export default auth((req) => {
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/internal/diag-loja-nord-menu") ||
+    pathname.startsWith("/api/internal/revalidate-menu-cache") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
     pathname === "/favicon.ico";
