@@ -9,6 +9,8 @@ import { StoreSwitcher } from "@/components/sidebar/store-switcher";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/calc";
 import { QuickActionMenu } from "./quick-action-menu";
 import { DesempenhoChart } from "./desempenho-chart";
+import { RotinaPanel } from "./rotina-panel";
+import { AlertasPanel } from "./alertas-panel";
 
 type EmpresaDTO = { id: string; key: string; name: string; color: string; logo: string | null };
 
@@ -320,6 +322,15 @@ export function GerencialDashboardClient({
           </Section>
         </>
       )}
+
+      {/*
+        Rotina e alertas não dependem do período selecionado acima (as duas
+        rotas são sempre "agora"), então cada painel busca os próprios dados
+        de forma independente — inclusive antes dos indicadores terminarem de
+        carregar — e só refaz a busca quando a loja ativa (empresaId) muda.
+      */}
+      <RotinaPanel empresaId={empresaId} />
+      <AlertasPanel empresaId={empresaId} />
     </div>
   );
 }
