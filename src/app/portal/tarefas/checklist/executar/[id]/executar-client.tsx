@@ -63,6 +63,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
   const [observacaoDraft, setObservacaoDraft] = useState("");
   const [uploadingItem, setUploadingItem] = useState<string | null>(null);
   const [uploadingGeral, setUploadingGeral] = useState(false);
+  const [pontosGanhos, setPontosGanhos] = useState<number | null>(null);
 
   const responseByItem = useMemo(() => new Map(occurrence.respostas.map((r) => [r.itemTemplateId, r])), [occurrence.respostas]);
   const visibleItens = useMemo(() => occurrence.template.itens.filter((i) => i.ativo !== false), [occurrence.template.itens]);
@@ -167,6 +168,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setOccurrence((o) => ({ ...o, ...data.occurrence }));
+      if (data.pontosGanhos > 0) setPontosGanhos(data.pontosGanhos);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível concluir o checklist.");
     } finally {
@@ -248,6 +250,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
           <p className="text-white font-medium">
             {occurrence.status === "CONCLUIDO_NO_PRAZO" ? "Checklist concluído no prazo" : "Checklist concluído com atraso"}
           </p>
+          {pontosGanhos != null && pontosGanhos > 0 && <p className="text-xs text-nord-blue-light mt-1">+{pontosGanhos} pontos</p>}
         </div>
       )}
 

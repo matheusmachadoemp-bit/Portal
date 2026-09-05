@@ -123,6 +123,7 @@ model User {
   checklistItemResponses        ChecklistItemResponse[]
   checklistPhotos               ChecklistPhoto[]
   checklistEscalationLogs       ChecklistEscalationLog[]
+  checklistPontos               ChecklistPontos[]
 }
 
 model UserPermission {
@@ -1249,9 +1250,27 @@ model ChecklistOccurrence {
   fotos          ChecklistPhoto[]
   notifications  Notification[]
   escalationLogs ChecklistEscalationLog[]
+  pontos         ChecklistPontos?
 
   @@unique([templateId, date])
   @@index([empresaId, date])
+}
+
+/**
+ * Pontos ganhos pelo responsável ao concluir um checklist. Um registro por
+ * ocorrência (nunca dois, mesmo que a conclusão seja tentada de novo) — é o
+ * próprio histórico de pontos, não só um contador.
+ */
+model ChecklistPontos {
+  id           String              @id @default(cuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occurrenceId String              @unique
+  occurrence   ChecklistOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  pontos       Int
+  createdAt    DateTime            @default(now())
+
+  @@index([userId])
 }
 
 enum ChecklistEscalationType {

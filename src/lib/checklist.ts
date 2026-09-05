@@ -35,6 +35,9 @@ export function weekdayFieldFor(dateKey: string): (typeof WEEKDAY_FIELDS)[number
   return WEEKDAY_FIELDS[spWeekday(dateKey)];
 }
 
+/** Pontos ganhos pelo responsável a cada checklist concluído. */
+export const CHECKLIST_PONTOS_POR_CONCLUSAO = 10;
+
 export const CHECKLIST_STATUS_LABEL: Record<ChecklistOccurrenceStatus, string> = {
   AGENDADO: "Agendado",
   DISPONIVEL: "Disponível",
