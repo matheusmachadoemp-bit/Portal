@@ -113,3 +113,9 @@ export const IDEA_STATUS_OPTIONS = [
   { key: "APROVADA", label: "Aprovada", tone: "success" as const },
   { key: "DESCARTADA", label: "Descartada", tone: "danger" as const },
 ];
+
+/** Divide o Banco de Ideias em blocos de conteúdo — separado do CATEGORY_OPTIONS (categoria de conteúdo do calendário). */
+export const IDEA_CATEGORY_OPTIONS = ["Produtos", "Campanhas"];
+
+/** Só quem pode aprovar/reprovar ideias do Banco de Ideias (o funcionário de marketing só cria). */
+export const IDEA_APPROVER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
