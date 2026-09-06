@@ -10,11 +10,12 @@ export default async function RecebimentoPage() {
 
   const [pendentes, recebimentos] = await Promise.all([
     prisma.purchase.findMany({
-      where: { empresaId: { in: empresaIds }, status: { in: ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "RECEBIDO_PARCIAL"] } },
+      where: { empresaId: { in: empresaIds }, status: { in: ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "EM_CONFERENCIA", "RECEBIDO_PARCIAL"] } },
       orderBy: { data: "desc" },
       include: {
         supplier: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
         items: { include: { ingredient: { select: { id: true, name: true, unidade: true } } } },
+        responsavelRecebimento: { select: { name: true } },
       },
     }),
     prisma.receiving.findMany({
@@ -40,6 +41,10 @@ export default async function RecebimentoPage() {
             id: p.id,
             numeroNota: p.numeroNota,
             data: p.data.toISOString(),
+            status: p.status,
+            previsaoEntrega: p.previsaoEntrega ? p.previsaoEntrega.toISOString() : null,
+            responsavelRecebimentoNome: p.responsavelRecebimento?.name ?? null,
+            recebimentoToken: p.recebimentoToken,
             supplierName: p.supplier.nomeFantasia ?? p.supplier.razaoSocial,
             items: p.items.map((it) => ({ id: it.id, ingredientId: it.ingredientId, ingredientName: it.ingredient.name, unidade: it.unidade, quantidade: it.quantidade })),
           }))}
