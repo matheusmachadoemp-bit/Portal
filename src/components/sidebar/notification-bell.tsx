@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
 
@@ -110,41 +111,44 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && panelPos && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div
-            className="fixed z-50 nord-card bg-nord-card shadow-xl py-1.5 max-h-96 overflow-y-auto nord-scrollbar"
-            style={{ top: panelPos.top, left: panelPos.left, width: panelPos.width }}
-          >
-            <div className="flex items-center justify-between px-3 py-1.5">
-              <p className="text-[10px] uppercase tracking-wide text-nord-gray/70">Notificações</p>
-              {unreadCount > 0 && (
-                <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] text-nord-blue-light hover:underline">
-                  <CheckCheck size={11} /> Marcar todas como lidas
-                </button>
+      {open &&
+        panelPos &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+            <div
+              className="fixed z-50 nord-card bg-nord-card shadow-xl py-1.5 max-h-96 overflow-y-auto nord-scrollbar"
+              style={{ top: panelPos.top, left: panelPos.left, width: panelPos.width }}
+            >
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <p className="text-[10px] uppercase tracking-wide text-nord-gray/70">Notificações</p>
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] text-nord-blue-light hover:underline">
+                    <CheckCheck size={11} /> Marcar todas como lidas
+                  </button>
+                )}
+              </div>
+              {notifications.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-nord-gray text-center">Nenhuma notificação por enquanto.</p>
+              ) : (
+                notifications.map((n) => (
+                  <button
+                    key={n.id}
+                    onClick={() => handleOpenNotification(n)}
+                    className={`w-full text-left px-3 py-2 hover:bg-white/5 border-l-2 ${
+                      n.read ? "border-transparent" : PRIORITY_BORDER[n.priority ?? ""] ?? "border-nord-blue"
+                    }`}
+                  >
+                    <p className={`text-xs ${n.read ? "text-nord-gray" : "text-white font-medium"}`}>{n.title}</p>
+                    {n.body && <p className="text-[11px] text-nord-gray mt-0.5 line-clamp-2">{n.body}</p>}
+                    <p className="text-[10px] text-nord-gray/70 mt-1">{new Date(n.createdAt).toLocaleString("pt-BR")}</p>
+                  </button>
+                ))
               )}
             </div>
-            {notifications.length === 0 ? (
-              <p className="px-3 py-4 text-xs text-nord-gray text-center">Nenhuma notificação por enquanto.</p>
-            ) : (
-              notifications.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => handleOpenNotification(n)}
-                  className={`w-full text-left px-3 py-2 hover:bg-white/5 border-l-2 ${
-                    n.read ? "border-transparent" : PRIORITY_BORDER[n.priority ?? ""] ?? "border-nord-blue"
-                  }`}
-                >
-                  <p className={`text-xs ${n.read ? "text-nord-gray" : "text-white font-medium"}`}>{n.title}</p>
-                  {n.body && <p className="text-[11px] text-nord-gray mt-0.5 line-clamp-2">{n.body}</p>}
-                  <p className="text-[10px] text-nord-gray/70 mt-1">{new Date(n.createdAt).toLocaleString("pt-BR")}</p>
-                </button>
-              ))
-            )}
-          </div>
-        </>
-      )}
+          </>,
+          document.body
+        )}
     </div>
   );
 }

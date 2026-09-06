@@ -1,6 +1,7 @@
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ReactNode } from "react";
+import Link from "next/link";
 
 export function StatCard({
   label,
@@ -11,6 +12,7 @@ export function StatCard({
   hint,
   labelClassName = "text-sm text-white",
   invertDeltaColor = false,
+  href,
 }: {
   label: string;
   value: string;
@@ -21,14 +23,17 @@ export function StatCard({
   labelClassName?: string;
   /** Set when a rising value is bad (ex.: "Atrasadas") so the pill colors correctly without flipping the number's sign. */
   invertDeltaColor?: boolean;
+  /** Quando informado, o card inteiro vira um link para o módulo relacionado (ex.: card de faturamento -> Vendas). */
+  href?: string;
 }) {
   const rising = (delta ?? 0) >= 0;
   const good = rising !== invertDeltaColor;
-  return (
-    <div
-      className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2 transition-colors hover:border-white/20"
-      style={{ borderTopColor: color }}
-    >
+  const className = `nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2 transition-colors hover:border-white/20${
+    href ? " cursor-pointer" : ""
+  }`;
+
+  const content = (
+    <>
       <div className="flex items-center gap-2">
         {icon && (
           <div
@@ -58,6 +63,20 @@ export function StatCard({
         )}
         {hint && !delta && <span className="text-xs text-nord-gray">{hint}</span>}
       </div>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={className} style={{ borderTopColor: color }}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={className} style={{ borderTopColor: color }}>
+      {content}
     </div>
   );
 }

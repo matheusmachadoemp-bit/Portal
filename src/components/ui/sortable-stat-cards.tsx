@@ -22,6 +22,8 @@ export type SortableStatCardConfig = {
   color?: string;
   hint?: string;
   invertDeltaColor?: boolean;
+  /** Quando informado, o card inteiro vira um link para o módulo relacionado. */
+  href?: string;
 };
 
 function SortableCard({ id, children }: { id: string; children: React.ReactNode }) {
@@ -144,6 +146,7 @@ export function SortableStatCards({
             color={card.color}
             hint={card.hint}
             invertDeltaColor={card.invertDeltaColor}
+            href={card.href}
           />
         ),
       }))}

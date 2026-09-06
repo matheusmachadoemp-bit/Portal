@@ -3,6 +3,7 @@
 import { Search, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMobileSidebar } from "@/components/sidebar/mobile-sidebar-context";
+import { UserMenu, type UserProfile } from "./user-menu";
 
 function nowInSaoPaulo() {
   const now = new Date();
@@ -33,7 +34,15 @@ function Clock() {
   );
 }
 
-export function Topbar({ title, subtitle }: { title: string; subtitle?: string }) {
+export function Topbar({
+  title,
+  subtitle,
+  user = null,
+}: {
+  title: string;
+  subtitle?: string;
+  user?: UserProfile | null;
+}) {
   const { setOpen: setMobileMenuOpen } = useMobileSidebar();
 
   return (
@@ -60,6 +69,7 @@ export function Topbar({ title, subtitle }: { title: string; subtitle?: string }
           />
         </div>
         <Clock />
+        <UserMenu user={user} />
       </div>
     </header>
   );
