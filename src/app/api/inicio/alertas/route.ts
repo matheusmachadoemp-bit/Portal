@@ -10,6 +10,9 @@ import {
   loadAlertaEstoqueBaixo,
   loadAlertaAvaliacaoNegativa,
   loadAlertaAprovacaoPendente,
+  loadAlertaChamadoUrgente,
+  loadAlertaEquipamentoParado,
+  loadAlertaManutencaoPreventivaAtrasada,
   sortAlertas,
 } from "@/lib/inicio";
 
@@ -23,6 +26,10 @@ import {
  * `loadAlertaAprovacaoPendente`/seção de alertas em src/lib/inicio.ts para o
  * motivo (não existe campo de prazo/validade em nenhum lugar do módulo de
  * treinamento hoje).
+ *
+ * Chamado urgente, equipamento parado e manutenção preventiva atrasada
+ * (módulo de Manutenção) foram adicionados nesta etapa — ver comentário
+ * acima de `loadAlertaChamadoUrgente` em src/lib/inicio.ts.
  */
 export async function GET(req: Request) {
   const session = await auth();
@@ -45,15 +52,27 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Loja inválida ou sem permissão." }, { status: 403 });
   }
 
-  const [checklistAtrasado, tarefaVencida, metaAbaixoRitmo, estoqueBaixo, avaliacaoNegativa, aprovacaoPendente] =
-    await Promise.all([
-      loadAlertaChecklistAtrasado(empresaId, empresa.name),
-      loadAlertaTarefaVencida(empresaId, empresa.name),
-      loadAlertaMetaAbaixoRitmo(empresaId, empresa.name),
-      loadAlertaEstoqueBaixo(empresaId, empresa.name),
-      loadAlertaAvaliacaoNegativa(empresaId, empresa.name),
-      loadAlertaAprovacaoPendente(empresaId, empresa.name),
-    ]);
+  const [
+    checklistAtrasado,
+    tarefaVencida,
+    metaAbaixoRitmo,
+    estoqueBaixo,
+    avaliacaoNegativa,
+    aprovacaoPendente,
+    chamadoUrgente,
+    equipamentoParado,
+    manutencaoPreventivaAtrasada,
+  ] = await Promise.all([
+    loadAlertaChecklistAtrasado(empresaId, empresa.name),
+    loadAlertaTarefaVencida(empresaId, empresa.name),
+    loadAlertaMetaAbaixoRitmo(empresaId, empresa.name),
+    loadAlertaEstoqueBaixo(empresaId, empresa.name),
+    loadAlertaAvaliacaoNegativa(empresaId, empresa.name),
+    loadAlertaAprovacaoPendente(empresaId, empresa.name),
+    loadAlertaChamadoUrgente(empresaId, empresa.name),
+    loadAlertaEquipamentoParado(empresaId, empresa.name),
+    loadAlertaManutencaoPreventivaAtrasada(empresaId, empresa.name),
+  ]);
 
   const alertas = sortAlertas([
     ...checklistAtrasado,
@@ -62,6 +81,9 @@ export async function GET(req: Request) {
     ...estoqueBaixo,
     ...avaliacaoNegativa,
     ...aprovacaoPendente,
+    ...chamadoUrgente,
+    ...equipamentoParado,
+    ...manutencaoPreventivaAtrasada,
   ]);
 
   return NextResponse.json({ alertas });

@@ -611,15 +611,22 @@ export function sortRotinaItems(itens: RotinaItem[], now: Date = new Date()): Ro
 // esta tela também é do Líder, não só Proprietário/Gerente).
 //
 // Cobre: checklist atrasado, tarefa vencida, meta abaixo do ritmo, estoque
-// abaixo do mínimo, avaliação negativa de cliente e aprovação pendente
-// (Tarefa aguardando validação + Resgate Loja Nord + Contagem de estoque).
+// abaixo do mínimo, avaliação negativa de cliente, aprovação pendente
+// (Tarefa aguardando validação + Resgate Loja Nord + Contagem de estoque),
+// chamado de manutenção urgente, equipamento parado e manutenção preventiva
+// atrasada.
 //
 // "Curso obrigatório vencendo" NÃO está implementado: `TrainingCourse.
 // mandatory` existe, mas nem ele, nem `TrainingEnrollment`, nem
 // `TrainingCertificate` têm qualquer campo de prazo/validade no schema —
 // não dá pra calcular "vencendo" sem inventar uma regra de negócio nova
-// (ex.: "N dias após a matrícula"). Módulo de manutenção/equipamento não
-// existe no escopo deste alerta (instrução explícita da tarefa).
+// (ex.: "N dias após a matrícula").
+//
+// Correção: uma etapa anterior desta mesma tela disse que "o módulo de
+// manutenção/equipamento não existe no escopo deste alerta" — isso estava
+// desatualizado (o módulo já existe, ver src/lib/manutencao.ts e
+// src/lib/manutencao-server.ts); os 3 tipos de alerta de manutenção abaixo
+// cobrem essa lacuna.
 // ---------------------------------------------------------------------------
 
 export function perfilPodeVerAlertas(perfil: PerfilInicio): boolean {
@@ -632,7 +639,10 @@ export type AlertaTipo =
   | "meta_abaixo_ritmo"
   | "estoque_baixo"
   | "avaliacao_negativa"
-  | "aprovacao_pendente";
+  | "aprovacao_pendente"
+  | "chamado_urgente"
+  | "equipamento_parado"
+  | "manutencao_preventiva_atrasada";
 
 export type AlertaNivel = "urgente" | "atencao" | "informativo";
 
@@ -875,6 +885,116 @@ export async function loadAlertaAprovacaoPendente(
   return alertas;
 }
 
+// ---------------------------------------------------------------------------
+// Alertas de Manutenção — Chamado, Equipamento e ManutencaoRegistro (ver
+// src/lib/manutencao.ts e src/lib/manutencao-server.ts). Reaproveitam
+// exatamente os mesmos critérios já usados pelo dashboard da Central de
+// Manutenção (`getManutencaoDashboardData`), só filtrados por uma única
+// `empresaId` em vez do conjunto de lojas do contexto ativo.
+// ---------------------------------------------------------------------------
+
+/**
+ * Chamados de manutenção com prioridade URGENTE ainda não resolvidos/
+ * cancelados — mesmo critério do KPI "Chamados urgentes" do dashboard de
+ * Manutenção. Nível sempre "urgente" (é a própria definição do alerta).
+ */
+export async function loadAlertaChamadoUrgente(
+  empresaId: string,
+  nomeLoja: string,
+  now: Date = new Date()
+): Promise<AlertaItem[]> {
+  const chamados = await prisma.chamado.findMany({
+    where: { empresaId, prioridade: "URGENTE", status: { notIn: ["RESOLVIDO", "CANCELADO"] } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return chamados.map(
+    (c): AlertaItem => ({
+      tipo: "chamado_urgente",
+      titulo: `${c.protocolo} — ${c.titulo}`,
+      loja: nomeLoja,
+      setor: c.setor,
+      tempoAtrasoOuPrazo: c.prazo
+        ? describePrazoText(c.prazo, now)
+        : `aberto há ${formatDuracao(now.getTime() - c.createdAt.getTime())}`,
+      nivel: "urgente",
+      actionHref: `/portal/manutencao/chamados/${c.id}`,
+    })
+  );
+}
+
+/**
+ * Equipamentos com status PARADO — mesmo critério do KPI "Equipamentos
+ * parados" do dashboard de Manutenção. Nível sempre "urgente": PARADO é o
+ * status de tom mais severo (`EQUIPAMENTO_STATUS_TONE` = "danger", em
+ * src/lib/manutencao.ts) entre os status de equipamento, mais grave que
+ * ATENCAO (tom "warning"), que não gera alerta aqui. Não existe no schema
+ * um campo de "desde quando" o equipamento está parado — `updatedAt` é a
+ * melhor aproximação disponível (mesmo recurso já usado para "aguardando
+ * aprovação há X" em `loadAlertaAprovacaoPendente`, acima).
+ */
+export async function loadAlertaEquipamentoParado(
+  empresaId: string,
+  nomeLoja: string,
+  now: Date = new Date()
+): Promise<AlertaItem[]> {
+  const equipamentos = await prisma.equipamento.findMany({
+    where: { empresaId, status: "PARADO" },
+    orderBy: { updatedAt: "asc" },
+  });
+
+  return equipamentos.map(
+    (e): AlertaItem => ({
+      tipo: "equipamento_parado",
+      titulo: `Equipamento parado: ${e.nome} (${e.codigo})`,
+      loja: nomeLoja,
+      setor: e.setor,
+      tempoAtrasoOuPrazo: `parado há ${formatDuracao(now.getTime() - e.updatedAt.getTime())}`,
+      nivel: "urgente",
+      actionHref: `/portal/manutencao/equipamentos/${e.id}`,
+    })
+  );
+}
+
+/**
+ * Manutenção preventiva programada (`Equipamento.proximaManutencaoEm`) cuja
+ * data já passou. Esse campo é real e já alimenta o dashboard de Manutenção
+ * (usado para compor "equipamentosCriticos" em `getManutencaoDashboardData`)
+ * — é preenchido manualmente ao registrar uma manutenção concluída (ver
+ * `proximaManutencaoEm` em src/app/api/manutencao/registros/route.ts), não
+ * por uma recorrência automática. O "Calendário preventivo"
+ * (/portal/manutencao/calendario) continua mostrando só "Em breve": aquela
+ * tela é sobre programar recorrência automaticamente, o que ainda não
+ * existe, mas isso não impede este alerta, que só lê a data já registrada.
+ *
+ * Nível "urgente" a partir de `DIAS_LIMITE_URGENTE` dias de atraso (mesmo
+ * limiar já usado para meta/aprovação pendente acima), "atenção" antes
+ * disso.
+ */
+export async function loadAlertaManutencaoPreventivaAtrasada(
+  empresaId: string,
+  nomeLoja: string,
+  now: Date = new Date()
+): Promise<AlertaItem[]> {
+  const equipamentos = await prisma.equipamento.findMany({
+    where: { empresaId, proximaManutencaoEm: { lt: now } },
+    orderBy: { proximaManutencaoEm: "asc" },
+  });
+
+  return equipamentos.map((e): AlertaItem => {
+    const proximaManutencaoEm = e.proximaManutencaoEm as Date;
+    return {
+      tipo: "manutencao_preventiva_atrasada",
+      titulo: `Manutenção preventiva atrasada: ${e.nome} (${e.codigo})`,
+      loja: nomeLoja,
+      setor: e.setor,
+      tempoAtrasoOuPrazo: describePrazoText(proximaManutencaoEm, now),
+      nivel: diasEntre(proximaManutencaoEm, now) >= DIAS_LIMITE_URGENTE ? "urgente" : "atencao",
+      actionHref: `/portal/manutencao/equipamentos/${e.id}`,
+    };
+  });
+}
+
 const ALERTA_NIVEL_ORDER: Record<AlertaNivel, number> = { urgente: 0, atencao: 1, informativo: 2 };
 
 /** Ordena por severidade (urgente primeiro), preservando a ordem relativa dentro de cada nível. */
@@ -947,5 +1067,59 @@ export async function loadEquipeOcorrenciasHoje(
     atrasos: occurrences
       .filter((o) => o.type === "ATRASO")
       .map((o): EquipeHojeAtraso => ({ id: o.id, nome: o.employee.name, minutosAtraso: o.minutosAtraso })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// "Resumo de manutenção" (GET /api/inicio/manutencao-resumo) — mesma
+// restrição de acesso de /api/inicio/alertas (`perfilPodeVerAlertas`:
+// Proprietário/Gerente/Líder).
+//
+// `chamadosAbertos`/`chamadosUrgentes`/`equipamentosParados` reaproveitam
+// exatamente as mesmas definições dos KPIs de mesmo nome do dashboard da
+// Central de Manutenção (`getManutencaoDashboardData`, em
+// src/lib/manutencao-server.ts), só filtradas por uma única `empresaId` em
+// vez do conjunto de lojas do contexto ativo — os números batem com o que
+// /portal/manutencao já mostra.
+//
+// `proximaManutencaoProgramada` é o equipamento com o `proximaManutencaoEm`
+// mais próximo ainda no futuro (mesmo campo usado por
+// `proximasManutencoesList` no dashboard), sem o corte de 30 dias que
+// aquela lista usa — aqui é só "qual a próxima", não "quantas nos próximos
+// 30 dias", então não faz sentido escondê-la só por estar mais longe que
+// isso. `null` quando nenhum equipamento tem essa data preenchida.
+// ---------------------------------------------------------------------------
+
+export type ManutencaoResumo = {
+  chamadosAbertos: number;
+  chamadosUrgentes: number;
+  equipamentosParados: number;
+  proximaManutencaoProgramada: { titulo: string; data: string } | null;
+};
+
+export async function loadManutencaoResumo(empresaId: string, now: Date = new Date()): Promise<ManutencaoResumo> {
+  const [chamadosAbertos, chamadosUrgentes, equipamentosParados, proximoEquipamento] = await Promise.all([
+    prisma.chamado.count({ where: { empresaId, status: { notIn: ["RESOLVIDO", "CANCELADO"] } } }),
+    prisma.chamado.count({
+      where: { empresaId, prioridade: "URGENTE", status: { notIn: ["RESOLVIDO", "CANCELADO"] } },
+    }),
+    prisma.equipamento.count({ where: { empresaId, status: "PARADO" } }),
+    prisma.equipamento.findFirst({
+      where: { empresaId, proximaManutencaoEm: { gte: now } },
+      orderBy: { proximaManutencaoEm: "asc" },
+      select: { nome: true, codigo: true, proximaManutencaoEm: true },
+    }),
+  ]);
+
+  return {
+    chamadosAbertos,
+    chamadosUrgentes,
+    equipamentosParados,
+    proximaManutencaoProgramada: proximoEquipamento
+      ? {
+          titulo: `${proximoEquipamento.nome} (${proximoEquipamento.codigo})`,
+          data: (proximoEquipamento.proximaManutencaoEm as Date).toISOString(),
+        }
+      : null,
   };
 }
