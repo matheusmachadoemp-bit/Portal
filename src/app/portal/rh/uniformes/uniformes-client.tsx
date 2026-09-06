@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { RhTabs } from "../rh-tabs";
@@ -47,17 +47,22 @@ const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" |
   PERDIDO: "danger",
 };
 
-function emptyForm(employeeId: string) {
+// Campos compartilhados por todo o kit (um colaborador, uma data, um responsável...).
+function emptySharedForm(employeeId: string) {
   return {
     employeeId,
-    item: "CAMISA",
-    quantidade: "1",
-    tamanho: "",
     dataEntrega: format(new Date(), "yyyy-MM-dd"),
     responsavel: "",
     status: "ENTREGUE",
     observacao: "",
   };
+}
+
+// Cada linha do kit é um item independente (ex.: 2 camisas, 2 calças, 2 toucas...).
+type ItemRow = { item: string; quantidade: string; tamanho: string };
+
+function emptyItemRow(): ItemRow {
+  return { item: "CAMISA", quantidade: "1", tamanho: "" };
 }
 
 export function UniformesClient({
@@ -74,7 +79,10 @@ export function UniformesClient({
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<UniformDeliveryDTO | null>(null);
-  const [form, setForm] = useState(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+  const [form, setForm] = useState(emptySharedForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+  const [items, setItems] = useState<ItemRow[]>([emptyItemRow()]);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState("");
 
@@ -103,7 +111,9 @@ export function UniformesClient({
 
   function openNew() {
     setEditing(null);
-    setForm(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+    setForm(emptySharedForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+    setItems([emptyItemRow()]);
+    setFormError(null);
     setShowForm(true);
   }
 
@@ -111,33 +121,73 @@ export function UniformesClient({
     setEditing(d);
     setForm({
       employeeId: d.employeeId,
-      item: d.item,
-      quantidade: String(d.quantidade),
-      tamanho: d.tamanho ?? "",
       dataEntrega: format(new Date(d.dataEntrega), "yyyy-MM-dd"),
       responsavel: d.responsavel ?? "",
       status: d.status,
       observacao: d.observacao ?? "",
     });
+    setItems([{ item: d.item, quantidade: String(d.quantidade), tamanho: d.tamanho ?? "" }]);
+    setFormError(null);
     setShowForm(true);
   }
 
+  function addItemRow() {
+    setItems((prev) => [...prev, emptyItemRow()]);
+  }
+
+  function updateItemRow(idx: number, patch: Partial<ItemRow>) {
+    setItems((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  }
+
+  function removeItemRow(idx: number) {
+    setItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+  }
+
   async function submit() {
-    if (editing) {
-      await fetch(`/api/rh/uniforms/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/rh/uniforms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      if (editing) {
+        // Edição continua sendo de UMA entrega só (um único item).
+        const row = items[0];
+        const res = await fetch(`/api/rh/uniforms/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...form, ...row }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}) as { error?: string });
+          setFormError(d.error ?? "Não foi possível salvar a alteração. Tente novamente.");
+          return;
+        }
+      } else {
+        // Cadastro novo: um POST por linha do kit, sequencialmente.
+        for (let i = 0; i < items.length; i++) {
+          const row = items[i];
+          const res = await fetch("/api/rh/uniforms", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...form, ...row }),
+          });
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}) as { error?: string });
+            const jaSalvos = i;
+            // Mantém no formulário só o que ainda falta salvar, para não duplicar em uma nova tentativa.
+            setItems(items.slice(i));
+            if (jaSalvos > 0) await refresh();
+            setFormError(
+              `${jaSalvos > 0 ? `${jaSalvos} ${jaSalvos === 1 ? "item já foi registrado" : "itens já foram registrados"} com sucesso. ` : ""}` +
+                `Não foi possível registrar "${ITEM_LABEL[row.item] ?? row.item}" (${d.error ?? "erro inesperado"}). Corrija e clique em Salvar novamente para os itens restantes.`
+            );
+            return;
+          }
+        }
+      }
+      setShowForm(false);
+      await refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -167,7 +217,7 @@ export function UniformesClient({
             onClick={openNew}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
-            <Plus size={13} /> Registrar entrega
+            <Plus size={13} /> Registrar kit
           </button>
         )}
       </div>
@@ -238,59 +288,133 @@ export function UniformesClient({
         </table>
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar entrega" : "Registrar entrega"}>
-        <div className="grid grid-cols-2 gap-3">
+      <Modal
+        open={showForm}
+        onClose={() => !submitting && setShowForm(false)}
+        title={editing ? "Editar entrega" : "Registrar kit de uniforme"}
+      >
+        <FormError message={formError} />
+        <div className="space-y-4">
           {!fixedEmployeeId && (
-            <div className="col-span-2">
-              <Field label="Colaborador">
-                <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} — {emp.setor}
+            <Field label="Colaborador">
+              <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} — {emp.setor}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          {editing ? (
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Item">
+                <select value={items[0].item} onChange={(e) => updateItemRow(0, { item: e.target.value })} className="input">
+                  {Object.entries(ITEM_LABEL).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
                     </option>
                   ))}
                 </select>
               </Field>
+              <Field label="Quantidade">
+                <input
+                  type="number"
+                  value={items[0].quantidade}
+                  onChange={(e) => updateItemRow(0, { quantidade: e.target.value })}
+                  className="input"
+                />
+              </Field>
+              <Field label="Tamanho">
+                <input
+                  value={items[0].tamanho}
+                  onChange={(e) => updateItemRow(0, { tamanho: e.target.value })}
+                  className="input"
+                  placeholder="P, M, G, 42..."
+                />
+              </Field>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <span className="block text-xs text-nord-gray">
+                Itens do kit — adicione uma linha para cada peça (ex.: camisa, calça, touca...)
+              </span>
+              {items.map((row, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    value={row.item}
+                    onChange={(e) => updateItemRow(idx, { item: e.target.value })}
+                    className="input flex-1"
+                  >
+                    {Object.entries(ITEM_LABEL).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Qtd."
+                    value={row.quantidade}
+                    onChange={(e) => updateItemRow(idx, { quantidade: e.target.value })}
+                    className="input w-20! shrink-0"
+                  />
+                  <input
+                    placeholder="Tamanho"
+                    value={row.tamanho}
+                    onChange={(e) => updateItemRow(idx, { tamanho: e.target.value })}
+                    className="input w-24! shrink-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeItemRow(idx)}
+                    disabled={submitting || items.length <= 1}
+                    title="Remover item"
+                    className="text-nord-gray hover:text-red-400 disabled:opacity-30 disabled:hover:text-nord-gray disabled:cursor-not-allowed shrink-0"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={addItemRow} disabled={submitting} className="btn-outline disabled:opacity-50">
+                <Plus size={13} /> Adicionar item
+              </button>
             </div>
           )}
-          <Field label="Item">
-            <select value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} className="input">
-              {Object.entries(ITEM_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Quantidade">
-            <input type="number" value={form.quantidade} onChange={(e) => setForm({ ...form, quantidade: e.target.value })} className="input" />
-          </Field>
-          <Field label="Tamanho">
-            <input value={form.tamanho} onChange={(e) => setForm({ ...form, tamanho: e.target.value })} className="input" placeholder="P, M, G, 42..." />
-          </Field>
-          <Field label="Data de entrega">
-            <input type="date" value={form.dataEntrega} onChange={(e) => setForm({ ...form, dataEntrega: e.target.value })} className="input" />
-          </Field>
-          <Field label="Responsável">
-            <input value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} className="input" />
-          </Field>
-          <Field label="Status">
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
-              {Object.entries(STATUS_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="col-span-2">
-            <Field label="Observação">
-              <input value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} className="input" />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Data de entrega">
+              <input type="date" value={form.dataEntrega} onChange={(e) => setForm({ ...form, dataEntrega: e.target.value })} className="input" />
             </Field>
+            <Field label="Status">
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
+                {Object.entries(STATUS_LABEL).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="col-span-2">
+              <Field label="Responsável">
+                <input value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} className="input" />
+              </Field>
+            </div>
+            <div className="col-span-2">
+              <Field label="Observação">
+                <input value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} className="input" />
+              </Field>
+            </div>
           </div>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 
