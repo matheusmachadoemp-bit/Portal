@@ -7,12 +7,10 @@ import {
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
-  PointerSensor,
   useDraggable,
   useDroppable,
-  useSensor,
-  useSensors,
 } from "@dnd-kit/core";
+import { useDndSensors } from "@/lib/use-dnd-sensors";
 import { TaskModal } from "../task-modal";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
@@ -72,7 +70,7 @@ export function TasksClient({
   const [editingTask, setEditingTask] = useState<TaskDTO | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useDndSensors();
 
   async function refresh() {
     const [tasksRes, historyRes] = await Promise.all([
