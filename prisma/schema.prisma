@@ -47,6 +47,15 @@ model User {
   defaultEmpresa      Empresa?           @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
   permissionProfileId String?
   permissionProfile   PermissionProfile? @relation(fields: [permissionProfileId], references: [id])
+  // Ficha de RH ligada a este login. `@unique` garante 1:1 nos dois
+  // sentidos (nunca dois Users apontando pro mesmo Employee). Substitui aos
+  // poucos o cruzamento por e-mail/nome que src/lib/inicio.ts fazia em
+  // tempo de execução (loadRotinaPesquisas, loadRotinaMetas) — continua
+  // null pra quem não tem ficha de RH (ex.: alguns ADMINISTRADOR) ou pra
+  // quem o backfill de e-mail não conseguiu casar sem ambiguidade; nesses
+  // casos o cruzamento antigo continua funcionando como fallback.
+  employeeId          String?            @unique
+  employee            Employee?          @relation(fields: [employeeId], references: [id])
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -1396,6 +1405,9 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
+  // Login (User) ligado a esta ficha de RH — ver User.employeeId. Null
+  // quando o colaborador não tem conta de acesso ao Portal.
+  user                    User?
   occurrences             Occurrence[]
   waiterSales             WaiterSaleEntry[]
   sales                   Sale[]

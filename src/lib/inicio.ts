@@ -466,28 +466,67 @@ export async function loadRotinaChecklist(
 }
 
 /**
+ * `Employee` ligado diretamente a este usuário nesta empresa, via
+ * `User.employeeId` (ver prisma/schema.prisma e a migration
+ * `20260906100000_user_employee_link`). Um usuário só pode estar ligado a
+ * UM `Employee` no schema atual — se a ficha de RH dele for de outra
+ * empresa (ex.: um supervisor com acesso a mais de uma loja, mas ficha de
+ * RH só numa delas), tratamos como "sem ligação nesta empresa" (retorna
+ * `null`) para quem chama cair no cruzamento antigo por e-mail/nome.
+ * `null` também quando o usuário nunca foi casado (backfill não achou
+ * match inequívoco, ou o usuário foi criado depois do backfill).
+ */
+async function findLinkedEmployee(
+  empresaId: string,
+  userId: string
+): Promise<{ id: string; name: string; setor: string; status: string } | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { employeeId: true } });
+  if (!user?.employeeId) return null;
+
+  return prisma.employee.findFirst({
+    where: { id: user.employeeId, empresaId },
+    select: { id: true, name: true, setor: true, status: true },
+  });
+}
+
+/**
  * Metas individuais do usuário do período corrente, incluídas só quando
  * abaixo do ritmo esperado, perto do prazo (até `DIAS_LIMITE_URGENTE` dias)
  * ou já vencidas sem terem sido atingidas.
  *
- * `Goal.responsavel` é campo de texto livre — não existe relação com
- * `User`/`Employee` no schema hoje —, então o cruzamento é por igualdade de
- * nome (sem diferenciar maiúsculas/minúsculas) com `session.user.name`; não
- * bate se o nome digitado na meta divergir do nome de cadastro do usuário
- * (apelido, sobrenome a menos, etc.).
+ * `Goal.responsavel` continua sendo um campo de texto livre (não existe —
+ * nem faria sentido existir — uma relação de `Goal` com `User`/`Employee`
+ * hoje), então o cruzamento continua sendo por igualdade de nome (sem
+ * diferenciar maiúsculas/minúsculas). A diferença é que agora, quando o
+ * usuário logado está ligado a uma ficha de RH nesta empresa
+ * (`User.employeeId`), o nome dessa ficha (`Employee.name`) também entra
+ * como candidato — cobre o caso de a meta ter sido cadastrada com o nome
+ * "oficial" do colaborador, diferente do nome de cadastro do login
+ * (apelido, sobrenome a menos, etc.). Quando não há ligação (ou ela aponta
+ * pra um Employee de outra empresa), o comportamento é exatamente o de
+ * antes: só `session.user.name`.
  */
 export async function loadRotinaMetas(
   empresaId: string,
+  userId: string,
   nomeLoja: string,
   nomeUsuario: string,
   now: Date = new Date()
 ): Promise<RotinaItem[]> {
-  if (!nomeUsuario.trim()) return [];
+  const nomesCandidatos = new Set<string>();
+  if (nomeUsuario.trim()) nomesCandidatos.add(nomeUsuario.trim());
+
+  const employeeLigado = await findLinkedEmployee(empresaId, userId);
+  if (employeeLigado?.name.trim()) nomesCandidatos.add(employeeLigado.name.trim());
+
+  if (nomesCandidatos.size === 0) return [];
 
   const goals = await prisma.goal.findMany({
     where: {
       empresaId,
-      responsavel: { equals: nomeUsuario, mode: "insensitive" },
+      OR: Array.from(nomesCandidatos).map((nome) => ({
+        responsavel: { equals: nome, mode: "insensitive" as const },
+      })),
       startDate: { lte: now },
       endDate: { gte: subDays(now, DIAS_LIMITE_URGENTE) },
     },
@@ -525,26 +564,35 @@ export async function loadRotinaMetas(
  * Convites de pesquisa de satisfação ainda não respondidos pelo usuário.
  * Convites são por `Employee`, não por `User` — o colaborador responde por
  * link com token, sem precisar logar (ver
- * src/app/api/satisfaction/responder/[token]/route.ts) — e não existe
- * relação direta `User`<->`Employee` no schema. O cruzamento aqui é por
- * e-mail (`Employee.email` = `session.user.email`, sem diferenciar
- * maiúsculas/minúsculas); usuários sem um cadastro de colaborador com o
- * mesmo e-mail (ex.: administradores sem ficha de RH) nunca verão pesquisas
- * aqui.
+ * src/app/api/satisfaction/responder/[token]/route.ts).
+ *
+ * Primeiro tenta a ligação direta (`User.employeeId`, quando existir e
+ * apontar pra um `Employee` ATIVO desta empresa); quando não há ligação
+ * (usuário nunca foi casado no backfill, ou foi casado com um Employee de
+ * outra empresa, ou a ficha ligada não está mais ATIVO), cai no cruzamento
+ * antigo por e-mail (`Employee.email` = `session.user.email`, sem
+ * diferenciar maiúsculas/minúsculas) como fallback. Usuários sem ligação e
+ * sem nenhum cadastro de colaborador ATIVO com o mesmo e-mail (ex.:
+ * administradores sem ficha de RH) continuam sem ver pesquisas aqui.
  */
 export async function loadRotinaPesquisas(
   empresaId: string,
+  userId: string,
   emailUsuario: string,
   nomeLoja: string,
   nomeUsuario: string,
   now: Date = new Date()
 ): Promise<RotinaItem[]> {
-  if (!emailUsuario.trim()) return [];
-
-  const employee = await prisma.employee.findFirst({
-    where: { empresaId, status: "ATIVO", email: { equals: emailUsuario, mode: "insensitive" } },
-    select: { id: true, setor: true },
-  });
+  const employeeLigado = await findLinkedEmployee(empresaId, userId);
+  const employee =
+    employeeLigado && employeeLigado.status === "ATIVO"
+      ? employeeLigado
+      : emailUsuario.trim()
+        ? await prisma.employee.findFirst({
+            where: { empresaId, status: "ATIVO", email: { equals: emailUsuario, mode: "insensitive" } },
+            select: { id: true, setor: true },
+          })
+        : null;
   if (!employee) return [];
 
   const convites = await prisma.satisfactionInvitation.findMany({
