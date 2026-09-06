@@ -11,7 +11,9 @@ import { QuickActionMenu } from "./quick-action-menu";
 import { DesempenhoChart } from "./desempenho-chart";
 import { RotinaPanel } from "./rotina-panel";
 import { AlertasPanel } from "./alertas-panel";
+import { ManutencaoResumoPanel } from "./manutencao-resumo-panel";
 import { MetasPanel } from "./metas-panel";
+import { EquipeHojePanel } from "./equipe-hoje-panel";
 import { LojaNordPanel } from "./loja-nord-panel";
 
 type EmpresaDTO = { id: string; key: string; name: string; color: string; logo: string | null };
@@ -326,15 +328,18 @@ export function GerencialDashboardClient({
       )}
 
       {/*
-        Rotina, alertas, metas e Loja Nord não dependem do período selecionado
-        acima (todas essas rotas são sempre "agora"/"mês corrente"), então
-        cada painel busca os próprios dados de forma independente —
-        inclusive antes dos indicadores terminarem de carregar — e só refaz
-        a busca quando a loja ativa (empresaId) muda.
+        Rotina, alertas, manutenção, metas, equipe de hoje e Loja Nord não
+        dependem do período selecionado acima (todas essas rotas são sempre
+        "agora"/"hoje"/"mês corrente"), então cada painel busca os próprios
+        dados de forma independente — inclusive antes dos indicadores
+        terminarem de carregar — e só refaz a busca quando a loja ativa
+        (empresaId) muda.
       */}
       <RotinaPanel empresaId={empresaId} />
       <AlertasPanel empresaId={empresaId} />
+      <ManutencaoResumoPanel empresaId={empresaId} />
       <MetasPanel empresaId={empresaId} />
+      <EquipeHojePanel empresaId={empresaId} />
       <LojaNordPanel empresaId={empresaId} />
     </div>
   );
