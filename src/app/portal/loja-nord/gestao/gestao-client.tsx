@@ -61,14 +61,24 @@ const emptyForm = {
   active: true,
 };
 
+const emptyPontosForm = {
+  userId: "",
+  kind: "BONIFICACAO",
+  pontos: "",
+  descricao: "",
+  justificativa: "",
+};
+
 export function GestaoClient({
   canManageCatalog,
   empresas,
+  colaboradores,
   initialRewards,
   initialRedemptions,
 }: {
   canManageCatalog: boolean;
   empresas: { id: string; name: string }[];
+  colaboradores: { id: string; name: string }[];
   initialRewards: RewardDTO[];
   initialRedemptions: RedemptionRow[];
 }) {
@@ -81,6 +91,9 @@ export function GestaoClient({
   const [error, setError] = useState<string | null>(null);
   const [recusando, setRecusando] = useState<string | null>(null);
   const [motivoRecusa, setMotivoRecusa] = useState("");
+  const [pontosForm, setPontosForm] = useState(emptyPontosForm);
+  const [lancandoPontos, setLancandoPontos] = useState(false);
+  const [pontosMsg, setPontosMsg] = useState<string | null>(null);
 
   function openNew() {
     setEditing(null);
@@ -202,9 +215,101 @@ export function GestaoClient({
     setMotivoRecusa("");
   }
 
+  async function submitPontos() {
+    setPontosMsg(null);
+    if (!pontosForm.userId || !pontosForm.pontos || !pontosForm.descricao.trim()) {
+      setPontosMsg("Preencha colaborador, quantidade de pontos e descrição.");
+      return;
+    }
+    setLancandoPontos(true);
+    try {
+      const res = await fetch("/api/loja-nord/pontos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pontosForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPontosMsg(data.error ?? "Não foi possível lançar os pontos.");
+        return;
+      }
+      setPontosMsg("Pontos lançados com sucesso.");
+      setPontosForm(emptyPontosForm);
+    } finally {
+      setLancandoPontos(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {error && <p className="text-xs text-nord-danger">{error}</p>}
+
+      <Section title="Lançar pontos manualmente">
+        <p className="text-xs text-nord-gray mb-3">
+          Use para bonificações e ajustes manuais. Toda movimentação fica registrada no histórico do colaborador com
+          o seu nome como responsável.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 items-end">
+          <label className="block xl:col-span-2">
+            <span className="block text-xs text-nord-gray mb-1">Colaborador</span>
+            <select value={pontosForm.userId} onChange={(e) => setPontosForm({ ...pontosForm, userId: e.target.value })} className="input">
+              <option value="">Selecione...</option>
+              {colaboradores.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Tipo</span>
+            <select value={pontosForm.kind} onChange={(e) => setPontosForm({ ...pontosForm, kind: e.target.value })} className="input">
+              <option value="BONIFICACAO">Bonificação</option>
+              <option value="AJUSTE_POSITIVO">Ajuste (crédito)</option>
+              <option value="AJUSTE_NEGATIVO">Ajuste (débito)</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Pontos</span>
+            <input
+              type="number"
+              value={pontosForm.pontos}
+              onChange={(e) => setPontosForm({ ...pontosForm, pontos: e.target.value })}
+              className="input"
+            />
+          </label>
+          <button
+            onClick={submitPontos}
+            disabled={lancandoPontos}
+            className="px-4 py-2 rounded-lg text-sm bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
+          >
+            {lancandoPontos ? "Lançando..." : "Lançar"}
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Descrição (aparece no histórico do colaborador)</span>
+            <input
+              value={pontosForm.descricao}
+              onChange={(e) => setPontosForm({ ...pontosForm, descricao: e.target.value })}
+              placeholder="Ex.: Bonificação por desempenho em setembro"
+              className="input"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Justificativa</span>
+            <input
+              value={pontosForm.justificativa}
+              onChange={(e) => setPontosForm({ ...pontosForm, justificativa: e.target.value })}
+              placeholder="Motivo do lançamento"
+              className="input"
+            />
+          </label>
+        </div>
+        {pontosMsg && (
+          <p className={`text-xs mt-2 ${pontosMsg.includes("sucesso") ? "text-nord-success" : "text-nord-danger"}`}>{pontosMsg}</p>
+        )}
+      </Section>
 
       <Section title="Solicitações de resgate">
         {redemptions.length === 0 ? (

@@ -3,33 +3,50 @@ import { PageContainer } from "@/components/page-container";
 import { EquipamentoDetailClient } from "./equipamento-detail-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { notFound } from "next/navigation";
+import QRCode from "qrcode";
+import { headers } from "next/headers";
 
 export default async function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const equipamento = await prisma.equipamento.findFirst({
-    where: { id, empresaId: { in: empresaIds } },
-    include: {
-      empresa: { select: { id: true, name: true, color: true } },
-      anexos: { orderBy: { createdAt: "desc" }, include: { uploadedBy: { select: { id: true, name: true } } } },
-      chamados: {
-        orderBy: { createdAt: "desc" },
-        include: { solicitante: { select: { id: true, name: true } }, responsavel: { select: { id: true, name: true } } },
+  const [equipamento, teamMembers, prestadores, preventivas] = await Promise.all([
+    prisma.equipamento.findFirst({
+      where: { id, empresaId: { in: empresaIds } },
+      include: {
+        empresa: { select: { id: true, name: true, color: true } },
+        anexos: { orderBy: { createdAt: "desc" }, include: { uploadedBy: { select: { id: true, name: true } } } },
+        chamados: {
+          orderBy: { createdAt: "desc" },
+          include: { solicitante: { select: { id: true, name: true } }, responsavel: { select: { id: true, name: true } } },
+        },
+        registros: {
+          orderBy: { data: "desc" },
+          include: { responsavel: { select: { id: true, name: true } }, anexos: true },
+        },
       },
-      registros: {
-        orderBy: { data: "desc" },
-        include: { responsavel: { select: { id: true, name: true } }, anexos: true },
-      },
-    },
-  });
+    }),
+    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.prestador.findMany({ where: { active: true }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
+    prisma.manutencaoPreventiva.findMany({
+      where: { equipamentoId: id, active: true },
+      orderBy: { createdAt: "desc" },
+      include: { responsavel: { select: { id: true, name: true } }, prestador: { select: { id: true, nome: true } } },
+    }),
+  ]);
   if (!equipamento) notFound();
 
   const custoAcumulado = await prisma.manutencaoRegistro.aggregate({
     where: { equipamentoId: id },
     _sum: { valorTotal: true },
   });
+
+  const headersList = await headers();
+  const host = headersList.get("host");
+  const protocol = host?.startsWith("localhost") ? "http" : "https";
+  const equipamentoUrl = `${protocol}://${host}/portal/manutencao/equipamentos/${id}`;
+  const qrCodeDataUrl = await QRCode.toDataURL(equipamentoUrl, { width: 240, margin: 1 });
 
   const serialized = {
     ...equipamento,
@@ -44,9 +61,22 @@ export default async function EquipamentoDetailPage({ params }: { params: Promis
     custoAcumulado: custoAcumulado._sum.valorTotal ?? 0,
   };
 
+  const serializedPreventivas = preventivas.map((p) => ({
+    ...p,
+    dataInicio: p.dataInicio.toISOString(),
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  }));
+
   return (
     <PageContainer title="Manutenção" subtitle="Ficha do equipamento" backHref="/portal/manutencao/equipamentos" backLabel="Equipamentos">
-      <EquipamentoDetailClient equipamento={serialized as never} />
+      <EquipamentoDetailClient
+        equipamento={serialized as never}
+        teamMembers={teamMembers}
+        prestadores={prestadores}
+        preventivas={serializedPreventivas as never}
+        qrCodeDataUrl={qrCodeDataUrl}
+      />
     </PageContainer>
   );
 }

@@ -87,7 +87,80 @@ export type ChamadoDTO = {
   comentarios?: ComentarioDTO[];
   historico?: ChamadoHistoricoDTO[];
   registros?: ManutencaoRegistroDTO[];
+  orcamentos?: OrcamentoDTO[];
   _count?: { comentarios: number };
+};
+
+export type PrestadorDTO = {
+  id: string;
+  nome: string;
+  nomeContato: string | null;
+  especialidade: string | null;
+  telefone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  documento: string | null;
+  endereco: string | null;
+  empresaIds: string[];
+  avaliacao: number | null;
+  observacoes: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { orcamentos: number; registros: number };
+  valorTotalGasto?: number;
+};
+
+export type OrcamentoDTO = {
+  id: string;
+  chamadoId: string;
+  prestadorId: string;
+  prestador: PrestadorDTO;
+  descricao: string | null;
+  valorMaoDeObra: number;
+  valorPecas: number;
+  valorTotal: number;
+  prazo: string | null;
+  garantia: string | null;
+  status: "RECEBIDO" | "EM_ANALISE" | "APROVADO" | "RECUSADO" | "EXPIRADO";
+  motivoRecusa: string | null;
+  createdAt: string;
+  updatedAt: string;
+  anexos?: AnexoDTO[];
+};
+
+export type ManutencaoPreventivaDTO = {
+  id: string;
+  equipamentoId: string;
+  equipamento: { id: string; nome: string; codigo: string; setor: string; fotoUrl: string | null; empresa: { name: string; color: string } };
+  tipoServico: string;
+  descricao: string | null;
+  frequencia: string;
+  intervaloDiasCustom: number | null;
+  horario: string | null;
+  responsavelId: string | null;
+  responsavel: UserOption | null;
+  prestadorId: string | null;
+  prestador: { id: string; nome: string } | null;
+  custoPrevisto: number | null;
+  checklist: string | null;
+  necessidadeParada: boolean;
+  dataInicio: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PreventivaOcorrenciaDTO = {
+  id: string;
+  preventivaId: string;
+  preventiva: ManutencaoPreventivaDTO;
+  dataProgramada: string;
+  status: "PROGRAMADA" | "EM_EXECUCAO" | "CONCLUIDA" | "REAGENDADA" | "CANCELADA";
+  registroId: string | null;
+  motivoReagendamento: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ManutencaoRegistroDTO = {

@@ -27,6 +27,7 @@ export default async function GestaoLojaNordPage() {
     rewards,
     colaboradoresParticipantes,
     empresas,
+    colaboradores,
     redemptions,
   ] = await Promise.all([
     prisma.lojaNordRedemption.count({ where: { status: "AGUARDANDO_APROVACAO" } }),
@@ -42,6 +43,7 @@ export default async function GestaoLojaNordPage() {
     prisma.lojaNordReward.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.lojaNordPointTransaction.findMany({ select: { userId: true }, distinct: ["userId"] }),
     prisma.empresa.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { order: "asc" } }),
+    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.lojaNordRedemption.findMany({
       where: { status: { in: ["AGUARDANDO_APROVACAO", "APROVADO", "DISPONIVEL_RETIRADA"] } },
       orderBy: { createdAt: "asc" },
@@ -77,6 +79,7 @@ export default async function GestaoLojaNordPage() {
         <GestaoClient
           canManageCatalog={canManageCatalog}
           empresas={empresas}
+          colaboradores={colaboradores}
           initialRewards={rewards.map((r) => ({
             ...r,
             createdAt: r.createdAt.toISOString(),

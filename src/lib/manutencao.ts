@@ -80,7 +80,7 @@ export const MANUTENCAO_TIPO_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 export const MANUTENCAO_FREQUENCIA_OPTIONS = [
-  { key: "NENHUMA", label: "Nenhuma" },
+  { key: "NENHUMA", label: "Nenhuma (única)" },
   { key: "SEMANAL", label: "Semanal" },
   { key: "QUINZENAL", label: "Quinzenal" },
   { key: "MENSAL", label: "Mensal" },
@@ -88,7 +88,43 @@ export const MANUTENCAO_FREQUENCIA_OPTIONS = [
   { key: "TRIMESTRAL", label: "Trimestral" },
   { key: "SEMESTRAL", label: "Semestral" },
   { key: "ANUAL", label: "Anual" },
+  { key: "PERSONALIZADA", label: "Personalizada (dias)" },
 ];
+
+export const PREVENTIVA_OCORRENCIA_STATUS_OPTIONS = [
+  { key: "PROGRAMADA", label: "Programada", tone: "default" as const },
+  { key: "EM_EXECUCAO", label: "Em execução", tone: "info" as const },
+  { key: "CONCLUIDA", label: "Concluída", tone: "success" as const },
+  { key: "REAGENDADA", label: "Reagendada", tone: "warning" as const },
+  { key: "CANCELADA", label: "Cancelada", tone: "danger" as const },
+];
+
+export const PREVENTIVA_OCORRENCIA_STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  PREVENTIVA_OCORRENCIA_STATUS_OPTIONS.map((s) => [s.key, s.label])
+);
+export const PREVENTIVA_OCORRENCIA_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> =
+  Object.fromEntries(PREVENTIVA_OCORRENCIA_STATUS_OPTIONS.map((s) => [s.key, s.tone]));
+
+/** Rótulo de exibição para uma ocorrência: distingue "Atrasada"/"Vence hoje"/"Próxima do vencimento"
+ * (derivados da data, sem alterar o status armazenado) das etiquetas reais do enum. */
+export function describePreventivaOcorrenciaLabel(status: string, dataProgramada: string | Date): {
+  label: string;
+  tone: "default" | "success" | "warning" | "danger" | "info";
+} {
+  if (status !== "PROGRAMADA") {
+    return { label: PREVENTIVA_OCORRENCIA_STATUS_LABEL[status] ?? status, tone: PREVENTIVA_OCORRENCIA_STATUS_TONE[status] ?? "default" };
+  }
+  const data = typeof dataProgramada === "string" ? new Date(dataProgramada) : dataProgramada;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const dia = new Date(data);
+  dia.setHours(0, 0, 0, 0);
+  const diffDias = Math.round((dia.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDias < 0) return { label: "Atrasada", tone: "danger" };
+  if (diffDias === 0) return { label: "Vence hoje", tone: "warning" };
+  if (diffDias <= 7) return { label: "Próxima do vencimento", tone: "warning" };
+  return { label: "Programada", tone: "default" };
+}
 
 export const MANUTENCAO_FREQUENCIA_LABEL: Record<string, string> = Object.fromEntries(
   MANUTENCAO_FREQUENCIA_OPTIONS.map((f) => [f.key, f.label])
@@ -122,7 +158,24 @@ const HISTORICO_ACTION_LABEL: Record<string, string> = {
   ANEXO_ADICIONADO: "adicionou um anexo",
   MANUTENCAO_REGISTRADA: "registrou uma manutenção",
   RESOLVIDO: "resolveu o chamado",
+  ORCAMENTO_ADICIONADO: "adicionou um orçamento",
+  ORCAMENTO_APROVADO: "aprovou um orçamento",
+  ORCAMENTO_RECUSADO: "recusou um orçamento",
 };
+
+export const ORCAMENTO_STATUS_OPTIONS = [
+  { key: "RECEBIDO", label: "Recebido", tone: "default" as const },
+  { key: "EM_ANALISE", label: "Em análise", tone: "info" as const },
+  { key: "APROVADO", label: "Aprovado", tone: "success" as const },
+  { key: "RECUSADO", label: "Recusado", tone: "danger" as const },
+  { key: "EXPIRADO", label: "Expirado", tone: "default" as const },
+];
+
+export const ORCAMENTO_STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  ORCAMENTO_STATUS_OPTIONS.map((s) => [s.key, s.label])
+);
+export const ORCAMENTO_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> =
+  Object.fromEntries(ORCAMENTO_STATUS_OPTIONS.map((s) => [s.key, s.tone]));
 
 export function describeChamadoHistoricoAction(action: string): string {
   return HISTORICO_ACTION_LABEL[action] ?? action;

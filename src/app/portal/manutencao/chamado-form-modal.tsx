@@ -11,12 +11,12 @@ import type { AnexoDraft } from "./types";
 type EquipamentoOption = { id: string; nome: string; codigo: string; fotoUrl: string | null; setor: string };
 type UserOption = { id: string; name: string };
 
-const emptyForm = () => ({
+const emptyForm = (presetEquipamentoId?: string, presetSetor?: string) => ({
   titulo: "",
-  setor: SETOR_SUGESTOES[0],
+  setor: presetSetor ?? SETOR_SUGESTOES[0],
   localEspecifico: "",
   categoria: CHAMADO_CATEGORIA_OPTIONS[0].key as string,
-  equipamentoId: "",
+  equipamentoId: presetEquipamentoId ?? "",
   descricao: "",
   prioridade: "MEDIA",
   responsavelId: "",
@@ -29,14 +29,17 @@ export function ChamadoFormModal({
   onCreated,
   equipamentos,
   teamMembers,
+  presetEquipamentoId,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
   equipamentos: EquipamentoOption[];
   teamMembers: UserOption[];
+  presetEquipamentoId?: string;
 }) {
-  const [form, setForm] = useState(emptyForm());
+  const preset = equipamentos.find((e) => e.id === presetEquipamentoId);
+  const [form, setForm] = useState(emptyForm(presetEquipamentoId, preset?.setor));
   const [anexos, setAnexos] = useState<AnexoDraft[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -47,7 +50,7 @@ export function ChamadoFormModal({
   }
 
   function reset() {
-    setForm(emptyForm());
+    setForm(emptyForm(presetEquipamentoId, preset?.setor));
     setAnexos([]);
     setError(null);
   }
