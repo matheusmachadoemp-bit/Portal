@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck } from "lucide-react";
+import { GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
 
 type NotificationDTO = {
   id: string;
@@ -13,6 +14,8 @@ type NotificationDTO = {
   taskId: string | null;
   checklistOccurrenceId: string | null;
   chamadoId: string | null;
+  goalId: string | null;
+  goalCategory: GoalCategoryKey | null;
   read: boolean;
   createdAt: string;
 };
@@ -93,6 +96,7 @@ export function NotificationBell() {
     if (n.checklistOccurrenceId) router.push(`/portal/tarefas/checklist/executar/${n.checklistOccurrenceId}`);
     else if (n.taskId) router.push("/portal/tarefas");
     else if (n.chamadoId) router.push(`/portal/manutencao/chamados/${n.chamadoId}`);
+    else if (n.goalCategory) router.push(`/portal/metas/${GOAL_CATEGORY_ROUTE[n.goalCategory]}`);
   }
 
   return (

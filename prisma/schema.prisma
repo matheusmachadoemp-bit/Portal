@@ -1106,10 +1106,12 @@ model Goal {
   planoDeAcao    String?
   createdById    String
   createdBy      User         @relation(fields: [createdById], references: [id])
+  alertaEnviado  Boolean      @default(false)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  attachments GoalAttachment[]
+  attachments   GoalAttachment[]
+  notifications Notification[]
 }
 
 model GoalAttachment {
@@ -3249,6 +3251,8 @@ model Notification {
   checklistOccurrence   ChecklistOccurrence?  @relation(fields: [checklistOccurrenceId], references: [id], onDelete: Cascade)
   chamadoId             String?
   chamado               Chamado?              @relation(fields: [chamadoId], references: [id], onDelete: SetNull)
+  goalId                String?
+  goal                  Goal?                 @relation(fields: [goalId], references: [id], onDelete: Cascade)
   read                  Boolean               @default(false)
   createdAt             DateTime              @default(now())
 

@@ -11,6 +11,10 @@
     {
       "path": "/api/checklist/escalations/run",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/metas/alertas/run",
+      "schedule": "0 3 * * *"
     }
   ]
 }
