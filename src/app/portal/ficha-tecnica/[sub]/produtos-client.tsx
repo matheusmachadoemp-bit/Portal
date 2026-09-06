@@ -4,14 +4,8 @@ import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
-import {
-  DndContext,
-  DragEndEvent,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
+import { DndContext, DragEndEvent, closestCenter } from "@dnd-kit/core";
+import { useDndSensors } from "@/lib/use-dnd-sensors";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Section, Badge } from "@/components/ui/stat-card";
@@ -102,7 +96,7 @@ export function ProdutosClient({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useDndSensors();
 
   async function refresh() {
     const res = await fetch(`/api/ficha-tecnica/produtos?category=${category}`);

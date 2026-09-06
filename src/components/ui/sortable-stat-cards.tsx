@@ -2,14 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { GripVertical } from "lucide-react";
-import {
-  DndContext,
-  DragEndEvent,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
+import { DndContext, DragEndEvent, closestCenter } from "@dnd-kit/core";
+import { useDndSensors } from "@/lib/use-dnd-sensors";
 import {
   SortableContext,
   arrayMove,
@@ -68,7 +62,7 @@ export function SortableCardGrid({
 }) {
   const defaultOrder = items.map((c) => c.key);
   const [order, setOrder] = useState<string[]>(defaultOrder);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useDndSensors();
 
   useEffect(() => {
     const saved = localStorage.getItem(storageKey);

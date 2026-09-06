@@ -9,12 +9,10 @@ import {
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
-  PointerSensor,
   useDraggable,
   useDroppable,
-  useSensor,
-  useSensors,
 } from "@dnd-kit/core";
+import { useDndSensors } from "@/lib/use-dnd-sensors";
 import { Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -49,7 +47,7 @@ export function ChamadosClient({
   const [activeId, setActiveId] = useState<string | null>(null);
   const router = useRouter();
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useDndSensors();
 
   async function refresh() {
     const res = await fetch("/api/manutencao/chamados");
