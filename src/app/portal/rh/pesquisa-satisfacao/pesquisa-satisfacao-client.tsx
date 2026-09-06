@@ -239,7 +239,9 @@ export function PesquisaSatisfacaoClient({
               {filtered.map((s) => (
                 <tr key={s.id} className="border-b border-nord-border/50">
                   <td className="py-2 px-3 text-white">{s.title}</td>
-                  <td className="py-2 px-3 text-nord-gray">{s.publico.map((p) => p.empresa.name).join(", ") || "-"}</td>
+                  <td className="py-2 px-3 text-nord-gray">
+                    {Array.from(new Set(s.publico.map((p) => p.empresa.name))).join(", ") || "-"}
+                  </td>
                   <td className="py-2 px-3 text-nord-gray font-mono">{s.perguntas.length}</td>
                   <td className="py-2 px-3 text-nord-gray font-mono">
                     {formatDate(s.startDate)} – {formatDate(s.endDate)}
