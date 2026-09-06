@@ -14,6 +14,7 @@ import { empresaIdsForContext, getActiveEmpresaContext, GRUPO_SENTINEL, type Emp
 import { perfilInicioForRole, perfilPodeVerPainelGerencial } from "@/lib/inicio";
 import { GerencialDashboardClient } from "./gerencial-dashboard-client";
 import { ColaboradorDashboardClient } from "./colaborador-dashboard-client";
+import { LiderDashboardClient } from "./lider-dashboard-client";
 import type { Empresa } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -30,9 +31,9 @@ const SUBTITULO_INICIO = "Veja o resumo da sua operação e suas prioridades de 
 
 /**
  * Bloco "escolha uma loja para ver o painel" — compartilhado pelos painéis
- * novos (Gerencial e Colaborador, abaixo), que só funcionam com uma loja por
- * vez: nenhuma das rotas de /api/inicio/* que eles consomem sabe consolidar
- * "Grupo Nord (consolidado)".
+ * novos (Gerencial, Colaborador e Líder, abaixo), que só funcionam com uma
+ * loja por vez: nenhuma das rotas de /api/inicio/* que eles consomem sabe
+ * consolidar "Grupo Nord (consolidado)".
  */
 function EscolhaLojaFallback({ ctx }: { ctx: EmpresaContext | null }) {
   return (
@@ -115,6 +116,34 @@ async function InicioColaborador({ userName }: { userName: string }) {
   );
 }
 
+/**
+ * Painel novo (alertas + minha rotina + colaboradores do setor + metas do
+ * setor + resumo de manutenção do setor + Loja Nord) — para o perfil Líder,
+ * uma loja por vez. Mesma regra dos painéis Gerencial/Colaborador acima: as
+ * rotas de /api/inicio/* que ele consome recebem sempre uma única
+ * `empresaId`, nunca "Grupo Nord (consolidado)". Cada painel já filtra pelo
+ * setor do Líder sozinho, por baixo dos panos, a partir da ficha de RH
+ * ligada ao login (ver LiderDashboardClient para o detalhe de cada um).
+ */
+async function InicioLider({ userName }: { userName: string }) {
+  const ctx = await getActiveEmpresaContext();
+  const title = saudacaoPara(userName);
+
+  if (!ctx || ctx.mode === "grupo") {
+    return (
+      <PageContainer title={title} subtitle={SUBTITULO_INICIO}>
+        <EscolhaLojaFallback ctx={ctx} />
+      </PageContainer>
+    );
+  }
+
+  return (
+    <PageContainer title={title} subtitle={SUBTITULO_INICIO}>
+      <LiderDashboardClient empresaId={ctx.empresa.id} />
+    </PageContainer>
+  );
+}
+
 export default async function InicioPage() {
   const session = await auth();
   const perfil = session?.user ? perfilInicioForRole(session.user.role) : "COLABORADOR";
@@ -129,14 +158,22 @@ export default async function InicioPage() {
     return <InicioColaborador userName={userName} />;
   }
 
+  if (session?.user && perfil === "LIDER") {
+    const userName = session.user.name?.trim() || session.user.email || "usuário";
+    return <InicioLider userName={userName} />;
+  }
+
   return <InicioClassico />;
 }
 
 // ---------------------------------------------------------------------------
-// Painel clássico (Líder) — inalterado nesta etapa. A reconstrução da Tela
-// de Início já cobre Proprietário/Gerente (InicioGerencial) e Colaborador
-// (InicioColaborador, ambos acima); só o Líder continua vendo exatamente
-// esta mesma tela até a fase dele ser construída.
+// Painel clássico — não é mais usado por nenhum perfil autenticado a partir
+// desta etapa (a reconstrução da Tela de Início agora cobre os 4 perfis:
+// Proprietário/Gerente em InicioGerencial, Colaborador em InicioColaborador
+// e Líder em InicioLider, todos acima). Só sobrevive como fallback de
+// `session?.user` vazio (sem sessão) — mantido sem alteração de propósito:
+// removê-lo é uma limpeza para depois, fora do escopo desta etapa, caso
+// alguma coisa ainda dependa dele que não foi percebido aqui.
 // ---------------------------------------------------------------------------
 
 async function getData(empresaIds: string[]) {
