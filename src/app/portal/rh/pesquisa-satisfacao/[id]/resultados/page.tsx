@@ -32,7 +32,7 @@ export default async function ResultadosPesquisaPage({ params }: { params: Promi
         <p className="text-nord-gray text-xs">Status: {SATISFACTION_STATUS_LABEL[survey.status]}</p>
         <p className="text-nord-gray text-xs">{survey.perguntas.length} pergunta(s) configurada(s)</p>
       </div>
-      <ResultadosClient surveyId={survey.id} />
+      <ResultadosClient surveyId={survey.id} surveyTitle={survey.title} />
     </PageContainer>
   );
 }

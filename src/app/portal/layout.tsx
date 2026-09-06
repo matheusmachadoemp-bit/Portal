@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/sidebar/sidebar";
+import { MobileSidebarProvider } from "@/components/sidebar/mobile-sidebar-context";
 import { redirect } from "next/navigation";
 import { getActiveEmpresaContext } from "@/lib/empresa";
 import { visibleModuleKeys } from "@/lib/permissions";
@@ -37,16 +38,18 @@ export default async function PortalLayout({ children }: { children: React.React
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-nord-black">
-      <Sidebar
-        initialCategories={categories}
-        userName={session.user.name ?? session.user.email ?? "Usuário"}
-        userRole={session.user.role}
-        empresas={empresaContext.empresas}
-        activeEmpresaId={empresaContext.mode === "single" ? empresaContext.empresa.id : "GRUPO"}
-        canViewGrupoNord={empresaContext.canViewGrupoNord}
-      />
-      <div className="flex-1 flex flex-col min-w-0">{children}</div>
-    </div>
+    <MobileSidebarProvider>
+      <div className="flex min-h-screen w-full bg-nord-black">
+        <Sidebar
+          initialCategories={categories}
+          userName={session.user.name ?? session.user.email ?? "Usuário"}
+          userRole={session.user.role}
+          empresas={empresaContext.empresas}
+          activeEmpresaId={empresaContext.mode === "single" ? empresaContext.empresa.id : "GRUPO"}
+          canViewGrupoNord={empresaContext.canViewGrupoNord}
+        />
+        <div className="flex-1 flex flex-col min-w-0">{children}</div>
+      </div>
+    </MobileSidebarProvider>
   );
 }
