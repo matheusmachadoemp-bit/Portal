@@ -25,6 +25,18 @@ function formatDueDate(dueDate: string | null, dueTime: string | null): string {
   return dueTime ? `${date} ${dueTime}` : date;
 }
 
+// Prazo tranquilo em branco, perto de vencer (24h) em laranja, vencido em vermelho.
+const PRAZO_PROXIMO_HORAS = 24;
+
+function prazoClass(t: TaskDTO): string {
+  if (t.overdue) return "text-red-400 font-medium";
+  if (t.dueDate && t.status !== "CONCLUIDA") {
+    const horasRestantes = (new Date(t.dueDate).getTime() - Date.now()) / (1000 * 60 * 60);
+    if (horasRestantes <= PRAZO_PROXIMO_HORAS) return "text-orange-400 font-medium";
+  }
+  return "text-white";
+}
+
 export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: TaskDTO) => void }) {
   const [sortField, setSortField] = useState<SortField>("dueDate");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -155,9 +167,7 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
                 <td className="py-2.5 pr-4">
                   <SectorBadge sectorKey={t.sectorKey} />
                 </td>
-                <td className={`py-2.5 pr-4 ${t.overdue ? "text-red-400 font-medium" : "text-nord-gray"}`}>
-                  {formatDueDate(t.dueDate, t.dueTime)}
-                </td>
+                <td className={`py-2.5 pr-4 ${prazoClass(t)}`}>{formatDueDate(t.dueDate, t.dueTime)}</td>
                 <td className="py-2.5 pr-4">
                   <span className="inline-flex items-center gap-1 text-xs" style={{ color: TASK_PRIORITY_COLOR[t.priority] }}>
                     {TASK_PRIORITY_LABEL[t.priority]}
