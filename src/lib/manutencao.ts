@@ -122,7 +122,24 @@ const HISTORICO_ACTION_LABEL: Record<string, string> = {
   ANEXO_ADICIONADO: "adicionou um anexo",
   MANUTENCAO_REGISTRADA: "registrou uma manutenção",
   RESOLVIDO: "resolveu o chamado",
+  ORCAMENTO_ADICIONADO: "adicionou um orçamento",
+  ORCAMENTO_APROVADO: "aprovou um orçamento",
+  ORCAMENTO_RECUSADO: "recusou um orçamento",
 };
+
+export const ORCAMENTO_STATUS_OPTIONS = [
+  { key: "RECEBIDO", label: "Recebido", tone: "default" as const },
+  { key: "EM_ANALISE", label: "Em análise", tone: "info" as const },
+  { key: "APROVADO", label: "Aprovado", tone: "success" as const },
+  { key: "RECUSADO", label: "Recusado", tone: "danger" as const },
+  { key: "EXPIRADO", label: "Expirado", tone: "default" as const },
+];
+
+export const ORCAMENTO_STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  ORCAMENTO_STATUS_OPTIONS.map((s) => [s.key, s.label])
+);
+export const ORCAMENTO_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> =
+  Object.fromEntries(ORCAMENTO_STATUS_OPTIONS.map((s) => [s.key, s.tone]));
 
 export function describeChamadoHistoricoAction(action: string): string {
   return HISTORICO_ACTION_LABEL[action] ?? action;

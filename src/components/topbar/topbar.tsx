@@ -1,21 +1,46 @@
 "use client";
 
-import { Search, Building2, Menu } from "lucide-react";
-import { NotificationBell } from "@/components/sidebar/notification-bell";
+import { Search, Menu } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useMobileSidebar } from "@/components/sidebar/mobile-sidebar-context";
 import { UserMenu, type UserProfile } from "./user-menu";
+
+function nowInSaoPaulo() {
+  const now = new Date();
+  return {
+    time: now.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }),
+    date: now.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" }),
+  };
+}
+
+/** Só passa a mostrar a hora após montar no cliente, para não divergir da renderização no servidor. */
+function Clock() {
+  const [value, setValue] = useState<{ time: string; date: string } | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- inicia o relógio só no cliente, evitando divergência com a renderização no servidor
+    setValue(nowInSaoPaulo());
+    const id = setInterval(() => setValue(nowInSaoPaulo()), 1000 * 30);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!value) return null;
+
+  return (
+    <div className="hidden sm:flex flex-col items-end leading-tight">
+      <span className="text-white text-sm font-medium tabular-nums">{value.time}</span>
+      <span className="text-nord-gray text-[11px] tabular-nums">{value.date}</span>
+    </div>
+  );
+}
 
 export function Topbar({
   title,
   subtitle,
-  empresaLabel,
-  empresaColor = "#2952E3",
   user = null,
 }: {
   title: string;
   subtitle?: string;
-  empresaLabel?: string;
-  empresaColor?: string;
   user?: UserProfile | null;
 }) {
   const { setOpen: setMobileMenuOpen } = useMobileSidebar();
@@ -36,15 +61,6 @@ export function Topbar({
         </div>
       </div>
       <div className="flex items-center gap-3">
-        {empresaLabel && (
-          <span
-            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
-            style={{ color: empresaColor, borderColor: `${empresaColor}55`, backgroundColor: `${empresaColor}15` }}
-          >
-            <Building2 size={12} />
-            Você está gerenciando: {empresaLabel}
-          </span>
-        )}
         <div className="relative hidden md:block">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nord-gray" />
           <input
@@ -52,7 +68,7 @@ export function Topbar({
             className="bg-nord-card border border-nord-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder:text-nord-gray/60 outline-none focus:border-nord-blue w-64"
           />
         </div>
-        <NotificationBell />
+        <Clock />
         <UserMenu user={user} />
       </div>
     </header>

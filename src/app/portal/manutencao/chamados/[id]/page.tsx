@@ -11,7 +11,7 @@ export default async function ChamadoDetailPage({ params }: { params: Promise<{ 
   const session = await auth();
   if (!session?.user) notFound();
 
-  const [chamado, teamMembers] = await Promise.all([
+  const [chamado, teamMembers, prestadores] = await Promise.all([
     prisma.chamado.findUnique({
       where: { id },
       include: {
@@ -23,9 +23,11 @@ export default async function ChamadoDetailPage({ params }: { params: Promise<{ 
         anexos: { orderBy: { createdAt: "desc" }, include: { uploadedBy: { select: { id: true, name: true } } } },
         historico: { orderBy: { createdAt: "asc" }, include: { user: { select: { id: true, name: true } } } },
         registros: { orderBy: { data: "desc" }, include: { responsavel: { select: { id: true, name: true } }, anexos: true } },
+        orcamentos: { orderBy: { createdAt: "desc" }, include: { prestador: true, anexos: true } },
       },
     }),
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.prestador.findMany({ where: { active: true }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
   ]);
   if (!chamado) notFound();
   if (chamado.status === "RASCUNHO" && chamado.solicitanteId !== session.user.id && !MANAGER_ROLES.includes(session.user.role)) {
@@ -53,11 +55,24 @@ export default async function ChamadoDetailPage({ params }: { params: Promise<{ 
     anexos: chamado.anexos.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
     historico: chamado.historico.map((h) => ({ ...h, createdAt: h.createdAt.toISOString() })),
     registros: chamado.registros.map((r) => ({ ...r, data: r.data.toISOString(), createdAt: r.createdAt.toISOString() })),
+    orcamentos: chamado.orcamentos.map((o) => ({
+      ...o,
+      createdAt: o.createdAt.toISOString(),
+      updatedAt: o.updatedAt.toISOString(),
+      prestador: { ...o.prestador, createdAt: o.prestador.createdAt.toISOString(), updatedAt: o.prestador.updatedAt.toISOString() },
+      anexos: o.anexos.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
+    })),
   };
 
   return (
     <PageContainer title="Manutenção" subtitle={`Chamado ${chamado.protocolo}`} backHref="/portal/manutencao/chamados" backLabel="Chamados">
-      <ChamadoDetailClient chamado={serialized as never} teamMembers={teamMembers} currentUserId={session.user.id} currentUserRole={session.user.role} />
+      <ChamadoDetailClient
+        chamado={serialized as never}
+        teamMembers={teamMembers}
+        prestadores={prestadores}
+        currentUserId={session.user.id}
+        currentUserRole={session.user.role}
+      />
     </PageContainer>
   );
 }

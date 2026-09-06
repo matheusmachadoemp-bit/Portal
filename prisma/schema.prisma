@@ -132,6 +132,8 @@ model User {
   manutencaoAnexos               ManutencaoAnexo[]
   manutencaoRegistrosResponsavel ManutencaoRegistro[]       @relation("ManutencaoRegistroResponsavel")
   manutencaoRegistrosCriados     ManutencaoRegistro[]       @relation("ManutencaoRegistroCreatedBy")
+  prestadoresCriados             Prestador[]                @relation("PrestadorCreatedBy")
+  orcamentosCriados              Orcamento[]                @relation("OrcamentoCreatedBy")
   satisfactionSurveysCreated     SatisfactionSurvey[]       @relation("SatisfactionSurveyCreatedBy")
   lojaNordTransactions           LojaNordPointTransaction[] @relation("LojaNordTransactionUser")
   lojaNordTransactionsLancadas   LojaNordPointTransaction[] @relation("LojaNordTransactionCriador")
@@ -3392,6 +3394,7 @@ model Chamado {
   anexos        ManutencaoAnexo[]
   historico     ChamadoHistorico[]
   registros     ManutencaoRegistro[]
+  orcamentos    Orcamento[]
   notifications Notification[]
 
   @@index([empresaId, status])
@@ -3431,6 +3434,8 @@ model ManutencaoAnexo {
   equipamento   Equipamento?        @relation(fields: [equipamentoId], references: [id], onDelete: Cascade)
   registroId    String?
   registro      ManutencaoRegistro? @relation(fields: [registroId], references: [id], onDelete: Cascade)
+  orcamentoId   String?
+  orcamento     Orcamento?          @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
   tipo          ManutencaoAnexoTipo @default(DOCUMENTO)
   name          String
   fileUrl       String
@@ -3439,10 +3444,70 @@ model ManutencaoAnexo {
   uploadedById  String
   uploadedBy    User                @relation(fields: [uploadedById], references: [id])
   createdAt     DateTime            @default(now())
+  prestador     Prestador?          @relation(fields: [prestadorId], references: [id])
+  prestadorId   String?
 
   @@index([chamadoId])
   @@index([equipamentoId])
   @@index([registroId])
+  @@index([orcamentoId])
+}
+
+model Prestador {
+  id            String   @id @default(cuid())
+  nome          String
+  nomeContato   String?
+  especialidade String?
+  telefone      String?
+  whatsapp      String?
+  email         String?
+  documento     String?
+  endereco      String?
+  empresaIds    String[] @default([])
+  avaliacao     Int?
+  observacoes   String?
+  active        Boolean  @default(true)
+  createdById   String
+  createdBy     User     @relation("PrestadorCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orcamentos Orcamento[]
+  registros  ManutencaoRegistro[] @relation("ManutencaoRegistroPrestador")
+  anexos     ManutencaoAnexo[]
+}
+
+enum OrcamentoStatus {
+  RECEBIDO
+  EM_ANALISE
+  APROVADO
+  RECUSADO
+  EXPIRADO
+}
+
+model Orcamento {
+  id             String          @id @default(cuid())
+  chamadoId      String
+  chamado        Chamado         @relation(fields: [chamadoId], references: [id], onDelete: Cascade)
+  prestadorId    String
+  prestador      Prestador       @relation(fields: [prestadorId], references: [id])
+  descricao      String?
+  valorMaoDeObra Float           @default(0)
+  valorPecas     Float           @default(0)
+  valorTotal     Float           @default(0)
+  prazo          String?
+  garantia       String?
+  status         OrcamentoStatus @default(RECEBIDO)
+  motivoRecusa   String?
+  createdById    String
+  createdBy      User            @relation("OrcamentoCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  anexos ManutencaoAnexo[]
+
+  @@index([chamadoId])
+  @@index([prestadorId])
 }
 
 model ManutencaoRegistro {
@@ -3462,6 +3527,8 @@ model ManutencaoRegistro {
   solucaoAplicada     String?
   pecasTrocadas       String?
   prestador           String?
+  prestadorId         String?
+  prestadorCadastrado Prestador?     @relation("ManutencaoRegistroPrestador", fields: [prestadorId], references: [id])
   responsavelId       String
   responsavel         User           @relation("ManutencaoRegistroResponsavel", fields: [responsavelId], references: [id])
   valorMaoDeObra      Float          @default(0)

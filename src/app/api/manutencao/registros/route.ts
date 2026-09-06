@@ -81,6 +81,7 @@ export async function POST(req: Request) {
         solucaoAplicada: body.solucaoAplicada || null,
         pecasTrocadas: body.pecasTrocadas || null,
         prestador: body.prestador || null,
+        prestadorId: body.prestadorId || null,
         responsavelId: body.responsavelId || session.user.id,
         valorMaoDeObra,
         valorPecas,
