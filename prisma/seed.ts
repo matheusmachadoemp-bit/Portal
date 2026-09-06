@@ -31,7 +31,6 @@ const CATEGORIES = [
     order: 2,
     contentType: "marketing",
     subs: [
-      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
       { key: "calendario", name: "Calendário de Conteúdo", icon: "Calendar" },
       { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
       { key: "campanhas", name: "Campanhas", icon: "Megaphone" },
@@ -40,8 +39,6 @@ const CATEGORIES = [
       { key: "ideias", name: "Banco de Ideias", icon: "Lightbulb" },
       { key: "trafego-pago", name: "Tráfego Pago", icon: "TrendingUp" },
       { key: "redes-sociais", name: "Redes Sociais", icon: "Share2" },
-      { key: "equipe", name: "Equipe", icon: "Users" },
-      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
     ],
   },
   {
