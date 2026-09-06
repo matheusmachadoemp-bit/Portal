@@ -1509,6 +1509,41 @@ async function main() {
     });
   }
 
+  // --- Conquistas (Badges) gerais — critérios verificados sob demanda por
+  // GET /api/inicio/conquistas (ver src/lib/conquistas.ts). Não inclui os
+  // badges de treinamento (TrainingBadge), que são de outro seed/módulo.
+  const BADGES_GERAIS = [
+    {
+      key: "sete_dias_sem_atraso",
+      name: "Sete dias sem atraso",
+      description: "7 dias corridos sem nenhum atraso registrado no ponto.",
+      icon: "AlarmClockCheck",
+      color: "#22c55e",
+    },
+    {
+      key: "checklist_perfeito",
+      name: "Checklist perfeito",
+      description:
+        "Concluiu, nos últimos 30 dias, todos os checklists sob sua responsabilidade dentro do prazo — sem nenhum atraso.",
+      icon: "ClipboardCheck",
+      color: "#2952E3",
+    },
+    {
+      key: "meta_alcancada",
+      name: "Meta alcançada",
+      description: "Atingiu 100% de uma meta.",
+      icon: "Target",
+      color: "#eab308",
+    },
+  ];
+  for (const badge of BADGES_GERAIS) {
+    await prisma.badge.upsert({
+      where: { key: badge.key },
+      update: { name: badge.name, description: badge.description, icon: badge.icon, color: badge.color },
+      create: badge,
+    });
+  }
+
   console.log("Seed concluído.");
   console.log("Login admin: admin@nordpizza.com / Nord@2026 (acesso Nord Pizza + Zarki Sushi + Grupo Nord)");
   console.log(`Login gerente: ${gerente.email} / Gerente@2026 (acesso apenas Nord Pizza)`);

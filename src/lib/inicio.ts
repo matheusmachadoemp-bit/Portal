@@ -476,7 +476,7 @@ export async function loadRotinaChecklist(
  * `null` também quando o usuário nunca foi casado (backfill não achou
  * match inequívoco, ou o usuário foi criado depois do backfill).
  */
-async function findLinkedEmployee(
+export async function findLinkedEmployee(
   empresaId: string,
   userId: string
 ): Promise<{ id: string; name: string; setor: string; status: string } | null> {
@@ -493,8 +493,16 @@ async function findLinkedEmployee(
  * Metas do usuário no período corrente (já iniciadas, ainda não encerradas
  * há mais de `DIAS_LIMITE_URGENTE` dias) — a parte de "encontrar a(s)
  * meta(s) do usuário" extraída de `loadRotinaMetas` para ser reaproveitada
- * também por `loadMinhaMeta` (painel dedicado, GET /api/inicio/minha-meta),
- * sem duplicar a consulta.
+ * também por `loadMinhaMeta` (painel dedicado, GET /api/inicio/minha-meta)
+ * e por `checkMetaAlcancada` (src/lib/conquistas.ts, critério do badge
+ * "Meta alcançada"), sem duplicar a consulta. Exportada por isso — continua
+ * não fazendo sentido fora do conceito de "metas do usuário logado" desta
+ * tela.
+ *
+ * Importante para quem consome esta função para fins de conquista/badge: o
+ * filtro `endDate: { gte: subDays(now, DIAS_LIMITE_URGENTE) }` restringe a
+ * metas do período corrente (não é um histórico completo) — uma meta
+ * concluída há muito mais tempo que isso não aparece aqui.
  *
  * `Goal.responsavel` continua sendo um campo de texto livre (não existe —
  * nem faria sentido existir — uma relação de `Goal` com `User`/`Employee`
@@ -508,7 +516,7 @@ async function findLinkedEmployee(
  * pra um Employee de outra empresa), o comportamento é exatamente o de
  * antes: só `nomeUsuario`.
  */
-async function findMetasDoUsuario(empresaId: string, userId: string, nomeUsuario: string, now: Date) {
+export async function findMetasDoUsuario(empresaId: string, userId: string, nomeUsuario: string, now: Date) {
   const nomesCandidatos = new Set<string>();
   if (nomeUsuario.trim()) nomesCandidatos.add(nomeUsuario.trim());
 
