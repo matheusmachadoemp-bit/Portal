@@ -10,9 +10,10 @@ import { DashboardCharts } from "./charts";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Store } from "lucide-react";
 import { StoreSwitcher } from "@/components/sidebar/store-switcher";
-import { empresaIdsForContext, getActiveEmpresaContext, GRUPO_SENTINEL } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, GRUPO_SENTINEL, type EmpresaContext } from "@/lib/empresa";
 import { perfilInicioForRole, perfilPodeVerPainelGerencial } from "@/lib/inicio";
 import { GerencialDashboardClient } from "./gerencial-dashboard-client";
+import { ColaboradorDashboardClient } from "./colaborador-dashboard-client";
 import type { Empresa } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,39 @@ function saudacaoPara(nomeCompleto: string): string {
 const SUBTITULO_INICIO = "Veja o resumo da sua operação e suas prioridades de hoje.";
 
 /**
+ * Bloco "escolha uma loja para ver o painel" — compartilhado pelos painéis
+ * novos (Gerencial e Colaborador, abaixo), que só funcionam com uma loja por
+ * vez: nenhuma das rotas de /api/inicio/* que eles consomem sabe consolidar
+ * "Grupo Nord (consolidado)".
+ */
+function EscolhaLojaFallback({ ctx }: { ctx: EmpresaContext | null }) {
+  return (
+    <div className="nord-card p-10 flex flex-col items-center text-center gap-4">
+      <div className="w-14 h-14 rounded-2xl bg-nord-blue/15 flex items-center justify-center">
+        <Store size={26} className="text-nord-blue-light" />
+      </div>
+      <div>
+        <p className="text-white font-medium text-base mb-1">Escolha uma loja para ver o painel</p>
+        <p className="text-nord-gray text-sm max-w-md mx-auto">
+          Este painel mostra os indicadores de uma loja por vez e não compara lojas entre si. Você está no
+          modo &quot;Grupo Nord (consolidado)&quot; — selecione uma loja abaixo para continuar.
+        </p>
+      </div>
+      {ctx && ctx.empresas.length > 0 && (
+        <div className="w-full max-w-xs">
+          <StoreSwitcher
+            empresas={ctx.empresas}
+            activeEmpresaId={GRUPO_SENTINEL}
+            canViewGrupoNord={ctx.canViewGrupoNord}
+            collapsed={false}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Painel novo (indicadores + desempenho da loja) — só para Proprietário e
  * Gerente, uma loja por vez. "Grupo Nord (consolidado)" não é suportado
  * aqui: se o usuário estiver nesse modo, pedimos para escolher uma loja.
@@ -39,28 +73,7 @@ async function InicioGerencial({ userName }: { userName: string }) {
   if (!ctx || ctx.mode === "grupo") {
     return (
       <PageContainer title={title} subtitle={SUBTITULO_INICIO}>
-        <div className="nord-card p-10 flex flex-col items-center text-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-nord-blue/15 flex items-center justify-center">
-            <Store size={26} className="text-nord-blue-light" />
-          </div>
-          <div>
-            <p className="text-white font-medium text-base mb-1">Escolha uma loja para ver o painel</p>
-            <p className="text-nord-gray text-sm max-w-md mx-auto">
-              Este painel mostra os indicadores de uma loja por vez e não compara lojas entre si. Você está no
-              modo &quot;Grupo Nord (consolidado)&quot; — selecione uma loja abaixo para continuar.
-            </p>
-          </div>
-          {ctx && ctx.empresas.length > 0 && (
-            <div className="w-full max-w-xs">
-              <StoreSwitcher
-                empresas={ctx.empresas}
-                activeEmpresaId={GRUPO_SENTINEL}
-                canViewGrupoNord={ctx.canViewGrupoNord}
-                collapsed={false}
-              />
-            </div>
-          )}
-        </div>
+        <EscolhaLojaFallback ctx={ctx} />
       </PageContainer>
     );
   }
@@ -76,6 +89,32 @@ async function InicioGerencial({ userName }: { userName: string }) {
   );
 }
 
+/**
+ * Painel novo simplificado (resumo pessoal + rotina + minha meta +
+ * conquistas + Loja Nord) — para o perfil Colaborador, uma loja por vez.
+ * Mesma regra do painel Gerencial acima: as rotas de /api/inicio/* que ele
+ * consome (colaborador-resumo, minha-meta, conquistas, rotina, loja-nord)
+ * recebem sempre uma única `empresaId`, nunca "Grupo Nord (consolidado)".
+ */
+async function InicioColaborador({ userName }: { userName: string }) {
+  const ctx = await getActiveEmpresaContext();
+  const title = saudacaoPara(userName);
+
+  if (!ctx || ctx.mode === "grupo") {
+    return (
+      <PageContainer title={title} subtitle={SUBTITULO_INICIO}>
+        <EscolhaLojaFallback ctx={ctx} />
+      </PageContainer>
+    );
+  }
+
+  return (
+    <PageContainer title={title} subtitle={SUBTITULO_INICIO}>
+      <ColaboradorDashboardClient empresaId={ctx.empresa.id} />
+    </PageContainer>
+  );
+}
+
 export default async function InicioPage() {
   const session = await auth();
   const perfil = session?.user ? perfilInicioForRole(session.user.role) : "COLABORADOR";
@@ -85,14 +124,19 @@ export default async function InicioPage() {
     return <InicioGerencial userName={userName} />;
   }
 
+  if (session?.user && perfil === "COLABORADOR") {
+    const userName = session.user.name?.trim() || session.user.email || "usuário";
+    return <InicioColaborador userName={userName} />;
+  }
+
   return <InicioClassico />;
 }
 
 // ---------------------------------------------------------------------------
-// Painel clássico (Líder/Colaborador) — inalterado nesta etapa. A
-// reconstrução da Tela de Início por enquanto só vale para Proprietário e
-// Gerente (ver InicioGerencial acima); os demais perfis continuam vendo
-// exatamente esta mesma tela até a fase deles ser construída.
+// Painel clássico (Líder) — inalterado nesta etapa. A reconstrução da Tela
+// de Início já cobre Proprietário/Gerente (InicioGerencial) e Colaborador
+// (InicioColaborador, ambos acima); só o Líder continua vendo exatamente
+// esta mesma tela até a fase dele ser construída.
 // ---------------------------------------------------------------------------
 
 async function getData(empresaIds: string[]) {
