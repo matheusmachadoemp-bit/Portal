@@ -13,7 +13,13 @@ import {
 import { generateChecklistOccurrences, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { isTaskOverdue, effectiveTaskStatus } from "@/lib/tarefas";
 import { generateDueTaskOccurrences } from "@/lib/tarefas-server";
-import { computeGoalStatus, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE } from "@/lib/goals";
+import {
+  computeGoalStatus,
+  GOAL_CATEGORIES,
+  GOAL_CATEGORY_LABEL,
+  GOAL_CATEGORY_ROUTE,
+  type GoalCategoryKey,
+} from "@/lib/goals";
 
 // ---------------------------------------------------------------------------
 // Perfil da Tela de Início — mapeia o enum `Role` (login/permissões) para o
@@ -487,6 +493,106 @@ export async function findLinkedEmployee(
     where: { id: user.employeeId, empresaId },
     select: { id: true, name: true, setor: true, status: true },
   });
+}
+
+// ---------------------------------------------------------------------------
+// "Qual o setor do Líder" — descobre o setor (texto livre de
+// `Employee.setor`) do usuário logado, usado pelos painéis exclusivos do
+// perfil Líder: metas/checklist do setor (`mapSetorLivreParaGoalCategory`,
+// logo abaixo — usado por GET /api/inicio/metas-setores), "Colaboradores"
+// do setor (`loadColaboradoresDoSetor`, mais abaixo — GET
+// /api/inicio/colaboradores-setor) e o resumo de manutenção por setor
+// (`loadManutencaoResumo`, mais abaixo — GET /api/inicio/manutencao-resumo).
+//
+// IMPORTANTE — confiabilidade deste cruzamento (investigado nesta etapa):
+// `Employee.setor` é texto livre digitado por quem cadastra o colaborador.
+// Conferido o formulário de cadastro
+// (src/app/portal/rh/colaboradores/colaboradores-client.tsx): o campo
+// "Setor" é um `<input>` comum, SEM `<select>` e SEM sugestão nenhuma
+// (nem um `<datalist>`) — não existe validação nem lista fixa. Duas fichas
+// de RH do mesmo setor podem estar digitadas como "Cozinha", "cozinha",
+// "COZINHA" ou até "Cozinha/Produção".
+//
+// Já `Goal.category` e `ChecklistTemplate.setor` usam o enum `GoalCategory`
+// (6 valores fixos: GERENCIA, SALAO, COZINHA, DELIVERY, MARKETING,
+// ADMINISTRATIVO) — travado pelo schema, sem variação de escrita possível.
+// E `Equipamento.setor`/`Chamado.setor` (módulo de Manutenção) também são
+// texto livre, mas com sugestões (`SETOR_SUGESTOES`, em
+// src/lib/manutencao.ts: "Cozinha", "Salão", "Estoque", "Bar", "Delivery",
+// "Administrativo", "Área externa" — um `<datalist>`, não obrigatório).
+//
+// Ou seja, há 3 convenções de "setor" diferentes no schema hoje (RH,
+// Metas/Checklist, Manutenção) e só a de Metas/Checklist é um enum de
+// verdade. O cruzamento "setor do Líder" (`Employee.setor`) -> "setor da
+// meta/checklist" (`GoalCategory`) é FRÁGIL por natureza — mesmo tipo de
+// problema de convenção de texto já visto antes neste projeto com
+// `ChecklistTemplate.turno` (também texto livre, sem garantia de bater com
+// nenhuma lista). `mapSetorLivreParaGoalCategory` (abaixo) só reconhece uma
+// correspondência quando o texto do RH bate (ignorando acento/maiúscula/
+// minúscula) com a CHAVE do enum ("salao") ou com o RÓTULO em português já
+// usado no resto do app (`GOAL_CATEGORY_LABEL`, ex. "Salão"). Optamos por
+// NÃO inventar sinônimo nenhum (ex. "atendimento" -> SALAO, "motoboy" ->
+// DELIVERY): não há banco disponível neste ambiente de desenvolvimento para
+// validar contra dado real, e a única evidência hoje é o seed
+// (prisma/seed.ts), que usa exatamente "Cozinha", "Salão" e "Delivery" para
+// `Employee.setor` — mas seed é dado de demonstração, não prova de como o
+// RH cadastra em produção. Quando o texto não bate com nenhuma das 6
+// opções, o mapeamento retorna `null` (setor não identificado) — cada
+// chamador trata isso como "sem setor conhecido" (lista vazia ou resumo
+// zerado), nunca como erro nem como "mostrar tudo por engano". Se, na
+// prática, muitos Líderes ficarem sem setor identificado por causa disso,
+// a correção de raiz é transformar `Employee.setor` num `<select>` com as
+// mesmas opções de `GoalCategory` (mudança de tela + possível migração de
+// dados) — decisão maior, fora do escopo desta etapa.
+//
+// Já o cruzamento usado por `loadColaboradoresDoSetor` (`Employee.setor`
+// contra `Employee.setor` de outros colaboradores) e por
+// `loadManutencaoResumo` quando chamado com `setor` (`Employee.setor`
+// contra `Equipamento.setor`/`Chamado.setor`) são texto-livre contra
+// texto-livre — comparados só por igualdade (sem diferenciar maiúsculas/
+// minúsculas, mas SEM tentar mapear sinônimo), sem o risco de "bater com o
+// enum errado". Ainda frágeis se as duas pontas usarem convenções
+// diferentes (ex.: RH cadastra "Cozinha" mas a Manutenção registra o
+// equipamento como "Cozinha e Produção"), mas o pior caso é simplesmente
+// não achar nada — nunca misturar setor errado.
+// ---------------------------------------------------------------------------
+
+/**
+ * `Employee.setor` (texto livre) do usuário logado nesta empresa, via
+ * `findLinkedEmployee`. `null` quando o usuário não tem ficha de RH ligada
+ * nesta empresa (sem `User.employeeId`, ou ele aponta para um `Employee` de
+ * outra empresa) — "setor não identificado", nunca um erro.
+ */
+export async function loadSetorDoLider(empresaId: string, userId: string): Promise<string | null> {
+  const employee = await findLinkedEmployee(empresaId, userId);
+  return employee?.setor || null;
+}
+
+/** Remove acentos e normaliza maiúsculas/minúsculas/espaços — só para comparar texto livre sem depender de digitação exata (acento, caixa). */
+function normalizarSetorTexto(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Mapeamento best-effort de texto livre (`Employee.setor`) para o enum
+ * `GoalCategory` — ver o comentário grande acima para os limites e o
+ * porquê de não incluir sinônimos. `null` quando o texto não bate com
+ * nenhuma das 6 categorias (nem pela chave do enum, nem pelo rótulo em
+ * português já usado no app).
+ */
+export function mapSetorLivreParaGoalCategory(setorLivre: string): GoalCategoryKey | null {
+  const normalizado = normalizarSetorTexto(setorLivre);
+  return (
+    GOAL_CATEGORIES.find(
+      (categoria) =>
+        normalizado === normalizarSetorTexto(categoria) ||
+        normalizado === normalizarSetorTexto(GOAL_CATEGORY_LABEL[categoria])
+    ) ?? null
+  );
 }
 
 /**
@@ -1247,6 +1353,37 @@ export async function loadEquipeOcorrenciasHoje(
 }
 
 // ---------------------------------------------------------------------------
+// "Colaboradores" do Líder (GET /api/inicio/colaboradores-setor) — painel
+// exclusivo do perfil Líder (diferente de "Equipe de hoje" acima, que é a
+// loja INTEIRA e só para Proprietário/Gerente): lista os colaboradores
+// ATIVOS do MESMO setor do Líder (`Employee.setor`, texto livre — ver o
+// comentário grande acima de `loadSetorDoLider` para os limites gerais
+// desse tipo de cruzamento; aqui o risco é menor que o de
+// `mapSetorLivreParaGoalCategory`, porque comparamos `Employee.setor` com
+// `Employee.setor` — o mesmo campo/convenção nos dois lados, sem tentar
+// bater com um enum de outro módulo).
+// ---------------------------------------------------------------------------
+
+export type ColaboradorSetor = { id: string; nome: string; cargo: string; avatarUrl: string | null };
+
+/**
+ * Colaboradores ATIVOS desta empresa cujo `setor` bate com `setor`
+ * (ignorando maiúsculas/minúsculas — o campo não tem lista fixa nem
+ * sugestão, então duas fichas do mesmo setor podem ter sido digitadas com
+ * caixa diferente). Ordenado por nome.
+ */
+export async function loadColaboradoresDoSetor(empresaId: string, setor: string): Promise<ColaboradorSetor[]> {
+  const colaboradores = await prisma.employee.findMany({
+    where: { empresaId, setor: { equals: setor, mode: "insensitive" }, status: "ATIVO" },
+    select: { id: true, name: true, cargo: true, photoUrl: true },
+  });
+
+  return colaboradores
+    .map((c): ColaboradorSetor => ({ id: c.id, nome: c.name, cargo: c.cargo, avatarUrl: c.photoUrl }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+// ---------------------------------------------------------------------------
 // "Resumo de manutenção" (GET /api/inicio/manutencao-resumo) — mesma
 // restrição de acesso de /api/inicio/alertas (`perfilPodeVerAlertas`:
 // Proprietário/Gerente/Líder).
@@ -1264,6 +1401,15 @@ export async function loadEquipeOcorrenciasHoje(
 // aquela lista usa — aqui é só "qual a próxima", não "quantas nos próximos
 // 30 dias", então não faz sentido escondê-la só por estar mais longe que
 // isso. `null` quando nenhum equipamento tem essa data preenchida.
+//
+// `setor` (3º parâmetro, opcional) restringe os 4 números a um único setor
+// — usado quando quem chama é um Líder (ver comentário grande acima de
+// `loadSetorDoLider`): `Equipamento.setor`/`Chamado.setor` também são texto
+// livre (com sugestões, `SETOR_SUGESTOES` em src/lib/manutencao.ts), então
+// comparamos sem diferenciar maiúsculas/minúsculas, sem tentar mapear
+// sinônimo algum (mesmo raciocínio de `loadColaboradoresDoSetor`, acima).
+// Sem `setor` (Proprietário/Gerente, ou chamada sem esse argumento),
+// comportamento idêntico ao de antes desta etapa: números da loja inteira.
 // ---------------------------------------------------------------------------
 
 export type ManutencaoResumo = {
@@ -1273,15 +1419,21 @@ export type ManutencaoResumo = {
   proximaManutencaoProgramada: { titulo: string; data: string } | null;
 };
 
-export async function loadManutencaoResumo(empresaId: string, now: Date = new Date()): Promise<ManutencaoResumo> {
+export async function loadManutencaoResumo(
+  empresaId: string,
+  now: Date = new Date(),
+  setor?: string
+): Promise<ManutencaoResumo> {
+  const setorFiltro = setor ? { setor: { equals: setor, mode: "insensitive" as const } } : {};
+
   const [chamadosAbertos, chamadosUrgentes, equipamentosParados, proximoEquipamento] = await Promise.all([
-    prisma.chamado.count({ where: { empresaId, status: { notIn: ["RESOLVIDO", "CANCELADO"] } } }),
+    prisma.chamado.count({ where: { empresaId, status: { notIn: ["RESOLVIDO", "CANCELADO"] }, ...setorFiltro } }),
     prisma.chamado.count({
-      where: { empresaId, prioridade: "URGENTE", status: { notIn: ["RESOLVIDO", "CANCELADO"] } },
+      where: { empresaId, prioridade: "URGENTE", status: { notIn: ["RESOLVIDO", "CANCELADO"] }, ...setorFiltro },
     }),
-    prisma.equipamento.count({ where: { empresaId, status: "PARADO" } }),
+    prisma.equipamento.count({ where: { empresaId, status: "PARADO", ...setorFiltro } }),
     prisma.equipamento.findFirst({
-      where: { empresaId, proximaManutencaoEm: { gte: now } },
+      where: { empresaId, proximaManutencaoEm: { gte: now }, ...setorFiltro },
       orderBy: { proximaManutencaoEm: "asc" },
       select: { nome: true, codigo: true, proximaManutencaoEm: true },
     }),

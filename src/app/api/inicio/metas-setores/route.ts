@@ -4,7 +4,7 @@ import { getUserEmpresas } from "@/lib/empresa";
 import { prisma } from "@/lib/prisma";
 import { pct } from "@/lib/calc";
 import { differenceInCalendarDays } from "date-fns";
-import { perfilInicioForRole, perfilPodeVerAlertas, goalPace } from "@/lib/inicio";
+import { perfilInicioForRole, perfilPodeVerAlertas, goalPace, loadSetorDoLider, mapSetorLivreParaGoalCategory } from "@/lib/inicio";
 import { currentMonth, monthToDateRange, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
 
 /**
@@ -18,7 +18,13 @@ const SETORES_INICIO: GoalCategoryKey[] = ["GERENCIA", "SALAO", "COZINHA", "DELI
 /**
  * "Progresso das metas" — mesmo grupo de perfis de /api/inicio/alertas
  * (Proprietário, Gerente e Líder; não Colaborador), pela mesma
- * `perfilPodeVerAlertas`.
+ * `perfilPodeVerAlertas`. Proprietário/Gerente sempre veem os 5 setores
+ * (comportamento inalterado); Líder só vê o(s) setor(es) que baterem com o
+ * setor da própria ficha de RH (`loadSetorDoLider` +
+ * `mapSetorLivreParaGoalCategory`, em src/lib/inicio.ts — ver o comentário
+ * grande lá para os limites desse cruzamento). Sem ficha de RH ligada, ou
+ * setor que não bate com nenhuma das 5 categorias, o Líder recebe
+ * `{ setores: [] }` — nunca os 5 setores por engano, nunca um erro.
  */
 export async function GET(req: Request) {
   const session = await auth();
@@ -42,6 +48,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Loja inválida ou sem permissão." }, { status: 403 });
   }
 
+  let setoresPermitidos = SETORES_INICIO;
+  if (perfil === "LIDER") {
+    const setorLivre = await loadSetorDoLider(empresaId, session.user.id);
+    const categoria = setorLivre ? mapSetorLivreParaGoalCategory(setorLivre) : null;
+    setoresPermitidos = categoria ? [categoria] : [];
+  }
+
   // Toda meta vale por um mês inteiro, do dia 1 ao último dia (ver
   // `monthToDateRange`/`currentMonth` em src/lib/goals.ts — os mesmos
   // helpers que a tela de Metas usa para achar "as metas do mês X" via
@@ -50,10 +63,13 @@ export async function GET(req: Request) {
   const now = new Date();
   const { startDate } = monthToDateRange(currentMonth());
 
-  const goals = await prisma.goal.findMany({
-    where: { empresaId, category: { in: SETORES_INICIO }, startDate: new Date(startDate) },
-    orderBy: { createdAt: "asc" },
-  });
+  const goals =
+    setoresPermitidos.length === 0
+      ? []
+      : await prisma.goal.findMany({
+          where: { empresaId, category: { in: setoresPermitidos }, startDate: new Date(startDate) },
+          orderBy: { createdAt: "asc" },
+        });
 
   // Na prática, cada um dos 5 setores costuma ter no máximo 1 meta cadastrada
   // por mês (é assim que a tela de Metas é usada hoje). Mas o schema permite
@@ -64,7 +80,7 @@ export async function GET(req: Request) {
   // TODAS as metas encontradas para o setor, cada uma como uma entrada
   // própria (podendo repetir o mesmo `setor` mais de uma vez). Nunca
   // escondemos uma meta real só para caber em "1 item por setor".
-  const setores = SETORES_INICIO.flatMap((categoria) =>
+  const setores = setoresPermitidos.flatMap((categoria) =>
     goals
       .filter((g) => g.category === categoria)
       .map((g) => {
