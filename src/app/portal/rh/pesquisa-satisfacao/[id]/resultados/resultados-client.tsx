@@ -10,11 +10,15 @@ import { exportRowsToCsv, exportRowsToExcel } from "@/lib/export-utils";
 import { exportKpiReportToPdf } from "@/lib/pdf-export";
 import type { SatisfactionTheme } from "@prisma/client";
 
-function temaColor(percent: number) {
-  if (percent >= 70) return "#22C55E";
-  if (percent >= 40) return "#F59E0B";
-  return "#EF4444";
-}
+const TEMA_COLOR: Record<SatisfactionTheme, string> = {
+  LIDERANCA: "#1464F4",
+  AMBIENTE: "#22C55E",
+  COMUNICACAO: "#F59E0B",
+  RECONHECIMENTO: "#A855F7",
+  TREINAMENTO: "#06B6D4",
+  BEM_ESTAR: "#EC4899",
+  ESCALA_FOLGAS: "#EF4444",
+};
 
 type Results = {
   totalInvitations: number;
@@ -224,7 +228,7 @@ export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; 
                 paddingAngle={3}
               >
                 {data.porTema.map((t) => (
-                  <Cell key={t.tema} fill={temaColor(t.satisfacaoPercent)} />
+                  <Cell key={t.tema} fill={TEMA_COLOR[t.tema]} />
                 ))}
               </Pie>
               <Legend wrapperStyle={{ fontSize: 12, color: "#9AA4B2" }} />
