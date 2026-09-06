@@ -263,7 +263,7 @@ export function CriarPesquisaClient({
                   placeholder="Título da pergunta"
                   className="input flex-1"
                 />
-                <select value={q.tipo} onChange={(e) => updateQuestion(idx, { tipo: e.target.value })} className="input w-auto">
+                <select value={q.tipo} onChange={(e) => updateQuestion(idx, { tipo: e.target.value })} className="input input-compact">
                   {Object.entries(SATISFACTION_QUESTION_TYPE_LABEL).map(([k, v]) => (
                     <option key={k} value={k}>
                       {v}
@@ -310,7 +310,7 @@ export function CriarPesquisaClient({
                   <select
                     value={q.tema ?? ""}
                     onChange={(e) => updateQuestion(idx, { tema: e.target.value || null })}
-                    className="input w-auto text-xs"
+                    className="input input-compact text-xs"
                   >
                     <option value="">Sem tema</option>
                     {Object.entries(SATISFACTION_THEME_LABEL).map(([k, v]) => (
@@ -410,6 +410,9 @@ export function CriarPesquisaClient({
         }
         .input:focus {
           border-color: var(--nord-blue);
+        }
+        .input-compact {
+          width: auto;
         }
       `}</style>
     </div>

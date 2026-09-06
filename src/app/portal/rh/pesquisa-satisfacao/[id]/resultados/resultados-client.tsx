@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, FileText, MessageSquare, Sheet, FileDown } from "lucide-react";
-import { Badge, ProgressBar, Section } from "@/components/ui/stat-card";
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { SATISFACTION_THEME_LABEL } from "@/lib/satisfaction";
 import { exportRowsToCsv, exportRowsToExcel } from "@/lib/export-utils";
 import { exportKpiReportToPdf } from "@/lib/pdf-export";
 import type { SatisfactionTheme } from "@prisma/client";
+
+function temaColor(percent: number) {
+  if (percent >= 70) return "#22C55E";
+  if (percent >= 40) return "#F59E0B";
+  return "#EF4444";
+}
 
 type Results = {
   totalInvitations: number;
@@ -151,7 +158,7 @@ export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; 
             label: "Alertas críticos",
             value: String(data.alerts.length),
             icon: "AlertTriangle",
-            color: data.alerts.length > 0 ? "#ef4444" : "#9AA4B2",
+            color: "#ef4444",
           },
         ]}
       />
@@ -206,17 +213,28 @@ export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; 
 
       {data.porTema.length > 0 && (
         <Section title="Satisfação por tema">
-          <div className="space-y-3">
-            {data.porTema.map((t) => (
-              <div key={t.tema}>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-white">{SATISFACTION_THEME_LABEL[t.tema]}</span>
-                  <span className="text-nord-gray">{t.satisfacaoPercent}%</span>
-                </div>
-                <ProgressBar percent={t.satisfacaoPercent} color={t.satisfacaoPercent >= 50 ? "#22c55e" : "#ef4444"} />
-              </div>
-            ))}
-          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie
+                data={data.porTema.map((t) => ({ name: SATISFACTION_THEME_LABEL[t.tema], value: t.satisfacaoPercent }))}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={60}
+                outerRadius={95}
+                paddingAngle={3}
+              >
+                {data.porTema.map((t) => (
+                  <Cell key={t.tema} fill={temaColor(t.satisfacaoPercent)} />
+                ))}
+              </Pie>
+              <Legend wrapperStyle={{ fontSize: 12, color: "#9AA4B2" }} />
+              <Tooltip
+                contentStyle={{ background: "#151A23", border: "1px solid #232A37", borderRadius: 8 }}
+                labelStyle={{ color: "#F7F9FC" }}
+                formatter={(v) => `${v}%`}
+              />
+            </PieChart>
+          </ResponsiveContainer>
         </Section>
       )}
 
@@ -224,7 +242,7 @@ export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; 
         title="Comentários anônimos"
         action={
           <div className="flex items-center gap-2">
-            <select value={filterSetor} onChange={(e) => setFilterSetor(e.target.value)} className="input w-auto text-xs">
+            <select value={filterSetor} onChange={(e) => setFilterSetor(e.target.value)} className="input input-compact text-xs">
               <option value="">Todos os setores</option>
               {setoresDisponiveis.map((s) => (
                 <option key={s} value={s}>
@@ -232,7 +250,7 @@ export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; 
                 </option>
               ))}
             </select>
-            <select value={filterTema} onChange={(e) => setFilterTema(e.target.value)} className="input w-auto text-xs">
+            <select value={filterTema} onChange={(e) => setFilterTema(e.target.value)} className="input input-compact text-xs">
               <option value="">Todos os temas</option>
               {temasDisponiveis.map((t) => (
                 <option key={t} value={t}>
