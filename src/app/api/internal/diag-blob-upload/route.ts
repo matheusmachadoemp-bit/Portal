@@ -5,7 +5,9 @@ const FIX_TOKEN = "nordportal-diag-blob-2026";
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
-  if (token !== FIX_TOKEN) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (token !== FIX_TOKEN) {
+    return NextResponse.json({ error: "Unauthorized", tokenReceived: token }, { status: 401 });
+  }
 
   const hasToken = !!process.env.BLOB_READ_WRITE_TOKEN;
   const tokenPrefix = process.env.BLOB_READ_WRITE_TOKEN?.slice(0, 20) ?? null;
