@@ -28,7 +28,7 @@ export default async function ResultadosPesquisaPage({ params }: { params: Promi
     >
       <div className="nord-card p-4 space-y-1 text-sm mb-4">
         <p className="text-white font-medium">{survey.title}</p>
-        <p className="text-nord-gray text-xs">{survey.publico.map((p) => p.empresa.name).join(", ")}</p>
+        <p className="text-nord-gray text-xs">{Array.from(new Set(survey.publico.map((p) => p.empresa.name))).join(", ")}</p>
         <p className="text-nord-gray text-xs">Status: {SATISFACTION_STATUS_LABEL[survey.status]}</p>
         <p className="text-nord-gray text-xs">{survey.perguntas.length} pergunta(s) configurada(s)</p>
       </div>

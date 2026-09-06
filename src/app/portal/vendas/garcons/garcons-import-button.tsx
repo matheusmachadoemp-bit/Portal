@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 
 export function GarconsImportButton({ canCreate = true }: { canCreate?: boolean }) {
@@ -121,7 +122,7 @@ export function GarconsImportButton({ canCreate = true }: { canCreate?: boolean 
             <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
               <p>
                 Importação concluída: {importResult.itens} linha(s), {importResult.garcons} garçom(s), somando{" "}
-                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(importResult.faturamentoTotal)}.
+                {formatCurrency(importResult.faturamentoTotal)}.
               </p>
               {importResult.semGarcomCadastrado.length > 0 && (
                 <p className="text-amber-300">

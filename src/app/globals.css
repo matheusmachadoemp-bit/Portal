@@ -83,6 +83,12 @@ body {
   color: var(--nord-gray);
   opacity: 0.7;
 }
+/* .input define width:100%, o que vence a utilidade w-auto do Tailwind quando
+   combinadas (ex.: "input w-auto") — use esta classe junto de "input" para
+   um campo com largura de conteúdo dentro de uma linha flex. */
+.input-compact {
+  width: auto;
+}
 
 .btn-primary {
   display: inline-flex;
