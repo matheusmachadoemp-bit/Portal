@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { IDEA_APPROVER_ROLES } from "@/lib/marketing";
 
 const STR_FIELDS = ["title", "description", "references", "links", "category", "tags", "status"] as const;
+const APPROVAL_STATUSES = ["APROVADA", "DESCARTADA"];
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -15,6 +17,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
   const body = await req.json();
+
+  const isApprovalAction = body.promote || (typeof body.status === "string" && APPROVAL_STATUSES.includes(body.status));
+  if (isApprovalAction && !IDEA_APPROVER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Sem permissão para aprovar ou reprovar ideias." }, { status: 403 });
+  }
 
   const data: Record<string, unknown> = {};
   for (const f of STR_FIELDS) {
