@@ -490,9 +490,11 @@ async function findLinkedEmployee(
 }
 
 /**
- * Metas individuais do usuário do período corrente, incluídas só quando
- * abaixo do ritmo esperado, perto do prazo (até `DIAS_LIMITE_URGENTE` dias)
- * ou já vencidas sem terem sido atingidas.
+ * Metas do usuário no período corrente (já iniciadas, ainda não encerradas
+ * há mais de `DIAS_LIMITE_URGENTE` dias) — a parte de "encontrar a(s)
+ * meta(s) do usuário" extraída de `loadRotinaMetas` para ser reaproveitada
+ * também por `loadMinhaMeta` (painel dedicado, GET /api/inicio/minha-meta),
+ * sem duplicar a consulta.
  *
  * `Goal.responsavel` continua sendo um campo de texto livre (não existe —
  * nem faria sentido existir — uma relação de `Goal` com `User`/`Employee`
@@ -504,15 +506,9 @@ async function findLinkedEmployee(
  * "oficial" do colaborador, diferente do nome de cadastro do login
  * (apelido, sobrenome a menos, etc.). Quando não há ligação (ou ela aponta
  * pra um Employee de outra empresa), o comportamento é exatamente o de
- * antes: só `session.user.name`.
+ * antes: só `nomeUsuario`.
  */
-export async function loadRotinaMetas(
-  empresaId: string,
-  userId: string,
-  nomeLoja: string,
-  nomeUsuario: string,
-  now: Date = new Date()
-): Promise<RotinaItem[]> {
+async function findMetasDoUsuario(empresaId: string, userId: string, nomeUsuario: string, now: Date) {
   const nomesCandidatos = new Set<string>();
   if (nomeUsuario.trim()) nomesCandidatos.add(nomeUsuario.trim());
 
@@ -521,7 +517,7 @@ export async function loadRotinaMetas(
 
   if (nomesCandidatos.size === 0) return [];
 
-  const goals = await prisma.goal.findMany({
+  return prisma.goal.findMany({
     where: {
       empresaId,
       OR: Array.from(nomesCandidatos).map((nome) => ({
@@ -531,6 +527,23 @@ export async function loadRotinaMetas(
       endDate: { gte: subDays(now, DIAS_LIMITE_URGENTE) },
     },
   });
+}
+
+/**
+ * Metas individuais do usuário do período corrente, incluídas só quando
+ * abaixo do ritmo esperado, perto do prazo (até `DIAS_LIMITE_URGENTE` dias)
+ * ou já vencidas sem terem sido atingidas. Reaproveita `findMetasDoUsuario`
+ * (acima) para a busca; esta função só decide o que é "alerta" o bastante
+ * para entrar na rotina.
+ */
+export async function loadRotinaMetas(
+  empresaId: string,
+  userId: string,
+  nomeLoja: string,
+  nomeUsuario: string,
+  now: Date = new Date()
+): Promise<RotinaItem[]> {
+  const goals = await findMetasDoUsuario(empresaId, userId, nomeUsuario, now);
 
   const itens: RotinaItem[] = [];
   for (const g of goals) {
@@ -558,6 +571,63 @@ export async function loadRotinaMetas(
     });
   }
   return itens;
+}
+
+// ---------------------------------------------------------------------------
+// "Minha meta" (GET /api/inicio/minha-meta) — painel dedicado à meta
+// individual do colaborador, diferente do alerta resumido de
+// `loadRotinaMetas` acima: aqui mostramos a meta completa (mesmo quando ela
+// está dentro do ritmo esperado), não só quando vira alerta. Reaproveita a
+// mesma busca de `findMetasDoUsuario`; aberto a QUALQUER perfil logado,
+// igual ao resto da seção "rotina".
+// ---------------------------------------------------------------------------
+
+export type MinhaMetaResumo = {
+  nome: string;
+  metaDefinida: number;
+  resultadoAlcancado: number;
+  percentual: number;
+  valorRestante: number;
+  status: string;
+  prazo: string;
+};
+
+/**
+ * A meta mais relevante do usuário no período corrente — quando há mais de
+ * uma meta encontrável (`findMetasDoUsuario`), escolhe a de prazo mais
+ * próximo de agora (menor diferença absoluta entre `endDate` e `now`: cobre
+ * tanto a que está prestes a vencer quanto a que acabou de vencer dentro da
+ * janela de tolerância de `DIAS_LIMITE_URGENTE` dias). `status` aqui é o
+ * status real gravado em `Goal.status` (enum `GoalStatus`), diferente do
+ * status de ritmo calculado on-the-fly em `loadRotinaMetas`/
+ * `computeGoalStatus` — este painel mostra o dado bruto da meta, não uma
+ * reinterpretação dela. `null` quando o usuário não tem nenhuma meta
+ * encontrável no período.
+ */
+export async function loadMinhaMeta(
+  empresaId: string,
+  userId: string,
+  nomeUsuario: string,
+  now: Date = new Date()
+): Promise<MinhaMetaResumo | null> {
+  const goals = await findMetasDoUsuario(empresaId, userId, nomeUsuario, now);
+  if (goals.length === 0) return null;
+
+  const maisRelevante = goals.reduce((maisProxima, g) =>
+    Math.abs(g.endDate.getTime() - now.getTime()) < Math.abs(maisProxima.endDate.getTime() - now.getTime())
+      ? g
+      : maisProxima
+  );
+
+  return {
+    nome: maisRelevante.name,
+    metaDefinida: maisRelevante.valorMeta,
+    resultadoAlcancado: maisRelevante.valorRealizado,
+    percentual: pct(maisRelevante.valorRealizado, maisRelevante.valorMeta),
+    valorRestante: Math.max(0, maisRelevante.valorMeta - maisRelevante.valorRealizado),
+    status: maisRelevante.status,
+    prazo: maisRelevante.endDate.toISOString(),
+  };
 }
 
 /**
@@ -651,6 +721,56 @@ export function sortRotinaItems(itens: RotinaItem[], now: Date = new Date()): Ro
       return diff !== 0 ? diff : a.index - b.index;
     })
     .map(({ item }) => item);
+}
+
+// ---------------------------------------------------------------------------
+// "Resumo do topo" do Colaborador (GET /api/inicio/colaborador-resumo) —
+// aberto a QUALQUER perfil logado, igual ao resto da seção "rotina" acima.
+// ---------------------------------------------------------------------------
+
+/**
+ * Total de tarefas + checklists CONCLUÍDOS pelo usuário este mês (mês
+ * calendário corrente, mesmo corte de `loadProgressoMeta`). Tarefa
+ * "concluída" = `status: "CONCLUIDA"` com `completedAt` neste mês — os dois
+ * campos são sempre gravados juntos (ver
+ * src/app/api/tarefas/[id]/comprovar/route.ts e .../validar/route.ts), então
+ * filtrar por `completedAt` já garante que é uma conclusão de fato ocorrida
+ * no mês, não só uma tarefa com prazo no mês. Checklist "concluído" = mesmos
+ * dois status de `countChecklistsConcluidos` (acima: `CONCLUIDO_NO_PRAZO` e
+ * `CONCLUIDO_COM_ATRASO`, nunca `JUSTIFICADO`/`CANCELADO`), também filtrado
+ * por `completedAt` (o momento real da conclusão, não o dia da ocorrência) e
+ * restrito às ocorrências do usuário — responsável direto OU substituto do
+ * template, o mesmo critério de "meu checklist" que `loadRotinaChecklist`
+ * já usa.
+ */
+export async function countAtividadesConcluidasNoMes(
+  empresaId: string,
+  userId: string,
+  now: Date = new Date()
+): Promise<number> {
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  const [tarefasConcluidas, checklistsConcluidos] = await Promise.all([
+    prisma.task.count({
+      where: {
+        empresaId,
+        assignees: { some: { userId } },
+        status: "CONCLUIDA",
+        completedAt: { gte: monthStart, lte: monthEnd },
+      },
+    }),
+    prisma.checklistOccurrence.count({
+      where: {
+        empresaId,
+        OR: [{ responsavelId: userId }, { template: { substitutoId: userId } }],
+        status: { in: ["CONCLUIDO_NO_PRAZO", "CONCLUIDO_COM_ATRASO"] },
+        completedAt: { gte: monthStart, lte: monthEnd },
+      },
+    }),
+  ]);
+
+  return tarefasConcluidas + checklistsConcluidos;
 }
 
 // ---------------------------------------------------------------------------
