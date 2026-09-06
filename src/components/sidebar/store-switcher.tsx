@@ -12,11 +12,14 @@ export function StoreSwitcher({
   activeEmpresaId,
   canViewGrupoNord,
   collapsed,
+  compact = false,
 }: {
   empresas: EmpresaDTO[];
   activeEmpresaId: string;
   canViewGrupoNord: boolean;
   collapsed: boolean;
+  /** Versão enxuta (botão de uma linha só), para uso fora da Sidebar — ex.: barra de filtros da Tela de Início. Reaproveita o mesmo estado/lógica de troca de loja, só muda a aparência do botão. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -45,6 +48,14 @@ export function StoreSwitcher({
 
   if (empresas.length <= 1 && !canViewGrupoNord) {
     // Nada para trocar — mostra só a identificação da loja atual.
+    if (compact) {
+      return (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-panel border border-nord-border text-white">
+          <Building2 size={13} style={{ color }} />
+          <span className="truncate max-w-[160px]">{label}</span>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center gap-2 px-3 py-2 mx-2 mb-2 rounded-lg bg-nord-card border border-nord-border">
         <div
@@ -59,29 +70,47 @@ export function StoreSwitcher({
   }
 
   return (
-    <div className="relative mx-2 mb-2">
+    <div className={compact ? "relative" : "relative mx-2 mb-2"}>
       <button
         onClick={() => setOpen((v) => !v)}
         disabled={switching}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-nord-card border border-nord-border hover:border-nord-blue transition disabled:opacity-60"
+        className={
+          compact
+            ? "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-panel border border-nord-border text-white hover:border-nord-blue transition disabled:opacity-60"
+            : "w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-nord-card border border-nord-border hover:border-nord-blue transition disabled:opacity-60"
+        }
       >
-        <div
-          className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-          style={{ backgroundColor: isGrupo ? "#2952E322" : `${color}22` }}
-        >
-          {isGrupo ? (
-            <Layers size={13} className="text-nord-blue-light" />
-          ) : (
-            <Building2 size={13} style={{ color }} />
-          )}
-        </div>
-        {!collapsed && (
+        {compact ? (
           <>
-            <div className="flex-1 text-left min-w-0">
-              <p className="text-[10px] text-nord-gray leading-none mb-0.5">Loja atual</p>
-              <p className="text-xs text-white font-medium truncate">{label}</p>
+            {isGrupo ? (
+              <Layers size={13} className="text-nord-blue-light" />
+            ) : (
+              <Building2 size={13} style={{ color }} />
+            )}
+            <span className="truncate max-w-[160px]">{label}</span>
+            <ChevronsUpDown size={12} className="text-nord-gray shrink-0" />
+          </>
+        ) : (
+          <>
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+              style={{ backgroundColor: isGrupo ? "#2952E322" : `${color}22` }}
+            >
+              {isGrupo ? (
+                <Layers size={13} className="text-nord-blue-light" />
+              ) : (
+                <Building2 size={13} style={{ color }} />
+              )}
             </div>
-            <ChevronsUpDown size={13} className="text-nord-gray shrink-0" />
+            {!collapsed && (
+              <>
+                <div className="flex-1 text-left min-w-0">
+                  <p className="text-[10px] text-nord-gray leading-none mb-0.5">Loja atual</p>
+                  <p className="text-xs text-white font-medium truncate">{label}</p>
+                </div>
+                <ChevronsUpDown size={13} className="text-nord-gray shrink-0" />
+              </>
+            )}
           </>
         )}
       </button>
