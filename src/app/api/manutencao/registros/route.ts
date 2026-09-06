@@ -59,6 +59,12 @@ export async function POST(req: Request) {
     if (!chamado) return NextResponse.json({ error: "Chamado não encontrado." }, { status: 404 });
   }
 
+  let preventivaOcorrencia = null;
+  if (body.preventivaOcorrenciaId) {
+    preventivaOcorrencia = await prisma.manutencaoPreventivaOcorrencia.findUnique({ where: { id: body.preventivaOcorrenciaId } });
+    if (!preventivaOcorrencia) return NextResponse.json({ error: "Ocorrência preventiva não encontrada." }, { status: 404 });
+  }
+
   const valorMaoDeObra = Number(body.valorMaoDeObra) || 0;
   const valorPecas = Number(body.valorPecas) || 0;
   const valorOutros = Number(body.valorOutros) || 0;
@@ -72,7 +78,7 @@ export async function POST(req: Request) {
         empresaId: equipamento.empresaId,
         equipamentoId: equipamento.id,
         chamadoId: body.chamadoId || null,
-        tipo: body.tipo || "CORRETIVA",
+        tipo: body.tipo || (body.preventivaOcorrenciaId ? "PREVENTIVA" : "CORRETIVA"),
         data: dataManutencao,
         horaInicio: body.horaInicio || null,
         horaFim: body.horaFim || null,
@@ -119,6 +125,13 @@ export async function POST(req: Request) {
 
     if (chamado && ADVANCE_FROM_STATUSES.includes(chamado.status)) {
       await tx.chamado.update({ where: { id: chamado.id }, data: { status: "EM_MANUTENCAO" } });
+    }
+
+    if (preventivaOcorrencia) {
+      await tx.manutencaoPreventivaOcorrencia.update({
+        where: { id: preventivaOcorrencia.id },
+        data: { status: "CONCLUIDA", registroId: created.id },
+      });
     }
 
     return tx.manutencaoRegistro.findUniqueOrThrow({

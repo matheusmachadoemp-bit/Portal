@@ -35,14 +35,16 @@ export function ManutencaoRegistroModal({
   onSaved,
   equipamentoId,
   chamadoId,
+  preventivaOcorrenciaId,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   equipamentoId: string;
   chamadoId?: string | null;
+  preventivaOcorrenciaId?: string | null;
 }) {
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState(() => (preventivaOcorrenciaId ? { ...emptyForm(), tipo: "PREVENTIVA" } : emptyForm()));
   const [anexosAntes, setAnexosAntes] = useState<AnexoDraft[]>([]);
   const [anexosDepois, setAnexosDepois] = useState<AnexoDraft[]>([]);
   const [prestadores, setPrestadores] = useState<PrestadorOption[]>([]);
@@ -63,7 +65,7 @@ export function ManutencaoRegistroModal({
   }
 
   function reset() {
-    setForm(emptyForm());
+    setForm(preventivaOcorrenciaId ? { ...emptyForm(), tipo: "PREVENTIVA" } : emptyForm());
     setAnexosAntes([]);
     setAnexosDepois([]);
     setError(null);
@@ -112,6 +114,7 @@ export function ManutencaoRegistroModal({
           ...form,
           equipamentoId,
           chamadoId: chamadoId || undefined,
+          preventivaOcorrenciaId: preventivaOcorrenciaId || undefined,
           proximaManutencaoEm: form.proximaManutencaoEm || undefined,
           anexos: [...anexosAntes, ...anexosDepois],
         }),
