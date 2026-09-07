@@ -2,13 +2,20 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { RecebimentoClient } from "./recebimento-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { loadRecebimentoDashboard } from "@/lib/recebimento-server";
 
 export default async function RecebimentoPage() {
+  const session = await auth();
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  const canCreate = ctx?.mode === "single" && RECEBIMENTO_MANAGE_ROLES.includes(session?.user?.role ?? "");
 
-  const [pendentes, recebimentos] = await Promise.all([
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+
+  const [pendentes, recebimentos, dashboard] = await Promise.all([
     prisma.purchase.findMany({
       where: { empresaId: { in: empresaIds }, status: { in: ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "EM_CONFERENCIA", "RECEBIDO_PARCIAL"] } },
       orderBy: { data: "desc" },
@@ -31,6 +38,7 @@ export default async function RecebimentoPage() {
         },
       },
     }),
+    loadRecebimentoDashboard(empresaIds, since),
   ]);
 
   return (
@@ -60,6 +68,7 @@ export default async function RecebimentoPage() {
             numeroNota: r.purchase.numeroNota,
           }))}
           canCreate={canCreate}
+          dashboard={dashboard}
         />
       </div>
     </PageContainer>

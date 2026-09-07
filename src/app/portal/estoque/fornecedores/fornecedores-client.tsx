@@ -6,6 +6,7 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { format } from "date-fns";
+import { formatCurrency } from "@/lib/calc";
 
 type Supplier = {
   id: string;
@@ -49,6 +50,13 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historicoSupplier, setHistoricoSupplier] = useState<Supplier | null>(null);
+  const [historico, setHistorico] = useState<{
+    totalRecebimentos: number;
+    taxaConformidade: number | null;
+    valorDivergencias: number;
+    taxaAtraso: number | null;
+  } | null>(null);
 
   const filtered = useMemo(
     () => suppliers.filter((s) => (s.nomeFantasia ?? s.razaoSocial).toLowerCase().includes(search.toLowerCase())),
@@ -68,6 +76,15 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
         ultimaCompra: (s.purchases as { data: string }[])[0]?.data ?? null,
       }))
     );
+  }
+
+  async function abrirHistorico(s: Supplier) {
+    setHistoricoSupplier(s);
+    setHistorico(null);
+    const res = await fetch(`/api/estoque/fornecedores/${s.id}/historico-recebimento`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setHistorico(data.historico);
   }
 
   function openEdit(s: Supplier) {
@@ -182,7 +199,10 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
                   </td>
                   <td className="py-2.5 pr-4 text-nord-gray">{s.ultimaCompra ? format(new Date(s.ultimaCompra), "dd/MM/yyyy") : "—"}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{s.produtos}</td>
-                  <td className="py-2.5 pr-4 text-right">
+                  <td className="py-2.5 pr-4 text-right space-x-2 whitespace-nowrap">
+                    <button onClick={() => abrirHistorico(s)} className="text-xs text-nord-gray hover:text-white">
+                      Histórico de recebimento
+                    </button>
                     {canCreate && (
                       <button onClick={() => openEdit(s)} className="text-xs text-nord-blue-light hover:underline">
                         Editar
@@ -258,6 +278,40 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
         <button onClick={submit} disabled={!form.razaoSocial.trim()} className="btn-primary w-full mt-4 py-2.5">
           Salvar
         </button>
+      </Modal>
+
+      <Modal
+        open={!!historicoSupplier}
+        onClose={() => setHistoricoSupplier(null)}
+        title={`Histórico de recebimento — ${historicoSupplier?.nomeFantasia ?? historicoSupplier?.razaoSocial ?? ""}`}
+        widthClass="max-w-lg"
+      >
+        {!historico ? (
+          <p className="text-center text-nord-gray py-4">Carregando...</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="nord-card p-3">
+              <p className="text-xs text-nord-gray">Recebimentos registrados</p>
+              <p className="text-white text-xl font-semibold">{historico.totalRecebimentos}</p>
+            </div>
+            <div className="nord-card p-3">
+              <p className="text-xs text-nord-gray">Taxa de conformidade</p>
+              <p className="text-white text-xl font-semibold">
+                {historico.taxaConformidade != null ? `${historico.taxaConformidade.toFixed(0)}%` : "—"}
+              </p>
+            </div>
+            <div className="nord-card p-3">
+              <p className="text-xs text-nord-gray">Valor acumulado em divergências</p>
+              <p className="text-white text-xl font-semibold">{formatCurrency(historico.valorDivergencias)}</p>
+            </div>
+            <div className="nord-card p-3">
+              <p className="text-xs text-nord-gray">Taxa de atraso na entrega</p>
+              <p className="text-white text-xl font-semibold">
+                {historico.taxaAtraso != null ? `${historico.taxaAtraso.toFixed(0)}%` : "—"}
+              </p>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
