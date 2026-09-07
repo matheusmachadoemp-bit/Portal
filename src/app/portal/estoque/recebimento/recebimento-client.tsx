@@ -1,15 +1,34 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Copy, CheckCheck, Send } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
-import { RECEIVING_DIVERGENCE_LABEL, RECEIVING_STATUS, RECEIVING_STATUS_LABEL, RECEIVING_STATUS_TONE } from "@/lib/estoque";
+import {
+  PURCHASE_STATUS_LABEL,
+  PURCHASE_STATUS_TONE,
+  RECEIVING_DIVERGENCE_LABEL,
+  RECEIVING_STATUS,
+  RECEIVING_STATUS_LABEL,
+  RECEIVING_STATUS_TONE,
+} from "@/lib/estoque";
 
 type PendingItem = { id: string; ingredientId: string; ingredientName: string; unidade: string; quantidade: number };
-type Pending = { id: string; numeroNota: string | null; data: string; supplierName: string; items: PendingItem[] };
+type Pending = {
+  id: string;
+  numeroNota: string | null;
+  data: string;
+  status: string;
+  previsaoEntrega: string | null;
+  responsavelRecebimentoNome: string | null;
+  recebimentoToken: string | null;
+  supplierName: string;
+  items: PendingItem[];
+};
 type Receiving = {
   id: string;
   dataHora: string;
@@ -32,9 +51,12 @@ export function RecebimentoClient({
   initialRecebimentos: Receiving[];
   canCreate: boolean;
 }) {
+  const router = useRouter();
   const [pendentes, setPendentes] = useState(initialPendentes);
   const [recebimentos, setRecebimentos] = useState(initialRecebimentos);
   const [conferindo, setConferindo] = useState<Pending | null>(null);
+  const [linkPedido, setLinkPedido] = useState<Pending | null>(null);
+  const [copied, setCopied] = useState(false);
   const [responsavel, setResponsavel] = useState("");
   const [status, setStatus] = useState("APROVADO");
   const [divergencias, setDivergencias] = useState<string[]>([]);
@@ -49,6 +71,10 @@ export function RecebimentoClient({
         id: p.id,
         numeroNota: p.numeroNota,
         data: p.data,
+        status: p.status,
+        previsaoEntrega: p.previsaoEntrega,
+        responsavelRecebimentoNome: (p.responsavelRecebimento as { name: string } | null)?.name ?? null,
+        recebimentoToken: p.recebimentoToken,
         supplierName: (p.supplier as { nomeFantasia: string | null; razaoSocial: string }).nomeFantasia ?? (p.supplier as { razaoSocial: string }).razaoSocial,
         items: (p.items as Record<string, unknown>[]).map((it) => ({
           id: it.id,
@@ -103,17 +129,34 @@ export function RecebimentoClient({
     refresh();
   }
 
+  async function copyLink(token: string) {
+    await navigator.clipboard.writeText(`${window.location.origin}/recebimento/${token}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
     <div className="space-y-6">
-      <Section title="Pedidos aguardando recebimento" action={<Toolbar onRefresh={refresh} />}>
+      <Section
+        title="Pedidos aguardando recebimento"
+        action={
+          <Toolbar
+            onRefresh={refresh}
+            onAdd={canCreate ? () => router.push("/portal/estoque/recebimento/novo") : undefined}
+            addLabel="Novo Pedido"
+          />
+        }
+      >
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
                 <th className="py-2 pr-4">Data do pedido</th>
                 <th className="py-2 pr-4">Fornecedor</th>
-                <th className="py-2 pr-4">Nota fiscal</th>
+                <th className="py-2 pr-4">Previsão</th>
                 <th className="py-2 pr-4">Itens</th>
+                <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4" />
               </tr>
             </thead>
@@ -122,9 +165,18 @@ export function RecebimentoClient({
                 <tr key={p.id} className="border-b border-nord-border/50 hover:bg-white/5">
                   <td className="py-2.5 pr-4 text-nord-gray">{format(new Date(p.data), "dd/MM/yyyy")}</td>
                   <td className="py-2.5 pr-4 text-white">{p.supplierName}</td>
-                  <td className="py-2.5 pr-4 text-nord-gray">{p.numeroNota ?? "—"}</td>
+                  <td className="py-2.5 pr-4 text-nord-gray">{p.previsaoEntrega ? format(new Date(p.previsaoEntrega), "dd/MM/yyyy") : "—"}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{p.items.length} item(ns)</td>
-                  <td className="py-2.5 pr-4 text-right">
+                  <td className="py-2.5 pr-4">
+                    <Badge tone={PURCHASE_STATUS_TONE[p.status] ?? "default"}>{PURCHASE_STATUS_LABEL[p.status] ?? p.status}</Badge>
+                  </td>
+                  <td className="py-2.5 pr-4 text-nord-gray">{p.responsavelRecebimentoNome ?? "—"}</td>
+                  <td className="py-2.5 pr-4 text-right space-x-2 whitespace-nowrap">
+                    {canCreate && p.recebimentoToken && (
+                      <button onClick={() => setLinkPedido(p)} className="text-xs text-nord-blue-light hover:underline inline-flex items-center gap-1">
+                        <Send size={12} /> Ver link
+                      </button>
+                    )}
                     {canCreate && (
                       <button onClick={() => openConferencia(p)} className="text-xs text-nord-blue-light hover:underline">
                         Conferir recebimento
@@ -135,7 +187,7 @@ export function RecebimentoClient({
               ))}
               {pendentes.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-nord-gray">
+                  <td colSpan={7} className="py-6 text-center text-nord-gray">
                     Nenhum pedido aguardando recebimento.
                   </td>
                 </tr>
@@ -234,6 +286,32 @@ export function RecebimentoClient({
             <button onClick={confirmar} className="btn-primary w-full py-2.5">
               Confirmar recebimento
             </button>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!linkPedido} onClose={() => setLinkPedido(null)} title={`Link de recebimento — ${linkPedido?.supplierName ?? ""}`} widthClass="max-w-lg">
+        {linkPedido && linkPedido.recebimentoToken && (
+          <div className="space-y-3">
+            <p className="text-xs text-nord-gray">
+              Envie este link para {linkPedido.responsavelRecebimentoNome ?? "o responsável"} realizar a conferência de recebimento.
+            </p>
+            <div className="flex items-center gap-2">
+              <input readOnly value={`${window.location.origin}/recebimento/${linkPedido.recebimentoToken}`} className="input flex-1 text-xs" />
+              <button onClick={() => copyLink(linkPedido.recebimentoToken!)} className="btn-outline shrink-0">
+                {copied ? <CheckCheck size={13} /> : <Copy size={13} />} {copied ? "Copiado!" : "Copiar"}
+              </button>
+            </div>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `Olá! Segue o link para realizar o recebimento da mercadoria.\n\nFornecedor: ${linkPedido.supplierName}\n\n${window.location.origin}/recebimento/${linkPedido.recebimentoToken}`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
+            >
+              Enviar por WhatsApp
+            </a>
           </div>
         )}
       </Modal>

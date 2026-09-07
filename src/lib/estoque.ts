@@ -57,11 +57,12 @@ export const SECTORS = [
 // Compras
 // ---------------------------------------------------------------------------
 
-export const PURCHASE_STATUS = ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "RECEBIDO_PARCIAL", "RECEBIDO", "DIVERGENCIA", "CANCELADO"] as const;
+export const PURCHASE_STATUS = ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "EM_CONFERENCIA", "RECEBIDO_PARCIAL", "RECEBIDO", "DIVERGENCIA", "CANCELADO"] as const;
 
 export const PURCHASE_STATUS_LABEL: Record<string, string> = {
   PEDIDO_REALIZADO: "Pedido realizado",
   AGUARDANDO_ENTREGA: "Aguardando entrega",
+  EM_CONFERENCIA: "Em conferência",
   RECEBIDO_PARCIAL: "Recebido parcialmente",
   RECEBIDO: "Recebido",
   DIVERGENCIA: "Divergência",
@@ -71,6 +72,7 @@ export const PURCHASE_STATUS_LABEL: Record<string, string> = {
 export const PURCHASE_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
   PEDIDO_REALIZADO: "info",
   AGUARDANDO_ENTREGA: "warning",
+  EM_CONFERENCIA: "info",
   RECEBIDO_PARCIAL: "warning",
   RECEBIDO: "success",
   DIVERGENCIA: "danger",
