@@ -15,6 +15,14 @@
     {
       "path": "/api/metas/alertas/run",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/producao/cron?mode=plan",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/producao/cron?mode=atrasados",
+      "schedule": "0 17 * * *"
     }
   ]
 }

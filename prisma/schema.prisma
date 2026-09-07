@@ -141,6 +141,11 @@ model User {
   lojaNordTransactionsLancadas     LojaNordPointTransaction[] @relation("LojaNordTransactionCriador")
   lojaNordRedemptions              LojaNordRedemption[]       @relation("LojaNordRedemptionUser")
   lojaNordRedemptionsAprovadas     LojaNordRedemption[]       @relation("LojaNordRedemptionAprovador")
+  productionItemsCriados           ProductionItem[]           @relation("ProductionItemCreatedBy")
+  productionStockMovementsCriados  ProductionStockMovement[]  @relation("ProductionStockMovementCreatedBy")
+  productionOrdersResponsavel      ProductionOrder[]          @relation("ProductionOrderResponsavel")
+  productionOrdersAjustadas        ProductionOrder[]          @relation("ProductionOrderAjustePor")
+  productionOrderHistoryEntries    ProductionOrderHistory[]
 }
 
 model UserPermission {
@@ -285,6 +290,13 @@ model Empresa {
   equipamentos              Equipamento[]
   chamados                  Chamado[]
   manutencaoRegistros       ManutencaoRegistro[]
+  productionItems           ProductionItem[]
+  productionStocks          ProductionStock[]
+  productionStockMovements  ProductionStockMovement[]
+  productionOrders          ProductionOrder[]
+  productionForecasts       ProductionForecast[]
+  productionWeekdayWeights  ProductionWeekdayWeight[]
+  productionSettings        ProductionSettings?
 }
 
 model UserEmpresaAccess {
@@ -1955,13 +1967,15 @@ model Ingredient {
   active                 Boolean        @default(true)
   fotoUrl                String?
 
-  priceHistory  IngredientPriceHistory[]
-  productLinks  ProductIngredient[]
-  movements     StockMovement[]
-  purchaseItems PurchaseItem[]
-  losses        Loss[]
-  transferItems TransferItem[]
-  countItems    StockCountItem[]
+  priceHistory      IngredientPriceHistory[]
+  productLinks      ProductIngredient[]
+  movements         StockMovement[]
+  purchaseItems     PurchaseItem[]
+  losses            Loss[]
+  transferItems     TransferItem[]
+  countItems        StockCountItem[]
+  productionItem    ProductionItem?
+  productionRecipes ProductionItemIngredient[]
 }
 
 model IngredientPriceHistory {
@@ -3744,4 +3758,226 @@ model LojaNordPointTransaction {
 
   @@index([userId, createdAt])
   @@index([empresaId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// PRODUÇÃO — Fase 1 (planejamento operacional diário de produção de cozinha)
+// Fase 2+ adiciona consumo real cruzado com vendas, dedução automática de
+// insumos, indicadores de precisão histórica e integração com etiquetas —
+// nada abaixo bloqueia isso (ver src/lib/producao-forecast.ts).
+// ---------------------------------------------------------------------------
+
+model ProductionCategory {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  color     String   @default("#2952E3")
+  icon      String   @default("ChefHat")
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items ProductionItem[]
+}
+
+enum ProductionItemType {
+  FIXO
+  VARIAVEL
+}
+
+model ProductionItem {
+  id                  String             @id @default(cuid())
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
+  categoryId          String
+  category            ProductionCategory @relation(fields: [categoryId], references: [id])
+  name                String
+  unidade             String             @default("kg")
+  fotoUrl             String?
+  descricao           String?
+  tipo                ProductionItemType @default(VARIAVEL)
+  quantidadeMinima    Float              @default(0)
+  margemSeguranca     Float              @default(0)
+  tamanhoLote         Float?
+  validadeDias        Int?
+  horarioLimitePadrao String?
+  prioridadePadrao    ProductionPriority @default(NORMAL)
+  ingredientId        String?            @unique
+  ingredient          Ingredient?        @relation(fields: [ingredientId], references: [id])
+  active              Boolean            @default(true)
+  createdById         String
+  createdBy           User               @relation("ProductionItemCreatedBy", fields: [createdById], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  ingredientes ProductionItemIngredient[]
+  orders       ProductionOrder[]
+  stock        ProductionStock?
+  movements    ProductionStockMovement[]
+  forecasts    ProductionForecast[]
+
+  @@index([empresaId, active])
+}
+
+model ProductionItemIngredient {
+  id               String         @id @default(cuid())
+  productionItemId String
+  productionItem   ProductionItem @relation(fields: [productionItemId], references: [id], onDelete: Cascade)
+  ingredientId     String
+  ingredient       Ingredient     @relation(fields: [ingredientId], references: [id])
+  quantidadeUsada  Float
+  unidade          String
+  order            Int            @default(0)
+}
+
+model ProductionStock {
+  id               String         @id @default(cuid())
+  productionItemId String         @unique
+  productionItem   ProductionItem @relation(fields: [productionItemId], references: [id], onDelete: Cascade)
+  empresaId        String
+  empresa          Empresa        @relation(fields: [empresaId], references: [id])
+  saldoAtual       Float          @default(0)
+  updatedAt        DateTime       @updatedAt
+}
+
+enum ProductionStockMovementType {
+  PRODUCAO
+  SALDO_ANTERIOR
+  AJUSTE
+  PERDA
+}
+
+model ProductionStockMovement {
+  id               String                      @id @default(cuid())
+  productionItemId String
+  productionItem   ProductionItem              @relation(fields: [productionItemId], references: [id], onDelete: Cascade)
+  empresaId        String
+  empresa          Empresa                     @relation(fields: [empresaId], references: [id])
+  type             ProductionStockMovementType
+  quantidade       Float
+  saldoApos        Float
+  orderId          String?
+  order            ProductionOrder?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  motivo           String?
+  createdById      String
+  createdBy        User                        @relation("ProductionStockMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime                    @default(now())
+
+  @@index([productionItemId, createdAt])
+  @@index([empresaId, createdAt])
+}
+
+enum ProductionPriority {
+  URGENTE
+  ALTA
+  NORMAL
+  BAIXA
+}
+
+enum ProductionOrderStatus {
+  PENDENTE
+  EM_PRODUCAO
+  CONCLUIDO
+  ATRASADO
+}
+
+enum ProductionAjusteMotivo {
+  EVENTO
+  RESERVA
+  PROMOCAO
+  EXPECTATIVA_MOVIMENTO
+  ESTOQUE
+  FERIADO
+  OUTRO
+}
+
+model ProductionOrder {
+  id                    String                  @id @default(cuid())
+  productionItemId      String
+  productionItem        ProductionItem          @relation(fields: [productionItemId], references: [id])
+  empresaId             String
+  empresa               Empresa                 @relation(fields: [empresaId], references: [id])
+  date                  DateTime
+  necessidadePrevista   Float
+  estoqueProntoSnapshot Float
+  quantidadeSugerida    Float
+  quantidadeAprovada    Float?
+  quantidadeProduzida   Float?
+  forecastId            String?
+  forecast              ProductionForecast?     @relation(fields: [forecastId], references: [id])
+  responsavelId         String?
+  responsavel           User?                   @relation("ProductionOrderResponsavel", fields: [responsavelId], references: [id])
+  prazo                 DateTime
+  prioridade            ProductionPriority      @default(NORMAL)
+  status                ProductionOrderStatus   @default(PENDENTE)
+  horaInicio            DateTime?
+  horaFim               DateTime?
+  observacao            String?
+  fotoUrl               String?
+  validade              DateTime?
+  ajusteMotivo          ProductionAjusteMotivo?
+  ajusteValorOriginal   Float?
+  ajusteValorAlterado   Float?
+  ajustePorId           String?
+  ajustePor             User?                   @relation("ProductionOrderAjustePor", fields: [ajustePorId], references: [id])
+  ajusteEm              DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  stockMovements ProductionStockMovement[]
+  history        ProductionOrderHistory[]
+
+  @@unique([productionItemId, empresaId, date])
+  @@index([empresaId, date, status])
+}
+
+model ProductionOrderHistory {
+  id        String          @id @default(cuid())
+  orderId   String
+  order     ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?           @relation(fields: [userId], references: [id])
+  action    String
+  detail    String?
+  createdAt DateTime        @default(now())
+}
+
+model ProductionForecast {
+  id                String         @id @default(cuid())
+  productionItemId  String
+  productionItem    ProductionItem @relation(fields: [productionItemId], references: [id])
+  empresaId         String
+  empresa           Empresa        @relation(fields: [empresaId], references: [id])
+  targetDate        DateTime
+  weekday           Int
+  weekdayWeightUsed Float
+  weeksUsed         String
+  mediaSemanal      Float
+  resultingQuantity Float
+  createdAt         DateTime       @default(now())
+
+  orders ProductionOrder[]
+
+  @@unique([productionItemId, empresaId, targetDate])
+}
+
+model ProductionWeekdayWeight {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  weekday   Int
+  percent   Float
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, weekday])
+}
+
+model ProductionSettings {
+  id                  String   @id @default(cuid())
+  empresaId           String   @unique
+  empresa             Empresa  @relation(fields: [empresaId], references: [id])
+  semanasParaMedia    Int      @default(4)
+  toleranciaAlertaPct Float    @default(10)
+  updatedAt           DateTime @updatedAt
 }

@@ -15,6 +15,7 @@ export const MODULES = [
   { key: "cmv", label: "CMV" },
   { key: "tarefas", label: "Tarefas" },
   { key: "manutencao", label: "Manutenção" },
+  { key: "producao", label: "Produção" },
   { key: "configuracoes", label: "Configurações" },
   { key: "usuarios", label: "Usuários" },
 ] as const;

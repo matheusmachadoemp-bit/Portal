@@ -251,10 +251,26 @@ const CATEGORIES = [
     ],
   },
   {
+    key: "producao",
+    name: "Produção",
+    icon: "ChefHat",
+    order: 17,
+    contentType: "producao",
+    subs: [
+      { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
+      { key: "hoje", name: "Produção de Hoje", icon: "ClipboardList" },
+      { key: "planejamento", name: "Planejamento", icon: "CalendarClock" },
+      { key: "produtos", name: "Produtos de Produção", icon: "Beef" },
+      { key: "historico", name: "Histórico", icon: "History" },
+      { key: "indicadores", name: "Indicadores", icon: "BarChart3" },
+      { key: "configuracoes", name: "Configurações", icon: "Settings" },
+    ],
+  },
+  {
     key: "loja-nord",
     name: "Loja Nord",
     icon: "Gift",
-    order: 17,
+    order: 18,
     contentType: "loja-nord",
     subs: [
       { key: "loja", name: "Loja", icon: "ShoppingBag" },
@@ -718,6 +734,39 @@ async function main() {
       create: { ...cat, order: idx },
     });
     stockCategoryByKey.set(cat.key, record);
+  }
+
+  // --- Produção: categorias (compartilhadas entre lojas) ---
+  const PRODUCTION_CATEGORIES = [
+    { key: "proteinas", name: "Proteínas", color: "#ef4444", icon: "Beef" },
+    { key: "massas", name: "Massas", color: "#f59e0b", icon: "Wheat" },
+    { key: "molhos", name: "Molhos", color: "#dc2626", icon: "Soup" },
+    { key: "pre-preparo", name: "Pré-preparo", color: "#22c55e", icon: "Carrot" },
+    { key: "sobremesas", name: "Sobremesas", color: "#ec4899", icon: "IceCreamCone" },
+  ];
+  for (const [idx, cat] of PRODUCTION_CATEGORIES.entries()) {
+    await prisma.productionCategory.upsert({
+      where: { key: cat.key },
+      update: { name: cat.name, color: cat.color, icon: cat.icon, order: idx },
+      create: { ...cat, order: idx },
+    });
+  }
+
+  // --- Produção: pesos padrão por dia da semana + configurações, por loja ---
+  const DEFAULT_WEEKDAY_WEIGHTS = [8, 8, 10, 12, 18, 24, 20]; // dom..sáb, soma 100
+  for (const empresa of [nordPizza, zarkiSushi]) {
+    for (let weekday = 0; weekday < 7; weekday++) {
+      await prisma.productionWeekdayWeight.upsert({
+        where: { empresaId_weekday: { empresaId: empresa.id, weekday } },
+        update: {},
+        create: { empresaId: empresa.id, weekday, percent: DEFAULT_WEEKDAY_WEIGHTS[weekday] },
+      });
+    }
+    await prisma.productionSettings.upsert({
+      where: { empresaId: empresa.id },
+      update: {},
+      create: { empresaId: empresa.id },
+    });
   }
 
   // --- Ficha técnica + Estoque: insumos, fornecedores, produto exemplo (Nord Pizza) ---
