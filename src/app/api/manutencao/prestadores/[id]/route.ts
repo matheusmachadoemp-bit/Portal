@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
+import { getUserEmpresas } from "@/lib/empresa";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -32,6 +33,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existing = await prisma.prestador.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (existing.empresaIds.length > 0) {
+    const empresasPermitidas = (await getUserEmpresas(session.user.id, session.user.role)).map((e) => e.id);
+    if (!existing.empresaIds.some((eid) => empresasPermitidas.includes(eid))) {
+      return NextResponse.json({ error: "Você não pode editar prestadores desta loja." }, { status: 403 });
+    }
+  }
 
   const body = await req.json();
   const prestador = await prisma.prestador.update({
@@ -68,6 +75,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     include: { _count: { select: { orcamentos: true, registros: true } } },
   });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (existing.empresaIds.length > 0) {
+    const empresasPermitidas = (await getUserEmpresas(session.user.id, session.user.role)).map((e) => e.id);
+    if (!existing.empresaIds.some((eid) => empresasPermitidas.includes(eid))) {
+      return NextResponse.json({ error: "Você não pode excluir prestadores desta loja." }, { status: 403 });
+    }
+  }
   if (existing._count.orcamentos > 0 || existing._count.registros > 0) {
     return NextResponse.json(
       { error: "Este prestador tem orçamentos ou manutenções vinculadas e não pode ser excluído. Desative-o em vez disso." },
