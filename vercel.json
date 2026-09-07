@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/integracoes/saipos/sync",
-      "schedule": "0 6 * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/integracoes/meta-ads/sync",
-      "schedule": "0 7 * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/checklist/escalations/run",

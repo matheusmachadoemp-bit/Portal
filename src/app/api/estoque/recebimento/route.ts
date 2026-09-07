@@ -13,11 +13,12 @@ export async function GET() {
 
   const [pendentes, recebimentos] = await Promise.all([
     prisma.purchase.findMany({
-      where: { empresaId: { in: empresaIds }, status: { in: ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "RECEBIDO_PARCIAL"] } },
+      where: { empresaId: { in: empresaIds }, status: { in: ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "EM_CONFERENCIA", "RECEBIDO_PARCIAL"] } },
       orderBy: { data: "desc" },
       include: {
         supplier: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
         items: { include: { ingredient: { select: { id: true, name: true, unidade: true } } } },
+        responsavelRecebimento: { select: { name: true } },
       },
     }),
     prisma.receiving.findMany({

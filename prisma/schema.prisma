@@ -72,6 +72,8 @@ model User {
   waiterSalesCreated               WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
   stockMovementsCreated            StockMovement[]            @relation("StockMovementCreatedBy")
   purchasesCreated                 Purchase[]                 @relation("PurchaseCreatedBy")
+  purchasesResponsavelRecebimento  Purchase[]                 @relation("PurchaseResponsavelRecebimento")
+  receivingItemsResolvidos         ReceivingItem[]            @relation("ReceivingItemResolvidoPor")
   transfersCreated                 Transfer[]                 @relation("TransferCreatedBy")
   lossesCreated                    Loss[]                     @relation("LossCreatedBy")
   stockCountsCreated               StockCount[]               @relation("StockCountCreatedBy")
@@ -1966,6 +1968,12 @@ model Ingredient {
   perecivel              Boolean        @default(false)
   active                 Boolean        @default(true)
   fotoUrl                String?
+  // --- Regras de conferência no recebimento de mercadorias ---
+  /// Quantidade é sempre conferida; estas regras ligam campos extras na tela de conferência.
+  exigirPeso             Boolean        @default(false)
+  exigirValidade         Boolean        @default(false)
+  exigirTemperatura      Boolean        @default(false)
+  exigirFoto             Boolean        @default(false)
 
   priceHistory      IngredientPriceHistory[]
   productLinks      ProductIngredient[]
@@ -2119,6 +2127,7 @@ model Supplier {
 enum PurchaseStatus {
   PEDIDO_REALIZADO
   AGUARDANDO_ENTREGA
+  EM_CONFERENCIA
   RECEBIDO_PARCIAL
   RECEBIDO
   DIVERGENCIA
@@ -2126,28 +2135,36 @@ enum PurchaseStatus {
 }
 
 model Purchase {
-  id                   String         @id @default(cuid())
-  empresaId            String
-  empresa              Empresa        @relation(fields: [empresaId], references: [id])
-  supplierId           String
-  supplier             Supplier       @relation(fields: [supplierId], references: [id])
-  numeroNota           String?
-  data                 DateTime       @default(now())
-  compradorResponsavel String?
-  formaPagamento       PaymentMethod?
-  dataVencimento       DateTime?
-  notaFiscalUrl        String?
-  desconto             Float          @default(0)
-  frete                Float          @default(0)
-  status               PurchaseStatus @default(PEDIDO_REALIZADO)
-  observacoes          String?
-  createdById          String
-  createdBy            User           @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  id                       String         @id @default(cuid())
+  empresaId                String
+  empresa                  Empresa        @relation(fields: [empresaId], references: [id])
+  supplierId               String
+  supplier                 Supplier       @relation(fields: [supplierId], references: [id])
+  numeroNota               String?
+  data                     DateTime       @default(now())
+  /// Data prevista de entrega do fornecedor — separada de `data` (data do pedido), usada para calcular atraso.
+  previsaoEntrega          DateTime?
+  compradorResponsavel     String?
+  /// Colaborador designado para conferir a mercadoria no recebimento (dono do link de recebimento).
+  responsavelRecebimentoId String?
+  responsavelRecebimento   User?          @relation("PurchaseResponsavelRecebimento", fields: [responsavelRecebimentoId], references: [id])
+  /// Token único do link público de recebimento (/recebimento/[token]), gerado ao enviar o pedido.
+  recebimentoToken         String?        @unique
+  formaPagamento           PaymentMethod?
+  dataVencimento           DateTime?
+  notaFiscalUrl            String?
+  desconto                 Float          @default(0)
+  frete                    Float          @default(0)
+  status                   PurchaseStatus @default(PEDIDO_REALIZADO)
+  observacoes              String?
+  createdById              String
+  createdBy                User           @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
 
-  items     PurchaseItem[]
-  receiving Receiving?
+  items         PurchaseItem[]
+  receiving     Receiving?
+  notifications Notification[]
 
   @@index([empresaId, data])
 }
@@ -2163,6 +2180,8 @@ model PurchaseItem {
   valorUnitario Float
   valorTotal    Float
 
+  receivingItem ReceivingItem?
+
   @@index([purchaseId])
 }
 
@@ -2175,21 +2194,77 @@ enum ReceivingStatus {
 }
 
 model Receiving {
-  id                String          @id @default(cuid())
-  purchaseId        String          @unique
-  purchase          Purchase        @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  empresaId         String
-  empresa           Empresa         @relation(fields: [empresaId], references: [id])
-  dataHora          DateTime        @default(now())
-  responsavel       String?
-  status            ReceivingStatus @default(AGUARDANDO_SOLUCAO)
+  id                  String          @id @default(cuid())
+  purchaseId          String          @unique
+  purchase            Purchase        @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  empresaId           String
+  empresa             Empresa         @relation(fields: [empresaId], references: [id])
+  dataHora            DateTime        @default(now())
+  /// Hora em que o responsável tocou em "Iniciar recebimento" no link mobile.
+  dataInicio          DateTime?
+  /// Hora em que a conferência foi finalizada (com ou sem divergência).
+  dataFim             DateTime?
+  responsavel         String?
+  status              ReceivingStatus @default(AGUARDANDO_SOLUCAO)
   /// Divergências marcadas: FALTA, EXCESSO, PESO_INCORRETO, PRODUTO_DANIFICADO, FORA_TEMPERATURA, VALIDADE_CURTA, PRODUTO_DIFERENTE, PRECO_DIFERENTE — lista separada por vírgula.
-  divergencias      String?
-  detalhes          String?
-  fotoMercadoriaUrl String?
-  fotoNotaUrl       String?
-  observacao        String?
-  createdAt         DateTime        @default(now())
+  divergencias        String?
+  detalhes            String?
+  fotoMercadoriaUrl   String?
+  fotoNotaUrl         String?
+  /// Número e valor da nota fiscal informados na conferência (para comparar com o valor do pedido).
+  numeroNotaInformado String?
+  valorNotaInformado  Float?
+  observacao          String?
+  createdAt           DateTime        @default(now())
+
+  items ReceivingItem[]
+}
+
+enum ReceivingItemStatus {
+  NAO_CONFERIDO
+  CONFERIDO
+  DIVERGENCIA
+  NAO_RECEBIDO
+}
+
+/// Conferência item a item de um recebimento — o que falta no `Receiving` (hoje só registra o pedido inteiro).
+model ReceivingItem {
+  id                    String                      @id @default(cuid())
+  receivingId           String
+  receiving             Receiving                   @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  purchaseItemId        String                      @unique
+  purchaseItem          PurchaseItem                @relation(fields: [purchaseItemId], references: [id], onDelete: Cascade)
+  status                ReceivingItemStatus         @default(NAO_CONFERIDO)
+  quantidadeRecebida    Float?
+  pesoAferido           Float?
+  temperaturaAferida    Float?
+  validadeInformada     DateTime?
+  precoInformado        Float?
+  fotoUrl               String?
+  /// Tipos de divergência marcados para este item — lista separada por vírgula (mesmas chaves de RECEIVING_DIVERGENCE_LABEL).
+  divergenciaTipos      String?
+  divergenciaDescricao  String?
+  /// Resolução da divergência (central de divergências pendentes) — nunca apagamos, só muda o tipo/status.
+  resolucaoTipo         ReceivingItemResolutionType @default(AGUARDANDO)
+  resolucaoDataPrevista DateTime?
+  resolucaoValorCredito Float?
+  resolucaoObservacao   String?
+  resolvidoPorId        String?
+  resolvidoPor          User?                       @relation("ReceivingItemResolvidoPor", fields: [resolvidoPorId], references: [id])
+  resolvidoEm           DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  @@index([receivingId])
+}
+
+enum ReceivingItemResolutionType {
+  AGUARDANDO
+  FORNECEDOR_REPOSICAO
+  FORNECEDOR_CREDITO
+  PRODUTO_DEVOLVIDO
+  DIFERENCA_ACEITA
+  OUTRA
 }
 
 enum TransferStatus {
@@ -3267,6 +3342,8 @@ model Notification {
   chamado               Chamado?              @relation(fields: [chamadoId], references: [id], onDelete: SetNull)
   goalId                String?
   goal                  Goal?                 @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  purchaseId            String?
+  purchase              Purchase?             @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   read                  Boolean               @default(false)
   createdAt             DateTime              @default(now())
 

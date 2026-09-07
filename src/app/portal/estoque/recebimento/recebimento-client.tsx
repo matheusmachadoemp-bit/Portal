@@ -1,17 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { Section, Badge } from "@/components/ui/stat-card";
+import { useRouter } from "next/navigation";
+import { Copy, CheckCheck, Send, History } from "lucide-react";
+import { Section, Badge, StatCard } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
-import { formatNumber } from "@/lib/calc";
+import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
-import { RECEIVING_DIVERGENCE_LABEL, RECEIVING_STATUS, RECEIVING_STATUS_LABEL, RECEIVING_STATUS_TONE } from "@/lib/estoque";
+import {
+  PURCHASE_STATUS_LABEL,
+  PURCHASE_STATUS_TONE,
+  RECEIVING_DIVERGENCE_LABEL,
+  RECEIVING_ITEM_DIVERGENCE_LABEL,
+  RECEIVING_STATUS,
+  RECEIVING_STATUS_LABEL,
+  RECEIVING_STATUS_TONE,
+} from "@/lib/estoque";
 
 type PendingItem = { id: string; ingredientId: string; ingredientName: string; unidade: string; quantidade: number };
-type Pending = { id: string; numeroNota: string | null; data: string; supplierName: string; items: PendingItem[] };
+type Pending = {
+  id: string;
+  numeroNota: string | null;
+  data: string;
+  status: string;
+  previsaoEntrega: string | null;
+  responsavelRecebimentoNome: string | null;
+  recebimentoToken: string | null;
+  supplierName: string;
+  items: PendingItem[];
+};
 type Receiving = {
   id: string;
+  purchaseId: string;
   dataHora: string;
   responsavel: string | null;
   status: string;
@@ -21,20 +42,37 @@ type Receiving = {
   numeroNota: string | null;
 };
 
+type Dashboard = {
+  totalRecebimentos: number;
+  pctSemDivergencia: number;
+  pedidosAtrasados: number;
+  divergenciasAbertas: number;
+  valorDivergencias: number;
+  tempoMedioResolucaoDias: number | null;
+  fornecedorMaisProblemas: { nome: string; count: number } | null;
+};
+
 const DIVERGENCE_KEYS = Object.keys(RECEIVING_DIVERGENCE_LABEL);
 
 export function RecebimentoClient({
   initialPendentes,
   initialRecebimentos,
   canCreate,
+  dashboard,
 }: {
   initialPendentes: Pending[];
   initialRecebimentos: Receiving[];
   canCreate: boolean;
+  dashboard: Dashboard;
 }) {
+  const router = useRouter();
   const [pendentes, setPendentes] = useState(initialPendentes);
   const [recebimentos, setRecebimentos] = useState(initialRecebimentos);
   const [conferindo, setConferindo] = useState<Pending | null>(null);
+  const [linkPedido, setLinkPedido] = useState<Pending | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [historicoPurchaseId, setHistoricoPurchaseId] = useState<string | null>(null);
+  const [historico, setHistorico] = useState<{ id: string; action: string; createdAt: string; userName: string | null }[]>([]);
   const [responsavel, setResponsavel] = useState("");
   const [status, setStatus] = useState("APROVADO");
   const [divergencias, setDivergencias] = useState<string[]>([]);
@@ -49,6 +87,10 @@ export function RecebimentoClient({
         id: p.id,
         numeroNota: p.numeroNota,
         data: p.data,
+        status: p.status,
+        previsaoEntrega: p.previsaoEntrega,
+        responsavelRecebimentoNome: (p.responsavelRecebimento as { name: string } | null)?.name ?? null,
+        recebimentoToken: p.recebimentoToken,
         supplierName: (p.supplier as { nomeFantasia: string | null; razaoSocial: string }).nomeFantasia ?? (p.supplier as { razaoSocial: string }).razaoSocial,
         items: (p.items as Record<string, unknown>[]).map((it) => ({
           id: it.id,
@@ -62,6 +104,7 @@ export function RecebimentoClient({
     setRecebimentos(
       data.recebimentos.map((r: Record<string, unknown>) => ({
         id: r.id,
+        purchaseId: (r.purchase as { id: string }).id,
         dataHora: r.dataHora,
         responsavel: r.responsavel,
         status: r.status,
@@ -103,17 +146,73 @@ export function RecebimentoClient({
     refresh();
   }
 
+  async function copyLink(token: string) {
+    await navigator.clipboard.writeText(`${window.location.origin}/recebimento/${token}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function abrirHistorico(purchaseId: string) {
+    setHistoricoPurchaseId(purchaseId);
+    setHistorico([]);
+    const res = await fetch(`/api/estoque/compras/${purchaseId}/historico`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setHistorico(
+      data.eventos.map((e: Record<string, unknown>) => ({
+        id: e.id,
+        action: e.action,
+        createdAt: e.createdAt,
+        userName: (e.user as { name: string } | null)?.name ?? null,
+      }))
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <Section title="Pedidos aguardando recebimento" action={<Toolbar onRefresh={refresh} />}>
+      <Section title="Dashboard gerencial (últimos 30 dias)">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard label="Recebimentos" value={String(dashboard.totalRecebimentos)} icon="PackageCheck" color="#1464F4" />
+          <StatCard label="Sem divergência" value={`${dashboard.pctSemDivergencia.toFixed(0)}%`} icon="CheckCircle2" color="#22C55E" />
+          <StatCard label="Pedidos atrasados" value={String(dashboard.pedidosAtrasados)} icon="Clock" color="#F59E0B" invertDeltaColor />
+          <StatCard label="Divergências abertas" value={String(dashboard.divergenciasAbertas)} icon="TriangleAlert" color="#EF4444" invertDeltaColor />
+          <StatCard label="Valor em divergências" value={formatCurrency(dashboard.valorDivergencias)} icon="DollarSign" color="#EF4444" invertDeltaColor />
+          <StatCard
+            label="Tempo médio de resolução"
+            value={dashboard.tempoMedioResolucaoDias != null ? `${dashboard.tempoMedioResolucaoDias.toFixed(1)} dias` : "—"}
+            icon="Timer"
+            color="#A855F7"
+          />
+          <StatCard
+            label="Fornecedor com mais problemas"
+            value={dashboard.fornecedorMaisProblemas ? dashboard.fornecedorMaisProblemas.nome : "—"}
+            hint={dashboard.fornecedorMaisProblemas ? `${dashboard.fornecedorMaisProblemas.count} divergência(s)` : undefined}
+            icon="AlertTriangle"
+            color="#F59E0B"
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="Pedidos aguardando recebimento"
+        action={
+          <Toolbar
+            onRefresh={refresh}
+            onAdd={canCreate ? () => router.push("/portal/estoque/recebimento/novo") : undefined}
+            addLabel="Novo Pedido"
+          />
+        }
+      >
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
                 <th className="py-2 pr-4">Data do pedido</th>
                 <th className="py-2 pr-4">Fornecedor</th>
-                <th className="py-2 pr-4">Nota fiscal</th>
+                <th className="py-2 pr-4">Previsão</th>
                 <th className="py-2 pr-4">Itens</th>
+                <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4" />
               </tr>
             </thead>
@@ -122,20 +221,32 @@ export function RecebimentoClient({
                 <tr key={p.id} className="border-b border-nord-border/50 hover:bg-white/5">
                   <td className="py-2.5 pr-4 text-nord-gray">{format(new Date(p.data), "dd/MM/yyyy")}</td>
                   <td className="py-2.5 pr-4 text-white">{p.supplierName}</td>
-                  <td className="py-2.5 pr-4 text-nord-gray">{p.numeroNota ?? "—"}</td>
+                  <td className="py-2.5 pr-4 text-nord-gray">{p.previsaoEntrega ? format(new Date(p.previsaoEntrega), "dd/MM/yyyy") : "—"}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{p.items.length} item(ns)</td>
-                  <td className="py-2.5 pr-4 text-right">
+                  <td className="py-2.5 pr-4">
+                    <Badge tone={PURCHASE_STATUS_TONE[p.status] ?? "default"}>{PURCHASE_STATUS_LABEL[p.status] ?? p.status}</Badge>
+                  </td>
+                  <td className="py-2.5 pr-4 text-nord-gray">{p.responsavelRecebimentoNome ?? "—"}</td>
+                  <td className="py-2.5 pr-4 text-right space-x-2 whitespace-nowrap">
+                    {canCreate && p.recebimentoToken && (
+                      <button onClick={() => setLinkPedido(p)} className="text-xs text-nord-blue-light hover:underline inline-flex items-center gap-1">
+                        <Send size={12} /> Ver link
+                      </button>
+                    )}
                     {canCreate && (
                       <button onClick={() => openConferencia(p)} className="text-xs text-nord-blue-light hover:underline">
                         Conferir recebimento
                       </button>
                     )}
+                    <button onClick={() => abrirHistorico(p.id)} className="text-xs text-nord-gray hover:text-white inline-flex items-center gap-1">
+                      <History size={12} /> Histórico
+                    </button>
                   </td>
                 </tr>
               ))}
               {pendentes.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-nord-gray">
+                  <td colSpan={7} className="py-6 text-center text-nord-gray">
                     Nenhum pedido aguardando recebimento.
                   </td>
                 </tr>
@@ -155,6 +266,7 @@ export function RecebimentoClient({
                 <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Divergências</th>
+                <th className="py-2 pr-4" />
               </tr>
             </thead>
             <tbody>
@@ -170,15 +282,20 @@ export function RecebimentoClient({
                     {r.divergencias
                       ? r.divergencias
                           .split(",")
-                          .map((d) => RECEIVING_DIVERGENCE_LABEL[d] ?? d)
+                          .map((d) => RECEIVING_DIVERGENCE_LABEL[d] ?? RECEIVING_ITEM_DIVERGENCE_LABEL[d] ?? d)
                           .join(", ")
                       : "—"}
+                  </td>
+                  <td className="py-2.5 pr-4 text-right">
+                    <button onClick={() => abrirHistorico(r.purchaseId)} className="text-xs text-nord-gray hover:text-white inline-flex items-center gap-1">
+                      <History size={12} /> Histórico
+                    </button>
                   </td>
                 </tr>
               ))}
               {recebimentos.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-nord-gray">
+                  <td colSpan={6} className="py-6 text-center text-nord-gray">
                     Nenhum recebimento registrado.
                   </td>
                 </tr>
@@ -236,6 +353,49 @@ export function RecebimentoClient({
             </button>
           </div>
         )}
+      </Modal>
+
+      <Modal open={!!linkPedido} onClose={() => setLinkPedido(null)} title={`Link de recebimento — ${linkPedido?.supplierName ?? ""}`} widthClass="max-w-lg">
+        {linkPedido && linkPedido.recebimentoToken && (
+          <div className="space-y-3">
+            <p className="text-xs text-nord-gray">
+              Envie este link para {linkPedido.responsavelRecebimentoNome ?? "o responsável"} realizar a conferência de recebimento.
+            </p>
+            <div className="flex items-center gap-2">
+              <input readOnly value={`${window.location.origin}/recebimento/${linkPedido.recebimentoToken}`} className="input flex-1 text-xs" />
+              <button onClick={() => copyLink(linkPedido.recebimentoToken!)} className="btn-outline shrink-0">
+                {copied ? <CheckCheck size={13} /> : <Copy size={13} />} {copied ? "Copiado!" : "Copiar"}
+              </button>
+            </div>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `Olá! Segue o link para realizar o recebimento da mercadoria.\n\nFornecedor: ${linkPedido.supplierName}\n\n${window.location.origin}/recebimento/${linkPedido.recebimentoToken}`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
+            >
+              Enviar por WhatsApp
+            </a>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!historicoPurchaseId} onClose={() => setHistoricoPurchaseId(null)} title="Histórico do pedido" widthClass="max-w-lg">
+        <div className="space-y-3">
+          {historico.map((h) => (
+            <div key={h.id} className="flex items-start gap-3 border-b border-nord-border/50 pb-2 last:border-0">
+              <div className="w-2 h-2 rounded-full bg-nord-blue mt-1.5 shrink-0" />
+              <div>
+                <p className="text-sm text-white">{h.action}</p>
+                <p className="text-xs text-nord-gray">
+                  {format(new Date(h.createdAt), "dd/MM/yyyy HH:mm")}{h.userName ? ` — ${h.userName}` : ""}
+                </p>
+              </div>
+            </div>
+          ))}
+          {historico.length === 0 && <p className="text-center text-nord-gray py-4">Nenhum evento registrado.</p>}
+        </div>
       </Modal>
     </div>
   );
