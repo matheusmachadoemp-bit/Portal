@@ -60,6 +60,113 @@ export async function logPurchaseEvent(params: {
   });
 }
 
+/**
+ * KPIs do dashboard gerencial de Recebimento: volume, % sem divergência, atrasos,
+ * divergências em aberto, valor acumulado das divergências, tempo médio de resolução
+ * e o fornecedor com mais problemas — tudo calculado a partir de Receiving/ReceivingItem
+ * (nada é armazenado à parte; o dashboard é sempre um retrato atual dos dados já registrados).
+ */
+export async function loadRecebimentoDashboard(empresaIds: string[], since: Date, supplierId?: string) {
+  const receivings = await prisma.receiving.findMany({
+    where: {
+      empresaId: { in: empresaIds },
+      dataFim: { gte: since },
+      ...(supplierId ? { purchase: { supplierId } } : {}),
+    },
+    include: {
+      purchase: {
+        select: {
+          id: true,
+          previsaoEntrega: true,
+          supplier: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
+        },
+      },
+      items: { include: { purchaseItem: { select: { quantidade: true, valorUnitario: true } } } },
+    },
+  });
+
+  const totalRecebimentos = receivings.length;
+  const semDivergencia = receivings.filter(
+    (r) => !r.items.some((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO")
+  ).length;
+  const pctSemDivergencia = totalRecebimentos ? (semDivergencia / totalRecebimentos) * 100 : 0;
+
+  const pedidosAtrasados = receivings.filter(
+    (r) => r.purchase.previsaoEntrega && r.dataFim && r.dataFim > r.purchase.previsaoEntrega
+  ).length;
+
+  const divergentes = receivings.flatMap((r) =>
+    r.items
+      .filter((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO")
+      .map((it) => ({ ...it, supplier: r.purchase.supplier }))
+  );
+
+  const divergenciasAbertas = divergentes.filter((it) => it.resolucaoTipo === "AGUARDANDO").length;
+
+  const valorDivergencias = divergentes.reduce((sum, it) => {
+    const precoRef = it.precoInformado ?? it.purchaseItem.valorUnitario;
+    const qtdDif = (it.quantidadeRecebida ?? 0) - it.purchaseItem.quantidade;
+    return sum + Math.abs(qtdDif) * precoRef;
+  }, 0);
+
+  const resolvidos = divergentes.filter((it) => it.resolvidoEm);
+  const tempoMedioResolucaoDias = resolvidos.length
+    ? resolvidos.reduce((sum, it) => sum + (it.resolvidoEm!.getTime() - it.createdAt.getTime()) / 86400000, 0) / resolvidos.length
+    : null;
+
+  const porFornecedor = new Map<string, { nome: string; count: number }>();
+  for (const it of divergentes) {
+    const nome = it.supplier.nomeFantasia ?? it.supplier.razaoSocial;
+    const entry = porFornecedor.get(it.supplier.id) ?? { nome, count: 0 };
+    entry.count += 1;
+    porFornecedor.set(it.supplier.id, entry);
+  }
+  const fornecedorMaisProblemas = [...porFornecedor.values()].sort((a, b) => b.count - a.count)[0] ?? null;
+
+  return {
+    totalRecebimentos,
+    pctSemDivergencia,
+    pedidosAtrasados,
+    divergenciasAbertas,
+    valorDivergencias,
+    tempoMedioResolucaoDias,
+    fornecedorMaisProblemas,
+  };
+}
+
+/**
+ * Histórico de recebimento de um fornecedor: taxa de conformidade, valor de divergências
+ * acumulado e atraso médio — complementa a `avaliacao` manual do fornecedor com dados reais.
+ */
+export async function loadSupplierReceivingHistory(supplierId: string) {
+  const receivings = await prisma.receiving.findMany({
+    where: { purchase: { supplierId } },
+    include: {
+      purchase: { select: { previsaoEntrega: true } },
+      items: { include: { purchaseItem: { select: { quantidade: true, valorUnitario: true } } } },
+    },
+  });
+
+  const totalRecebimentos = receivings.length;
+  const comDivergencia = receivings.filter((r) =>
+    r.items.some((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO")
+  ).length;
+  const taxaConformidade = totalRecebimentos ? ((totalRecebimentos - comDivergencia) / totalRecebimentos) * 100 : null;
+
+  const valorDivergencias = receivings
+    .flatMap((r) => r.items.filter((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO"))
+    .reduce((sum, it) => {
+      const precoRef = it.precoInformado ?? it.purchaseItem.valorUnitario;
+      const qtdDif = (it.quantidadeRecebida ?? 0) - it.purchaseItem.quantidade;
+      return sum + Math.abs(qtdDif) * precoRef;
+    }, 0);
+
+  const atrasos = receivings.filter((r) => r.purchase.previsaoEntrega && r.dataFim && r.dataFim > r.purchase.previsaoEntrega).length;
+  const taxaAtraso = totalRecebimentos ? (atrasos / totalRecebimentos) * 100 : null;
+
+  return { totalRecebimentos, taxaConformidade, valorDivergencias, taxaAtraso };
+}
+
 /** ADMINISTRADOR/GESTOR (globais) + GERENTE com acesso a essa empresa — mesmo critério usado no escalonamento do Checklist. */
 async function loadManagers(empresaId: string) {
   return prisma.user.findMany({

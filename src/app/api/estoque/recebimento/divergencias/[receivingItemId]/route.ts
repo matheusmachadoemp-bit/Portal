@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
+import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 
 const VALID_TIPOS = ["FORNECEDOR_REPOSICAO", "FORNECEDOR_CREDITO", "PRODUTO_DEVOLVIDO", "DIFERENCA_ACEITA", "OUTRA"];
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ receivingItemId: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!RECEBIMENTO_MANAGE_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Você não tem permissão para resolver divergências de recebimento." }, { status: 403 });
+  }
 
   const { receivingItemId } = await params;
   const body = await req.json();

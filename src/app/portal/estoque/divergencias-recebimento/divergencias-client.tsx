@@ -49,7 +49,7 @@ function valorDiferenca(item: Item) {
   return qtdDif * precoRef;
 }
 
-export function DivergenciasClient({ initialItems }: { initialItems: Item[] }) {
+export function DivergenciasClient({ initialItems, canResolve }: { initialItems: Item[]; canResolve: boolean }) {
   const [items, setItems] = useState(initialItems);
   const [resolvendo, setResolvendo] = useState<Item | null>(null);
   const [tipo, setTipo] = useState("FORNECEDOR_REPOSICAO");
@@ -167,9 +167,11 @@ export function DivergenciasClient({ initialItems }: { initialItems: Item[] }) {
                     )}
                   </td>
                   <td className="py-2.5 pr-4 text-right">
-                    <button onClick={() => openResolver(it)} className="text-xs text-nord-blue-light hover:underline">
-                      Resolver
-                    </button>
+                    {canResolve && (
+                      <button onClick={() => openResolver(it)} className="text-xs text-nord-blue-light hover:underline">
+                        Resolver
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

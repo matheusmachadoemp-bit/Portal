@@ -171,6 +171,9 @@ export const RECEIVING_ITEM_RESOLUTION_TONE: Record<string, "default" | "success
   OUTRA: "success",
 };
 
+/** Quem pode criar pedidos de compra e resolver divergências de recebimento — decisões com impacto financeiro, não abertas a qualquer colaborador. */
+export const RECEBIMENTO_MANAGE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 // ---------------------------------------------------------------------------
 // Transferências entre lojas
 // ---------------------------------------------------------------------------

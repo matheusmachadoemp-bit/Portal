@@ -2,8 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { DivergenciasClient } from "./divergencias-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 
 export default async function DivergenciasRecebimentoPage() {
+  const session = await auth();
+  const canResolve = RECEBIMENTO_MANAGE_ROLES.includes(session?.user?.role ?? "");
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
@@ -65,6 +69,7 @@ export default async function DivergenciasRecebimentoPage() {
           unidade: it.purchaseItem.unidade,
           valorUnitario: it.purchaseItem.valorUnitario,
         }))}
+        canResolve={canResolve}
       />
     </PageContainer>
   );
