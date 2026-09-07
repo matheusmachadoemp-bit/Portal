@@ -50,6 +50,7 @@ export default async function RecebimentoPage() {
           }))}
           initialRecebimentos={recebimentos.map((r) => ({
             id: r.id,
+            purchaseId: r.purchase.id,
             dataHora: r.dataHora.toISOString(),
             responsavel: r.responsavel,
             status: r.status,

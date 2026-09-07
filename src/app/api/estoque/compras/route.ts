@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { logPurchaseEvent } from "@/lib/recebimento-server";
 
 export async function GET() {
   const session = await auth();
@@ -72,6 +73,21 @@ export async function POST(req: Request) {
     },
     include: { items: true, supplier: true },
   });
+
+  await logPurchaseEvent({
+    purchaseId: purchase.id,
+    empresaId: empresa.id,
+    action: `Pedido criado por ${session.user.name ?? "usuário"}`,
+    userId: session.user.id,
+  });
+  if (body.enviarParaRecebimento) {
+    await logPurchaseEvent({
+      purchaseId: purchase.id,
+      empresaId: empresa.id,
+      action: "Pedido enviado para recebimento",
+      userId: session.user.id,
+    });
+  }
 
   return NextResponse.json({ purchase });
 }

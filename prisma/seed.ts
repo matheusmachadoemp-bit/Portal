@@ -173,6 +173,7 @@ const CATEGORIES = [
       { key: "compras", name: "Compras", icon: "ShoppingBasket" },
       { key: "fornecedores", name: "Fornecedores", icon: "Truck" },
       { key: "recebimento", name: "Recebimento de Mercadorias", icon: "PackageCheck" },
+      { key: "divergencias-recebimento", name: "Divergências de Recebimento", icon: "TriangleAlert" },
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
       { key: "transferencias", name: "Transferências", icon: "Shuffle" },
       { key: "perdas", name: "Perdas e Desperdícios", icon: "TriangleAlert" },

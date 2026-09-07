@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { loadPurchaseByToken, receivingState } from "@/lib/recebimento-server";
+import { loadPurchaseByToken, logPurchaseEvent, receivingState } from "@/lib/recebimento-server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -39,6 +39,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     }),
     prisma.purchase.update({ where: { id: purchase!.id }, data: { status: "EM_CONFERENCIA" } }),
   ]);
+
+  await logPurchaseEvent({
+    purchaseId: purchase!.id,
+    empresaId: purchase!.empresaId,
+    action: `Recebimento iniciado por ${purchase!.responsavelRecebimento?.name ?? "responsável"}`,
+    userId: purchase!.responsavelRecebimentoId,
+  });
 
   return NextResponse.json({ ok: true });
 }

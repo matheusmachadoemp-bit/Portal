@@ -73,6 +73,7 @@ model User {
   stockMovementsCreated            StockMovement[]            @relation("StockMovementCreatedBy")
   purchasesCreated                 Purchase[]                 @relation("PurchaseCreatedBy")
   purchasesResponsavelRecebimento  Purchase[]                 @relation("PurchaseResponsavelRecebimento")
+  receivingItemsResolvidos         ReceivingItem[]            @relation("ReceivingItemResolvidoPor")
   transfersCreated                 Transfer[]                 @relation("TransferCreatedBy")
   lossesCreated                    Loss[]                     @relation("LossCreatedBy")
   stockCountsCreated               StockCount[]               @relation("StockCountCreatedBy")
@@ -2214,25 +2215,42 @@ enum ReceivingItemStatus {
 
 /// Conferência item a item de um recebimento — o que falta no `Receiving` (hoje só registra o pedido inteiro).
 model ReceivingItem {
-  id                   String              @id @default(cuid())
-  receivingId          String
-  receiving            Receiving           @relation(fields: [receivingId], references: [id], onDelete: Cascade)
-  purchaseItemId       String              @unique
-  purchaseItem         PurchaseItem        @relation(fields: [purchaseItemId], references: [id], onDelete: Cascade)
-  status               ReceivingItemStatus @default(NAO_CONFERIDO)
-  quantidadeRecebida   Float?
-  pesoAferido          Float?
-  temperaturaAferida   Float?
-  validadeInformada    DateTime?
-  precoInformado       Float?
-  fotoUrl              String?
+  id                    String                      @id @default(cuid())
+  receivingId           String
+  receiving             Receiving                   @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  purchaseItemId        String                      @unique
+  purchaseItem          PurchaseItem                @relation(fields: [purchaseItemId], references: [id], onDelete: Cascade)
+  status                ReceivingItemStatus         @default(NAO_CONFERIDO)
+  quantidadeRecebida    Float?
+  pesoAferido           Float?
+  temperaturaAferida    Float?
+  validadeInformada     DateTime?
+  precoInformado        Float?
+  fotoUrl               String?
   /// Tipos de divergência marcados para este item — lista separada por vírgula (mesmas chaves de RECEIVING_DIVERGENCE_LABEL).
-  divergenciaTipos     String?
-  divergenciaDescricao String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  divergenciaTipos      String?
+  divergenciaDescricao  String?
+  /// Resolução da divergência (central de divergências pendentes) — nunca apagamos, só muda o tipo/status.
+  resolucaoTipo         ReceivingItemResolutionType @default(AGUARDANDO)
+  resolucaoDataPrevista DateTime?
+  resolucaoValorCredito Float?
+  resolucaoObservacao   String?
+  resolvidoPorId        String?
+  resolvidoPor          User?                       @relation("ReceivingItemResolvidoPor", fields: [resolvidoPorId], references: [id])
+  resolvidoEm           DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
 
   @@index([receivingId])
+}
+
+enum ReceivingItemResolutionType {
+  AGUARDANDO
+  FORNECEDOR_REPOSICAO
+  FORNECEDOR_CREDITO
+  PRODUTO_DEVOLVIDO
+  DIFERENCA_ACEITA
+  OUTRA
 }
 
 enum TransferStatus {
