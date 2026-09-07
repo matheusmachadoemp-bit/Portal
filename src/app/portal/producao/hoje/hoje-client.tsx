@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, Clock, Play, Search } from "lucide-react";
+import { AlertTriangle, Clock, Play, Printer, Search } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/lib/producao";
 import type { ProductionOrderDTO, CategoriaOption, UserOption } from "../types";
 import { FinalizarModal } from "./finalizar-modal";
+import { EtiquetaModal } from "./etiqueta-modal";
 
 type StatusFilter = "TODOS" | "PENDENTE" | "EM_PRODUCAO" | "CONCLUIDO" | "ATRASADO";
 
@@ -40,6 +41,7 @@ export function HojeClient({
   const [responsavelFilter, setResponsavelFilter] = useState("");
   const [search, setSearch] = useState("");
   const [finalizando, setFinalizando] = useState<ProductionOrderDTO | null>(null);
+  const [imprimindo, setImprimindo] = useState<ProductionOrderDTO | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   async function refresh() {
@@ -180,6 +182,14 @@ export function HojeClient({
                   Finalizar Produção
                 </button>
               )}
+              {ordem.status === "CONCLUIDO" && (
+                <button
+                  onClick={() => setImprimindo(ordem)}
+                  className="w-full flex items-center justify-center gap-1.5 border border-nord-border text-nord-gray hover:text-white text-sm font-medium rounded-lg py-2"
+                >
+                  <Printer size={13} /> Imprimir Etiqueta
+                </button>
+              )}
             </div>
           );
         })}
@@ -198,6 +208,7 @@ export function HojeClient({
           }}
         />
       )}
+      {imprimindo && <EtiquetaModal ordem={imprimindo} onClose={() => setImprimindo(null)} />}
     </div>
   );
 }

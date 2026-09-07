@@ -2,9 +2,13 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { notifyUser } from "@/lib/tarefas-server";
 import { getStoreManagers } from "@/lib/manutencao-server";
-import { effectiveProductionStatus } from "@/lib/producao";
+import { compareProducedToPlanned, effectiveProductionStatus } from "@/lib/producao";
 
 export const PRODUCTION_MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+/** Pontos ganhos na régua da Loja Nord por concluir uma produção no prazo e
+ * dentro da tolerância — seção 32: nunca premia só por quantidade, só por
+ * produzir certo e na hora certa. */
+const PRODUCAO_PONTOS_NO_PRAZO = 5;
 
 export { getStoreManagers };
 
@@ -88,14 +92,66 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
     return [updatedOrder];
   });
 
-  await logProductionOrderHistory(
-    orderId,
-    userId,
-    "FINALIZADO",
-    `Planejado: ${order.quantidadeAprovada ?? order.quantidadeSugerida} · Produzido: ${quantidadeProduzida}`
-  );
+  const planejado = order.quantidadeAprovada ?? order.quantidadeSugerida;
+  await logProductionOrderHistory(orderId, userId, "FINALIZADO", `Planejado: ${planejado} · Produzido: ${quantidadeProduzida}`);
+
+  await avaliarFinalizacaoProductionOrder(updated, planejado, userId);
 
   return updated;
+}
+
+/** Roda depois de finalizar: pontua na Loja Nord quando aplicável, avisa o
+ * gestor quando a produção ficou bem abaixo do planejado, e confere se foi
+ * a última pendência do dia pra avisar "produção do dia concluída". */
+async function avaliarFinalizacaoProductionOrder(
+  order: { id: string; empresaId: string; productionItemId: string; responsavelId: string | null; prazo: Date; horaFim: Date | null; quantidadeProduzida: number | null; date: Date },
+  planejado: number,
+  userId: string
+): Promise<void> {
+  const [settings, item] = await Promise.all([
+    prisma.productionSettings.findUnique({ where: { empresaId: order.empresaId } }),
+    prisma.productionItem.findUniqueOrThrow({ where: { id: order.productionItemId }, select: { name: true, unidade: true } }),
+  ]);
+  const tolerancia = settings?.toleranciaAlertaPct ?? 10;
+  const produzido = order.quantidadeProduzida ?? 0;
+  const comparison = compareProducedToPlanned(planejado, produzido, tolerancia);
+  const noPrazo = !order.horaFim || order.horaFim.getTime() <= new Date(order.prazo).getTime();
+
+  if (noPrazo && !comparison.alerta) {
+    await prisma.lojaNordPointTransaction.create({
+      data: {
+        userId: order.responsavelId ?? userId,
+        empresaId: order.empresaId,
+        kind: "GANHO",
+        pontos: PRODUCAO_PONTOS_NO_PRAZO,
+        origem: "Produção",
+        descricao: `Produção concluída no prazo e dentro da tolerância: ${item.name}`,
+      },
+    });
+  }
+
+  if (comparison.alerta === "abaixo") {
+    const managerIds = await getStoreManagers(order.empresaId);
+    await notifyProducaoUsers(
+      managerIds,
+      "PRODUCAO_ABAIXO_DO_PLANEJADO",
+      `Produção abaixo do planejado: ${item.name}`,
+      `Planejado: ${planejado} ${item.unidade} · Produzido: ${produzido} ${item.unidade}.`
+    );
+  }
+
+  const dayStart = new Date(order.date);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const [total, pendentes] = await Promise.all([
+    prisma.productionOrder.count({ where: { empresaId: order.empresaId, date: { gte: dayStart, lt: dayEnd } } }),
+    prisma.productionOrder.count({ where: { empresaId: order.empresaId, date: { gte: dayStart, lt: dayEnd }, status: { not: "CONCLUIDO" } } }),
+  ]);
+  if (total > 0 && pendentes === 0) {
+    const managerIds = await getStoreManagers(order.empresaId);
+    await notifyProducaoUsers(managerIds, "PRODUCAO_DIA_CONCLUIDO", "Produção do dia concluída", `${total} de ${total} produções concluídas.`);
+  }
 }
 
 /** Lança manualmente um movimento de estoque pronto (saldo do turno anterior,
