@@ -42,6 +42,24 @@ export function receivingState(purchase: PurchaseByToken | null) {
   return "ok" as const;
 }
 
+/** Registra um evento na linha do tempo do pedido (histórico auditável), reaproveitando o AuditLog genérico já usado em outros módulos. */
+export async function logPurchaseEvent(params: {
+  purchaseId: string;
+  empresaId: string;
+  action: string;
+  userId?: string | null;
+}) {
+  await prisma.auditLog.create({
+    data: {
+      entityType: "Purchase",
+      entityId: params.purchaseId,
+      empresaId: params.empresaId,
+      userId: params.userId ?? null,
+      action: params.action,
+    },
+  });
+}
+
 /** ADMINISTRADOR/GESTOR (globais) + GERENTE com acesso a essa empresa — mesmo critério usado no escalonamento do Checklist. */
 async function loadManagers(empresaId: string) {
   return prisma.user.findMany({

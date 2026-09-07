@@ -153,6 +153,24 @@ export const RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO = new Set([
   "QUALIDADE_FORA_PADRAO",
 ]);
 
+export const RECEIVING_ITEM_RESOLUTION_LABEL: Record<string, string> = {
+  AGUARDANDO: "Aguardando solução",
+  FORNECEDOR_REPOSICAO: "Fornecedor fará reposição",
+  FORNECEDOR_CREDITO: "Fornecedor dará crédito",
+  PRODUTO_DEVOLVIDO: "Produto devolvido",
+  DIFERENCA_ACEITA: "Diferença aceita",
+  OUTRA: "Outra solução",
+};
+
+export const RECEIVING_ITEM_RESOLUTION_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
+  AGUARDANDO: "warning",
+  FORNECEDOR_REPOSICAO: "info",
+  FORNECEDOR_CREDITO: "info",
+  PRODUTO_DEVOLVIDO: "success",
+  DIFERENCA_ACEITA: "success",
+  OUTRA: "success",
+};
+
 // ---------------------------------------------------------------------------
 // Transferências entre lojas
 // ---------------------------------------------------------------------------

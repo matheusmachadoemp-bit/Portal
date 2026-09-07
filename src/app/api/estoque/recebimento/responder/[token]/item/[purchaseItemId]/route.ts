@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { loadPurchaseByToken, receivingState } from "@/lib/recebimento-server";
+import { loadPurchaseByToken, logPurchaseEvent, receivingState } from "@/lib/recebimento-server";
 import { RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO } from "@/lib/estoque";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ token: string; purchaseItemId: string }> }) {
@@ -49,6 +49,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
       divergenciaDescricao: body.divergenciaDescricao || null,
     },
   });
+
+  if (status === "DIVERGENCIA" || status === "NAO_RECEBIDO") {
+    await logPurchaseEvent({
+      purchaseId: purchase!.id,
+      empresaId: purchase!.empresaId,
+      action: `Divergência registrada — ${item.ingredient.name}`,
+      userId: purchase!.responsavelRecebimentoId,
+    });
+  }
 
   return NextResponse.json({ receivingItem });
 }

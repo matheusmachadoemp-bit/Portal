@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, CheckCheck, Send } from "lucide-react";
+import { Copy, CheckCheck, Send, History } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -32,6 +32,7 @@ type Pending = {
 };
 type Receiving = {
   id: string;
+  purchaseId: string;
   dataHora: string;
   responsavel: string | null;
   status: string;
@@ -58,6 +59,8 @@ export function RecebimentoClient({
   const [conferindo, setConferindo] = useState<Pending | null>(null);
   const [linkPedido, setLinkPedido] = useState<Pending | null>(null);
   const [copied, setCopied] = useState(false);
+  const [historicoPurchaseId, setHistoricoPurchaseId] = useState<string | null>(null);
+  const [historico, setHistorico] = useState<{ id: string; action: string; createdAt: string; userName: string | null }[]>([]);
   const [responsavel, setResponsavel] = useState("");
   const [status, setStatus] = useState("APROVADO");
   const [divergencias, setDivergencias] = useState<string[]>([]);
@@ -89,6 +92,7 @@ export function RecebimentoClient({
     setRecebimentos(
       data.recebimentos.map((r: Record<string, unknown>) => ({
         id: r.id,
+        purchaseId: (r.purchase as { id: string }).id,
         dataHora: r.dataHora,
         responsavel: r.responsavel,
         status: r.status,
@@ -134,6 +138,22 @@ export function RecebimentoClient({
     await navigator.clipboard.writeText(`${window.location.origin}/recebimento/${token}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function abrirHistorico(purchaseId: string) {
+    setHistoricoPurchaseId(purchaseId);
+    setHistorico([]);
+    const res = await fetch(`/api/estoque/compras/${purchaseId}/historico`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setHistorico(
+      data.eventos.map((e: Record<string, unknown>) => ({
+        id: e.id,
+        action: e.action,
+        createdAt: e.createdAt,
+        userName: (e.user as { name: string } | null)?.name ?? null,
+      }))
+    );
   }
 
   return (
@@ -183,6 +203,9 @@ export function RecebimentoClient({
                         Conferir recebimento
                       </button>
                     )}
+                    <button onClick={() => abrirHistorico(p.id)} className="text-xs text-nord-gray hover:text-white inline-flex items-center gap-1">
+                      <History size={12} /> Histórico
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -208,6 +231,7 @@ export function RecebimentoClient({
                 <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Divergências</th>
+                <th className="py-2 pr-4" />
               </tr>
             </thead>
             <tbody>
@@ -227,11 +251,16 @@ export function RecebimentoClient({
                           .join(", ")
                       : "—"}
                   </td>
+                  <td className="py-2.5 pr-4 text-right">
+                    <button onClick={() => abrirHistorico(r.purchaseId)} className="text-xs text-nord-gray hover:text-white inline-flex items-center gap-1">
+                      <History size={12} /> Histórico
+                    </button>
+                  </td>
                 </tr>
               ))}
               {recebimentos.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-nord-gray">
+                  <td colSpan={6} className="py-6 text-center text-nord-gray">
                     Nenhum recebimento registrado.
                   </td>
                 </tr>
@@ -315,6 +344,23 @@ export function RecebimentoClient({
             </a>
           </div>
         )}
+      </Modal>
+
+      <Modal open={!!historicoPurchaseId} onClose={() => setHistoricoPurchaseId(null)} title="Histórico do pedido" widthClass="max-w-lg">
+        <div className="space-y-3">
+          {historico.map((h) => (
+            <div key={h.id} className="flex items-start gap-3 border-b border-nord-border/50 pb-2 last:border-0">
+              <div className="w-2 h-2 rounded-full bg-nord-blue mt-1.5 shrink-0" />
+              <div>
+                <p className="text-sm text-white">{h.action}</p>
+                <p className="text-xs text-nord-gray">
+                  {format(new Date(h.createdAt), "dd/MM/yyyy HH:mm")}{h.userName ? ` — ${h.userName}` : ""}
+                </p>
+              </div>
+            </div>
+          ))}
+          {historico.length === 0 && <p className="text-center text-nord-gray py-4">Nenhum evento registrado.</p>}
+        </div>
       </Modal>
     </div>
   );
