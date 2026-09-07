@@ -2147,8 +2147,9 @@ model Purchase {
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
 
-  items     PurchaseItem[]
-  receiving Receiving?
+  items         PurchaseItem[]
+  receiving     Receiving?
+  notifications Notification[]
 
   @@index([empresaId, data])
 }
@@ -2178,25 +2179,28 @@ enum ReceivingStatus {
 }
 
 model Receiving {
-  id                String          @id @default(cuid())
-  purchaseId        String          @unique
-  purchase          Purchase        @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  empresaId         String
-  empresa           Empresa         @relation(fields: [empresaId], references: [id])
-  dataHora          DateTime        @default(now())
+  id                  String          @id @default(cuid())
+  purchaseId          String          @unique
+  purchase            Purchase        @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  empresaId           String
+  empresa             Empresa         @relation(fields: [empresaId], references: [id])
+  dataHora            DateTime        @default(now())
   /// Hora em que o responsável tocou em "Iniciar recebimento" no link mobile.
-  dataInicio        DateTime?
+  dataInicio          DateTime?
   /// Hora em que a conferência foi finalizada (com ou sem divergência).
-  dataFim           DateTime?
-  responsavel       String?
-  status            ReceivingStatus @default(AGUARDANDO_SOLUCAO)
+  dataFim             DateTime?
+  responsavel         String?
+  status              ReceivingStatus @default(AGUARDANDO_SOLUCAO)
   /// Divergências marcadas: FALTA, EXCESSO, PESO_INCORRETO, PRODUTO_DANIFICADO, FORA_TEMPERATURA, VALIDADE_CURTA, PRODUTO_DIFERENTE, PRECO_DIFERENTE — lista separada por vírgula.
-  divergencias      String?
-  detalhes          String?
-  fotoMercadoriaUrl String?
-  fotoNotaUrl       String?
-  observacao        String?
-  createdAt         DateTime        @default(now())
+  divergencias        String?
+  detalhes            String?
+  fotoMercadoriaUrl   String?
+  fotoNotaUrl         String?
+  /// Número e valor da nota fiscal informados na conferência (para comparar com o valor do pedido).
+  numeroNotaInformado String?
+  valorNotaInformado  Float?
+  observacao          String?
+  createdAt           DateTime        @default(now())
 
   items ReceivingItem[]
 }
@@ -3306,6 +3310,8 @@ model Notification {
   chamado               Chamado?              @relation(fields: [chamadoId], references: [id], onDelete: SetNull)
   goalId                String?
   goal                  Goal?                 @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  purchaseId            String?
+  purchase              Purchase?             @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   read                  Boolean               @default(false)
   createdAt             DateTime              @default(now())
 
