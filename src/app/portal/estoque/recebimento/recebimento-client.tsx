@@ -12,6 +12,7 @@ import {
   PURCHASE_STATUS_LABEL,
   PURCHASE_STATUS_TONE,
   RECEIVING_DIVERGENCE_LABEL,
+  RECEIVING_ITEM_DIVERGENCE_LABEL,
   RECEIVING_STATUS,
   RECEIVING_STATUS_LABEL,
   RECEIVING_STATUS_TONE,
@@ -222,7 +223,7 @@ export function RecebimentoClient({
                     {r.divergencias
                       ? r.divergencias
                           .split(",")
-                          .map((d) => RECEIVING_DIVERGENCE_LABEL[d] ?? d)
+                          .map((d) => RECEIVING_DIVERGENCE_LABEL[d] ?? RECEIVING_ITEM_DIVERGENCE_LABEL[d] ?? d)
                           .join(", ")
                       : "—"}
                   </td>
