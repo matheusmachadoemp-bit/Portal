@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { loadPurchaseByToken, receivingState } from "@/lib/recebimento-server";
+import { loadPurchaseByToken, notifyReceivingDivergence, receivingState } from "@/lib/recebimento-server";
 
-export async function POST(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const body = await req.json().catch(() => ({}));
   const purchase = await loadPurchaseByToken(token);
   const state = receivingState(purchase);
   if (state === "invalido") return NextResponse.json({ error: "Link inválido." }, { status: 404 });
@@ -56,6 +57,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
       })
     : [];
 
+  const valorPedido = purchase!.items.reduce((s, it) => s + it.valorTotal, 0) + purchase!.frete - purchase!.desconto;
+  const valorNotaInformado = body.valorNota != null && body.valorNota !== "" ? Number(body.valorNota) : null;
+
   await prisma.$transaction([
     prisma.receiving.update({
       where: { id: purchase!.receiving.id },
@@ -65,6 +69,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
         divergencias: houveDivergencia
           ? [...new Set(purchase!.items.flatMap((it) => it.receivingItem?.divergenciaTipos?.split(",") ?? []))].join(",")
           : null,
+        numeroNotaInformado: body.numeroNota || null,
+        valorNotaInformado,
+        fotoNotaUrl: body.fotoNotaUrl || null,
       },
     }),
     prisma.purchase.update({
@@ -74,5 +81,21 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     ...movimentos,
   ]);
 
-  return NextResponse.json({ ok: true, houveDivergencia });
+  if (houveDivergencia) {
+    const divergenciasCount = purchase!.items.filter(
+      (it) => it.receivingItem?.status === "DIVERGENCIA" || it.receivingItem?.status === "NAO_RECEBIDO"
+    ).length;
+    const valorRecebido = purchase!.items.reduce(
+      (s, it) => s + (it.receivingItem?.quantidadeRecebida ?? 0) * (it.receivingItem?.precoInformado ?? it.valorUnitario),
+      0
+    );
+    const impactoFinanceiro = (valorNotaInformado ?? valorRecebido) - valorPedido;
+    await notifyReceivingDivergence(purchase!, {
+      totalItens: purchase!.items.length,
+      divergencias: divergenciasCount,
+      impactoFinanceiro,
+    });
+  }
+
+  return NextResponse.json({ ok: true, houveDivergencia, valorPedido, valorNotaInformado });
 }

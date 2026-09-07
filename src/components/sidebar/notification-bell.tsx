@@ -15,6 +15,7 @@ type NotificationDTO = {
   taskId: string | null;
   checklistOccurrenceId: string | null;
   chamadoId: string | null;
+  purchaseId: string | null;
   goalId: string | null;
   goalCategory: GoalCategoryKey | null;
   read: boolean;
@@ -97,6 +98,7 @@ export function NotificationBell() {
     if (n.checklistOccurrenceId) router.push(`/portal/tarefas/checklist/executar/${n.checklistOccurrenceId}`);
     else if (n.taskId) router.push("/portal/tarefas");
     else if (n.chamadoId) router.push(`/portal/manutencao/chamados/${n.chamadoId}`);
+    else if (n.purchaseId) router.push("/portal/estoque/recebimento");
     else if (n.goalCategory) router.push(`/portal/metas/${GOAL_CATEGORY_ROUTE[n.goalCategory]}`);
   }
 
