@@ -52,11 +52,12 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
   const quantidadeProduzida = Math.max(input.quantidadeProduzida, 0);
 
   const order = await prisma.productionOrder.findUniqueOrThrow({ where: { id: orderId } });
+  const item = await prisma.productionItem.findUniqueOrThrow({
+    where: { id: order.productionItemId },
+    select: { name: true, validadeDias: true, ingredientes: { select: { ingredientId: true, quantidadeUsada: true } } },
+  });
   const validadeCalculada =
-    input.validade ??
-    (await prisma.productionItem
-      .findUnique({ where: { id: order.productionItemId }, select: { validadeDias: true } })
-      .then((item) => (item?.validadeDias ? new Date(Date.now() + item.validadeDias * 24 * 60 * 60 * 1000) : null)));
+    input.validade ?? (item.validadeDias ? new Date(Date.now() + item.validadeDias * 24 * 60 * 60 * 1000) : null);
 
   const [updated] = await prisma.$transaction(async (tx) => {
     const stock = await tx.productionStock.upsert({
@@ -88,6 +89,31 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
         createdById: userId,
       },
     });
+
+    // Desconta os insumos crus da ficha do item produzido (seção 30) —
+    // mesmo padrão de saída de estoque já usado em perdas/movimentos: nunca
+    // deixa o estoque ficar negativo, só zera.
+    if (quantidadeProduzida > 0) {
+      for (const linha of item.ingredientes) {
+        const consumo = quantidadeProduzida * linha.quantidadeUsada;
+        if (consumo <= 0) continue;
+        const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: linha.ingredientId }, select: { estoqueAtual: true } });
+        const estoqueApos = Math.max(0, ingredient.estoqueAtual - consumo);
+        await tx.ingredient.update({ where: { id: linha.ingredientId }, data: { estoqueAtual: estoqueApos } });
+        await tx.stockMovement.create({
+          data: {
+            ingredientId: linha.ingredientId,
+            empresaId: order.empresaId,
+            type: "SAIDA",
+            quantidade: consumo,
+            estoqueApos,
+            motivo: `Consumo em produção — ${item.name}`,
+            origin: "CONSUMO_INTERNO",
+            createdById: userId,
+          },
+        });
+      }
+    }
 
     return [updatedOrder];
   });
