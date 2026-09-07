@@ -113,6 +113,47 @@ export const RECEIVING_DIVERGENCE_LABEL: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Recebimento — conferência item a item (tela mobile)
+// ---------------------------------------------------------------------------
+
+export const RECEIVING_ITEM_STATUS_LABEL: Record<string, string> = {
+  NAO_CONFERIDO: "Não conferido",
+  CONFERIDO: "Conferido",
+  DIVERGENCIA: "Divergência",
+  NAO_RECEBIDO: "Não recebido",
+};
+
+export const RECEIVING_ITEM_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
+  NAO_CONFERIDO: "default",
+  CONFERIDO: "success",
+  DIVERGENCIA: "danger",
+  NAO_RECEBIDO: "danger",
+};
+
+export const RECEIVING_ITEM_DIVERGENCE_LABEL: Record<string, string> = {
+  QUANTIDADE_MENOR: "Quantidade menor",
+  QUANTIDADE_MAIOR: "Quantidade maior",
+  PRODUTO_NAO_ENTREGUE: "Produto não entregue",
+  PRODUTO_DIFERENTE: "Produto diferente",
+  PRECO_DIFERENTE: "Preço diferente",
+  PRODUTO_AVARIADO: "Produto avariado",
+  EMBALAGEM_VIOLADA: "Embalagem violada",
+  VALIDADE_INADEQUADA: "Validade inadequada",
+  TEMPERATURA_INADEQUADA: "Temperatura inadequada",
+  QUALIDADE_FORA_PADRAO: "Qualidade fora do padrão",
+  OUTRO: "Outro",
+};
+
+/** Divergências que exigem foto como comprovação obrigatória. */
+export const RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO = new Set([
+  "PRODUTO_AVARIADO",
+  "EMBALAGEM_VIOLADA",
+  "VALIDADE_INADEQUADA",
+  "TEMPERATURA_INADEQUADA",
+  "QUALIDADE_FORA_PADRAO",
+]);
+
+// ---------------------------------------------------------------------------
 // Transferências entre lojas
 // ---------------------------------------------------------------------------
 
