@@ -10,6 +10,8 @@ const PUBLIC_PATHS = [
   "/certificado",
   "/pesquisa",
   "/api/satisfaction/responder",
+  "/recebimento",
+  "/api/estoque/recebimento/responder",
 ];
 
 export default auth((req) => {
@@ -28,7 +30,10 @@ export default auth((req) => {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||
-    pathname === "/favicon.ico";
+    pathname === "/favicon.ico" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/apple-touch-icon.png" ||
+    /^\/icon-(192|512|maskable-512)\.png$/.test(pathname);
 
   if (isPublic) return NextResponse.next();
 

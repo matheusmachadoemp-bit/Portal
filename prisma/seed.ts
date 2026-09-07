@@ -31,7 +31,6 @@ const CATEGORIES = [
     order: 2,
     contentType: "marketing",
     subs: [
-      { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
       { key: "calendario", name: "Calendário de Conteúdo", icon: "Calendar" },
       { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
       { key: "campanhas", name: "Campanhas", icon: "Megaphone" },
@@ -40,8 +39,6 @@ const CATEGORIES = [
       { key: "ideias", name: "Banco de Ideias", icon: "Lightbulb" },
       { key: "trafego-pago", name: "Tráfego Pago", icon: "TrendingUp" },
       { key: "redes-sociais", name: "Redes Sociais", icon: "Share2" },
-      { key: "equipe", name: "Equipe", icon: "Users" },
-      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
     ],
   },
   {
@@ -176,6 +173,7 @@ const CATEGORIES = [
       { key: "compras", name: "Compras", icon: "ShoppingBasket" },
       { key: "fornecedores", name: "Fornecedores", icon: "Truck" },
       { key: "recebimento", name: "Recebimento de Mercadorias", icon: "PackageCheck" },
+      { key: "divergencias-recebimento", name: "Divergências de Recebimento", icon: "TriangleAlert" },
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
       { key: "transferencias", name: "Transferências", icon: "Shuffle" },
       { key: "perdas", name: "Perdas e Desperdícios", icon: "TriangleAlert" },

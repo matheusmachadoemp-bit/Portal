@@ -57,11 +57,12 @@ export const SECTORS = [
 // Compras
 // ---------------------------------------------------------------------------
 
-export const PURCHASE_STATUS = ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "RECEBIDO_PARCIAL", "RECEBIDO", "DIVERGENCIA", "CANCELADO"] as const;
+export const PURCHASE_STATUS = ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "EM_CONFERENCIA", "RECEBIDO_PARCIAL", "RECEBIDO", "DIVERGENCIA", "CANCELADO"] as const;
 
 export const PURCHASE_STATUS_LABEL: Record<string, string> = {
   PEDIDO_REALIZADO: "Pedido realizado",
   AGUARDANDO_ENTREGA: "Aguardando entrega",
+  EM_CONFERENCIA: "Em conferência",
   RECEBIDO_PARCIAL: "Recebido parcialmente",
   RECEBIDO: "Recebido",
   DIVERGENCIA: "Divergência",
@@ -71,6 +72,7 @@ export const PURCHASE_STATUS_LABEL: Record<string, string> = {
 export const PURCHASE_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
   PEDIDO_REALIZADO: "info",
   AGUARDANDO_ENTREGA: "warning",
+  EM_CONFERENCIA: "info",
   RECEBIDO_PARCIAL: "warning",
   RECEBIDO: "success",
   DIVERGENCIA: "danger",
@@ -109,6 +111,68 @@ export const RECEIVING_DIVERGENCE_LABEL: Record<string, string> = {
   PRODUTO_DIFERENTE: "Produto diferente do pedido",
   PRECO_DIFERENTE: "Preço diferente do negociado",
 };
+
+// ---------------------------------------------------------------------------
+// Recebimento — conferência item a item (tela mobile)
+// ---------------------------------------------------------------------------
+
+export const RECEIVING_ITEM_STATUS_LABEL: Record<string, string> = {
+  NAO_CONFERIDO: "Não conferido",
+  CONFERIDO: "Conferido",
+  DIVERGENCIA: "Divergência",
+  NAO_RECEBIDO: "Não recebido",
+};
+
+export const RECEIVING_ITEM_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
+  NAO_CONFERIDO: "default",
+  CONFERIDO: "success",
+  DIVERGENCIA: "danger",
+  NAO_RECEBIDO: "danger",
+};
+
+export const RECEIVING_ITEM_DIVERGENCE_LABEL: Record<string, string> = {
+  QUANTIDADE_MENOR: "Quantidade menor",
+  QUANTIDADE_MAIOR: "Quantidade maior",
+  PRODUTO_NAO_ENTREGUE: "Produto não entregue",
+  PRODUTO_DIFERENTE: "Produto diferente",
+  PRECO_DIFERENTE: "Preço diferente",
+  PRODUTO_AVARIADO: "Produto avariado",
+  EMBALAGEM_VIOLADA: "Embalagem violada",
+  VALIDADE_INADEQUADA: "Validade inadequada",
+  TEMPERATURA_INADEQUADA: "Temperatura inadequada",
+  QUALIDADE_FORA_PADRAO: "Qualidade fora do padrão",
+  OUTRO: "Outro",
+};
+
+/** Divergências que exigem foto como comprovação obrigatória. */
+export const RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO = new Set([
+  "PRODUTO_AVARIADO",
+  "EMBALAGEM_VIOLADA",
+  "VALIDADE_INADEQUADA",
+  "TEMPERATURA_INADEQUADA",
+  "QUALIDADE_FORA_PADRAO",
+]);
+
+export const RECEIVING_ITEM_RESOLUTION_LABEL: Record<string, string> = {
+  AGUARDANDO: "Aguardando solução",
+  FORNECEDOR_REPOSICAO: "Fornecedor fará reposição",
+  FORNECEDOR_CREDITO: "Fornecedor dará crédito",
+  PRODUTO_DEVOLVIDO: "Produto devolvido",
+  DIFERENCA_ACEITA: "Diferença aceita",
+  OUTRA: "Outra solução",
+};
+
+export const RECEIVING_ITEM_RESOLUTION_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
+  AGUARDANDO: "warning",
+  FORNECEDOR_REPOSICAO: "info",
+  FORNECEDOR_CREDITO: "info",
+  PRODUTO_DEVOLVIDO: "success",
+  DIFERENCA_ACEITA: "success",
+  OUTRA: "success",
+};
+
+/** Quem pode criar pedidos de compra e resolver divergências de recebimento — decisões com impacto financeiro, não abertas a qualquer colaborador. */
+export const RECEBIMENTO_MANAGE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
 // ---------------------------------------------------------------------------
 // Transferências entre lojas

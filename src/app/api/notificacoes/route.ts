@@ -10,8 +10,11 @@ export async function GET() {
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
     take: 30,
+    include: { goal: { select: { category: true } } },
   });
   const unreadCount = await prisma.notification.count({ where: { userId: session.user.id, read: false } });
 
-  return NextResponse.json({ notifications, unreadCount });
+  const dto = notifications.map((n) => ({ ...n, goalCategory: n.goal?.category ?? null, goal: undefined }));
+
+  return NextResponse.json({ notifications: dto, unreadCount });
 }

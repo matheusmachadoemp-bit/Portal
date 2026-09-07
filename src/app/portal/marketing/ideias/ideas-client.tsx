@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus, Trash2, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/stat-card";
-import { IDEA_STATUS_OPTIONS, CATEGORY_OPTIONS } from "@/lib/marketing";
+import { IDEA_STATUS_OPTIONS, IDEA_CATEGORY_OPTIONS } from "@/lib/marketing";
 
 type Idea = {
   id: string;
@@ -22,12 +22,26 @@ type Idea = {
 
 const emptyForm = { title: "", description: "", references: "", links: "", category: "", tags: "" };
 
-export function IdeasClient({ initialIdeas, canCreate }: { initialIdeas: Idea[]; canCreate: boolean }) {
+export function IdeasClient({
+  initialIdeas,
+  canCreate,
+  canApprove,
+}: {
+  initialIdeas: Idea[];
+  canCreate: boolean;
+  canApprove: boolean;
+}) {
   const [ideas, setIdeas] = useState(initialIdeas);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [promoted, setPromoted] = useState<string | null>(null);
+  const [filterCategory, setFilterCategory] = useState<string>("");
+
+  const filtered = useMemo(
+    () => (filterCategory ? ideas.filter((i) => i.category === filterCategory) : ideas),
+    [ideas, filterCategory]
+  );
 
   async function refresh() {
     const res = await fetch("/api/marketing/ideas");
@@ -75,19 +89,40 @@ export function IdeasClient({ initialIdeas, canCreate }: { initialIdeas: Idea[];
 
   return (
     <div className="space-y-6">
-      {canCreate && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            onClick={() => setFilterCategory("")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+              filterCategory === "" ? "bg-nord-blue text-white" : "bg-nord-panel border border-nord-border text-nord-gray hover:text-white"
+            }`}
+          >
+            Todas
+          </button>
+          {IDEA_CATEGORY_OPTIONS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setFilterCategory(c)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                filterCategory === c ? "bg-nord-blue text-white" : "bg-nord-panel border border-nord-border text-nord-gray hover:text-white"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        {canCreate && (
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
             <Plus size={13} /> Nova ideia
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {ideas.map((idea) => {
+        {filtered.map((idea) => {
           const statusOpt = IDEA_STATUS_OPTIONS.find((s) => s.key === idea.status);
           return (
             <div key={idea.id} className="nord-card p-4">
@@ -102,36 +137,54 @@ export function IdeasClient({ initialIdeas, canCreate }: { initialIdeas: Idea[];
               )}
               <p className="text-[11px] text-nord-gray mt-3">{idea.createdBy.name} · {idea.empresa.name}</p>
 
-              {canCreate && (
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-nord-border">
-                  <select
-                    value={idea.status}
-                    onChange={(e) => setStatus(idea, e.target.value)}
-                    className="bg-nord-panel border border-nord-border rounded-lg px-2 py-1 text-xs text-white outline-none"
+              {canApprove && (
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-nord-border">
+                  <button
+                    onClick={() => setStatus(idea, "APROVADA")}
+                    title="Aprovar"
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+                      idea.status === "APROVADA"
+                        ? "bg-nord-success/20 text-nord-success"
+                        : "bg-nord-panel border border-nord-border text-nord-gray hover:text-nord-success hover:border-nord-success/40"
+                    }`}
                   >
-                    {IDEA_STATUS_OPTIONS.map((s) => (
-                      <option key={s.key} value={s.key}>{s.label}</option>
-                    ))}
-                  </select>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => promote(idea)}
-                      title="Transformar em tarefa"
-                      className="flex items-center gap-1 text-xs text-nord-blue-light hover:text-white"
-                    >
-                      <Sparkles size={13} /> {promoted === idea.id ? "Tarefa criada!" : "Promover"}
-                    </button>
-                    <button onClick={() => setConfirmDeleteId(idea.id)} className="text-nord-gray hover:text-red-400">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                    <ThumbsUp size={13} /> Aprovar
+                  </button>
+                  <button
+                    onClick={() => setStatus(idea, "DESCARTADA")}
+                    title="Reprovar"
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+                      idea.status === "DESCARTADA"
+                        ? "bg-nord-danger/20 text-nord-danger"
+                        : "bg-nord-panel border border-nord-border text-nord-gray hover:text-nord-danger hover:border-nord-danger/40"
+                    }`}
+                  >
+                    <ThumbsDown size={13} /> Reprovar
+                  </button>
+                </div>
+              )}
+
+              {canCreate && (
+                <div className="flex items-center justify-end gap-3 mt-2 pt-2">
+                  <button
+                    onClick={() => promote(idea)}
+                    title="Transformar em tarefa"
+                    className="flex items-center gap-1 text-xs text-nord-blue-light hover:text-white"
+                  >
+                    <Sparkles size={13} /> {promoted === idea.id ? "Tarefa criada!" : "Promover"}
+                  </button>
+                  <button onClick={() => setConfirmDeleteId(idea.id)} className="text-nord-gray hover:text-red-400">
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               )}
             </div>
           );
         })}
-        {ideas.length === 0 && (
-          <p className="text-sm text-nord-gray col-span-full text-center py-8">Nenhuma ideia registrada ainda.</p>
+        {filtered.length === 0 && (
+          <p className="text-sm text-nord-gray col-span-full text-center py-8">
+            {ideas.length === 0 ? "Nenhuma ideia registrada ainda." : "Nenhuma ideia nessa categoria."}
+          </p>
         )}
       </div>
 
@@ -149,7 +202,7 @@ export function IdeasClient({ initialIdeas, canCreate }: { initialIdeas: Idea[];
             <span className="block text-xs text-nord-gray mb-1">Categoria</span>
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input">
               <option value="">—</option>
-              {CATEGORY_OPTIONS.map((c) => (
+              {IDEA_CATEGORY_OPTIONS.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

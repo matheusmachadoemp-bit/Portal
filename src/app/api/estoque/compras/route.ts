@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { logPurchaseEvent } from "@/lib/recebimento-server";
+import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 
 export async function GET() {
   const session = await auth();
@@ -27,6 +30,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!RECEBIMENTO_MANAGE_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Você não tem permissão para registrar pedidos de compra." }, { status: 403 });
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -38,18 +44,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Informe o fornecedor e ao menos um item." }, { status: 400 });
   }
 
+  if (body.enviarParaRecebimento && !body.responsavelRecebimentoId) {
+    return NextResponse.json({ error: "Selecione o responsável pelo recebimento antes de enviar." }, { status: 400 });
+  }
+
   const purchase = await prisma.purchase.create({
     data: {
       empresaId: empresa.id,
       supplierId: body.supplierId,
       numeroNota: body.numeroNota || null,
       data: body.data ? new Date(body.data) : new Date(),
+      previsaoEntrega: body.previsaoEntrega ? new Date(body.previsaoEntrega) : null,
+      responsavelRecebimentoId: body.responsavelRecebimentoId || null,
+      recebimentoToken: body.enviarParaRecebimento ? randomBytes(16).toString("hex") : null,
       compradorResponsavel: body.compradorResponsavel || session.user.name || null,
       formaPagamento: body.formaPagamento || null,
       dataVencimento: body.dataVencimento ? new Date(body.dataVencimento) : null,
       desconto: Number(body.desconto) || 0,
       frete: Number(body.frete) || 0,
-      status: body.status || "PEDIDO_REALIZADO",
+      status: body.status || (body.enviarParaRecebimento ? "AGUARDANDO_ENTREGA" : "PEDIDO_REALIZADO"),
       observacoes: body.observacoes || null,
       createdById: session.user.id,
       items: {
@@ -64,6 +77,21 @@ export async function POST(req: Request) {
     },
     include: { items: true, supplier: true },
   });
+
+  await logPurchaseEvent({
+    purchaseId: purchase.id,
+    empresaId: empresa.id,
+    action: `Pedido criado por ${session.user.name ?? "usuário"}`,
+    userId: session.user.id,
+  });
+  if (body.enviarParaRecebimento) {
+    await logPurchaseEvent({
+      purchaseId: purchase.id,
+      empresaId: empresa.id,
+      action: "Pedido enviado para recebimento",
+      userId: session.user.id,
+    });
+  }
 
   return NextResponse.json({ purchase });
 }
