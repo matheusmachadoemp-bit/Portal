@@ -62,7 +62,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: Record<string, unknown> = {};
   if ("responsavelId" in body) data.responsavelId = body.responsavelId || null;
   if ("justificativa" in body) data.justificativa = body.justificativa || null;
-  if ("status" in body) data.status = body.status;
+  // O único status "forjável" por aqui é JUSTIFICADO (usado pelo botão "Justificar"
+  // em ocorrências ATRASADO/NAO_REALIZADO). Concluir uma ocorrência (CONCLUIDO_NO_PRAZO/
+  // CONCLUIDO_COM_ATRASO) precisa passar pelas validações de itens obrigatórios/fotos
+  // da rota dedicada /complete — por isso não é aceito aqui.
+  if ("status" in body) {
+    if (body.status !== "JUSTIFICADO") {
+      return NextResponse.json(
+        { error: "Só é possível marcar como justificado por aqui. Para concluir, use a rota de conclusão." },
+        { status: 400 }
+      );
+    }
+    data.status = body.status;
+  }
 
   const updated = await prisma.checklistOccurrence.update({ where: { id }, data });
 

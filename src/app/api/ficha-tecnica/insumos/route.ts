@@ -41,6 +41,16 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
+  if (body.fornecedorPrincipalId) {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: body.fornecedorPrincipalId },
+      select: { empresaId: true },
+    });
+    if (!supplier || supplier.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Fornecedor inválido para esta loja." }, { status: 400 });
+    }
+  }
+
   const ingredient = await prisma.ingredient.create({
     data: {
       empresaId: empresa.id,
