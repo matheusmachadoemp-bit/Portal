@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 /** Catálogo de brindes disponíveis para a loja ativa do usuário logado. */
 export async function GET(req: NextRequest) {
@@ -45,6 +46,12 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json({ error: "Sem permissão para cadastrar brindes." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "loja-nord", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite cadastrar brindes." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json().catch(() => null);

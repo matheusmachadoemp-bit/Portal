@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -28,6 +29,12 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canManageUsers(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para criar trilhas." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "universidade", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar trilhas." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();

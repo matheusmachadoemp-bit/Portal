@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getUserEmpresas } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 import {
   aprovarResgate,
   cancelarResgate,
@@ -32,6 +33,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (!GESTOR_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para gerenciar resgates." }, { status: 403 });
+  }
+  // A partir daqui só ações de gestão (aprovar/recusar/disponivel/entregar) — "cancelar" (o próprio
+  // colaborador desistindo do próprio pedido, autoatendimento) já retornou acima, antes deste
+  // ponto, e por isso nunca passa por esta checagem de perfil.
+  if (!(await hasModulePermission(session.user.id, "loja-nord", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite gerenciar resgates." },
+      { status: 403 }
+    );
   }
 
   const empresasPermitidas = (await getUserEmpresas(session.user.id, session.user.role)).map((e) => e.id);
