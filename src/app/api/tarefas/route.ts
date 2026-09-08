@@ -35,6 +35,10 @@ export async function GET(req: Request) {
   const to = searchParams.get("to");
   const q = searchParams.get("q");
 
+  if (empresaId && !empresaIds.includes(empresaId)) {
+    return NextResponse.json({ error: "Você não tem acesso a essa unidade." }, { status: 403 });
+  }
+
   const where: Record<string, unknown> = {
     empresaId: { in: empresaId ? [empresaId] : empresaIds },
   };

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -8,8 +9,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const prestador = await prisma.prestador.findUnique({
-    where: { id },
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+  const empresaIds = empresaIdsForContext(ctx);
+
+  const prestador = await prisma.prestador.findFirst({
+    where: { id, OR: [{ empresaIds: { isEmpty: true } }, { empresaIds: { hasSome: empresaIds } }] },
     include: {
       orcamentos: { orderBy: { createdAt: "desc" }, include: { chamado: { select: { id: true, protocolo: true, titulo: true } } } },
       registros: { orderBy: { data: "desc" }, include: { equipamento: { select: { id: true, nome: true, codigo: true } } } },
