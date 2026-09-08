@@ -11,13 +11,45 @@ function hasFullAccess(role: string) {
   return role === "ADMINISTRADOR" || role === "GESTOR";
 }
 
-export const getUserEmpresas = cache(async (userId: string, role: string): Promise<Empresa[]> => {
+/**
+ * Campos "de vitrine" da empresa — os únicos que fazem sentido circular
+ * livremente pelo app (seletor de loja, cards, comparativos entre lojas
+ * etc.), inclusive em props de componente cliente. Nunca inclua aqui
+ * `saiposApiToken`, `metaAdsAccessToken` ou qualquer outro campo de
+ * integração/segredo: esses só devem ser lidos, no servidor, para a loja
+ * ativa específica (ver `getActiveEmpresaContext` abaixo).
+ */
+const EMPRESA_SUMMARY_SELECT = {
+  id: true,
+  key: true,
+  name: true,
+  logo: true,
+  color: true,
+  active: true,
+  order: true,
+  metaCmvPercent: true,
+} as const;
+
+export type EmpresaSummary = Pick<Empresa, keyof typeof EMPRESA_SUMMARY_SELECT>;
+
+/**
+ * Lista de lojas que o usuário pode acessar — usada pelo seletor de loja,
+ * por comparativos entre lojas e por checagens de "esse id está entre os
+ * permitidos?". Propositalmente enxuta (ver `EMPRESA_SUMMARY_SELECT`): não
+ * traz tokens/segredos de integração, então é sempre seguro repassar o
+ * resultado direto pra uma resposta de API ou prop de componente cliente.
+ */
+export const getUserEmpresas = cache(async (userId: string, role: string): Promise<EmpresaSummary[]> => {
   if (hasFullAccess(role)) {
-    return prisma.empresa.findMany({ where: { active: true }, orderBy: { order: "asc" } });
+    return prisma.empresa.findMany({
+      where: { active: true },
+      orderBy: { order: "asc" },
+      select: EMPRESA_SUMMARY_SELECT,
+    });
   }
   const access = await prisma.userEmpresaAccess.findMany({
     where: { userId },
-    include: { empresa: true },
+    include: { empresa: { select: EMPRESA_SUMMARY_SELECT } },
   });
   return access.map((a) => a.empresa).filter((e) => e.active);
 });
@@ -28,8 +60,8 @@ export async function userCanViewGrupoNord(userId: string, role: string, flag: b
 }
 
 export type EmpresaContext =
-  | { mode: "single"; empresa: Empresa; empresas: Empresa[]; canViewGrupoNord: boolean }
-  | { mode: "grupo"; empresas: Empresa[]; canViewGrupoNord: boolean };
+  | { mode: "single"; empresa: Empresa; empresas: EmpresaSummary[]; canViewGrupoNord: boolean }
+  | { mode: "grupo"; empresas: EmpresaSummary[]; canViewGrupoNord: boolean };
 
 /**
  * Resolve o contexto de empresa ativo para a requisição atual, a partir do
@@ -65,23 +97,25 @@ export const getActiveEmpresaContext = cache(async (): Promise<EmpresaContext | 
     return { mode: "grupo", empresas, canViewGrupoNord };
   }
 
-  const fromCookie = activeId ? empresas.find((e) => e.id === activeId) : undefined;
-  if (fromCookie) {
-    return { mode: "single", empresa: fromCookie, empresas, canViewGrupoNord };
-  }
+  // Decide qual loja fica ativa (cookie > padrão do usuário > primeira da
+  // lista), sempre validando o id contra `empresas` — a lista já filtrada
+  // pelo que esse usuário pode acessar. Só depois disso buscamos o
+  // registro completo (com os campos de integração) dessa loja específica;
+  // nunca dos outros itens da lista.
+  const candidateId =
+    (activeId && empresas.some((e) => e.id === activeId) ? activeId : null) ??
+    (dbUser?.defaultEmpresaId && empresas.some((e) => e.id === dbUser.defaultEmpresaId)
+      ? dbUser.defaultEmpresaId
+      : null) ??
+    empresas[0]?.id ??
+    null;
 
-  const fromDefault = dbUser?.defaultEmpresaId
-    ? empresas.find((e) => e.id === dbUser.defaultEmpresaId)
-    : undefined;
-  if (fromDefault) {
-    return { mode: "single", empresa: fromDefault, empresas, canViewGrupoNord };
-  }
+  if (!candidateId) return null;
 
-  if (empresas[0]) {
-    return { mode: "single", empresa: empresas[0], empresas, canViewGrupoNord };
-  }
+  const empresa = await prisma.empresa.findUnique({ where: { id: candidateId } });
+  if (!empresa) return null;
 
-  return null;
+  return { mode: "single", empresa, empresas, canViewGrupoNord };
 });
 
 /** IDs de empresa a considerar numa query (uma loja, ou todas em modo Grupo). */

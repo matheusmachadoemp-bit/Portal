@@ -3,7 +3,14 @@ import crypto from "crypto";
 const ALGO = "aes-256-cbc";
 
 function getKey() {
-  const secret = process.env.VAULT_SECRET || "fallback-dev-secret-key-32chars!";
+  const secret = process.env.VAULT_SECRET;
+  // Nunca cair num valor reserva aqui: uma chave fixa escrita no código-fonte permitiria
+  // decifrar Cofre de senhas, tokens Saipos/Meta Ads e senha dos Cursos pra qualquer pessoa que
+  // leia o repositório. Melhor quebrar visivelmente numa configuração errada (VAULT_SECRET
+  // ausente) do que cifrar tudo com uma chave pública.
+  if (!secret) {
+    throw new Error("VAULT_SECRET não configurada — obrigatória para usar criptografia de segredos.");
+  }
   return crypto.createHash("sha256").update(secret).digest();
 }
 

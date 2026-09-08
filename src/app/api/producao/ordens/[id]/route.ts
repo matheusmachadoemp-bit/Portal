@@ -8,6 +8,7 @@ import {
   PRODUCTION_MANAGER_ROLES,
 } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -25,6 +26,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     },
   });
   if (!ordem) return NextResponse.json({ error: "Ordem de produção não encontrada." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, ordem.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
 
   return NextResponse.json({ ordem });
 }
@@ -32,6 +36,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+
+  // Diferente do padrão cargo → empresa → perfil usado nas outras rotas [id]: aqui não existe
+  // uma checagem de cargo única que cubra as 4 ações (só "ajustar"/"reatribuir" exigem
+  // PRODUCTION_MANAGER_ROLES; "iniciar"/"finalizar" não têm check de cargo próprio — ver
+  // comentário abaixo). Como isso é verdade pras 4 ações igualmente, carregamos a ordem e
+  // confirmamos o acesso à loja logo no início, antes de qualquer checagem mais fina — inclusive
+  // antes de hasModulePermission — pra nunca deixar "iniciar"/"finalizar" (que hoje não filtram
+  // por cargo) alterarem uma ordem de outra loja.
+  const existing = await prisma.productionOrder.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Ordem de produção não encontrada." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+
   // As 4 ações (iniciar/finalizar/ajustar/reatribuir) são todas transições de status de uma
   // ProductionOrder já existente, nunca criam uma ordem nova — mesmo critério de canEdit já usado
   // em manutencao/preventivas/ocorrencias/[id] e checklist/occurrences/[id]/responses. Nota: hoje
@@ -45,7 +65,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const { id } = await params;
   const body = await req.json();
 
   if (body.action === "iniciar") {
@@ -78,7 +97,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!body.motivo) {
       return NextResponse.json({ error: "Informe o motivo do ajuste." }, { status: 400 });
     }
-    const atual = await prisma.productionOrder.findUniqueOrThrow({ where: { id } });
+    const atual = existing;
     const ordem = await prisma.productionOrder.update({
       where: { id },
       data: {

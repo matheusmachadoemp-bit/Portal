@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { endOfWeek, endOfMonth, endOfYear, startOfWeek, startOfMonth, startOfYear, subDays } from "date-fns";
 import { rankForRange } from "@/lib/loja-nord-server";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 type Periodo = "semana" | "mes" | "ano" | "geral";
 
@@ -22,18 +23,28 @@ export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+  const empresaIdsPermitidos = empresaIdsForContext(ctx);
+
   const { searchParams } = req.nextUrl;
   const periodo = (searchParams.get("periodo") as Periodo) || "geral";
-  const empresaId = searchParams.get("empresaId");
+  const empresaIdParam = searchParams.get("empresaId");
   const setor = searchParams.get("setor");
   const origem = searchParams.get("origem");
+
+  // O empresaId da URL nunca decide sozinho o filtro de loja — ele só pode restringir mais
+  // dentro do que o usuário já pode acessar (ex.: alguém no modo Grupo Nord querendo ver o
+  // ranking de uma loja específica). Se vier vazio ou um id fora da lista permitida, cai pra
+  // lista inteira já autorizada em vez de aceitar o valor do cliente sem checagem.
+  const empresaIds =
+    empresaIdParam && empresaIdsPermitidos.includes(empresaIdParam) ? [empresaIdParam] : empresaIdsPermitidos;
 
   const now = new Date();
   const range = rangeForPeriodo(periodo, now);
 
-  const baseWhere: Record<string, unknown> = {};
+  const baseWhere: Record<string, unknown> = { empresaId: { in: empresaIds } };
   if (range) baseWhere.createdAt = { gte: range.start, lte: range.end };
-  if (empresaId) baseWhere.empresaId = empresaId;
   if (setor) baseWhere.setor = setor;
   if (origem) baseWhere.origem = origem;
 

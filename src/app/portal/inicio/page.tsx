@@ -10,10 +10,9 @@ import { DashboardCharts } from "./charts";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Store } from "lucide-react";
 import { StoreSwitcher } from "@/components/sidebar/store-switcher";
-import { empresaIdsForContext, getActiveEmpresaContext, GRUPO_SENTINEL } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, GRUPO_SENTINEL, type EmpresaSummary } from "@/lib/empresa";
 import { perfilInicioForRole, perfilPodeVerPainelGerencial } from "@/lib/inicio";
 import { GerencialDashboardClient } from "./gerencial-dashboard-client";
-import type { Empresa } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
 // Saudação fixa (não varia por horário) usada como título da Tela de Início
@@ -220,7 +219,7 @@ async function getData(empresaIds: string[]) {
   };
 }
 
-async function getComparisonRow(empresa: Empresa) {
+async function getComparisonRow(empresa: EmpresaSummary) {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
