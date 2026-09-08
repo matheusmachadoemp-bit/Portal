@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -40,6 +41,14 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Venda Acumulada é uma subcategoria do menu Metas (não tem moduleKey própria em
+  // src/lib/permissions.ts), então usa a mesma chave "metas".
+  if (!(await hasModulePermission(session.user.id, "metas", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite lançar vendas acumuladas." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

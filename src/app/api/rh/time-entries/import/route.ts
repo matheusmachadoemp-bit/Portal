@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { computeHorasTrabalhadas, timeToMinutes } from "@/lib/rh-helpers";
+import { hasModulePermission } from "@/lib/authz";
 import * as XLSX from "xlsx";
 
 const HEADER_ALIASES: Record<string, string> = {
@@ -60,6 +61,15 @@ function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // A planilha cria registros de ponto novos e atualiza os já existentes (match por
+  // colaborador+data) na mesma chamada — trata como canCreate por ser uma importação em massa,
+  // mesmo padrão usado em financeiro/conciliacao/import.
+  if (!(await hasModulePermission(session.user.id, "rh", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite importar registros de ponto." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
