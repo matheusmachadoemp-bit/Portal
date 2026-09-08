@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { MANAGER_ROLES, isValidBlobUrl, logChamadoHistorico, notifyManutencaoUser } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -16,6 +17,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!chamado) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, chamado.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite registrar orçamentos de manutenção." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();

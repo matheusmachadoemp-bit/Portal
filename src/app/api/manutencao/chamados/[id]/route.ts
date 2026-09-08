@@ -9,6 +9,7 @@ import {
   logChamadoHistorico,
   notifyManutencaoUser,
 } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const CHAMADO_DETAIL_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
@@ -73,6 +74,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (body.status === "RESOLVIDO" && !(body.descricaoSolucao || existing.descricaoSolucao)) {
     return NextResponse.json({ error: "Descreva a solução aplicada antes de resolver o chamado." }, { status: 400 });
+  }
+
+  // hasModulePermission é aplicado depois de toda a lógica fina acima (canManage, restrições de
+  // aprovar/resolver/trocar responsável) — ela restringe MAIS um usuário específico dentro do que
+  // essas regras já permitiriam, nunca substituindo nenhuma delas.
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar chamados de manutenção." },
+      { status: 403 }
+    );
   }
 
   const wasDraft = existing.status === "RASCUNHO";
@@ -160,6 +171,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!canManage) return NextResponse.json({ error: "Você não pode excluir este chamado." }, { status: 403 });
   if (existing.status !== "RASCUNHO") {
     return NextResponse.json({ error: "Só é possível excluir chamados em rascunho. Cancele-o em vez disso." }, { status: 409 });
+  }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir chamados de manutenção." },
+      { status: 403 }
+    );
   }
 
   await prisma.chamado.delete({ where: { id } });

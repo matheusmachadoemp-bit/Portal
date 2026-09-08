@@ -10,6 +10,7 @@ import {
   logChamadoHistorico,
   notifyManutencaoUser,
 } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const CHAMADO_LIST_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
@@ -73,6 +74,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite abrir chamados de manutenção." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

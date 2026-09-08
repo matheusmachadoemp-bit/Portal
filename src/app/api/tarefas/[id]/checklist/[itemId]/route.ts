@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { logTaskHistory } from "@/lib/tarefas-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string; itemId: string }> }) {
   const session = await auth();
@@ -13,6 +14,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!task) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, task.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar itens do checklist da tarefa." },
+      { status: 403 }
+    );
   }
 
   const existingItem = await prisma.taskChecklistItem.findUnique({ where: { id: itemId } });
@@ -42,6 +49,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!task) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, task.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite remover itens do checklist da tarefa." },
+      { status: 403 }
+    );
   }
 
   const existingItem = await prisma.taskChecklistItem.findUnique({ where: { id: itemId } });

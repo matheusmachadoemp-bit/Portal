@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { MANAGER_ROLES, logChamadoHistorico, notifyManutencaoUser } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const PRE_APROVACAO_STATUSES = ["ABERTO", "AGUARDANDO_AVALIACAO", "AGUARDANDO_ORCAMENTO", "AGUARDANDO_APROVACAO"];
 
@@ -18,6 +19,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.chamado.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  // Transição/edição de um orçamento já existente (inclui aprovar/recusar), nunca cria um
+  // Orcamento novo (isso é feito em POST /api/manutencao/chamados/[id]/orcamentos) — mesmo
+  // critério de canEdit já usado em estoque/contagens/[id] e estoque/transferencias/[id].
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar orçamentos de manutenção." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();

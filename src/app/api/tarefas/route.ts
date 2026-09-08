@@ -4,6 +4,7 @@ import type { TaskRecurrenceFreq } from "@prisma/client";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { generateDueTaskOccurrences, logTaskHistory, notifyUser } from "@/lib/tarefas-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const TASK_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
@@ -83,6 +84,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar tarefas." },
+      { status: 403 }
+    );
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

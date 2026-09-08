@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
 import { refreshOccurrenceStatuses } from "@/lib/checklist-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const DETAIL_INCLUDE = {
   // Itens são retornados sem filtrar por `ativo` de propósito: uma resposta
@@ -58,6 +59,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where: { id, empresaId: { in: empresaIdsForContext(ctx) } },
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar execuções de checklist." },
+      { status: 403 }
+    );
+  }
 
   const data: Record<string, unknown> = {};
   if ("responsavelId" in body) data.responsavelId = body.responsavelId || null;
