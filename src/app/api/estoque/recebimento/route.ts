@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -53,6 +54,14 @@ export async function POST(req: Request) {
   if (!purchase) return NextResponse.json({ error: "Pedido de compra não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, purchase.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  // Este POST sempre cria um Receiving novo para o pedido (a linha acima já barra o caso de já
+  // existir um) — nunca atualiza um recebimento existente (isso é feito na tela de divergências).
+  if (!(await hasModulePermission(session.user.id, "estoque", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite registrar recebimentos." },
+      { status: 403 }
+    );
   }
   if (purchase.receiving) return NextResponse.json({ error: "Este pedido já possui um recebimento registrado." }, { status: 400 });
 

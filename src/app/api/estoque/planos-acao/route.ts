@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -21,6 +22,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "estoque", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar planos de ação." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

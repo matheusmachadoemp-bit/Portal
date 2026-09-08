@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 const NEXT_STATUS_MOVEMENT = new Set(["ENVIADA", "RECEBIDA"]);
 
@@ -23,6 +24,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   ]);
   if (!temAcessoOrigem && !temAcessoDestino) {
     return NextResponse.json({ error: "Sem acesso a essa transferência." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "estoque", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar transferências entre lojas." },
+      { status: 403 }
+    );
   }
 
   const novoStatus = body.status as string | undefined;
