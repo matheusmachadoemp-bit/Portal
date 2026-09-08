@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell } from "lucide-react";
 import { GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
 
 type NotificationDTO = {
@@ -80,11 +80,6 @@ export function NotificationBell() {
     return () => clearInterval(interval);
   }, []);
 
-  async function markAllRead() {
-    await fetch("/api/notificacoes/marcar-todas-lidas", { method: "POST" });
-    load();
-  }
-
   async function handleOpenNotification(n: NotificationDTO) {
     if (!n.read) {
       await fetch(`/api/notificacoes/${n.id}`, {
@@ -126,13 +121,8 @@ export function NotificationBell() {
               className="fixed z-50 nord-card bg-nord-card shadow-xl py-1.5 max-h-96 overflow-y-auto nord-scrollbar"
               style={{ top: panelPos.top, left: panelPos.left, width: panelPos.width }}
             >
-              <div className="flex items-center justify-between px-3 py-1.5">
+              <div className="px-3 py-1.5">
                 <p className="text-[10px] uppercase tracking-wide text-nord-gray/70">Notificações</p>
-                {unreadCount > 0 && (
-                  <button onClick={markAllRead} className="flex items-center gap-1 text-[11px] text-nord-blue-light hover:underline">
-                    <CheckCheck size={11} /> Marcar todas como lidas
-                  </button>
-                )}
               </div>
               {notifications.length === 0 ? (
                 <p className="px-3 py-4 text-xs text-nord-gray text-center">Nenhuma notificação por enquanto.</p>
