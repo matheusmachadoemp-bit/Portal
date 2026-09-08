@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { IDEA_APPROVER_ROLES } from "@/lib/marketing";
+import { hasModulePermission } from "@/lib/authz";
 
 const STR_FIELDS = ["title", "description", "references", "links", "category", "tags", "status"] as const;
 const APPROVAL_STATUSES = ["APROVADA", "DESCARTADA"];
@@ -21,6 +22,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const isApprovalAction = body.promote || (typeof body.status === "string" && APPROVAL_STATUSES.includes(body.status));
   if (isApprovalAction && !IDEA_APPROVER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para aprovar ou reprovar ideias." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "marketing", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar ideias de marketing." },
+      { status: 403 }
+    );
   }
 
   const data: Record<string, unknown> = {};
@@ -57,6 +64,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "marketing", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir ideias de marketing." },
+      { status: 403 }
+    );
   }
   await prisma.marketingIdea.delete({ where: { id } });
   return NextResponse.json({ ok: true });

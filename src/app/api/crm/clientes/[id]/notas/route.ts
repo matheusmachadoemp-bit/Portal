@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,6 +14,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const cliente = await prisma.cliente.findFirst({ where: { id, empresaId: { in: empresaIdsForContext(ctx) } } });
   if (!cliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "crm", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar notas de cliente." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   if (!body.texto || !String(body.texto).trim()) {

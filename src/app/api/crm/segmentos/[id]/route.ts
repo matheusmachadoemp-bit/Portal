@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,6 +14,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const segmento = await prisma.crmSegment.findFirst({ where: { id, empresaId: { in: empresaIdsForContext(ctx) } } });
   if (!segmento) return NextResponse.json({ error: "Segmento não encontrado." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "crm", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir segmentos." },
+      { status: 403 }
+    );
+  }
 
   await prisma.crmSegment.delete({ where: { id } });
   return NextResponse.json({ ok: true });
