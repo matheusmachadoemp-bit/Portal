@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 type IngredienteInput = { ingredientId: string; quantidadeUsada: number; unidade: string };
 
@@ -40,6 +41,12 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode cadastrar produtos de produção." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "producao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar produtos de produção." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();

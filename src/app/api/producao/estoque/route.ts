@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { lancarProductionStockMovement, PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const ALLOWED_TYPES = ["SALDO_ANTERIOR", "AJUSTE", "PERDA"] as const;
 
@@ -10,6 +11,16 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode lançar movimentos de estoque pronto." }, { status: 403 });
+  }
+  // lancarProductionStockMovement sempre cria um ProductionStockMovement novo (o ledger de
+  // entradas/saídas), mesmo quando o saldo de ProductionStock é só ajustado por baixo dos panos —
+  // mesmo critério de canCreate já usado em estoque/movimentos (lançamento de movimentação de
+  // insumos, estrutura idêntica).
+  if (!(await hasModulePermission(session.user.id, "producao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite lançar movimentos de estoque pronto." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { generateInvitations } from "@/lib/satisfaction-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const CAN_MANAGE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
@@ -38,6 +39,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!CAN_MANAGE_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para gerar convites." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite gerar convites de pesquisa de satisfação." },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;
