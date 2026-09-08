@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { revalidateTag } from "next/cache";
 import { allDreCategories } from "@/lib/dre-structure";
 import { getFinancialCategories } from "@/lib/financial-categories";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -15,6 +16,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar categorias financeiras." },
+      { status: 403 }
+    );
+  }
   const body = await req.json();
 
   const valid = allDreCategories().some((c) => c.key === body.dreKey);

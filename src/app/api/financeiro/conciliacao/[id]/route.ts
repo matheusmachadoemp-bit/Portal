@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 const VALID_STATUSES = ["PENDENTE", "CONCILIADO", "IGNORADO"];
 const VALID_MATCH_TYPES = ["PAYABLE", "RECEIVABLE"];
@@ -15,6 +16,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar a conciliação bancária." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();
