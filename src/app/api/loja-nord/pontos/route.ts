@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { lancarAjusteManual } from "@/lib/loja-nord-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const GESTOR_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 const KINDS = ["BONIFICACAO", "AJUSTE_POSITIVO", "AJUSTE_NEGATIVO"];
@@ -12,6 +13,15 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!GESTOR_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para lançar pontos." }, { status: 403 });
+  }
+  // Mesmo critério já usado em crm/fidelidade/ajustar: lançamento manual de pontos para outro
+  // colaborador é tratado como canEdit (na prática, quase sempre um ajuste sobre um saldo já
+  // existente), não canCreate.
+  if (!(await hasModulePermission(session.user.id, "loja-nord", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite lançar pontos." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();
