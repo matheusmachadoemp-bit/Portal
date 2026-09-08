@@ -1885,7 +1885,7 @@ model Course {
   plataforma          String?
   link                String?
   usuario             String?
-  senha               String?
+  senhaCipher         String?
   responsavel         String?
   percentualConcluido Int       @default(0)
   startDate           DateTime?
