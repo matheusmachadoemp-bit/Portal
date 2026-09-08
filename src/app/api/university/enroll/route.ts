@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
+import { hasModulePermission } from "@/lib/authz";
 
 async function enrollUserInCourse(userId: string, courseId: string) {
   const existing = await prisma.trainingEnrollment.findUnique({
@@ -18,8 +19,21 @@ export async function POST(req: Request) {
   const body = await req.json();
   const targetUserId: string = body.userId || session.user.id;
 
-  if (targetUserId !== session.user.id && !canManageUsers(session.user.role)) {
-    return NextResponse.json({ error: "Sem permissão para matricular outros colaboradores." }, { status: 403 });
+  // Auto-matrícula (targetUserId === o próprio usuário logado, o caso comum: colaborador se
+  // matriculando no próprio curso/trilha) é autoatendimento essencial do dia a dia e por isso NUNCA
+  // passa por nenhuma checagem de perfil aqui — só matricular OUTRO colaborador é ação de gestão,
+  // e já exigia canManageUsers antes desta tarefa; a checagem de perfil (canCreate) foi adicionada
+  // logo depois, só dentro deste mesmo bloco.
+  if (targetUserId !== session.user.id) {
+    if (!canManageUsers(session.user.role)) {
+      return NextResponse.json({ error: "Sem permissão para matricular outros colaboradores." }, { status: 403 });
+    }
+    if (!(await hasModulePermission(session.user.id, "universidade", "canCreate"))) {
+      return NextResponse.json(
+        { error: "Seu perfil de permissão não permite matricular outros colaboradores." },
+        { status: 403 }
+      );
+    }
   }
 
   if (body.trackId) {

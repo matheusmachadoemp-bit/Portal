@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -19,6 +20,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.preventiva.equipamento.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  // Transição de status de uma ocorrência já existente (reagendar/concluir/cancelar), nunca cria
+  // uma ManutencaoPreventivaOcorrencia nova (isso é feito por geração automática) — mesmo
+  // critério de canEdit já usado em estoque/contagens/[id] e estoque/transferencias/[id].
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar ocorrências de manutenção preventiva." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();

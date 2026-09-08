@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { computeCurrentAquisitivePeriod } from "@/lib/rh-helpers";
+import { hasModulePermission } from "@/lib/authz";
 import * as XLSX from "xlsx";
 
 // Colunas aceitas na planilha de importação de colaboradores (RH > Colaboradores).
@@ -85,6 +86,15 @@ function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // A planilha cria colaboradores novos e atualiza os já existentes (match por CPF/nome) na
+  // mesma chamada — trata como canCreate por ser fundamentalmente uma importação em massa,
+  // mesmo padrão usado em financeiro/conciliacao/import.
+  if (!(await hasModulePermission(session.user.id, "rh", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite importar colaboradores." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

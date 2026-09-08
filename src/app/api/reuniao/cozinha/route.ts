@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
 import { computeCozinhaMetrics } from "@/lib/reuniao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -34,6 +35,16 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Upsert do fechamento do período (mesmo endpoint cria ou atualiza, sem rota de edição
+  // separada, e a própria tela já rotula o botão como "Atualizar" quando o período já existe) —
+  // mesmo critério já usado em configurações e em checklist/occurrences/responses: trata como
+  // canEdit.
+  if (!(await hasModulePermission(session.user.id, "reuniao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite lançar o fechamento da reunião de cozinha." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

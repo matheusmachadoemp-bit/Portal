@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -10,7 +11,7 @@ function hasFullAccess(role: string) {
   return role === "ADMINISTRADOR" || role === "GESTOR";
 }
 
-export async function getUserEmpresas(userId: string, role: string): Promise<Empresa[]> {
+export const getUserEmpresas = cache(async (userId: string, role: string): Promise<Empresa[]> => {
   if (hasFullAccess(role)) {
     return prisma.empresa.findMany({ where: { active: true }, orderBy: { order: "asc" } });
   }
@@ -19,7 +20,7 @@ export async function getUserEmpresas(userId: string, role: string): Promise<Emp
     include: { empresa: true },
   });
   return access.map((a) => a.empresa).filter((e) => e.active);
-}
+});
 
 export async function userCanViewGrupoNord(userId: string, role: string, flag: boolean) {
   if (hasFullAccess(role)) return true;
@@ -34,8 +35,12 @@ export type EmpresaContext =
  * Resolve o contexto de empresa ativo para a requisição atual, a partir do
  * cookie de loja selecionada, validando contra as empresas permitidas para o
  * usuário logado. Cai para a loja padrão do usuário ou a primeira disponível.
+ *
+ * Envolvida em `cache()` do React: como essa função é chamada em praticamente
+ * toda página do portal (às vezes mais de uma vez na mesma requisição), o
+ * cache garante que as consultas ao banco rodem só uma vez por requisição.
  */
-export async function getActiveEmpresaContext(): Promise<EmpresaContext | null> {
+export const getActiveEmpresaContext = cache(async (): Promise<EmpresaContext | null> => {
   const session = await auth();
   if (!session?.user) return null;
 
@@ -77,7 +82,7 @@ export async function getActiveEmpresaContext(): Promise<EmpresaContext | null> 
   }
 
   return null;
-}
+});
 
 /** IDs de empresa a considerar numa query (uma loja, ou todas em modo Grupo). */
 export function empresaIdsForContext(ctx: EmpresaContext): string[] {

@@ -7,6 +7,7 @@ import {
   logProductionOrderHistory,
   PRODUCTION_MANAGER_ROLES,
 } from "@/lib/producao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -31,6 +32,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // As 4 ações (iniciar/finalizar/ajustar/reatribuir) são todas transições de status de uma
+  // ProductionOrder já existente, nunca criam uma ordem nova — mesmo critério de canEdit já usado
+  // em manutencao/preventivas/ocorrencias/[id] e checklist/occurrences/[id]/responses. Nota: hoje
+  // "iniciar"/"finalizar" não têm nenhum check de cargo próprio (qualquer colaborador logado pode
+  // chamar, tipicamente quem está de fato produzindo), diferente de "ajustar"/"reatribuir" que já
+  // exigem PRODUCTION_MANAGER_ROLES — esta checagem única cobre as 4 igualmente.
+  if (!(await hasModulePermission(session.user.id, "producao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar ordens de produção." },
+      { status: 403 }
+    );
+  }
 
   const { id } = await params;
   const body = await req.json();

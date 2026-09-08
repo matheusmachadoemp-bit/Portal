@@ -3,15 +3,27 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { computeHorasTrabalhadas } from "@/lib/rh-helpers";
+import { hasModulePermission } from "@/lib/authz";
+
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.timeEntry.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar registros de ponto." },
+      { status: 403 }
+    );
   }
   const body = await req.json();
 
@@ -40,11 +52,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.timeEntry.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir registros de ponto." },
+      { status: 403 }
+    );
   }
   await prisma.timeEntry.delete({ where: { id } });
   return NextResponse.json({ ok: true });

@@ -5,6 +5,12 @@ import { auth } from "@/auth";
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return NextResponse.json(
+      { error: "Sem permissão para editar cursos." },
+      { status: 403 }
+    );
+  }
   const { id } = await params;
   const body = await req.json();
 
@@ -31,6 +37,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return NextResponse.json(
+      { error: "Sem permissão para excluir cursos." },
+      { status: 403 }
+    );
+  }
   const { id } = await params;
   await prisma.course.delete({ where: { id } });
   return NextResponse.json({ ok: true });

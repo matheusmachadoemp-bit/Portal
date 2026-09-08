@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { hasModulePermission } from "@/lib/authz";
 
 /** Edita um brinde do catálogo, incluindo ativar/desativar (Administrador/Gestor). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -8,6 +9,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json({ error: "Sem permissão para editar brindes." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "loja-nord", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar brindes." },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;

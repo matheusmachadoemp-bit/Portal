@@ -3,12 +3,19 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import type { ChecklistItemType } from "@prisma/client";
+import { hasModulePermission } from "@/lib/authz";
 
 const WEEKDAYS = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"] as const;
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar checklists." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -28,6 +35,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where: { templateId: id },
     select: { id: true, _count: { select: { respostas: true } } },
   });
+  const existingIds = new Set(existingItens.map((item) => item.id));
+
+  // Todo item enviado com um `id` precisa realmente pertencer a este template —
+  // caso contrário alguém poderia sobrescrever um item de outro checklist só
+  // informando o id dele no corpo da requisição.
+  const invalidItemId = incomingItens.find((item) => item.id && !existingIds.has(item.id as string));
+  if (invalidItemId) {
+    return NextResponse.json({ error: "Item de checklist inválido para este template." }, { status: 400 });
+  }
+
   const incomingIds = new Set(incomingItens.map((item) => item.id).filter(Boolean));
   const removedItens = existingItens.filter((item) => !incomingIds.has(item.id));
   const removedIdsToDelete = removedItens.filter((item) => item._count.respostas === 0).map((item) => item.id);
@@ -108,6 +125,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir checklists." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

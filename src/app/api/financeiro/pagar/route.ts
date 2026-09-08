@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -36,6 +37,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar lançamentos financeiros." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -55,6 +62,14 @@ export async function POST(req: Request) {
 
   const status = body.status || "EM_ABERTO";
   const valor = Number(body.valor) || 0;
+
+  const preDelta = balanceDelta(-1, status, valor);
+  if (preDelta && body.bankAccountId) {
+    const bankAccount = await prisma.bankAccount.findUnique({ where: { id: body.bankAccountId } });
+    if (!bankAccount || bankAccount.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Conta bancária inválida para esta loja." }, { status: 400 });
+    }
+  }
 
   const payable = await prisma.$transaction(async (tx) => {
     // number vem do id sequencial autoincrementado pelo Postgres (sequence),

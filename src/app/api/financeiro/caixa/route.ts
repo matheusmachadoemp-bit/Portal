@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -26,6 +27,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar lançamentos financeiros." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -53,6 +60,17 @@ export async function POST(req: Request) {
       { error: "Transferência exige uma conta de destino." },
       { status: 400 }
     );
+  }
+
+  const bankAccount = await prisma.bankAccount.findUnique({ where: { id: body.bankAccountId } });
+  if (!bankAccount || bankAccount.empresaId !== empresa.id) {
+    return NextResponse.json({ error: "Conta bancária inválida para esta loja." }, { status: 400 });
+  }
+  if (body.destinoId) {
+    const destinoAccount = await prisma.bankAccount.findUnique({ where: { id: body.destinoId } });
+    if (!destinoAccount || destinoAccount.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Conta de destino inválida para esta loja." }, { status: 400 });
+    }
   }
 
   const movement = await prisma.$transaction(async (tx) => {

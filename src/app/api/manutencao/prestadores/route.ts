@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getUserEmpresas } from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -58,10 +59,25 @@ export async function POST(req: Request) {
   if (!MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode cadastrar prestadores." }, { status: 403 });
   }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite cadastrar prestadores." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   if (!body.nome || !body.nome.trim()) {
     return NextResponse.json({ error: "Nome ou razão social é obrigatório." }, { status: 400 });
+  }
+
+  const empresaIds: string[] = Array.isArray(body.empresaIds) ? body.empresaIds : [];
+  if (empresaIds.length > 0) {
+    const empresasPermitidas = await getUserEmpresas(session.user.id, session.user.role);
+    const idsPermitidos = new Set(empresasPermitidas.map((e) => e.id));
+    if (empresaIds.some((id) => !idsPermitidos.has(id))) {
+      return NextResponse.json({ error: "Loja inválida ou sem acesso." }, { status: 400 });
+    }
   }
 
   const prestador = await prisma.prestador.create({
@@ -74,7 +90,7 @@ export async function POST(req: Request) {
       email: body.email || null,
       documento: body.documento || null,
       endereco: body.endereco || null,
-      empresaIds: Array.isArray(body.empresaIds) ? body.empresaIds : [],
+      empresaIds,
       avaliacao: body.avaliacao ? Number(body.avaliacao) : null,
       observacoes: body.observacoes || null,
       active: body.active !== undefined ? !!body.active : true,

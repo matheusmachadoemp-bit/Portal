@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeSurveyStatus } from "@/lib/satisfaction";
 import type { SatisfactionQuestionType, SatisfactionTheme } from "@prisma/client";
+import { hasModulePermission } from "@/lib/authz";
 
 const CAN_MANAGE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
@@ -40,6 +41,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!CAN_MANAGE_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para editar pesquisas." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar pesquisas de satisfação." },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;
@@ -155,6 +162,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!CAN_MANAGE_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para excluir pesquisas." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir pesquisas de satisfação." },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;

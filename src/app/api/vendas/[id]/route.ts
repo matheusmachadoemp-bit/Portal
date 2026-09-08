@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,6 +14,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!before) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, before.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "vendas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar lançamentos de vendas." },
+      { status: 403 }
+    );
   }
 
   const entry = await prisma.salesEntry.update({
@@ -56,6 +63,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!before) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, before.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "vendas", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir lançamentos de vendas." },
+      { status: 403 }
+    );
   }
 
   await prisma.salesEntry.delete({ where: { id } });

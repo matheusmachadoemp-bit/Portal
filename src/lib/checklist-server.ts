@@ -31,22 +31,24 @@ export async function generateChecklistOccurrences(empresaIds: string[], dateKey
     },
   });
 
-  for (const t of templates) {
-    const releaseAt = spDateTime(dateKey, t.releaseTime);
-    const dueAt = spDateTime(dateKey, t.dueTime);
-    await prisma.checklistOccurrence.upsert({
-      where: { templateId_date: { templateId: t.id, date: day } },
-      update: {},
-      create: {
-        templateId: t.id,
-        empresaId: t.empresaId,
-        date: day,
-        releaseAt,
-        dueAt,
-        responsavelId: t.responsavelId,
-      },
-    });
-  }
+  await Promise.all(
+    templates.map((t) => {
+      const releaseAt = spDateTime(dateKey, t.releaseTime);
+      const dueAt = spDateTime(dateKey, t.dueTime);
+      return prisma.checklistOccurrence.upsert({
+        where: { templateId_date: { templateId: t.id, date: day } },
+        update: {},
+        create: {
+          templateId: t.id,
+          empresaId: t.empresaId,
+          date: day,
+          releaseAt,
+          dueAt,
+          responsavelId: t.responsavelId,
+        },
+      });
+    })
+  );
 }
 
 /** Recalcula (e persiste, se mudou) o status "ao vivo" de cada ocorrência. */
@@ -142,6 +144,14 @@ export async function processChecklistEscalations(occurrenceIds: string[]) {
   const now = new Date();
   let notified = 0;
 
+  // Uma busca por loja distinta (não por ocorrência) — várias ocorrências costumam ser da mesma loja.
+  const distinctEmpresaIds = [...new Set(occurrences.map((o) => o.empresaId))];
+  const managersByEmpresa = new Map(
+    await Promise.all(
+      distinctEmpresaIds.map(async (empresaId) => [empresaId, await loadEscalationManagers(empresaId)] as const)
+    )
+  );
+
   for (const o of occurrences) {
     if (!o.template.cobrancaAtiva) continue;
 
@@ -158,8 +168,7 @@ export async function processChecklistEscalations(occurrenceIds: string[]) {
     if (levels.length === 0) continue;
 
     const minutesLate = (now.getTime() - o.dueAt.getTime()) / 60000;
-    const managers = await loadEscalationManagers(o.empresaId);
-    const managerIds = new Set(managers.map((m) => m.id));
+    const managerIds = new Set((managersByEmpresa.get(o.empresaId) ?? []).map((m) => m.id));
 
     for (const tipo of levels) {
       let recipientIds: string[];

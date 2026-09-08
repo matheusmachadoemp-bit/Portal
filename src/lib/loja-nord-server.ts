@@ -157,10 +157,18 @@ export async function cancelarResgate(redemptionId: string, userId: string): Pro
   return { ok: true };
 }
 
-/** Aprova um resgate (gerente/proprietário). */
-export async function aprovarResgate(redemptionId: string, aprovadoPorId: string, dataPrevista?: Date): Promise<LojaNordActionResult> {
+/** Aprova um resgate (gerente/proprietário). `empresasPermitidas` são as lojas que quem está aprovando pode gerenciar. */
+export async function aprovarResgate(
+  redemptionId: string,
+  aprovadoPorId: string,
+  dataPrevista?: Date,
+  empresasPermitidas?: string[]
+): Promise<LojaNordActionResult> {
   const redemption = await prisma.lojaNordRedemption.findUnique({ where: { id: redemptionId }, include: { reward: true } });
   if (!redemption) return { ok: false, error: "Resgate não encontrado." };
+  if (empresasPermitidas && !empresasPermitidas.includes(redemption.empresaId)) {
+    return { ok: false, error: "Você não tem permissão para gerenciar resgates desta loja." };
+  }
   if (redemption.status !== "AGUARDANDO_APROVACAO") return { ok: false, error: "Este resgate já foi processado." };
 
   await prisma.lojaNordRedemption.update({
@@ -178,11 +186,19 @@ export async function aprovarResgate(redemptionId: string, aprovadoPorId: string
   return { ok: true };
 }
 
-/** Recusa um resgate (gerente/proprietário) — exige justificativa e devolve os pontos. */
-export async function recusarResgate(redemptionId: string, aprovadoPorId: string, motivo: string): Promise<LojaNordActionResult> {
+/** Recusa um resgate (gerente/proprietário) — exige justificativa e devolve os pontos. `empresasPermitidas` são as lojas que quem está recusando pode gerenciar. */
+export async function recusarResgate(
+  redemptionId: string,
+  aprovadoPorId: string,
+  motivo: string,
+  empresasPermitidas?: string[]
+): Promise<LojaNordActionResult> {
   if (!motivo.trim()) return { ok: false, error: "Informe uma justificativa para a recusa." };
   const redemption = await prisma.lojaNordRedemption.findUnique({ where: { id: redemptionId }, include: { reward: true } });
   if (!redemption) return { ok: false, error: "Resgate não encontrado." };
+  if (empresasPermitidas && !empresasPermitidas.includes(redemption.empresaId)) {
+    return { ok: false, error: "Você não tem permissão para gerenciar resgates desta loja." };
+  }
   if (redemption.status !== "AGUARDANDO_APROVACAO") return { ok: false, error: "Este resgate já foi processado." };
 
   await prisma.lojaNordRedemption.update({
@@ -233,9 +249,12 @@ async function estornarResgate(
   });
 }
 
-export async function marcarDisponivel(redemptionId: string): Promise<LojaNordActionResult> {
+export async function marcarDisponivel(redemptionId: string, empresasPermitidas?: string[]): Promise<LojaNordActionResult> {
   const redemption = await prisma.lojaNordRedemption.findUnique({ where: { id: redemptionId }, include: { reward: true } });
   if (!redemption) return { ok: false, error: "Resgate não encontrado." };
+  if (empresasPermitidas && !empresasPermitidas.includes(redemption.empresaId)) {
+    return { ok: false, error: "Você não tem permissão para gerenciar resgates desta loja." };
+  }
   if (redemption.status !== "APROVADO") return { ok: false, error: "Só é possível marcar como disponível um resgate aprovado." };
 
   await prisma.lojaNordRedemption.update({ where: { id: redemptionId }, data: { status: "DISPONIVEL_RETIRADA" } });
@@ -249,9 +268,12 @@ export async function marcarDisponivel(redemptionId: string): Promise<LojaNordAc
   return { ok: true };
 }
 
-export async function confirmarEntrega(redemptionId: string): Promise<LojaNordActionResult> {
+export async function confirmarEntrega(redemptionId: string, empresasPermitidas?: string[]): Promise<LojaNordActionResult> {
   const redemption = await prisma.lojaNordRedemption.findUnique({ where: { id: redemptionId }, include: { reward: true } });
   if (!redemption) return { ok: false, error: "Resgate não encontrado." };
+  if (empresasPermitidas && !empresasPermitidas.includes(redemption.empresaId)) {
+    return { ok: false, error: "Você não tem permissão para gerenciar resgates desta loja." };
+  }
   if (redemption.status !== "DISPONIVEL_RETIRADA") return { ok: false, error: "Este resgate ainda não está disponível para retirada." };
 
   await prisma.lojaNordRedemption.update({ where: { id: redemptionId }, data: { status: "ENTREGUE" } });

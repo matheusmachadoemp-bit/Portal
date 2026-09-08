@@ -6,9 +6,11 @@ import {
   MANAGER_ROLES,
   generateChamadoProtocolo,
   getStoreManagers,
+  isValidBlobUrl,
   logChamadoHistorico,
   notifyManutencaoUser,
 } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const CHAMADO_LIST_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
@@ -72,6 +74,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite abrir chamados de manutenção." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -87,6 +95,10 @@ export async function POST(req: Request) {
   }
 
   const status = body.status === "RASCUNHO" ? "RASCUNHO" : "ABERTO";
+
+  if (Array.isArray(body.anexos) && body.anexos.some((a: { fileUrl?: string }) => !isValidBlobUrl(a?.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
+  }
 
   const chamado = await prisma.$transaction(async (tx) => {
     const created = await tx.chamado.create({

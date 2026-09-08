@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -30,6 +31,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "ficha-tecnica", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite cadastrar insumos." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -40,6 +47,16 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+
+  if (body.fornecedorPrincipalId) {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: body.fornecedorPrincipalId },
+      select: { empresaId: true },
+    });
+    if (!supplier || supplier.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Fornecedor inválido para esta loja." }, { status: 400 });
+    }
+  }
 
   const ingredient = await prisma.ingredient.create({
     data: {

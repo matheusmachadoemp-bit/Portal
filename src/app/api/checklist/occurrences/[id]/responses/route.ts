@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -19,6 +20,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     include: { template: true },
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite responder itens do checklist." },
+      { status: 403 }
+    );
+  }
 
   if (status === "PROBLEMA" && occurrence.template.exigirObservacaoProblema && !observacao?.trim()) {
     return NextResponse.json({ error: "Esse checklist exige uma observação quando há um problema." }, { status: 400 });

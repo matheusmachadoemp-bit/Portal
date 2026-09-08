@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { MANAGER_ROLES, logChamadoHistorico, notifyManutencaoUser } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const ADVANCE_FROM_STATUSES = ["ABERTO", "AGUARDANDO_AVALIACAO", "AGUARDANDO_ORCAMENTO", "AGUARDANDO_APROVACAO", "APROVADO", "AGUARDANDO_PECA"];
 
@@ -57,12 +58,28 @@ export async function POST(req: Request) {
   if (body.chamadoId) {
     chamado = await prisma.chamado.findUnique({ where: { id: body.chamadoId } });
     if (!chamado) return NextResponse.json({ error: "Chamado não encontrado." }, { status: 404 });
+    if (chamado.empresaId !== equipamento.empresaId) {
+      return NextResponse.json({ error: "Este chamado não pertence a essa loja." }, { status: 403 });
+    }
   }
 
   let preventivaOcorrencia = null;
   if (body.preventivaOcorrenciaId) {
-    preventivaOcorrencia = await prisma.manutencaoPreventivaOcorrencia.findUnique({ where: { id: body.preventivaOcorrenciaId } });
+    preventivaOcorrencia = await prisma.manutencaoPreventivaOcorrencia.findUnique({
+      where: { id: body.preventivaOcorrenciaId },
+      include: { preventiva: { include: { equipamento: true } } },
+    });
     if (!preventivaOcorrencia) return NextResponse.json({ error: "Ocorrência preventiva não encontrada." }, { status: 404 });
+    if (preventivaOcorrencia.preventiva.equipamento.empresaId !== equipamento.empresaId) {
+      return NextResponse.json({ error: "Esta ocorrência preventiva não pertence a essa loja." }, { status: 403 });
+    }
+  }
+
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite registrar manutenções." },
+      { status: 403 }
+    );
   }
 
   const valorMaoDeObra = Number(body.valorMaoDeObra) || 0;

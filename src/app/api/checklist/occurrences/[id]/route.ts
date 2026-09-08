@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
 import { refreshOccurrenceStatuses } from "@/lib/checklist-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const DETAIL_INCLUDE = {
   // Itens são retornados sem filtrar por `ativo` de propósito: uma resposta
@@ -58,11 +59,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where: { id, empresaId: { in: empresaIdsForContext(ctx) } },
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar execuções de checklist." },
+      { status: 403 }
+    );
+  }
 
   const data: Record<string, unknown> = {};
   if ("responsavelId" in body) data.responsavelId = body.responsavelId || null;
   if ("justificativa" in body) data.justificativa = body.justificativa || null;
-  if ("status" in body) data.status = body.status;
+  // O único status "forjável" por aqui é JUSTIFICADO (usado pelo botão "Justificar"
+  // em ocorrências ATRASADO/NAO_REALIZADO). Concluir uma ocorrência (CONCLUIDO_NO_PRAZO/
+  // CONCLUIDO_COM_ATRASO) precisa passar pelas validações de itens obrigatórios/fotos
+  // da rota dedicada /complete — por isso não é aceito aqui.
+  if ("status" in body) {
+    if (body.status !== "JUSTIFICADO") {
+      return NextResponse.json(
+        { error: "Só é possível marcar como justificado por aqui. Para concluir, use a rota de conclusão." },
+        { status: 400 }
+      );
+    }
+    data.status = body.status;
+  }
 
   const updated = await prisma.checklistOccurrence.update({ where: { id }, data });
 

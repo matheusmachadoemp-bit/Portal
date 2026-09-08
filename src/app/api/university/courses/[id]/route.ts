@@ -2,14 +2,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const course = await prisma.trainingCourse.findUnique({
-    where: { id },
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
+  const course = await prisma.trainingCourse.findFirst({
+    where: { id, OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }] },
     include: {
       modules: { orderBy: { order: "asc" } },
       quiz: { include: { questions: { include: { options: true }, orderBy: { order: "asc" } } } },
@@ -54,6 +59,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canManageUsers(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para editar cursos." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "universidade", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar cursos." },
+      { status: 403 }
+    );
   }
   const { id } = await params;
   const existing = await prisma.trainingCourse.findUnique({ where: { id } });
@@ -142,6 +153,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canManageUsers(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para excluir cursos." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "universidade", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir cursos." },
+      { status: 403 }
+    );
   }
   const { id } = await params;
   try {

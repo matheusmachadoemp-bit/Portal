@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -32,6 +33,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite lançar vendas." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -65,6 +72,14 @@ export async function POST(req: Request) {
   });
   const valorTotal = parsedItems.reduce((sum, i) => sum + i.faturamento, 0);
 
+  const garcomId: string | null = body.garcomId || null;
+  if (garcomId) {
+    const employee = await prisma.employee.findUnique({ where: { id: garcomId } });
+    if (!employee || employee.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Garçom inválido para esta loja." }, { status: 400 });
+    }
+  }
+
   let clienteId: string | null = null;
   const clienteTelefone = (body.clienteTelefone || "").trim();
   if (clienteTelefone) {
@@ -83,7 +98,7 @@ export async function POST(req: Request) {
       channel: body.channel || "SALAO",
       platform: body.platform || "SITE_PROPRIO",
       formaPagamento: body.formaPagamento || "OUTRO",
-      garcomId: body.garcomId || null,
+      garcomId,
       clienteId,
       mesaNumero: body.mesaNumero || null,
       bairro: body.bairro || null,

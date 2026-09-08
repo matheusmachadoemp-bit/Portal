@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -12,7 +13,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
+  if (!(await hasModulePermission(session.user.id, "ficha-tecnica", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar produtos." },
+      { status: 403 }
+    );
+  }
   const body = await req.json();
+
+  if (body.ingredients) {
+    const ingredientIds = [
+      ...new Set((body.ingredients as { ingredientId: string }[]).map((i) => i.ingredientId).filter(Boolean)),
+    ];
+    if (ingredientIds.length) {
+      const validCount = await prisma.ingredient.count({
+        where: { id: { in: ingredientIds }, empresaId: existing.empresaId },
+      });
+      if (validCount !== ingredientIds.length) {
+        return NextResponse.json({ error: "Um ou mais insumos informados não pertencem a esta loja." }, { status: 400 });
+      }
+    }
+  }
 
   await prisma.product.update({
     where: { id },
@@ -65,6 +86,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "ficha-tecnica", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir produtos." },
+      { status: 403 }
+    );
   }
   await prisma.product.delete({ where: { id } });
   return NextResponse.json({ ok: true });

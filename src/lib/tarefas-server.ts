@@ -27,39 +27,59 @@ export async function generateDueTaskOccurrences(empresaIds: string[], reference
 
   const dueDate = startOfDay(referenceDate);
 
-  for (const recurrence of due) {
-    const existing = await prisma.task.findUnique({
-      where: { recurrenceId_dueDate: { recurrenceId: recurrence.id, dueDate } },
-      select: { id: true },
-    });
-    if (existing) continue;
+  // Uma única consulta batendo todas as recorrências de uma vez, em vez de uma por recorrência.
+  const existing = await prisma.task.findMany({
+    where: { recurrenceId: { in: due.map((r) => r.id) }, dueDate },
+    select: { recurrenceId: true },
+  });
+  const existingRecurrenceIds = new Set(existing.map((t) => t.recurrenceId));
+  const toCreate = due.filter((r) => !existingRecurrenceIds.has(r.id));
+  if (toCreate.length === 0) return;
 
-    const assigneeIds = parseAssigneeIds(recurrence.defaultAssigneeIds);
+  const tasks = await Promise.all(
+    toCreate.map((recurrence) => {
+      const assigneeIds = parseAssigneeIds(recurrence.defaultAssigneeIds);
+      return prisma.task.create({
+        data: {
+          empresaId: recurrence.empresaId,
+          title: recurrence.title,
+          description: recurrence.description,
+          sectorKey: recurrence.sectorKey,
+          priority: recurrence.priority,
+          dueDate,
+          dueTime: recurrence.dueTime,
+          recurrenceId: recurrence.id,
+          proofType: recurrence.proofType,
+          requiresValidation: recurrence.requiresValidation,
+          validatorId: recurrence.validatorId,
+          sourceType: "MANUAL",
+          createdById: recurrence.createdById,
+          assignees: assigneeIds.length > 0 ? { create: assigneeIds.map((userId) => ({ userId })) } : undefined,
+        },
+      }).then((task) => ({ task, assigneeIds }));
+    })
+  );
 
-    const task = await prisma.task.create({
-      data: {
-        empresaId: recurrence.empresaId,
-        title: recurrence.title,
-        description: recurrence.description,
-        sectorKey: recurrence.sectorKey,
-        priority: recurrence.priority,
-        dueDate,
-        dueTime: recurrence.dueTime,
-        recurrenceId: recurrence.id,
-        proofType: recurrence.proofType,
-        requiresValidation: recurrence.requiresValidation,
-        validatorId: recurrence.validatorId,
-        sourceType: "MANUAL",
-        createdById: recurrence.createdById,
-        assignees: assigneeIds.length > 0 ? { create: assigneeIds.map((userId) => ({ userId })) } : undefined,
-      },
-    });
+  await prisma.taskHistory.createMany({
+    data: tasks.map(({ task }) => ({
+      taskId: task.id,
+      userId: null,
+      action: "CREATED",
+      detail: "Gerada automaticamente pela recorrência",
+    })),
+  });
 
-    await logTaskHistory(task.id, null, "CREATED", "Gerada automaticamente pela recorrência");
-    for (const userId of assigneeIds) {
-      await notifyUser(userId, "NOVA_TAREFA", "Nova tarefa", `Você recebeu a tarefa "${task.title}".`, task.id);
-    }
-  }
+  await prisma.notification.createMany({
+    data: tasks.flatMap(({ task, assigneeIds }) =>
+      assigneeIds.map((userId) => ({
+        userId,
+        type: "NOVA_TAREFA",
+        title: "Nova tarefa",
+        body: `Você recebeu a tarefa "${task.title}".`,
+        taskId: task.id,
+      }))
+    ),
+  });
 }
 
 export async function logTaskHistory(taskId: string, userId: string | null, action: string, detail?: string | null): Promise<void> {

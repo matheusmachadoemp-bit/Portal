@@ -7,7 +7,6 @@ import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { SATISFACTION_THEME_LABEL } from "@/lib/satisfaction";
 import { exportRowsToCsv, exportRowsToExcel } from "@/lib/export-utils";
-import { exportKpiReportToPdf } from "@/lib/pdf-export";
 import type { SatisfactionTheme } from "@prisma/client";
 
 const TEMA_COLOR: Record<SatisfactionTheme, string> = {
@@ -92,7 +91,8 @@ export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; 
   }));
   const fileBase = surveyTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-  function exportPdf() {
+  async function exportPdf() {
+    const { exportKpiReportToPdf } = await import("@/lib/pdf-export");
     exportKpiReportToPdf(surveyTitle, "Resultados da pesquisa de satisfação", [
       {
         title: "Resumo",

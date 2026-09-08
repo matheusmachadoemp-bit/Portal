@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 const VALID_STATUSES = ["PENDENTE", "CONCILIADO", "IGNORADO"];
 const VALID_MATCH_TYPES = ["PAYABLE", "RECEIVABLE"];
@@ -16,6 +17,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar a conciliação bancária." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   if (body.status && !VALID_STATUSES.includes(body.status)) {
@@ -28,6 +35,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const manualMatch = body.matchedType && body.matchedId;
   // Ao sair de CONCILIADO (sem informar um novo vínculo), remove o vínculo existente.
   const clearMatch = body.status && body.status !== "CONCILIADO" && !manualMatch;
+
+  if (manualMatch) {
+    const matched =
+      body.matchedType === "PAYABLE"
+        ? await prisma.payable.findUnique({ where: { id: body.matchedId }, select: { empresaId: true } })
+        : await prisma.receivable.findUnique({ where: { id: body.matchedId }, select: { empresaId: true } });
+    if (!matched || matched.empresaId !== existing.empresaId) {
+      return NextResponse.json({ error: "Registro de vínculo inválido para essa loja." }, { status: 400 });
+    }
+  }
 
   const transaction = await prisma.bankTransaction.update({
     where: { id },

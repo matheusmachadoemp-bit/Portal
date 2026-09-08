@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { generateEquipamentoCodigo, MANAGER_ROLES } from "@/lib/manutencao-server";
+import { generateEquipamentoCodigo, isValidBlobUrl, MANAGER_ROLES } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -50,6 +51,12 @@ export async function POST(req: Request) {
   if (!MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode cadastrar equipamentos." }, { status: 403 });
   }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite cadastrar equipamentos." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -62,6 +69,10 @@ export async function POST(req: Request) {
   const body = await req.json();
   if (!body.nome || !body.setor || !body.categoria) {
     return NextResponse.json({ error: "Nome, setor e categoria são obrigatórios." }, { status: 400 });
+  }
+
+  if (Array.isArray(body.anexos) && body.anexos.some((a: { fileUrl?: string }) => !isValidBlobUrl(a?.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
   }
 
   const equipamento = await prisma.$transaction(async (tx) => {

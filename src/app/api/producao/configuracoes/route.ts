@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -30,6 +31,12 @@ export async function PUT(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode alterar as configurações de produção." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "producao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite alterar as configurações de produção." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();

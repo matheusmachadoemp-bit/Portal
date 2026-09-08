@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { logTaskHistory } from "@/lib/tarefas-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -50,6 +51,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const canManage = MANAGER_ROLES.includes(session.user.role) || existing.createdById === session.user.id;
   if (!canManage) {
     return NextResponse.json({ error: "Você não pode alterar prazo, responsável ou dados da tarefa." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar tarefas." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();
@@ -101,6 +108,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
   const canManage = MANAGER_ROLES.includes(session.user.role) || existing.createdById === session.user.id;
   if (!canManage) return NextResponse.json({ error: "Você não pode excluir essa tarefa." }, { status: 403 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir tarefas." },
+      { status: 403 }
+    );
+  }
 
   await prisma.task.delete({ where: { id } });
   return NextResponse.json({ ok: true });

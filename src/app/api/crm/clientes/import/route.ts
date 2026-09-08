@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 import * as XLSX from "xlsx";
 
 // Vercel mata a função em 10s por padrão — um arquivo com centenas/milhares
@@ -129,6 +130,15 @@ async function processInChunks<T>(items: T[], concurrency: number, task: (item: 
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // A planilha cria clientes novos e atualiza os já existentes (match por telefone) na mesma
+  // chamada — trata como canCreate por ser fundamentalmente uma importação em massa, mesmo
+  // padrão usado em rh/employees/import, rh/time-entries/import e vendas/importar.
+  if (!(await hasModulePermission(session.user.id, "crm", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite importar clientes." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

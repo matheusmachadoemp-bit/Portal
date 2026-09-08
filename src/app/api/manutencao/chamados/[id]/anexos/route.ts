@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import type { ManutencaoAnexoTipo } from "@prisma/client";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { logChamadoHistorico } from "@/lib/manutencao-server";
+import { isValidBlobUrl, logChamadoHistorico } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -15,12 +16,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, chamado.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite anexar arquivos a chamados de manutenção." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   const anexos: { name: string; fileUrl: string; mimeType?: string; sizeBytes?: number; tipo?: string }[] = Array.isArray(body.anexos)
     ? body.anexos
     : [];
   if (anexos.length === 0) return NextResponse.json({ error: "Nenhum anexo enviado." }, { status: 400 });
+  if (anexos.some((a) => !isValidBlobUrl(a.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
+  }
 
   await prisma.manutencaoAnexo.createMany({
     data: anexos.map((a) => ({

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { MANAGER_ROLES, notifyManutencaoUser, getStoreManagers } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const EQUIPAMENTO_DETAIL_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
@@ -49,6 +50,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (!MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode editar equipamentos." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar equipamentos." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();
@@ -106,6 +113,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
   if (!MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode excluir equipamentos." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir equipamentos." },
+      { status: 403 }
+    );
   }
   if (existing._count.chamados > 0) {
     return NextResponse.json(

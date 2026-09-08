@@ -2,12 +2,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode editar categorias de produção." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "producao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar categorias de produção." },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;
@@ -31,6 +38,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode excluir categorias de produção." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "producao", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir categorias de produção." },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;

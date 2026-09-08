@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { logTaskHistory, notifyUser } from "@/lib/tarefas-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,6 +14,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!task) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, task.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  // Transição de status de uma tarefa já existente (envia comprovação e avança o status),
+  // nunca cria uma Task nova — mesmo critério de canEdit já usado em estoque/contagens/[id]
+  // e estoque/transferencias/[id].
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite comprovar tarefas." },
+      { status: 403 }
+    );
   }
   if (task.status === "CONCLUIDA") {
     return NextResponse.json({ error: "Essa tarefa já está concluída." }, { status: 400 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -15,6 +16,15 @@ export async function POST(req: Request) {
     where: { id: body.clienteId, empresaId: { in: empresaIdsForContext(ctx) } },
   });
   if (!cliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+  // Faz upsert da LoyaltyAccount do cliente (na prática quase sempre já existe, criada no
+  // primeiro ganho de pontos) e sempre cria uma nova LoyaltyTransaction — na maior parte do uso
+  // real é um ajuste manual num saldo já existente, por isso trata como canEdit.
+  if (!(await hasModulePermission(session.user.id, "crm", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ajustar pontos de fidelidade." },
+      { status: 403 }
+    );
+  }
 
   const tipo: "GANHO" | "RESGATE" = body.tipo === "RESGATE" ? "RESGATE" : "GANHO";
   const pontos = Number(body.pontos) || 0;
