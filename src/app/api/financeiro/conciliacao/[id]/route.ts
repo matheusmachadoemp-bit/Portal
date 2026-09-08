@@ -36,6 +36,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Ao sair de CONCILIADO (sem informar um novo vínculo), remove o vínculo existente.
   const clearMatch = body.status && body.status !== "CONCILIADO" && !manualMatch;
 
+  if (manualMatch) {
+    const matched =
+      body.matchedType === "PAYABLE"
+        ? await prisma.payable.findUnique({ where: { id: body.matchedId }, select: { empresaId: true } })
+        : await prisma.receivable.findUnique({ where: { id: body.matchedId }, select: { empresaId: true } });
+    if (!matched || matched.empresaId !== existing.empresaId) {
+      return NextResponse.json({ error: "Registro de vínculo inválido para essa loja." }, { status: 400 });
+    }
+  }
+
   const transaction = await prisma.bankTransaction.update({
     where: { id },
     data: {

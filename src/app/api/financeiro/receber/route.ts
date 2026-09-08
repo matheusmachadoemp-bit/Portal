@@ -63,6 +63,14 @@ export async function POST(req: Request) {
   const status = body.status || "EM_ABERTO";
   const valor = Number(body.valor) || 0;
 
+  const preDelta = balanceDelta(1, status, valor);
+  if (preDelta && body.bankAccountId) {
+    const bankAccount = await prisma.bankAccount.findUnique({ where: { id: body.bankAccountId } });
+    if (!bankAccount || bankAccount.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Conta bancária inválida para esta loja." }, { status: 400 });
+    }
+  }
+
   const receivable = await prisma.$transaction(async (tx) => {
     // number vem do id sequencial autoincrementado pelo Postgres (sequence),
     // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo

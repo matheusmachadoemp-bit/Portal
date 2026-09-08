@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { ingredientCostPerUnit } from "@/lib/estoque";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -12,6 +13,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     include: { items: { include: { ingredient: true } }, empresa: true },
   });
   if (!count) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, count.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
   return NextResponse.json({ count });
 }
 
@@ -26,6 +30,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     include: { items: { include: { ingredient: true } }, empresa: true },
   });
   if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
 
   // --- Atualização item a item (contagem em andamento) ---
   if (Array.isArray(body.items)) {

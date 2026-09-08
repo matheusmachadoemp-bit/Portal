@@ -17,6 +17,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const priceChanged =
     body.precoAtual !== undefined && Number(body.precoAtual) !== existing?.precoAtual;
 
+  if (body.fornecedorPrincipalId) {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: body.fornecedorPrincipalId },
+      select: { empresaId: true },
+    });
+    if (!supplier || supplier.empresaId !== existing.empresaId) {
+      return NextResponse.json({ error: "Fornecedor inválido para esta loja." }, { status: 400 });
+    }
+  }
+
   const ingredient = await prisma.ingredient.update({
     where: { id },
     data: {

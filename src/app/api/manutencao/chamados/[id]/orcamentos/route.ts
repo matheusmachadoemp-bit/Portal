@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { MANAGER_ROLES, logChamadoHistorico, notifyManutencaoUser } from "@/lib/manutencao-server";
+import { MANAGER_ROLES, isValidBlobUrl, logChamadoHistorico, notifyManutencaoUser } from "@/lib/manutencao-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -21,6 +21,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = await req.json();
   if (!body.prestadorId) {
     return NextResponse.json({ error: "Selecione o prestador." }, { status: 400 });
+  }
+
+  if (Array.isArray(body.anexos) && body.anexos.some((a: { fileUrl?: string }) => !isValidBlobUrl(a?.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
   }
 
   const valorMaoDeObra = Number(body.valorMaoDeObra) || 0;

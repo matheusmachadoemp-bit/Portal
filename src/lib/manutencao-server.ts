@@ -3,6 +3,23 @@ import type { Prisma, ChamadoCategoria, ChamadoPrioridade, ChamadoStatus } from 
 
 export const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
+// Anexos de manutenção sempre passam antes pelo /api/upload (Vercel Blob),
+// que já valida tipo/tamanho de verdade. Como não dá pra "re-validar" um
+// arquivo já hospedado externamente, a defesa possível aqui é garantir que a
+// URL recebida do cliente realmente aponta pro domínio de armazenamento do
+// Blob, e não uma URL arbitrária de fora do sistema.
+const BLOB_HOSTNAME_SUFFIX = ".public.blob.vercel-storage.com";
+
+export function isValidBlobUrl(url: unknown): url is string {
+  if (typeof url !== "string" || !url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(BLOB_HOSTNAME_SUFFIX);
+  } catch {
+    return false;
+  }
+}
+
 function stripAccents(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }

@@ -6,6 +6,8 @@ import type { FinanceEntryStatus } from "@prisma/client";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,6 +24,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
   const body = await req.json();
+
+  const nextStatusCheck: FinanceEntryStatus = body.status ?? existingCheck.status;
+  const nextValorCheck = body.valor !== undefined ? Number(body.valor) : existingCheck.valor;
+  const nextBankAccountIdCheck =
+    body.bankAccountId !== undefined ? body.bankAccountId : existingCheck.bankAccountId;
+  const newDeltaCheck = balanceDelta(1, nextStatusCheck, nextValorCheck);
+  if (newDeltaCheck && nextBankAccountIdCheck) {
+    const bankAccount = await prisma.bankAccount.findUnique({ where: { id: nextBankAccountIdCheck } });
+    if (!bankAccount || bankAccount.empresaId !== existingCheck.empresaId) {
+      return NextResponse.json({ error: "Conta bancária inválida para esta loja." }, { status: 400 });
+    }
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     const before = await tx.receivable.findUniqueOrThrow({ where: { id } });
@@ -94,6 +108,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
+  }
   const { id } = await params;
   const existingCheck = await prisma.receivable.findUnique({ where: { id } });
   if (!existingCheck) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });

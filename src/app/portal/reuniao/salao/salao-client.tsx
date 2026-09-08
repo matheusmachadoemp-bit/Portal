@@ -16,7 +16,6 @@ import {
   resolveComparePeriodos,
   SALAO_PRODUTOS_PADRAO,
 } from "@/lib/reuniao";
-import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type ProdutoMeta = { produto: string; quantidade: number | null; meta: number; premiacao: number };
 
@@ -187,7 +186,8 @@ export function SalaoClient({
   const compFaturamento = compareToPrevious(metrics.faturamentoValor, anteriorParaComparacao?.faturamentoValor, "max");
   const compTicketMedio = compareToPrevious(metrics.ticketMedioValor, anteriorParaComparacao?.ticketMedioValor, "max");
 
-  function exportPdf() {
+  async function exportPdf() {
+    const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
     const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
 
     function historico<K extends "npsPercent" | "faturamentoValor" | "ticketMedioValor">(key: K, atualValue: number | null) {
