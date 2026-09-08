@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Plus, Trash2, GripVertical } from "lucide-react";
+import { upload } from "@vercel/blob/client";
+import { sanitizeFileName } from "@/lib/upload";
 import { COURSE_CATEGORY_OPTIONS, COURSE_STATUS_OPTIONS, MODULE_TYPE_OPTIONS, QUESTION_TYPE_OPTIONS } from "@/lib/university";
 import type { CourseDTO } from "./university-types";
 
@@ -82,9 +84,24 @@ export function CourseBuilderModal({
   );
 
   const [saving, setSaving] = useState(false);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   function updateModule(idx: number, patch: Partial<ModuleForm>) {
     setModules((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  }
+
+  async function handleVideoUpload(idx: number, file: File) {
+    setUploadingIdx(idx);
+    setUploadError(null);
+    try {
+      const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
+      updateModule(idx, { videoUrl: blob.url });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Falha ao enviar o vídeo.");
+    } finally {
+      setUploadingIdx(null);
+    }
   }
   function addModule() {
     setModules((prev) => [...prev, { ...emptyModule }]);
@@ -267,6 +284,7 @@ export function CourseBuilderModal({
 
       {tab === "modulos" && (
         <div className="space-y-3">
+          {uploadError && <p className="text-xs text-nord-danger">{uploadError}</p>}
           {modules.map((m, idx) => (
             <div key={idx} className="nord-card p-3">
               <div className="flex items-center gap-2 mb-2">
@@ -287,20 +305,32 @@ export function CourseBuilderModal({
                 </button>
               </div>
               {m.type === "VIDEO" && (
-                <div className="grid grid-cols-3 gap-2">
-                  <input
-                    value={m.videoUrl}
-                    onChange={(e) => updateModule(idx, { videoUrl: e.target.value })}
-                    placeholder="URL do vídeo (mp4, YouTube embed...)"
-                    className="input col-span-2"
-                  />
-                  <input
-                    type="number"
-                    value={m.durationSeconds}
-                    onChange={(e) => updateModule(idx, { durationSeconds: e.target.value })}
-                    placeholder="Duração (segundos)"
-                    className="input"
-                  />
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      value={m.videoUrl}
+                      onChange={(e) => updateModule(idx, { videoUrl: e.target.value })}
+                      placeholder="URL do vídeo (mp4, YouTube embed...)"
+                      className="input col-span-2"
+                    />
+                    <input
+                      type="number"
+                      value={m.durationSeconds}
+                      onChange={(e) => updateModule(idx, { durationSeconds: e.target.value })}
+                      placeholder="Duração (segundos)"
+                      className="input"
+                    />
+                  </div>
+                  <label className="inline-flex items-center gap-1.5 text-xs text-nord-blue-light hover:text-white cursor-pointer">
+                    {uploadingIdx === idx ? "Enviando vídeo..." : "ou enviar arquivo de vídeo"}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      disabled={uploadingIdx !== null}
+                      onChange={(e) => e.target.files?.[0] && handleVideoUpload(idx, e.target.files[0])}
+                    />
+                  </label>
                 </div>
               )}
               {m.type === "PDF" && (
