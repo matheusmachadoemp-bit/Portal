@@ -6,7 +6,6 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency } from "@/lib/calc";
 import { exportRowsToExcel } from "@/lib/export-utils";
-import { exportKpiReportToPdf } from "@/lib/pdf-export";
 import { CHAMADO_PRIORIDADE_LABEL } from "@/lib/manutencao";
 
 type KeyValor = { key: string; valor: number };
@@ -77,7 +76,8 @@ export function RelatoriosClient({
     setData(initialData);
   }
 
-  function exportPdf() {
+  async function exportPdf() {
+    const { exportKpiReportToPdf } = await import("@/lib/pdf-export");
     exportKpiReportToPdf("Manutenção — Relatório", `Gerado em ${new Date().toLocaleDateString("pt-BR")}`, [
       { title: "Gastos por loja", rows: data.gastosPorLoja.map((g) => [g.key, formatCurrency(g.valor)] as [string, string]) },
       { title: "Gastos por setor", rows: data.gastosPorSetor.map((g) => [g.key, formatCurrency(g.valor)] as [string, string]) },

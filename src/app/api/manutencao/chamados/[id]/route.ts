@@ -48,12 +48,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
-  const canManage = MANAGER_ROLES.includes(session.user.role) || existing.solicitanteId === session.user.id;
+  const isManager = MANAGER_ROLES.includes(session.user.role);
+  const canManage = isManager || existing.solicitanteId === session.user.id;
   if (!canManage) {
     return NextResponse.json({ error: "Você não pode alterar este chamado." }, { status: 403 });
   }
 
   const body = await req.json();
+
+  // Só a gestão pode aprovar (isso normalmente acontece via aprovação de orçamento,
+  // em /api/manutencao/orcamentos/[id], já restrita a MANAGER_ROLES) ou marcar como
+  // resolvido — o próprio solicitante não pode se auto-aprovar nem se auto-resolver.
+  if (body.status && (body.status === "APROVADO" || body.status === "RESOLVIDO") && !isManager) {
+    return NextResponse.json({ error: "Só a gestão pode aprovar ou resolver um chamado." }, { status: 403 });
+  }
+  // Só a gestão decide quem é o responsável pelo chamado.
+  if (
+    body.responsavelId !== undefined &&
+    (body.responsavelId || null) !== existing.responsavelId &&
+    !isManager
+  ) {
+    return NextResponse.json({ error: "Só a gestão pode definir o responsável pelo chamado." }, { status: 403 });
+  }
 
   if (body.status === "RESOLVIDO" && !(body.descricaoSolucao || existing.descricaoSolucao)) {
     return NextResponse.json({ error: "Descreva a solução aplicada antes de resolver o chamado." }, { status: 400 });

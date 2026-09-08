@@ -66,7 +66,15 @@ export async function resolveAudience(
   audienceType: "TODOS" | "SEGMENTO" | "CLIENTES",
   opts: { segmentId?: string | null; autoSegmentoKey?: string | null; clienteIds?: string[] }
 ): Promise<string[]> {
-  if (audienceType === "CLIENTES") return opts.clienteIds ?? [];
+  if (audienceType === "CLIENTES") {
+    const clienteIds = opts.clienteIds ?? [];
+    if (clienteIds.length === 0) return [];
+    const validos = await prisma.cliente.findMany({
+      where: { id: { in: clienteIds }, empresaId },
+      select: { id: true },
+    });
+    return validos.map((c) => c.id);
+  }
 
   const clientes = await loadClientesCompletos([empresaId]);
 

@@ -57,12 +57,21 @@ export async function POST(req: Request) {
   if (body.chamadoId) {
     chamado = await prisma.chamado.findUnique({ where: { id: body.chamadoId } });
     if (!chamado) return NextResponse.json({ error: "Chamado não encontrado." }, { status: 404 });
+    if (chamado.empresaId !== equipamento.empresaId) {
+      return NextResponse.json({ error: "Este chamado não pertence a essa loja." }, { status: 403 });
+    }
   }
 
   let preventivaOcorrencia = null;
   if (body.preventivaOcorrenciaId) {
-    preventivaOcorrencia = await prisma.manutencaoPreventivaOcorrencia.findUnique({ where: { id: body.preventivaOcorrenciaId } });
+    preventivaOcorrencia = await prisma.manutencaoPreventivaOcorrencia.findUnique({
+      where: { id: body.preventivaOcorrenciaId },
+      include: { preventiva: { include: { equipamento: true } } },
+    });
     if (!preventivaOcorrencia) return NextResponse.json({ error: "Ocorrência preventiva não encontrada." }, { status: 404 });
+    if (preventivaOcorrencia.preventiva.equipamento.empresaId !== equipamento.empresaId) {
+      return NextResponse.json({ error: "Esta ocorrência preventiva não pertence a essa loja." }, { status: 403 });
+    }
   }
 
   const valorMaoDeObra = Number(body.valorMaoDeObra) || 0;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 const NEXT_STATUS_MOVEMENT = new Set(["ENVIADA", "RECEBIDA"]);
 
@@ -16,8 +17,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   });
   if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
 
+  const [temAcessoOrigem, temAcessoDestino] = await Promise.all([
+    assertEmpresaAccess(session.user.id, session.user.role, existing.origemEmpresaId),
+    assertEmpresaAccess(session.user.id, session.user.role, existing.destinoEmpresaId),
+  ]);
+  if (!temAcessoOrigem && !temAcessoDestino) {
+    return NextResponse.json({ error: "Sem acesso a essa transferência." }, { status: 403 });
+  }
+
   const novoStatus = body.status as string | undefined;
   const disparaSaida = novoStatus === "ENVIADA" && existing.status !== "ENVIADA" && !NEXT_STATUS_MOVEMENT.has(existing.status);
+  if (disparaSaida && !temAcessoOrigem) {
+    return NextResponse.json({ error: "Apenas a loja de origem pode enviar esta transferência." }, { status: 403 });
+  }
+  if (novoStatus === "RECEBIDA" && !temAcessoDestino) {
+    return NextResponse.json({ error: "Apenas a loja de destino pode confirmar o recebimento desta transferência." }, { status: 403 });
+  }
 
   const ops = [];
 

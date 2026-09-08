@@ -65,6 +65,14 @@ export async function POST(req: Request) {
   });
   const valorTotal = parsedItems.reduce((sum, i) => sum + i.faturamento, 0);
 
+  const garcomId: string | null = body.garcomId || null;
+  if (garcomId) {
+    const employee = await prisma.employee.findUnique({ where: { id: garcomId } });
+    if (!employee || employee.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Garçom inválido para esta loja." }, { status: 400 });
+    }
+  }
+
   let clienteId: string | null = null;
   const clienteTelefone = (body.clienteTelefone || "").trim();
   if (clienteTelefone) {
@@ -83,7 +91,7 @@ export async function POST(req: Request) {
       channel: body.channel || "SALAO",
       platform: body.platform || "SITE_PROPRIO",
       formaPagamento: body.formaPagamento || "OUTRO",
-      garcomId: body.garcomId || null,
+      garcomId,
       clienteId,
       mesaNumero: body.mesaNumero || null,
       bairro: body.bairro || null,
