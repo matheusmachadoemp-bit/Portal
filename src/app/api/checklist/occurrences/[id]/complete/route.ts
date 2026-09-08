@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
 import { CHECKLIST_PONTOS_POR_CONCLUSAO } from "@/lib/checklist";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -22,6 +23,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     },
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
+  // Transição de status de uma execução já existente (marca como concluída), nunca cria uma
+  // ChecklistOccurrence nova (isso é feito por geração automática) — mesmo critério de canEdit
+  // já usado em estoque/contagens/[id] e estoque/transferencias/[id].
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite concluir execuções de checklist." },
+      { status: 403 }
+    );
+  }
   if (occurrence.completedAt) {
     return NextResponse.json({ error: "Esse checklist já foi concluído." }, { status: 400 });
   }

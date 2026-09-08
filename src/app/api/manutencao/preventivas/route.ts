@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -47,6 +48,12 @@ export async function POST(req: Request) {
   if (!equipamento) return NextResponse.json({ error: "Equipamento não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, equipamento.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite programar manutenções preventivas." },
+      { status: 403 }
+    );
   }
 
   const preventiva = await prisma.manutencaoPreventiva.create({

@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
 import { getUserEmpresas } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -43,6 +44,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!existing.empresaIds.some((eid) => empresasPermitidas.includes(eid))) {
       return NextResponse.json({ error: "Você não pode editar prestadores desta loja." }, { status: 403 });
     }
+  }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar prestadores." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();
@@ -85,6 +92,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     if (!existing.empresaIds.some((eid) => empresasPermitidas.includes(eid))) {
       return NextResponse.json({ error: "Você não pode excluir prestadores desta loja." }, { status: 403 });
     }
+  }
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir prestadores." },
+      { status: 403 }
+    );
   }
   if (existing._count.orcamentos > 0 || existing._count.registros > 0) {
     return NextResponse.json(

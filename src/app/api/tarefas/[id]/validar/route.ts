@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { logTaskHistory, notifyUser } from "@/lib/tarefas-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -25,6 +26,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const canValidate = task.validatorId === session.user.id || MANAGER_ROLES.includes(session.user.role);
   if (!canValidate) {
     return NextResponse.json({ error: "Você não é o responsável pela validação desta tarefa." }, { status: 403 });
+  }
+  // Transição de status de uma tarefa já existente (AGUARDANDO_VALIDACAO -> CONCLUIDA/EM_ANDAMENTO),
+  // nunca cria uma Task nova — mesmo critério de canEdit já usado em estoque/contagens/[id] e
+  // estoque/transferencias/[id].
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite validar tarefas." },
+      { status: 403 }
+    );
   }
 
   const body = await req.json();

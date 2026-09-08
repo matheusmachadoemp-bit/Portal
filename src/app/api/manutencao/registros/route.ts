@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { MANAGER_ROLES, logChamadoHistorico, notifyManutencaoUser } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
 
 const ADVANCE_FROM_STATUSES = ["ABERTO", "AGUARDANDO_AVALIACAO", "AGUARDANDO_ORCAMENTO", "AGUARDANDO_APROVACAO", "APROVADO", "AGUARDANDO_PECA"];
 
@@ -72,6 +73,13 @@ export async function POST(req: Request) {
     if (preventivaOcorrencia.preventiva.equipamento.empresaId !== equipamento.empresaId) {
       return NextResponse.json({ error: "Esta ocorrência preventiva não pertence a essa loja." }, { status: 403 });
     }
+  }
+
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite registrar manutenções." },
+      { status: 403 }
+    );
   }
 
   const valorMaoDeObra = Number(body.valorMaoDeObra) || 0;
