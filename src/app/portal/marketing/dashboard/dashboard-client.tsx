@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -292,8 +293,9 @@ export function DashboardClient({
                   className="nord-card p-2 flex flex-col gap-1 hover:border-nord-blue/50"
                 >
                   {/\.(png|jpe?g|webp|gif)$/i.test(f.fileUrl) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={f.fileUrl} alt={f.name} className="w-full h-16 object-cover rounded" />
+                    <div className="relative w-full h-16">
+                      <Image src={f.fileUrl} alt={f.name} fill className="object-cover rounded" />
+                    </div>
                   ) : (
                     <div className="w-full h-16 rounded bg-nord-panel flex items-center justify-center">
                       <DynamicIcon name="File" size={20} className="text-nord-gray" />

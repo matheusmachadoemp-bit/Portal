@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { Plus, Trash2, Trophy, Award } from "lucide-react";
 import { Section, ProgressBar, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -132,8 +133,7 @@ export function VendaAcumuladaClient({
               <div key={w.employeeId} className="nord-card p-4 flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   {w.photo ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={w.photo} alt={w.name} className="w-11 h-11 rounded-full object-cover shrink-0" />
+                    <Image src={w.photo} alt={w.name} width={44} height={44} className="w-11 h-11 rounded-full object-cover shrink-0" />
                   ) : (
                     <div className="w-11 h-11 rounded-full bg-nord-panel flex items-center justify-center text-nord-gray text-sm font-medium shrink-0">
                       {w.name.slice(0, 2).toUpperCase()}

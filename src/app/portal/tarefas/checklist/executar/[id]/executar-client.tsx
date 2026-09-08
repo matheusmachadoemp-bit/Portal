@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { upload } from "@vercel/blob/client";
 import { ArrowLeft, Camera, CheckCircle2, Circle, Clock, AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
@@ -235,7 +236,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
                   .filter((f) => !f.itemResponseId)
                   .map((f) => (
                     <a key={f.id} href={f.fileUrl} target="_blank" rel="noreferrer">
-                      <img src={f.fileUrl} alt={f.fileName} className="w-12 h-12 object-cover rounded-lg border border-nord-border" />
+                      <Image src={f.fileUrl} alt={f.fileName} width={48} height={48} className="w-12 h-12 object-cover rounded-lg border border-nord-border" />
                     </a>
                   ))}
               </div>
@@ -357,7 +358,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
                     <div className="flex gap-1.5 flex-wrap">
                       {itemPhotos.map((f) => (
                         <a key={f.id} href={f.fileUrl} target="_blank" rel="noreferrer">
-                          <img src={f.fileUrl} alt={f.fileName} className="w-12 h-12 object-cover rounded-lg border border-nord-border" />
+                          <Image src={f.fileUrl} alt={f.fileName} width={48} height={48} className="w-12 h-12 object-cover rounded-lg border border-nord-border" />
                         </a>
                       ))}
                     </div>

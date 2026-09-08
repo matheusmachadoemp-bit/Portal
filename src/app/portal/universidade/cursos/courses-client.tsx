@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Plus, Pencil, Trash2, PlayCircle, Clock, Award } from "lucide-react";
 import { CourseBuilderModal } from "../course-builder-modal";
 import { ConfirmDialog } from "@/components/ui/modal";
@@ -118,10 +119,9 @@ export function CoursesClient({
           const statusOpt = COURSE_STATUS_OPTIONS.find((s) => s.key === c.status);
           return (
             <div key={c.id} className="nord-card overflow-hidden flex flex-col">
-              <div className="h-28 bg-nord-panel flex items-center justify-center">
+              <div className="relative h-28 bg-nord-panel flex items-center justify-center">
                 {c.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover" />
+                  <Image src={c.imageUrl} alt={c.name} fill className="object-cover" />
                 ) : (
                   <PlayCircle size={32} className="text-nord-gray" />
                 )}
