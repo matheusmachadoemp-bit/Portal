@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { getUserEmpresas } from "@/lib/empresa";
 import {
   aprovarResgate,
   cancelarResgate,
@@ -33,26 +34,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Sem permissão para gerenciar resgates." }, { status: 403 });
   }
 
+  const empresasPermitidas = (await getUserEmpresas(session.user.id, session.user.role)).map((e) => e.id);
+
   if (action === "aprovar") {
-    const result = await aprovarResgate(id, session.user.id, body.dataPrevista ? new Date(body.dataPrevista) : undefined);
+    const result = await aprovarResgate(
+      id,
+      session.user.id,
+      body.dataPrevista ? new Date(body.dataPrevista) : undefined,
+      empresasPermitidas
+    );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
 
   if (action === "recusar") {
-    const result = await recusarResgate(id, session.user.id, String(body.motivo ?? ""));
+    const result = await recusarResgate(id, session.user.id, String(body.motivo ?? ""), empresasPermitidas);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
 
   if (action === "disponivel") {
-    const result = await marcarDisponivel(id);
+    const result = await marcarDisponivel(id, empresasPermitidas);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
 
   if (action === "entregar") {
-    const result = await confirmarEntrega(id);
+    const result = await confirmarEntrega(id, empresasPermitidas);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }

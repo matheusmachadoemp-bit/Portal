@@ -15,6 +15,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
 
+  const existingItem = await prisma.taskChecklistItem.findUnique({ where: { id: itemId } });
+  if (!existingItem || existingItem.taskId !== id) {
+    return NextResponse.json({ error: "Item não encontrado nesta tarefa." }, { status: 404 });
+  }
+
   const body = await req.json();
   const done = !!body.done;
 
@@ -37,6 +42,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!task) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, task.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+
+  const existingItem = await prisma.taskChecklistItem.findUnique({ where: { id: itemId } });
+  if (!existingItem || existingItem.taskId !== id) {
+    return NextResponse.json({ error: "Item não encontrado nesta tarefa." }, { status: 404 });
   }
 
   await prisma.taskChecklistItem.delete({ where: { id: itemId } });
