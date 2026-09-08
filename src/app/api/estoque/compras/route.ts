@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -32,6 +33,12 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!RECEBIMENTO_MANAGE_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não tem permissão para registrar pedidos de compra." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "estoque", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite registrar pedidos de compra." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { ingredientCostPerUnit } from "@/lib/estoque";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -32,6 +33,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  // Esta rota só atualiza uma contagem já existente (lançamento de itens contados e transições
+  // de status como concluir/aprovar/reabrir) — nunca cria uma StockCount nova (isso é feito em
+  // POST /api/estoque/contagens). Por isso trata como canEdit.
+  if (!(await hasModulePermission(session.user.id, "estoque", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar contagens de estoque." },
+      { status: 403 }
+    );
   }
 
   // --- Atualização item a item (contagem em andamento) ---

@@ -2,12 +2,22 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json({ error: "Sem permissão para alterar esta configuração." }, { status: 403 });
+  }
+  // Upsert de configuração por categoria (cria na primeira vez, atualiza depois) — mesmo
+  // critério usado em estoque/configuracoes: é uma tela de configuração, não um cadastro
+  // recorrente, então trata como canEdit.
+  if (!(await hasModulePermission(session.user.id, "ficha-tecnica", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite alterar as configurações de qualidade." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();
