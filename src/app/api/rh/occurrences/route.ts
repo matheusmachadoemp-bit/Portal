@@ -19,6 +19,7 @@ export async function GET(req: Request) {
       ...(employeeId ? { employeeId } : {}),
     },
     orderBy: { date: "desc" },
+    take: 300,
     include: { employee: { select: { name: true, setor: true } }, createdBy: { select: { name: true } } },
   });
   return NextResponse.json({ occurrences });

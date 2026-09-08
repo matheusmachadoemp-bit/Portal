@@ -13,6 +13,7 @@ export async function GET() {
   const tasks = await prisma.marketingTask.findMany({
     where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: [{ date: "asc" }, { order: "asc" }],
+    take: 1000,
     include: {
       responsavel: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
