@@ -5,6 +5,12 @@ import { auth } from "@/auth";
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return NextResponse.json(
+      { error: "Sem permissão para acessar os cursos." },
+      { status: 403 }
+    );
+  }
   const courses = await prisma.course.findMany({ orderBy: { createdAt: "desc" } });
   return NextResponse.json({ courses });
 }
@@ -12,6 +18,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return NextResponse.json(
+      { error: "Sem permissão para cadastrar cursos." },
+      { status: 403 }
+    );
+  }
   const body = await req.json();
 
   const course = await prisma.course.create({

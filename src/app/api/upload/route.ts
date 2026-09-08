@@ -27,7 +27,6 @@ export async function POST(req: Request) {
           "application/vnd.openxmlformats-officedocument.*",
           "application/vnd.ms-excel",
           "application/msword",
-          "text/*",
         ],
         addRandomSuffix: true,
         maximumSizeInBytes: 200 * 1024 * 1024,

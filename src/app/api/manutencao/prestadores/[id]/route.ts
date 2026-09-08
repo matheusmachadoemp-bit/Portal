@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
+import { getUserEmpresas } from "@/lib/empresa";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const prestador = await prisma.prestador.findUnique({
-    where: { id },
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+  const empresaIds = empresaIdsForContext(ctx);
+
+  const prestador = await prisma.prestador.findFirst({
+    where: { id, OR: [{ empresaIds: { isEmpty: true } }, { empresaIds: { hasSome: empresaIds } }] },
     include: {
       orcamentos: { orderBy: { createdAt: "desc" }, include: { chamado: { select: { id: true, protocolo: true, titulo: true } } } },
       registros: { orderBy: { data: "desc" }, include: { equipamento: { select: { id: true, nome: true, codigo: true } } } },
@@ -32,6 +38,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existing = await prisma.prestador.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (existing.empresaIds.length > 0) {
+    const empresasPermitidas = (await getUserEmpresas(session.user.id, session.user.role)).map((e) => e.id);
+    if (!existing.empresaIds.some((eid) => empresasPermitidas.includes(eid))) {
+      return NextResponse.json({ error: "Você não pode editar prestadores desta loja." }, { status: 403 });
+    }
+  }
 
   const body = await req.json();
   const prestador = await prisma.prestador.update({
@@ -68,6 +80,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     include: { _count: { select: { orcamentos: true, registros: true } } },
   });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (existing.empresaIds.length > 0) {
+    const empresasPermitidas = (await getUserEmpresas(session.user.id, session.user.role)).map((e) => e.id);
+    if (!existing.empresaIds.some((eid) => empresasPermitidas.includes(eid))) {
+      return NextResponse.json({ error: "Você não pode excluir prestadores desta loja." }, { status: 403 });
+    }
+  }
   if (existing._count.orcamentos > 0 || existing._count.registros > 0) {
     return NextResponse.json(
       { error: "Este prestador tem orçamentos ou manutenções vinculadas e não pode ser excluído. Desative-o em vez disso." },

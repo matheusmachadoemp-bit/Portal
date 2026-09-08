@@ -6,6 +6,12 @@ import { encryptSecret } from "@/lib/vault";
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return NextResponse.json(
+      { error: "Sem permissão para acessar o cofre de senhas." },
+      { status: 403 }
+    );
+  }
 
   const entries = await prisma.vaultEntry.findMany({
     orderBy: { systemName: "asc" },
@@ -30,6 +36,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return NextResponse.json(
+      { error: "Sem permissão para cadastrar senhas no cofre." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   const entry = await prisma.vaultEntry.create({

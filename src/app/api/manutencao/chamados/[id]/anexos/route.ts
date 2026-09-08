@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import type { ManutencaoAnexoTipo } from "@prisma/client";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { logChamadoHistorico } from "@/lib/manutencao-server";
+import { isValidBlobUrl, logChamadoHistorico } from "@/lib/manutencao-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -21,6 +21,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ? body.anexos
     : [];
   if (anexos.length === 0) return NextResponse.json({ error: "Nenhum anexo enviado." }, { status: 400 });
+  if (anexos.some((a) => !isValidBlobUrl(a.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
+  }
 
   await prisma.manutencaoAnexo.createMany({
     data: anexos.map((a) => ({

@@ -16,6 +16,9 @@ async function findAccessibleSurvey(id: string) {
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!CAN_MANAGE_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Sem permissão para ver os convites desta pesquisa." }, { status: 403 });
+  }
 
   const { id } = await params;
   const survey = await findAccessibleSurvey(id);

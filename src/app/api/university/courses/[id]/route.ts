@@ -2,14 +2,18 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const course = await prisma.trainingCourse.findUnique({
-    where: { id },
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
+  const course = await prisma.trainingCourse.findFirst({
+    where: { id, OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }] },
     include: {
       modules: { orderBy: { order: "asc" } },
       quiz: { include: { questions: { include: { options: true }, orderBy: { order: "asc" } } } },

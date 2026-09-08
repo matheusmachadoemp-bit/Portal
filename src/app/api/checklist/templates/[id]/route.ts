@@ -28,6 +28,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where: { templateId: id },
     select: { id: true, _count: { select: { respostas: true } } },
   });
+  const existingIds = new Set(existingItens.map((item) => item.id));
+
+  // Todo item enviado com um `id` precisa realmente pertencer a este template —
+  // caso contrário alguém poderia sobrescrever um item de outro checklist só
+  // informando o id dele no corpo da requisição.
+  const invalidItemId = incomingItens.find((item) => item.id && !existingIds.has(item.id as string));
+  if (invalidItemId) {
+    return NextResponse.json({ error: "Item de checklist inválido para este template." }, { status: 400 });
+  }
+
   const incomingIds = new Set(incomingItens.map((item) => item.id).filter(Boolean));
   const removedItens = existingItens.filter((item) => !incomingIds.has(item.id));
   const removedIdsToDelete = removedItens.filter((item) => item._count.respostas === 0).map((item) => item.id);
