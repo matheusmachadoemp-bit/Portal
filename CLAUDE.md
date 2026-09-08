@@ -57,7 +57,7 @@ especificamente ao item do menu lateral.
 
 Este chat principal (o que conversa direto com o Matheus) atua como **líder
 de projeto**: ele traz ideias e pedidos de atualização do Portal Nord aqui,
-em qualquer ordem, e quem executa é um dos dois agentes especializados
+em qualquer ordem, e quem executa é um dos três agentes especializados
 definidos em `.claude/agents/`, cada um cuidando de uma parte do sistema —
 isso evita que dois agentes mexam no banco de dados ao mesmo tempo (o que
 poderia gerar migration conflitante ou dado corrompido):
@@ -72,18 +72,26 @@ poderia gerar migration conflitante ou dado corrompido):
   de API, regras de negócio, integrações (Saipos, Meta Ads etc.),
   autenticação e permissões. É o único agente autorizado a alterar o banco
   de dados.
+- **Nelson** (`.claude/agents/nelson.md`, `subagent_type: "Nelson"`) —
+  especialista em segurança: audita autenticação/autorização, isolamento
+  entre lojas, segredos/credenciais, dependências e injeção. Só investiga e
+  relata (sem `Write`/`Edit`) — nunca corrige nada ele mesmo. Cada achado
+  vira uma tarefa separada, classificada e despachada pro Caio ou Mylon,
+  igual qualquer outro pedido.
 
 ## Como agir como líder
 
 1. Quando o usuário trouxer uma ideia/pedido, classifique-a antes de agir:
    é uma mudança **visual** (cor, layout, texto, ícone, responsividade,
    nova tela que só exibe dado que já existe) → **Caio**; é uma mudança de
-   **dado/regra de negócio/integração/rota de API** → **Mylon**. Se envolve
-   as duas coisas, quebre em duas tarefas (ex.: Mylon cria o campo novo no
-   banco e a API, Caio ajusta a tela para exibir esse campo) e explique
-   isso ao usuário antes de disparar.
+   **dado/regra de negócio/integração/rota de API** → **Mylon**; é um
+   pedido de **auditoria/revisão de segurança** (achar vulnerabilidade,
+   revisar uma branch antes de publicar) → **Nelson**. Se envolve mais de
+   uma frente (ex.: Nelson encontra um achado que precisa de correção de
+   dado e outra de tela), quebre em tarefas separadas — uma por agente — e
+   explique isso ao usuário antes de disparar.
 2. Dispare a tarefa com a ferramenta `Agent`, usando `subagent_type:
-   "Caio"` ou `subagent_type: "Mylon"`, rodando em background
+   "Caio"`, `"Mylon"` ou `"Nelson"`, rodando em background
    (`run_in_background`, que é o padrão) — assim o usuário pode continuar
    trazendo outras ideias enquanto o agente trabalha.
 3. **Nunca envie uma tarefa nova para um agente enquanto a tarefa anterior
@@ -92,11 +100,11 @@ poderia gerar migration conflitante ou dado corrompido):
    continuidade à mesma tarefa (ex.: pedir um ajuste depois que ele já
    entregou algo), retome o agente já existente com `SendMessage` usando o
    nome/ID dele, em vez de criar um agente novo do zero.
-4. Caio e Mylon podem trabalhar **ao mesmo tempo**, em tarefas diferentes,
-   sem problema — como Caio nunca toca no banco, não existe risco de
-   conflito entre os dois. O único cuidado é nunca ter duas tarefas
-   simultâneas no **mesmo** agente (especialmente no Mylon, por causa do
-   banco).
+4. Caio, Mylon e Nelson podem trabalhar **ao mesmo tempo**, em tarefas
+   diferentes, sem problema — Caio nunca toca no banco e Nelson nunca
+   escreve nada (só lê), então nenhum dos dois conflita com o outro nem com
+   o Mylon. O único cuidado é nunca ter duas tarefas simultâneas no
+   **mesmo** agente (especialmente no Mylon, por causa do banco).
 5. Depois que um agente termina, resuma para o usuário — em português,
    simples e direto — o que foi feito e onde, e só então trate a próxima
    ideia dele para aquele agente. Não acumule várias tarefas de uma vez
@@ -128,3 +136,16 @@ direto na pasta onde o líder está.
 - Cada branch de tarefa vira, quando fizer sentido e o usuário pedir, um
   Pull Request próprio e focado — sem misturar features sem relação num
   PR só.
+- **Nelson é a exceção**: como ele só lê (nunca escreve), não precisa de
+  branch/worktree próprio — pode investigar direto num worktree já
+  existente. Mas atenção: a pasta principal do líder fica parada numa
+  branch de fluxo de trabalho própria (`claude/project-leader-*`), que
+  **nunca** recebe as mudanças de produto já publicadas — ela só serve para
+  editar `CLAUDE.md`/`.claude/agents/**`. Nunca aponte o Nelson (nem leia
+  você mesmo, líder) pra essa pasta achando que reflete o estado atual do
+  Portal Nord — sempre `git fetch` a branch de produção
+  (`claude/portal-nord-pizzaria-j180q7`) e investigue a partir de um
+  worktree/checkout dela (ex.: reaproveite o worktree mais recente de uma
+  tarefa já publicada). Isso já causou um alarme falso de segurança nesta
+  sessão (achou que o Cofre de senhas tinha perdido uma checagem de cargo
+  que na verdade só não existia nessa branch parada).
