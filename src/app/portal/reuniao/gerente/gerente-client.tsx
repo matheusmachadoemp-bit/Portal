@@ -9,7 +9,6 @@ import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
-import { exportMeetingReportPdf } from "@/lib/reuniao-pdf";
 
 type Meeting = {
   id: string;
@@ -163,7 +162,8 @@ export function GerenteClient({
     return total;
   }, [bateuFaturamento, bateuCmv, bateuTurnover, bateuChecklist, form]);
 
-  function exportPdf() {
+  async function exportPdf() {
+    const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
     const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
 
     function historico<K extends "faturamentoTotalValor" | "cmvPercent" | "turnoverPercent" | "checklistOperacionalPercent">(
