@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
+import { hasModulePermission } from "@/lib/authz";
 
 async function ensureAdmin() {
   const session = await auth();
@@ -13,6 +14,12 @@ async function ensureAdmin() {
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await ensureAdmin();
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await hasModulePermission(user.id, "usuarios", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar usuários." },
+      { status: 403 }
+    );
+  }
   const { id } = await params;
   const body = await req.json();
 
@@ -54,6 +61,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await ensureAdmin();
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await hasModulePermission(user.id, "usuarios", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir usuários." },
+      { status: 403 }
+    );
+  }
   const { id } = await params;
   if (id === user.id) {
     return NextResponse.json({ error: "Você não pode excluir seu próprio usuário." }, { status: 400 });

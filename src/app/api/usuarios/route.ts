@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
+import { hasModulePermission } from "@/lib/authz";
 
 async function ensureAdmin() {
   const session = await auth();
@@ -37,6 +38,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const user = await ensureAdmin();
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await hasModulePermission(user.id, "usuarios", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar usuários." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   const passwordHash = await bcrypt.hash(body.password || "Nord@123", 10);

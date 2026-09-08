@@ -3,12 +3,19 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { encryptSecret } from "@/lib/vault";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json({ error: "Sem permissão para alterar esta configuração." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "configuracoes", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite alterar as configurações da Saipos." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();

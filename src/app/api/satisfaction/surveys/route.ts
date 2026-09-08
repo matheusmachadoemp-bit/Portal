@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeSurveyStatus } from "@/lib/satisfaction";
 import type { SatisfactionQuestionType, SatisfactionTheme } from "@prisma/client";
+import { hasModulePermission } from "@/lib/authz";
 
 const CAN_CREATE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
@@ -35,6 +36,12 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!CAN_CREATE_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Sem permissão para criar pesquisas." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar pesquisas de satisfação." },
+      { status: 403 }
+    );
   }
 
   const ctx = await getActiveEmpresaContext();
