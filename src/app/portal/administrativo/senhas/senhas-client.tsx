@@ -36,6 +36,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showFormPassword, setShowFormPassword] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/admin/vault");
@@ -46,6 +47,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
+    setShowFormPassword(false);
     setShowForm(true);
   }
 
@@ -60,6 +62,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
       responsavel: e.responsavel ?? "",
       observacao: e.observacao ?? "",
     });
+    setShowFormPassword(false);
     setShowForm(true);
   }
 
@@ -192,7 +195,22 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
             <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="input" />
           </Field>
           <Field label={editing ? "Nova senha (deixe em branco para manter)" : "Senha"}>
-            <input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input" />
+            <div className="relative">
+              <input
+                type={showFormPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="input pr-8"
+              />
+              <button
+                type="button"
+                onClick={() => setShowFormPassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-nord-gray hover:text-white"
+                tabIndex={-1}
+              >
+                {showFormPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
           </Field>
           <Field label="Categoria">
             <input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input" />
