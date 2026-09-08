@@ -1,0 +1,20 @@
+-- Segurança: Course.senha (senha de login da plataforma externa do curso, ex.
+-- usuário/senha da Udemy/Coursera) era gravada em texto puro no banco. Agora
+-- passa a ser gravada criptografada (mesma criptografia reversível já usada
+-- em VaultEntry.passwordCipher / Empresa.saiposApiToken /
+-- Empresa.metaAdsAccessToken, via encryptSecret/decryptSecret de
+-- src/lib/vault.ts). Renomeamos a coluna para "senhaCipher" para deixar
+-- explícito, pelo próprio nome, que o conteúdo é criptografado — evitando
+-- que alguém no futuro volte a gravar texto puro nela achando que "senha" é
+-- só uma coluna comum.
+--
+-- RENAME COLUMN preserva os dados já existentes (nenhuma linha é apagada ou
+-- perdida) — só troca o nome da coluna. Os valores das linhas já cadastradas
+-- continuam em texto puro logo após esta migration (renomear não criptografa
+-- nada sozinho); a correção desses valores legados acontece de forma
+-- automática, um registro por vez, na primeira vez que alguém pedir para ver
+-- a senha de cada curso pela nova rota GET /api/admin/courses/[id]/senha
+-- (ver lógica de detecção de formato em src/lib/vault.ts,
+-- isEncryptedSecret). Não é necessário nenhum acesso direto ao banco de
+-- produção para essa correção.
+ALTER TABLE "Course" RENAME COLUMN "senha" TO "senhaCipher";

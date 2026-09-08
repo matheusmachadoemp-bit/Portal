@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 type IngredienteInput = { ingredientId: string; quantidadeUsada: number; unidade: string };
 
@@ -20,6 +21,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     },
   });
   if (!item) return NextResponse.json({ error: "Produto de produção não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, item.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
 
   return NextResponse.json({ item });
 }
@@ -30,6 +34,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode editar produtos de produção." }, { status: 403 });
   }
+
+  const { id } = await params;
+  const existing = await prisma.productionItem.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Produto de produção não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "producao", "canEdit"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite editar produtos de produção." },
@@ -37,7 +48,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const { id } = await params;
   const body = await req.json();
   const ingredientes: IngredienteInput[] | undefined = Array.isArray(body.ingredientes) ? body.ingredientes : undefined;
 
@@ -89,6 +99,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Você não pode excluir produtos de produção." }, { status: 403 });
   }
+
+  const { id } = await params;
+  const existing = await prisma.productionItem.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Produto de produção não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "producao", "canDelete"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite excluir produtos de produção." },
@@ -96,7 +113,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     );
   }
 
-  const { id } = await params;
   // Mantém o histórico de ordens já geradas — só desativa, não apaga (mesmo
   // espírito de "active" usado em Ingredient/Product).
   await prisma.productionItem.update({ where: { id }, data: { active: false } });

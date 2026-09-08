@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { requireActiveSingleEmpresa } from "@/lib/empresa";
+import { prisma } from "@/lib/prisma";
+import { assertEmpresaAccess, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { lancarAjusteManual } from "@/lib/loja-nord-server";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -35,6 +36,18 @@ export async function POST(req: Request) {
   }
   if (!body?.descricao?.trim()) {
     return NextResponse.json({ error: "Descreva o motivo do lançamento." }, { status: 400 });
+  }
+
+  // O saldo de pontos é único por colaborador (não por loja): sem essa checagem, um
+  // gestor/supervisor da loja ativa poderia lançar bonificação ou ajuste negativo pro userId de
+  // um colaborador de outra loja, afetando um saldo que essa pessoa pode resgatar depois.
+  // Confere acesso do colaborador ALVO (não de quem está logado) à loja ativa antes de aplicar.
+  const targetUser = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true, role: true } });
+  if (!targetUser) {
+    return NextResponse.json({ error: "Colaborador não encontrado." }, { status: 404 });
+  }
+  if (!(await assertEmpresaAccess(targetUser.id, targetUser.role, empresa.id))) {
+    return NextResponse.json({ error: "Esse colaborador não pertence a esta loja." }, { status: 403 });
   }
 
   const result = await lancarAjusteManual({

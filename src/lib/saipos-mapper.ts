@@ -59,12 +59,38 @@ export function isSaiposSaleCanceled(record: SaiposSaleRecord): boolean {
   return normalize(record.canceled) === "y" || normalize(record.canceled) === "s";
 }
 
+/**
+ * Diferente dos demais campos deste mapeamento (todos lidos com `??`/optional
+ * chaining para tolerar ausência), `id_sale` e `shift_date` não têm um
+ * fallback razoável: sem eles não dá pra identificar a venda nem o dia a que
+ * ela pertence. Se a Saipos algum dia mudar/omitir esses campos, é melhor
+ * falhar aqui com uma mensagem clara (capturada por quem chama esta função)
+ * do que gravar `saiposId: "undefined"` ou uma data inválida silenciosamente.
+ */
 export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {
+  if (record.id_sale === undefined || record.id_sale === null) {
+    throw new Error(
+      "Uma venda retornada pela Saipos não tem o campo obrigatório id_sale — não é possível identificá-la."
+    );
+  }
+
+  const shiftDate = new Date(record.shift_date);
+  if (Number.isNaN(shiftDate.getTime())) {
+    throw new Error(
+      `Venda ${record.id_sale} da Saipos veio com shift_date inválido ou ausente (recebido: ${JSON.stringify(record.shift_date)}).`
+    );
+  }
+
+  const dateTime = new Date(record.created_at ?? record.shift_date);
+
   return {
     empresaId,
     saiposId: String(record.id_sale),
-    shiftDate: new Date(record.shift_date),
-    dateTime: new Date(record.created_at ?? record.shift_date),
+    shiftDate,
+    // created_at é só informativo (hora exata da venda); se vier num formato
+    // inválido, cai para o shiftDate (já validado acima) em vez de gravar
+    // uma data quebrada.
+    dateTime: Number.isNaN(dateTime.getTime()) ? shiftDate : dateTime,
     channel: mapSaiposChannel(record),
     platform: mapSaiposPlatform(record),
     formaPagamento: mapSaiposPaymentMethod(record),

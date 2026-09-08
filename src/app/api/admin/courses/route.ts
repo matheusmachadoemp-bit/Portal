@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { encryptSecret } from "@/lib/vault";
 
 export async function GET() {
   const session = await auth();
@@ -12,7 +13,14 @@ export async function GET() {
     );
   }
   const courses = await prisma.course.findMany({ orderBy: { createdAt: "desc" } });
-  return NextResponse.json({ courses });
+  // Nunca devolve senhaCipher pra listagem (nem cru, nem decifrado) — só um
+  // indicador booleano de que existe senha cadastrada. Ver senha de verdade
+  // é só pela rota dedicada GET /api/admin/courses/[id]/senha.
+  const sanitized = courses.map(({ senhaCipher, ...course }) => ({
+    ...course,
+    hasSenha: !!senhaCipher,
+  }));
+  return NextResponse.json({ courses: sanitized });
 }
 
 export async function POST(req: Request) {
@@ -32,7 +40,7 @@ export async function POST(req: Request) {
       plataforma: body.plataforma || null,
       link: body.link || null,
       usuario: body.usuario || null,
-      senha: body.senha || null,
+      senhaCipher: body.senha ? encryptSecret(body.senha) : null,
       responsavel: body.responsavel || null,
       percentualConcluido: Number(body.percentualConcluido) || 0,
       startDate: body.startDate ? new Date(body.startDate) : null,
@@ -43,5 +51,9 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({ course });
+  // Mesmo cuidado do GET: não devolve senhaCipher na resposta (aqui já seria
+  // o valor cifrado, não a senha em texto puro, mas não há motivo pra
+  // expor esse campo pro front-end mesmo assim).
+  const { senhaCipher, ...sanitizedCourse } = course;
+  return NextResponse.json({ course: { ...sanitizedCourse, hasSenha: !!senhaCipher } });
 }
