@@ -2,6 +2,7 @@
 
 import { Search, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
+import { NotificationBell } from "@/components/sidebar/notification-bell";
 import { useMobileSidebar } from "@/components/sidebar/mobile-sidebar-context";
 import { UserMenu, type UserProfile } from "./user-menu";
 
@@ -69,6 +70,7 @@ export function Topbar({
           />
         </div>
         <Clock />
+        <NotificationBell />
         <UserMenu user={user} />
       </div>
     </header>

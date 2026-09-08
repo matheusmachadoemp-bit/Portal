@@ -43,8 +43,8 @@ export async function GET(req: Request) {
   const [tarefas, checklist, metas, pesquisas] = await Promise.all([
     loadRotinaTarefas(empresaId, userId, empresa.name, nomeUsuario),
     loadRotinaChecklist(empresaId, userId, empresa.name, nomeUsuario),
-    loadRotinaMetas(empresaId, empresa.name, nomeUsuario),
-    loadRotinaPesquisas(empresaId, emailUsuario, empresa.name, nomeUsuario),
+    loadRotinaMetas(empresaId, userId, empresa.name, nomeUsuario),
+    loadRotinaPesquisas(empresaId, userId, emailUsuario, empresa.name, nomeUsuario),
   ]);
 
   const itens = sortRotinaItems([...tarefas, ...checklist, ...metas, ...pesquisas]);

@@ -47,6 +47,15 @@ model User {
   defaultEmpresa      Empresa?           @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
   permissionProfileId String?
   permissionProfile   PermissionProfile? @relation(fields: [permissionProfileId], references: [id])
+  // Ficha de RH ligada a este login. `@unique` garante 1:1 nos dois
+  // sentidos (nunca dois Users apontando pro mesmo Employee). Substitui aos
+  // poucos o cruzamento por e-mail/nome que src/lib/inicio.ts fazia em
+  // tempo de execução (loadRotinaPesquisas, loadRotinaMetas) — continua
+  // null pra quem não tem ficha de RH (ex.: alguns ADMINISTRADOR) ou pra
+  // quem o backfill de e-mail não conseguiu casar sem ambiguidade; nesses
+  // casos o cruzamento antigo continua funcionando como fallback.
+  employeeId          String?            @unique
+  employee            Employee?          @relation(fields: [employeeId], references: [id])
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -100,6 +109,11 @@ model User {
   trainingCertificates             TrainingCertificate[]
   trainingBadges                   TrainingUserBadge[]
   trainingXpEvents                 TrainingXpEvent[]
+  // Conquistas gerais (não só treinamento) — ver Badge/UserBadge abaixo.
+  // Deliberadamente um model novo, não uma generalização de
+  // TrainingBadge/TrainingUserBadge (que continuam só do módulo de
+  // Universidade/Cursos).
+  badges                           UserBadge[]
   trainingLibraryItems             TrainingLibraryItem[]
   customerNotesAuthored            CustomerNote[]             @relation("CustomerNoteAuthor")
   crmSegmentsCreated               CrmSegment[]               @relation("CrmSegmentCreatedBy")
@@ -1418,6 +1432,9 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
+  // Login (User) ligado a esta ficha de RH — ver User.employeeId. Null
+  // quando o colaborador não tem conta de acesso ao Portal.
+  user                    User?
   occurrences             Occurrence[]
   waiterSales             WaiterSaleEntry[]
   sales                   Sale[]
@@ -3116,6 +3133,45 @@ model TrainingLibraryItem {
   uploadedById String
   uploadedBy   User     @relation(fields: [uploadedById], references: [id])
   createdAt    DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// CONQUISTAS (BADGES) — sistema geral de medalhas, pedido para a Tela de
+// Início (Colaborador) e aberto a virar critério de QUALQUER módulo, não só
+// treinamento. `TrainingBadge`/`TrainingUserBadge` (acima) continuam
+// existindo só para o módulo de Universidade/Cursos — não foram renomeados
+// nem generalizados de propósito, para não arriscar quebrar aquele módulo.
+// `Badge`/`UserBadge` aqui são aditivos e usados pelo restante do app.
+//
+// A concessão roda sob demanda (verificar-e-conceder, idempotente via
+// `@@unique([userId, badgeId])`), disparada por GET /api/inicio/conquistas
+// — ver src/lib/conquistas.ts. Não existe cron job para isso.
+// ---------------------------------------------------------------------------
+
+model Badge {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  icon        String   @default("Award")
+  color       String   @default("#eab308")
+  createdAt   DateTime @default(now())
+
+  users UserBadge[]
+}
+
+/**
+ * Uma medalha só é conquistada uma vez por usuário — `earnedAt` é a data da conquista, não um contador.
+ */
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  badgeId  String
+  badge    Badge    @relation(fields: [badgeId], references: [id])
+  earnedAt DateTime @default(now())
+
+  @@unique([userId, badgeId])
 }
 
 // ---------------------------------------------------------------------------

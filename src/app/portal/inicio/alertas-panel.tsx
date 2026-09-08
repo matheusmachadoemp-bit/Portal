@@ -3,9 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ClipboardX, CalendarX, TrendingDown, PackageX, Frown, Clock, CheckCircle2, ArrowRight } from "lucide-react";
+import {
+  ClipboardX,
+  CalendarX,
+  TrendingDown,
+  PackageX,
+  Frown,
+  Clock,
+  Wrench,
+  PauseCircle,
+  CalendarClock,
+  CheckCircle2,
+  ArrowRight,
+} from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { FormError } from "@/components/ui/modal";
+import type { AlertaItem, AlertaNivel, AlertaTipo } from "@/lib/inicio";
 
 // ---------------------------------------------------------------------------
 // "Alertas importantes" — GET /api/inicio/alertas?empresaId=X. Assim como a
@@ -13,27 +26,15 @@ import { FormError } from "@/components/ui/modal";
 // sempre "agora"), então este painel só refaz a busca quando a loja ativa
 // muda. Visual segue o mesmo padrão de card com borda colorida à esquerda já
 // usado em "Inteligência CRM" (src/app/portal/crm/dashboard/dashboard-client.tsx).
+//
+// `AlertaTipo`/`AlertaNivel`/`AlertaItem` vêm de src/lib/inicio.ts via
+// `import type` (apagado na compilação — o Prisma usado lá dentro nunca
+// entra no bundle do client) em vez de duplicados aqui: esse arquivo já
+// declarou seu próprio tipo local uma vez e ficou desatualizado quando a API
+// ganhou 3 tipos novos de alerta de manutenção (chamado_urgente,
+// equipamento_parado, manutencao_preventiva_atrasada) — importar direto
+// evita esse tipo de dessincronia se a lista crescer de novo no futuro.
 // ---------------------------------------------------------------------------
-
-type AlertaTipo =
-  | "checklist_atrasado"
-  | "tarefa_vencida"
-  | "meta_abaixo_ritmo"
-  | "estoque_baixo"
-  | "avaliacao_negativa"
-  | "aprovacao_pendente";
-
-type AlertaNivel = "urgente" | "atencao" | "informativo";
-
-type AlertaItem = {
-  tipo: AlertaTipo;
-  titulo: string;
-  loja: string;
-  setor: string | null;
-  tempoAtrasoOuPrazo: string;
-  nivel: AlertaNivel;
-  actionHref: string;
-};
 
 const TIPO_ICON: Record<AlertaTipo, LucideIcon> = {
   checklist_atrasado: ClipboardX,
@@ -42,6 +43,9 @@ const TIPO_ICON: Record<AlertaTipo, LucideIcon> = {
   estoque_baixo: PackageX,
   avaliacao_negativa: Frown,
   aprovacao_pendente: Clock,
+  chamado_urgente: Wrench,
+  equipamento_parado: PauseCircle,
+  manutencao_preventiva_atrasada: CalendarClock,
 };
 
 // Mesmos tons de --nord-danger / --nord-warning / --nord-blue do DESIGN_SYSTEM.md.

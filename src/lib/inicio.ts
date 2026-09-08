@@ -13,7 +13,13 @@ import {
 import { generateChecklistOccurrences, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { isTaskOverdue, effectiveTaskStatus } from "@/lib/tarefas";
 import { generateDueTaskOccurrences } from "@/lib/tarefas-server";
-import { computeGoalStatus, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE } from "@/lib/goals";
+import {
+  computeGoalStatus,
+  GOAL_CATEGORIES,
+  GOAL_CATEGORY_LABEL,
+  GOAL_CATEGORY_ROUTE,
+  type GoalCategoryKey,
+} from "@/lib/goals";
 
 // ---------------------------------------------------------------------------
 // Perfil da Tela de Início — mapeia o enum `Role` (login/permissões) para o
@@ -466,32 +472,192 @@ export async function loadRotinaChecklist(
 }
 
 /**
- * Metas individuais do usuário do período corrente, incluídas só quando
- * abaixo do ritmo esperado, perto do prazo (até `DIAS_LIMITE_URGENTE` dias)
- * ou já vencidas sem terem sido atingidas.
- *
- * `Goal.responsavel` é campo de texto livre — não existe relação com
- * `User`/`Employee` no schema hoje —, então o cruzamento é por igualdade de
- * nome (sem diferenciar maiúsculas/minúsculas) com `session.user.name`; não
- * bate se o nome digitado na meta divergir do nome de cadastro do usuário
- * (apelido, sobrenome a menos, etc.).
+ * `Employee` ligado diretamente a este usuário nesta empresa, via
+ * `User.employeeId` (ver prisma/schema.prisma e a migration
+ * `20260906100000_user_employee_link`). Um usuário só pode estar ligado a
+ * UM `Employee` no schema atual — se a ficha de RH dele for de outra
+ * empresa (ex.: um supervisor com acesso a mais de uma loja, mas ficha de
+ * RH só numa delas), tratamos como "sem ligação nesta empresa" (retorna
+ * `null`) para quem chama cair no cruzamento antigo por e-mail/nome.
+ * `null` também quando o usuário nunca foi casado (backfill não achou
+ * match inequívoco, ou o usuário foi criado depois do backfill).
  */
-export async function loadRotinaMetas(
+export async function findLinkedEmployee(
   empresaId: string,
-  nomeLoja: string,
-  nomeUsuario: string,
-  now: Date = new Date()
-): Promise<RotinaItem[]> {
-  if (!nomeUsuario.trim()) return [];
+  userId: string
+): Promise<{ id: string; name: string; setor: string; status: string } | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { employeeId: true } });
+  if (!user?.employeeId) return null;
 
-  const goals = await prisma.goal.findMany({
+  return prisma.employee.findFirst({
+    where: { id: user.employeeId, empresaId },
+    select: { id: true, name: true, setor: true, status: true },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// "Qual o setor do Líder" — descobre o setor (texto livre de
+// `Employee.setor`) do usuário logado, usado pelos painéis exclusivos do
+// perfil Líder: metas/checklist do setor (`mapSetorLivreParaGoalCategory`,
+// logo abaixo — usado por GET /api/inicio/metas-setores), "Colaboradores"
+// do setor (`loadColaboradoresDoSetor`, mais abaixo — GET
+// /api/inicio/colaboradores-setor) e o resumo de manutenção por setor
+// (`loadManutencaoResumo`, mais abaixo — GET /api/inicio/manutencao-resumo).
+//
+// IMPORTANTE — confiabilidade deste cruzamento (investigado nesta etapa):
+// `Employee.setor` é texto livre digitado por quem cadastra o colaborador.
+// Conferido o formulário de cadastro
+// (src/app/portal/rh/colaboradores/colaboradores-client.tsx): o campo
+// "Setor" é um `<input>` comum, SEM `<select>` e SEM sugestão nenhuma
+// (nem um `<datalist>`) — não existe validação nem lista fixa. Duas fichas
+// de RH do mesmo setor podem estar digitadas como "Cozinha", "cozinha",
+// "COZINHA" ou até "Cozinha/Produção".
+//
+// Já `Goal.category` e `ChecklistTemplate.setor` usam o enum `GoalCategory`
+// (6 valores fixos: GERENCIA, SALAO, COZINHA, DELIVERY, MARKETING,
+// ADMINISTRATIVO) — travado pelo schema, sem variação de escrita possível.
+// E `Equipamento.setor`/`Chamado.setor` (módulo de Manutenção) também são
+// texto livre, mas com sugestões (`SETOR_SUGESTOES`, em
+// src/lib/manutencao.ts: "Cozinha", "Salão", "Estoque", "Bar", "Delivery",
+// "Administrativo", "Área externa" — um `<datalist>`, não obrigatório).
+//
+// Ou seja, há 3 convenções de "setor" diferentes no schema hoje (RH,
+// Metas/Checklist, Manutenção) e só a de Metas/Checklist é um enum de
+// verdade. O cruzamento "setor do Líder" (`Employee.setor`) -> "setor da
+// meta/checklist" (`GoalCategory`) é FRÁGIL por natureza — mesmo tipo de
+// problema de convenção de texto já visto antes neste projeto com
+// `ChecklistTemplate.turno` (também texto livre, sem garantia de bater com
+// nenhuma lista). `mapSetorLivreParaGoalCategory` (abaixo) só reconhece uma
+// correspondência quando o texto do RH bate (ignorando acento/maiúscula/
+// minúscula) com a CHAVE do enum ("salao") ou com o RÓTULO em português já
+// usado no resto do app (`GOAL_CATEGORY_LABEL`, ex. "Salão"). Optamos por
+// NÃO inventar sinônimo nenhum (ex. "atendimento" -> SALAO, "motoboy" ->
+// DELIVERY): não há banco disponível neste ambiente de desenvolvimento para
+// validar contra dado real, e a única evidência hoje é o seed
+// (prisma/seed.ts), que usa exatamente "Cozinha", "Salão" e "Delivery" para
+// `Employee.setor` — mas seed é dado de demonstração, não prova de como o
+// RH cadastra em produção. Quando o texto não bate com nenhuma das 6
+// opções, o mapeamento retorna `null` (setor não identificado) — cada
+// chamador trata isso como "sem setor conhecido" (lista vazia ou resumo
+// zerado), nunca como erro nem como "mostrar tudo por engano". Se, na
+// prática, muitos Líderes ficarem sem setor identificado por causa disso,
+// a correção de raiz é transformar `Employee.setor` num `<select>` com as
+// mesmas opções de `GoalCategory` (mudança de tela + possível migração de
+// dados) — decisão maior, fora do escopo desta etapa.
+//
+// Já o cruzamento usado por `loadColaboradoresDoSetor` (`Employee.setor`
+// contra `Employee.setor` de outros colaboradores) e por
+// `loadManutencaoResumo` quando chamado com `setor` (`Employee.setor`
+// contra `Equipamento.setor`/`Chamado.setor`) são texto-livre contra
+// texto-livre — comparados só por igualdade (sem diferenciar maiúsculas/
+// minúsculas, mas SEM tentar mapear sinônimo), sem o risco de "bater com o
+// enum errado". Ainda frágeis se as duas pontas usarem convenções
+// diferentes (ex.: RH cadastra "Cozinha" mas a Manutenção registra o
+// equipamento como "Cozinha e Produção"), mas o pior caso é simplesmente
+// não achar nada — nunca misturar setor errado.
+// ---------------------------------------------------------------------------
+
+/**
+ * `Employee.setor` (texto livre) do usuário logado nesta empresa, via
+ * `findLinkedEmployee`. `null` quando o usuário não tem ficha de RH ligada
+ * nesta empresa (sem `User.employeeId`, ou ele aponta para um `Employee` de
+ * outra empresa) — "setor não identificado", nunca um erro.
+ */
+export async function loadSetorDoLider(empresaId: string, userId: string): Promise<string | null> {
+  const employee = await findLinkedEmployee(empresaId, userId);
+  return employee?.setor || null;
+}
+
+/** Remove acentos e normaliza maiúsculas/minúsculas/espaços — só para comparar texto livre sem depender de digitação exata (acento, caixa). */
+function normalizarSetorTexto(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Mapeamento best-effort de texto livre (`Employee.setor`) para o enum
+ * `GoalCategory` — ver o comentário grande acima para os limites e o
+ * porquê de não incluir sinônimos. `null` quando o texto não bate com
+ * nenhuma das 6 categorias (nem pela chave do enum, nem pelo rótulo em
+ * português já usado no app).
+ */
+export function mapSetorLivreParaGoalCategory(setorLivre: string): GoalCategoryKey | null {
+  const normalizado = normalizarSetorTexto(setorLivre);
+  return (
+    GOAL_CATEGORIES.find(
+      (categoria) =>
+        normalizado === normalizarSetorTexto(categoria) ||
+        normalizado === normalizarSetorTexto(GOAL_CATEGORY_LABEL[categoria])
+    ) ?? null
+  );
+}
+
+/**
+ * Metas do usuário no período corrente (já iniciadas, ainda não encerradas
+ * há mais de `DIAS_LIMITE_URGENTE` dias) — a parte de "encontrar a(s)
+ * meta(s) do usuário" extraída de `loadRotinaMetas` para ser reaproveitada
+ * também por `loadMinhaMeta` (painel dedicado, GET /api/inicio/minha-meta)
+ * e por `checkMetaAlcancada` (src/lib/conquistas.ts, critério do badge
+ * "Meta alcançada"), sem duplicar a consulta. Exportada por isso — continua
+ * não fazendo sentido fora do conceito de "metas do usuário logado" desta
+ * tela.
+ *
+ * Importante para quem consome esta função para fins de conquista/badge: o
+ * filtro `endDate: { gte: subDays(now, DIAS_LIMITE_URGENTE) }` restringe a
+ * metas do período corrente (não é um histórico completo) — uma meta
+ * concluída há muito mais tempo que isso não aparece aqui.
+ *
+ * `Goal.responsavel` continua sendo um campo de texto livre (não existe —
+ * nem faria sentido existir — uma relação de `Goal` com `User`/`Employee`
+ * hoje), então o cruzamento continua sendo por igualdade de nome (sem
+ * diferenciar maiúsculas/minúsculas). A diferença é que agora, quando o
+ * usuário logado está ligado a uma ficha de RH nesta empresa
+ * (`User.employeeId`), o nome dessa ficha (`Employee.name`) também entra
+ * como candidato — cobre o caso de a meta ter sido cadastrada com o nome
+ * "oficial" do colaborador, diferente do nome de cadastro do login
+ * (apelido, sobrenome a menos, etc.). Quando não há ligação (ou ela aponta
+ * pra um Employee de outra empresa), o comportamento é exatamente o de
+ * antes: só `nomeUsuario`.
+ */
+export async function findMetasDoUsuario(empresaId: string, userId: string, nomeUsuario: string, now: Date) {
+  const nomesCandidatos = new Set<string>();
+  if (nomeUsuario.trim()) nomesCandidatos.add(nomeUsuario.trim());
+
+  const employeeLigado = await findLinkedEmployee(empresaId, userId);
+  if (employeeLigado?.name.trim()) nomesCandidatos.add(employeeLigado.name.trim());
+
+  if (nomesCandidatos.size === 0) return [];
+
+  return prisma.goal.findMany({
     where: {
       empresaId,
-      responsavel: { equals: nomeUsuario, mode: "insensitive" },
+      OR: Array.from(nomesCandidatos).map((nome) => ({
+        responsavel: { equals: nome, mode: "insensitive" as const },
+      })),
       startDate: { lte: now },
       endDate: { gte: subDays(now, DIAS_LIMITE_URGENTE) },
     },
   });
+}
+
+/**
+ * Metas individuais do usuário do período corrente, incluídas só quando
+ * abaixo do ritmo esperado, perto do prazo (até `DIAS_LIMITE_URGENTE` dias)
+ * ou já vencidas sem terem sido atingidas. Reaproveita `findMetasDoUsuario`
+ * (acima) para a busca; esta função só decide o que é "alerta" o bastante
+ * para entrar na rotina.
+ */
+export async function loadRotinaMetas(
+  empresaId: string,
+  userId: string,
+  nomeLoja: string,
+  nomeUsuario: string,
+  now: Date = new Date()
+): Promise<RotinaItem[]> {
+  const goals = await findMetasDoUsuario(empresaId, userId, nomeUsuario, now);
 
   const itens: RotinaItem[] = [];
   for (const g of goals) {
@@ -521,30 +687,96 @@ export async function loadRotinaMetas(
   return itens;
 }
 
+// ---------------------------------------------------------------------------
+// "Minha meta" (GET /api/inicio/minha-meta) — painel dedicado à meta
+// individual do colaborador, diferente do alerta resumido de
+// `loadRotinaMetas` acima: aqui mostramos a meta completa (mesmo quando ela
+// está dentro do ritmo esperado), não só quando vira alerta. Reaproveita a
+// mesma busca de `findMetasDoUsuario`; aberto a QUALQUER perfil logado,
+// igual ao resto da seção "rotina".
+// ---------------------------------------------------------------------------
+
+export type MinhaMetaResumo = {
+  nome: string;
+  metaDefinida: number;
+  resultadoAlcancado: number;
+  percentual: number;
+  valorRestante: number;
+  status: string;
+  prazo: string;
+};
+
+/**
+ * A meta mais relevante do usuário no período corrente — quando há mais de
+ * uma meta encontrável (`findMetasDoUsuario`), escolhe a de prazo mais
+ * próximo de agora (menor diferença absoluta entre `endDate` e `now`: cobre
+ * tanto a que está prestes a vencer quanto a que acabou de vencer dentro da
+ * janela de tolerância de `DIAS_LIMITE_URGENTE` dias). `status` aqui é o
+ * status real gravado em `Goal.status` (enum `GoalStatus`), diferente do
+ * status de ritmo calculado on-the-fly em `loadRotinaMetas`/
+ * `computeGoalStatus` — este painel mostra o dado bruto da meta, não uma
+ * reinterpretação dela. `null` quando o usuário não tem nenhuma meta
+ * encontrável no período.
+ */
+export async function loadMinhaMeta(
+  empresaId: string,
+  userId: string,
+  nomeUsuario: string,
+  now: Date = new Date()
+): Promise<MinhaMetaResumo | null> {
+  const goals = await findMetasDoUsuario(empresaId, userId, nomeUsuario, now);
+  if (goals.length === 0) return null;
+
+  const maisRelevante = goals.reduce((maisProxima, g) =>
+    Math.abs(g.endDate.getTime() - now.getTime()) < Math.abs(maisProxima.endDate.getTime() - now.getTime())
+      ? g
+      : maisProxima
+  );
+
+  return {
+    nome: maisRelevante.name,
+    metaDefinida: maisRelevante.valorMeta,
+    resultadoAlcancado: maisRelevante.valorRealizado,
+    percentual: pct(maisRelevante.valorRealizado, maisRelevante.valorMeta),
+    valorRestante: Math.max(0, maisRelevante.valorMeta - maisRelevante.valorRealizado),
+    status: maisRelevante.status,
+    prazo: maisRelevante.endDate.toISOString(),
+  };
+}
+
 /**
  * Convites de pesquisa de satisfação ainda não respondidos pelo usuário.
  * Convites são por `Employee`, não por `User` — o colaborador responde por
  * link com token, sem precisar logar (ver
- * src/app/api/satisfaction/responder/[token]/route.ts) — e não existe
- * relação direta `User`<->`Employee` no schema. O cruzamento aqui é por
- * e-mail (`Employee.email` = `session.user.email`, sem diferenciar
- * maiúsculas/minúsculas); usuários sem um cadastro de colaborador com o
- * mesmo e-mail (ex.: administradores sem ficha de RH) nunca verão pesquisas
- * aqui.
+ * src/app/api/satisfaction/responder/[token]/route.ts).
+ *
+ * Primeiro tenta a ligação direta (`User.employeeId`, quando existir e
+ * apontar pra um `Employee` ATIVO desta empresa); quando não há ligação
+ * (usuário nunca foi casado no backfill, ou foi casado com um Employee de
+ * outra empresa, ou a ficha ligada não está mais ATIVO), cai no cruzamento
+ * antigo por e-mail (`Employee.email` = `session.user.email`, sem
+ * diferenciar maiúsculas/minúsculas) como fallback. Usuários sem ligação e
+ * sem nenhum cadastro de colaborador ATIVO com o mesmo e-mail (ex.:
+ * administradores sem ficha de RH) continuam sem ver pesquisas aqui.
  */
 export async function loadRotinaPesquisas(
   empresaId: string,
+  userId: string,
   emailUsuario: string,
   nomeLoja: string,
   nomeUsuario: string,
   now: Date = new Date()
 ): Promise<RotinaItem[]> {
-  if (!emailUsuario.trim()) return [];
-
-  const employee = await prisma.employee.findFirst({
-    where: { empresaId, status: "ATIVO", email: { equals: emailUsuario, mode: "insensitive" } },
-    select: { id: true, setor: true },
-  });
+  const employeeLigado = await findLinkedEmployee(empresaId, userId);
+  const employee =
+    employeeLigado && employeeLigado.status === "ATIVO"
+      ? employeeLigado
+      : emailUsuario.trim()
+        ? await prisma.employee.findFirst({
+            where: { empresaId, status: "ATIVO", email: { equals: emailUsuario, mode: "insensitive" } },
+            select: { id: true, setor: true },
+          })
+        : null;
   if (!employee) return [];
 
   const convites = await prisma.satisfactionInvitation.findMany({
@@ -603,6 +835,56 @@ export function sortRotinaItems(itens: RotinaItem[], now: Date = new Date()): Ro
       return diff !== 0 ? diff : a.index - b.index;
     })
     .map(({ item }) => item);
+}
+
+// ---------------------------------------------------------------------------
+// "Resumo do topo" do Colaborador (GET /api/inicio/colaborador-resumo) —
+// aberto a QUALQUER perfil logado, igual ao resto da seção "rotina" acima.
+// ---------------------------------------------------------------------------
+
+/**
+ * Total de tarefas + checklists CONCLUÍDOS pelo usuário este mês (mês
+ * calendário corrente, mesmo corte de `loadProgressoMeta`). Tarefa
+ * "concluída" = `status: "CONCLUIDA"` com `completedAt` neste mês — os dois
+ * campos são sempre gravados juntos (ver
+ * src/app/api/tarefas/[id]/comprovar/route.ts e .../validar/route.ts), então
+ * filtrar por `completedAt` já garante que é uma conclusão de fato ocorrida
+ * no mês, não só uma tarefa com prazo no mês. Checklist "concluído" = mesmos
+ * dois status de `countChecklistsConcluidos` (acima: `CONCLUIDO_NO_PRAZO` e
+ * `CONCLUIDO_COM_ATRASO`, nunca `JUSTIFICADO`/`CANCELADO`), também filtrado
+ * por `completedAt` (o momento real da conclusão, não o dia da ocorrência) e
+ * restrito às ocorrências do usuário — responsável direto OU substituto do
+ * template, o mesmo critério de "meu checklist" que `loadRotinaChecklist`
+ * já usa.
+ */
+export async function countAtividadesConcluidasNoMes(
+  empresaId: string,
+  userId: string,
+  now: Date = new Date()
+): Promise<number> {
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  const [tarefasConcluidas, checklistsConcluidos] = await Promise.all([
+    prisma.task.count({
+      where: {
+        empresaId,
+        assignees: { some: { userId } },
+        status: "CONCLUIDA",
+        completedAt: { gte: monthStart, lte: monthEnd },
+      },
+    }),
+    prisma.checklistOccurrence.count({
+      where: {
+        empresaId,
+        OR: [{ responsavelId: userId }, { template: { substitutoId: userId } }],
+        status: { in: ["CONCLUIDO_NO_PRAZO", "CONCLUIDO_COM_ATRASO"] },
+        completedAt: { gte: monthStart, lte: monthEnd },
+      },
+    }),
+  ]);
+
+  return tarefasConcluidas + checklistsConcluidos;
 }
 
 // ---------------------------------------------------------------------------
@@ -1071,6 +1353,37 @@ export async function loadEquipeOcorrenciasHoje(
 }
 
 // ---------------------------------------------------------------------------
+// "Colaboradores" do Líder (GET /api/inicio/colaboradores-setor) — painel
+// exclusivo do perfil Líder (diferente de "Equipe de hoje" acima, que é a
+// loja INTEIRA e só para Proprietário/Gerente): lista os colaboradores
+// ATIVOS do MESMO setor do Líder (`Employee.setor`, texto livre — ver o
+// comentário grande acima de `loadSetorDoLider` para os limites gerais
+// desse tipo de cruzamento; aqui o risco é menor que o de
+// `mapSetorLivreParaGoalCategory`, porque comparamos `Employee.setor` com
+// `Employee.setor` — o mesmo campo/convenção nos dois lados, sem tentar
+// bater com um enum de outro módulo).
+// ---------------------------------------------------------------------------
+
+export type ColaboradorSetor = { id: string; nome: string; cargo: string; avatarUrl: string | null };
+
+/**
+ * Colaboradores ATIVOS desta empresa cujo `setor` bate com `setor`
+ * (ignorando maiúsculas/minúsculas — o campo não tem lista fixa nem
+ * sugestão, então duas fichas do mesmo setor podem ter sido digitadas com
+ * caixa diferente). Ordenado por nome.
+ */
+export async function loadColaboradoresDoSetor(empresaId: string, setor: string): Promise<ColaboradorSetor[]> {
+  const colaboradores = await prisma.employee.findMany({
+    where: { empresaId, setor: { equals: setor, mode: "insensitive" }, status: "ATIVO" },
+    select: { id: true, name: true, cargo: true, photoUrl: true },
+  });
+
+  return colaboradores
+    .map((c): ColaboradorSetor => ({ id: c.id, nome: c.name, cargo: c.cargo, avatarUrl: c.photoUrl }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+// ---------------------------------------------------------------------------
 // "Resumo de manutenção" (GET /api/inicio/manutencao-resumo) — mesma
 // restrição de acesso de /api/inicio/alertas (`perfilPodeVerAlertas`:
 // Proprietário/Gerente/Líder).
@@ -1088,6 +1401,15 @@ export async function loadEquipeOcorrenciasHoje(
 // aquela lista usa — aqui é só "qual a próxima", não "quantas nos próximos
 // 30 dias", então não faz sentido escondê-la só por estar mais longe que
 // isso. `null` quando nenhum equipamento tem essa data preenchida.
+//
+// `setor` (3º parâmetro, opcional) restringe os 4 números a um único setor
+// — usado quando quem chama é um Líder (ver comentário grande acima de
+// `loadSetorDoLider`): `Equipamento.setor`/`Chamado.setor` também são texto
+// livre (com sugestões, `SETOR_SUGESTOES` em src/lib/manutencao.ts), então
+// comparamos sem diferenciar maiúsculas/minúsculas, sem tentar mapear
+// sinônimo algum (mesmo raciocínio de `loadColaboradoresDoSetor`, acima).
+// Sem `setor` (Proprietário/Gerente, ou chamada sem esse argumento),
+// comportamento idêntico ao de antes desta etapa: números da loja inteira.
 // ---------------------------------------------------------------------------
 
 export type ManutencaoResumo = {
@@ -1097,15 +1419,21 @@ export type ManutencaoResumo = {
   proximaManutencaoProgramada: { titulo: string; data: string } | null;
 };
 
-export async function loadManutencaoResumo(empresaId: string, now: Date = new Date()): Promise<ManutencaoResumo> {
+export async function loadManutencaoResumo(
+  empresaId: string,
+  now: Date = new Date(),
+  setor?: string
+): Promise<ManutencaoResumo> {
+  const setorFiltro = setor ? { setor: { equals: setor, mode: "insensitive" as const } } : {};
+
   const [chamadosAbertos, chamadosUrgentes, equipamentosParados, proximoEquipamento] = await Promise.all([
-    prisma.chamado.count({ where: { empresaId, status: { notIn: ["RESOLVIDO", "CANCELADO"] } } }),
+    prisma.chamado.count({ where: { empresaId, status: { notIn: ["RESOLVIDO", "CANCELADO"] }, ...setorFiltro } }),
     prisma.chamado.count({
-      where: { empresaId, prioridade: "URGENTE", status: { notIn: ["RESOLVIDO", "CANCELADO"] } },
+      where: { empresaId, prioridade: "URGENTE", status: { notIn: ["RESOLVIDO", "CANCELADO"] }, ...setorFiltro },
     }),
-    prisma.equipamento.count({ where: { empresaId, status: "PARADO" } }),
+    prisma.equipamento.count({ where: { empresaId, status: "PARADO", ...setorFiltro } }),
     prisma.equipamento.findFirst({
-      where: { empresaId, proximaManutencaoEm: { gte: now } },
+      where: { empresaId, proximaManutencaoEm: { gte: now }, ...setorFiltro },
       orderBy: { proximaManutencaoEm: "asc" },
       select: { nome: true, codigo: true, proximaManutencaoEm: true },
     }),
