@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { format } from "date-fns";
@@ -64,6 +64,7 @@ export function UsuariosClient({
   const [permissions, setPermissions] = useState<Record<string, string>>({});
   const [empresaIds, setEmpresaIds] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showFormPassword, setShowFormPassword] = useState(false);
 
   function toggleEmpresa(id: string) {
     setEmpresaIds((prev) => (prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]));
@@ -80,6 +81,7 @@ export function UsuariosClient({
     setForm(emptyForm);
     setPermissions({});
     setEmpresaIds([]);
+    setShowFormPassword(false);
     setShowForm(true);
   }
 
@@ -100,6 +102,7 @@ export function UsuariosClient({
     u.permissions.forEach((p) => (perm[p.moduleKey] = p.level));
     setPermissions(perm);
     setEmpresaIds(u.empresaIds);
+    setShowFormPassword(false);
     setShowForm(true);
   }
 
@@ -207,7 +210,23 @@ export function UsuariosClient({
             <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
           </Field>
           <Field label={editing ? "Nova senha (opcional)" : "Senha inicial"}>
-            <input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input" placeholder="Nord@123" />
+            <div className="relative">
+              <input
+                type={showFormPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="input pr-8"
+                placeholder="Nord@123"
+              />
+              <button
+                type="button"
+                onClick={() => setShowFormPassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-nord-gray hover:text-white"
+                tabIndex={-1}
+              >
+                {showFormPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
           </Field>
           <Field label="Telefone">
             <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input" />

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Plus,
   Pencil,
@@ -1094,8 +1095,7 @@ export function ChecklistClient({
                   <div className="flex flex-wrap gap-2">
                     {g.fotos.map((f) => (
                       <a key={f.id} href={f.fileUrl} target="_blank" rel="noreferrer" title={`${f.uploadedBy?.name ?? "-"} · ${formatDateTime(f.createdAt)}`}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={f.fileUrl} alt={f.fileName} className="w-20 h-20 object-cover rounded-lg border border-nord-border" />
+                        <Image src={f.fileUrl} alt={f.fileName} width={80} height={80} className="w-20 h-20 object-cover rounded-lg border border-nord-border" />
                       </a>
                     ))}
                   </div>

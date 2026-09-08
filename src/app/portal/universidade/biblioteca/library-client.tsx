@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
@@ -141,8 +142,9 @@ export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] })
           <div key={f.id} className="nord-card p-2 group relative">
             <a href={f.fileUrl} target="_blank" rel="noreferrer" className="block">
               {isImage(f.fileUrl) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={f.fileUrl} alt={f.name} className="w-full h-24 object-cover rounded" />
+                <div className="relative w-full h-24">
+                  <Image src={f.fileUrl} alt={f.name} fill className="object-cover rounded" />
+                </div>
               ) : (
                 <div className="w-full h-24 rounded bg-nord-panel flex items-center justify-center">
                   <FileIcon size={22} className="text-nord-gray" />

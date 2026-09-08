@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Search, Gift, X } from "lucide-react";
 import { Badge, StatCard } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
@@ -164,8 +165,7 @@ export function LojaNordClient({
               <div key={r.id} className="nord-card overflow-hidden flex flex-col">
                 <div className="relative h-36 bg-nord-panel flex items-center justify-center">
                   {r.imagemUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- imagens vêm do Vercel Blob (domínio variável), padrão já usado no restante do Portal
-                    <img src={r.imagemUrl} alt={r.nome} className="absolute inset-0 w-full h-full object-cover" />
+                    <Image src={r.imagemUrl} alt={r.nome} fill className="object-cover" />
                   ) : (
                     <DynamicIcon name={CATEGORY_ICON[r.categoria] ?? "Gift"} size={36} className="text-nord-gray" />
                   )}
@@ -201,10 +201,9 @@ export function LojaNordClient({
         {selected && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-16 h-16 rounded-lg bg-nord-panel flex items-center justify-center overflow-hidden shrink-0">
+              <div className="relative w-16 h-16 rounded-lg bg-nord-panel flex items-center justify-center overflow-hidden shrink-0">
                 {selected.imagemUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- imagens vêm do Vercel Blob (domínio variável), padrão já usado no restante do Portal
-                  <img src={selected.imagemUrl} alt={selected.nome} className="object-cover w-full h-full" />
+                  <Image src={selected.imagemUrl} alt={selected.nome} fill className="object-cover" />
                 ) : (
                   <DynamicIcon name={CATEGORY_ICON[selected.categoria] ?? "Gift"} size={24} className="text-nord-gray" />
                 )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { Plus, ImagePlus, Pencil } from "lucide-react";
@@ -407,8 +408,7 @@ export function GestaoClient({
                   <td className="py-2 pr-4">
                     <div className="flex items-center gap-2">
                       {r.imagemUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={r.imagemUrl} alt={r.nome} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                        <Image src={r.imagemUrl} alt={r.nome} width={32} height={32} className="w-8 h-8 rounded-lg object-cover shrink-0" />
                       ) : (
                         <div className="w-8 h-8 rounded-lg bg-nord-panel flex items-center justify-center shrink-0">
                           <ImagePlus size={14} className="text-nord-gray" />
@@ -453,8 +453,7 @@ export function GestaoClient({
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar brinde" : "Cadastrar brinde"} widthClass="max-w-2xl">
         <div className="flex items-center gap-3 mb-4">
           {form.imagemUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={form.imagemUrl} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+            <Image src={form.imagemUrl} alt="" width={64} height={64} className="w-16 h-16 rounded-lg object-cover shrink-0" />
           ) : (
             <div className="w-16 h-16 rounded-lg bg-nord-panel flex items-center justify-center text-nord-gray shrink-0">
               <ImagePlus size={20} />
