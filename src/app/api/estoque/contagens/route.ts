@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     take: 100,
     include: {
       empresa: { select: { id: true, name: true, color: true } },
-      items: { include: { ingredient: { select: { id: true, name: true, unidade: true, categoryId: true } } } },
+      items: { select: { quantidadeContada: true, status: true } },
       createdBy: { select: { name: true } },
     },
   });

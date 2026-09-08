@@ -21,7 +21,6 @@ export async function GET() {
       campaign: { select: { id: true, name: true } },
       empresa: { select: { id: true, name: true, color: true } },
       comments: { include: { author: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
-      files: true,
     },
   });
 
