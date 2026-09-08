@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { StatCard, Badge } from "@/components/ui/stat-card";
@@ -153,8 +154,7 @@ export function EmployeeProfileClient({
       <div className="nord-card p-5 flex flex-col md:flex-row md:items-center gap-5">
         <div className="flex items-center gap-4 flex-1 min-w-0">
           {employee.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={employee.photoUrl} alt={employee.name} className="w-16 h-16 rounded-full object-cover shrink-0" />
+            <Image src={employee.photoUrl} alt={employee.name} width={64} height={64} className="w-16 h-16 rounded-full object-cover shrink-0" />
           ) : (
             <div className="w-16 h-16 rounded-full bg-nord-blue/20 text-nord-blue text-xl font-semibold flex items-center justify-center shrink-0">
               {initials}

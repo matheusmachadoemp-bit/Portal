@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Wrench, ClipboardList, FileText, History, LayoutDashboard, Printer, TriangleAlert } from "lucide-react";
@@ -78,8 +79,7 @@ export function EquipamentoDetailClient({
       <div className="nord-card p-4 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           {equipamento.fotoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={equipamento.fotoUrl} alt={equipamento.nome} className="w-16 h-16 rounded-xl object-cover" />
+            <Image src={equipamento.fotoUrl} alt={equipamento.nome} width={64} height={64} className="w-16 h-16 rounded-xl object-cover" />
           ) : (
             <div className="w-16 h-16 rounded-xl bg-nord-panel flex items-center justify-center">
               <Wrench size={24} className="text-nord-gray" />

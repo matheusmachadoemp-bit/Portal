@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
@@ -246,8 +247,7 @@ export function ProdutosClient({
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
                   {p.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.photoUrl} alt={p.name} className="w-11 h-11 rounded-lg object-cover shrink-0" />
+                    <Image src={p.photoUrl} alt={p.name} width={44} height={44} className="w-11 h-11 rounded-lg object-cover shrink-0" />
                   ) : (
                     <div className="w-11 h-11 rounded-lg bg-nord-panel flex items-center justify-center text-nord-gray shrink-0">
                       <ImagePlus size={16} />
@@ -291,8 +291,7 @@ export function ProdutosClient({
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar produto" : "Novo produto"} widthClass="max-w-2xl">
         <div className="flex items-center gap-3 mb-4">
           {form.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={form.photoUrl} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+            <Image src={form.photoUrl} alt="" width={64} height={64} className="w-16 h-16 rounded-lg object-cover shrink-0" />
           ) : (
             <div className="w-16 h-16 rounded-lg bg-nord-panel flex items-center justify-center text-nord-gray shrink-0">
               <ImagePlus size={20} />

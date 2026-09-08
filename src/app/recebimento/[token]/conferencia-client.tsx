@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { upload } from "@vercel/blob/client";
 import { Camera, CheckCircle2, ChevronRight, Minus, Plus, X } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
@@ -316,8 +317,7 @@ export function ConferenciaClient({ token, purchase, empresaName }: { token: str
           </label>
           {fotoNotaUrl ? (
             <div className="relative w-24 h-24">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={fotoNotaUrl} alt="Foto da nota fiscal" className="w-24 h-24 object-cover rounded-lg" />
+              <Image src={fotoNotaUrl} alt="Foto da nota fiscal" fill className="object-cover rounded-lg" />
               <button
                 onClick={() => setFotoNotaUrl(null)}
                 className="absolute -top-1.5 -right-1.5 bg-nord-black rounded-full p-0.5 border border-nord-border"
@@ -627,8 +627,7 @@ export function ConferenciaClient({ token, purchase, empresaName }: { token: str
               </span>
               {fotoUrl ? (
                 <div className="relative w-24 h-24">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={fotoUrl} alt="Foto da divergência" className="w-24 h-24 object-cover rounded-lg" />
+                  <Image src={fotoUrl} alt="Foto da divergência" fill className="object-cover rounded-lg" />
                   <button
                     onClick={() => setFotoUrl(null)}
                     className="absolute -top-1.5 -right-1.5 bg-nord-black rounded-full p-0.5 border border-nord-border"

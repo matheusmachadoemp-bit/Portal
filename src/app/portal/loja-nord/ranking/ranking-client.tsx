@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Trophy, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { formatNumber } from "@/lib/calc";
@@ -24,8 +25,7 @@ const PODIUM_HEIGHT = ["h-24", "h-32", "h-20"];
 
 function Avatar({ nome, avatarUrl, size = 40 }: { nome: string; avatarUrl: string | null; size?: number }) {
   if (avatarUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- avatar vem do Vercel Blob (domínio variável)
-    return <img src={avatarUrl} alt={nome} className="rounded-full object-cover" style={{ width: size, height: size }} />;
+    return <Image src={avatarUrl} alt={nome} width={size} height={size} className="rounded-full object-cover" />;
   }
   return (
     <div

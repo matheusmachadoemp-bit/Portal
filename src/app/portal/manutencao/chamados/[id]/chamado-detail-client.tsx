@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Upload as UploadIcon, Send } from "lucide-react";
@@ -201,8 +202,7 @@ export function ChamadoDetailClient({
           <Section title="Equipamento relacionado">
             <div className="flex items-center gap-3">
               {chamado.equipamento.fotoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={chamado.equipamento.fotoUrl} alt={chamado.equipamento.nome} className="w-14 h-14 rounded-lg object-cover" />
+                <Image src={chamado.equipamento.fotoUrl} alt={chamado.equipamento.nome} width={56} height={56} className="w-14 h-14 rounded-lg object-cover" />
               ) : (
                 <div className="w-14 h-14 rounded-lg bg-nord-panel" />
               )}

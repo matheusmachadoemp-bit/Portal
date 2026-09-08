@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Eye, Upload } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
@@ -79,8 +80,7 @@ function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
     .join("")
     .toUpperCase();
   if (photoUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={photoUrl} alt={name} className="w-8 h-8 rounded-full object-cover shrink-0" />;
+    return <Image src={photoUrl} alt={name} width={32} height={32} className="w-8 h-8 rounded-full object-cover shrink-0" />;
   }
   return (
     <div className="w-8 h-8 rounded-full bg-nord-blue/20 text-nord-blue text-xs font-semibold flex items-center justify-center shrink-0">
