@@ -993,6 +993,8 @@ model MarketingTask {
 
   comments MarketingComment[]
   files    MarketingFile[]
+
+  @@index([empresaId, date])
 }
 
 model MarketingComment {
@@ -1545,6 +1547,7 @@ model TimeEntry {
   createdAt        DateTime @default(now())
 
   @@unique([employeeId, date])
+  @@index([empresaId, date])
 }
 
 // ---------------------------------------------------------------------------
@@ -3297,6 +3300,8 @@ model TaskHistory {
   action    String
   detail    String?
   createdAt DateTime @default(now())
+
+  @@index([taskId])
 }
 
 model TaskRecurrence {
