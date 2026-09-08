@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, ExternalLink, Eye, EyeOff } from "lucide-react";
 import { Section, ProgressBar } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { format } from "date-fns";
@@ -12,7 +12,7 @@ type CourseDTO = {
   plataforma: string | null;
   link: string | null;
   usuario: string | null;
-  senha: string | null;
+  hasSenha: boolean;
   responsavel: string | null;
   percentualConcluido: number;
   startDate: string | null;
@@ -41,6 +41,9 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
   const [editing, setEditing] = useState<CourseDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showFormPassword, setShowFormPassword] = useState(false);
+  const [loadingSenha, setLoadingSenha] = useState(false);
+  const [senhaError, setSenhaError] = useState<string | null>(null);
 
   async function refresh() {
     const res = await fetch("/api/admin/courses");
@@ -51,6 +54,8 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
+    setShowFormPassword(false);
+    setSenhaError(null);
     setShowForm(true);
   }
 
@@ -61,7 +66,10 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
       plataforma: c.plataforma ?? "",
       link: c.link ?? "",
       usuario: c.usuario ?? "",
-      senha: c.senha ?? "",
+      // A listagem nunca traz a senha de verdade (só o indicador hasSenha),
+      // então o campo sempre nasce vazio — quem quiser ver o valor atual
+      // usa o botão "Ver senha atual" (busca sob demanda).
+      senha: "",
       responsavel: c.responsavel ?? "",
       percentualConcluido: String(c.percentualConcluido),
       startDate: c.startDate ? format(new Date(c.startDate), "yyyy-MM-dd") : "",
@@ -69,7 +77,26 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
       certificadoUrl: c.certificadoUrl ?? "",
       observacoes: c.observacoes ?? "",
     });
+    setShowFormPassword(false);
+    setSenhaError(null);
     setShowForm(true);
+  }
+
+  async function revealCurrentSenha() {
+    if (!editing) return;
+    setLoadingSenha(true);
+    setSenhaError(null);
+    try {
+      const res = await fetch(`/api/admin/courses/${editing.id}/senha`);
+      if (!res.ok) throw new Error("Falha ao buscar a senha");
+      const data = await res.json();
+      setForm((f) => ({ ...f, senha: data.senha ?? "" }));
+      setShowFormPassword(true);
+    } catch {
+      setSenhaError("Não foi possível carregar a senha atual.");
+    } finally {
+      setLoadingSenha(false);
+    }
   }
 
   async function submit() {
@@ -155,7 +182,36 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
             <input value={form.usuario} onChange={(e) => setForm({ ...form, usuario: e.target.value })} className="input" />
           </Field>
           <Field label="Senha">
-            <input value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} className="input" />
+            <div className="relative">
+              <input
+                type={showFormPassword ? "text" : "password"}
+                value={form.senha}
+                onChange={(e) => setForm({ ...form, senha: e.target.value })}
+                placeholder={editing?.hasSenha ? "•••••••• (configurada)" : "Deixe em branco se não houver"}
+                className="input pr-8"
+              />
+              <button
+                type="button"
+                onClick={() => setShowFormPassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-nord-gray hover:text-white"
+                tabIndex={-1}
+              >
+                {showFormPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+            {editing?.hasSenha && (
+              <div className="mt-1.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={revealCurrentSenha}
+                  disabled={loadingSenha}
+                  className="text-xs text-nord-blue-light hover:underline disabled:opacity-50"
+                >
+                  {loadingSenha ? "Carregando..." : "Ver senha atual"}
+                </button>
+                {senhaError && <span className="text-xs text-red-400">{senhaError}</span>}
+              </div>
+            )}
           </Field>
           <Field label="Responsável">
             <input value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} className="input" />

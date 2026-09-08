@@ -22,3 +22,17 @@ export function decryptSecret(cipherText: string): string {
   const decrypted = Buffer.concat([decipher.update(Buffer.from(dataHex, "hex")), decipher.final()]);
   return decrypted.toString("utf8");
 }
+
+// encryptSecret sempre produz "<iv em hex, 16 bytes = 32 caracteres>:<dado
+// cifrado em hex>". Um valor que bate nesse formato é tratado como já
+// criptografado; qualquer outra coisa (string vazia, texto puro, etc.) é
+// tratada como um valor legado gravado antes de existir criptografia para
+// aquele campo (ex.: Course.senhaCipher, que até esta mudança se chamava
+// "senha" e guardava texto puro). Isso é uma heurística de formato, não uma
+// prova criptográfica: em tese um texto puro poderia por acaso ter esse
+// formato exato, mas é um caso extremamente improvável na prática.
+const ENCRYPTED_SECRET_FORMAT = /^[0-9a-f]{32}:(?:[0-9a-f]{2})+$/i;
+
+export function isEncryptedSecret(value: string): boolean {
+  return ENCRYPTED_SECRET_FORMAT.test(value);
+}
