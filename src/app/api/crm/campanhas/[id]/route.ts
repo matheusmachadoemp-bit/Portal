@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getCampanhaResultados } from "@/lib/crm-data";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -28,6 +29,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const campanha = await prisma.campaign.findFirst({ where: { id, empresaId: { in: empresaIdsForContext(ctx) } } });
   if (!campanha) return NextResponse.json({ error: "Campanha não encontrada." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "crm", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite atualizar campanhas." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   if (body.action === "enviar-agora") {
@@ -52,6 +59,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const campanha = await prisma.campaign.findFirst({ where: { id, empresaId: { in: empresaIdsForContext(ctx) } } });
   if (!campanha) return NextResponse.json({ error: "Campanha não encontrada." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "crm", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir campanhas." },
+      { status: 403 }
+    );
+  }
 
   await prisma.campaign.delete({ where: { id } });
   return NextResponse.json({ ok: true });

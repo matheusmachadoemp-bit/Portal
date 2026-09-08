@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string; notaId: string }> }) {
   const session = await auth();
@@ -15,6 +16,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     where: { id: notaId, clienteId: id, empresaId: { in: empresaIdsForContext(ctx) } },
   });
   if (!nota) return NextResponse.json({ error: "Nota não encontrada." }, { status: 404 });
+  if (!(await hasModulePermission(session.user.id, "crm", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir notas de cliente." },
+      { status: 403 }
+    );
+  }
 
   await prisma.customerNote.delete({ where: { id: notaId } });
   return NextResponse.json({ ok: true });
