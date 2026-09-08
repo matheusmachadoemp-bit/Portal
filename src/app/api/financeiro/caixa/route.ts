@@ -55,6 +55,17 @@ export async function POST(req: Request) {
     );
   }
 
+  const bankAccount = await prisma.bankAccount.findUnique({ where: { id: body.bankAccountId } });
+  if (!bankAccount || bankAccount.empresaId !== empresa.id) {
+    return NextResponse.json({ error: "Conta bancária inválida para esta loja." }, { status: 400 });
+  }
+  if (body.destinoId) {
+    const destinoAccount = await prisma.bankAccount.findUnique({ where: { id: body.destinoId } });
+    if (!destinoAccount || destinoAccount.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Conta de destino inválida para esta loja." }, { status: 400 });
+    }
+  }
+
   const movement = await prisma.$transaction(async (tx) => {
     const created = await tx.cashMovement.create({
       data: {

@@ -16,6 +16,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const body = await req.json();
 
+  const nextStatusCheck: FinanceEntryStatus = body.status ?? existingCheck.status;
+  const nextValorCheck = body.valor !== undefined ? Number(body.valor) : existingCheck.valor;
+  const nextBankAccountIdCheck =
+    body.bankAccountId !== undefined ? body.bankAccountId : existingCheck.bankAccountId;
+  const newDeltaCheck = balanceDelta(1, nextStatusCheck, nextValorCheck);
+  if (newDeltaCheck && nextBankAccountIdCheck) {
+    const bankAccount = await prisma.bankAccount.findUnique({ where: { id: nextBankAccountIdCheck } });
+    if (!bankAccount || bankAccount.empresaId !== existingCheck.empresaId) {
+      return NextResponse.json({ error: "Conta bancária inválida para esta loja." }, { status: 400 });
+    }
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const before = await tx.receivable.findUniqueOrThrow({ where: { id } });
 
