@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
 import type { FinanceEntryStatus } from "@prisma/client";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,6 +14,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existingCheck) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existingCheck.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar lançamentos financeiros." },
+      { status: 403 }
+    );
   }
   const body = await req.json();
 
@@ -92,6 +99,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!existingCheck) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existingCheck.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir lançamentos financeiros." },
+      { status: 403 }
+    );
   }
 
   await prisma.$transaction(async (tx) => {
