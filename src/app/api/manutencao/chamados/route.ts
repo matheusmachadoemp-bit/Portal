@@ -6,6 +6,7 @@ import {
   MANAGER_ROLES,
   generateChamadoProtocolo,
   getStoreManagers,
+  isValidBlobUrl,
   logChamadoHistorico,
   notifyManutencaoUser,
 } from "@/lib/manutencao-server";
@@ -87,6 +88,10 @@ export async function POST(req: Request) {
   }
 
   const status = body.status === "RASCUNHO" ? "RASCUNHO" : "ABERTO";
+
+  if (Array.isArray(body.anexos) && body.anexos.some((a: { fileUrl?: string }) => !isValidBlobUrl(a?.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
+  }
 
   const chamado = await prisma.$transaction(async (tx) => {
     const created = await tx.chamado.create({

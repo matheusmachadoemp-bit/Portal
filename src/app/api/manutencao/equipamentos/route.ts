@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { generateEquipamentoCodigo, MANAGER_ROLES } from "@/lib/manutencao-server";
+import { generateEquipamentoCodigo, isValidBlobUrl, MANAGER_ROLES } from "@/lib/manutencao-server";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -62,6 +62,10 @@ export async function POST(req: Request) {
   const body = await req.json();
   if (!body.nome || !body.setor || !body.categoria) {
     return NextResponse.json({ error: "Nome, setor e categoria são obrigatórios." }, { status: 400 });
+  }
+
+  if (Array.isArray(body.anexos) && body.anexos.some((a: { fileUrl?: string }) => !isValidBlobUrl(a?.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
   }
 
   const equipamento = await prisma.$transaction(async (tx) => {
