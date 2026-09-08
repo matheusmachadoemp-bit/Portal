@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import * as XLSX from "xlsx";
 import type { ProductCategory } from "@prisma/client";
+import { hasModulePermission } from "@/lib/authz";
 
 const INSERT_CHUNK_SIZE = 1000;
 
@@ -51,6 +52,12 @@ function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite importar o desempenho de garçons." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

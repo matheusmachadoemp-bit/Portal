@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import * as XLSX from "xlsx";
 import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
+import { hasModulePermission } from "@/lib/authz";
 
 const SALE_INSERT_CHUNK_SIZE = 1000;
 
@@ -196,6 +197,15 @@ function emptyDay(): DayAggregate {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Importa o resumo diário (cria ou atualiza o SalesEntry do dia) e substitui as vendas
+  // detalhadas do período (delete + createMany) na mesma chamada — trata como canCreate por ser
+  // fundamentalmente uma importação em massa, mesmo padrão usado em financeiro/conciliacao/import.
+  if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite importar vendas." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {

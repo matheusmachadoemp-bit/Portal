@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -11,6 +12,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  // Venda Acumulada é uma subcategoria do menu Metas (não tem moduleKey própria em
+  // src/lib/permissions.ts), então usa a mesma chave "metas".
+  if (!(await hasModulePermission(session.user.id, "metas", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir lançamentos de venda acumulada." },
+      { status: 403 }
+    );
   }
   await prisma.waiterSaleEntry.delete({ where: { id } });
   return NextResponse.json({ ok: true });
