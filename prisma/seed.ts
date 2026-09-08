@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { allDreCategories } from "../src/lib/dre-structure";
-import { MODULES, PERMISSION_PROFILES } from "../src/lib/permissions";
+import { ACCESS_LEVEL_TO_MODULE_FLAGS, MODULES, PERMISSION_PROFILES, defaultLevelForProfileKey } from "../src/lib/permissions";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
@@ -374,17 +374,18 @@ async function main() {
   }
 
   // --- Perfis de permissão ---
-  // Todo perfil começa com "Ver" liberado em todos os módulos (para não
-  // esconder nada que já era visível hoje) e Criar/Editar/Excluir em branco,
-  // exceto o Administrador, que tem acesso total. Ajustável depois na tela
-  // de Permissões.
+  // Cada perfil começa com as 4 flags (Ver/Criar/Editar/Excluir) de acordo com o nível de acesso
+  // padrão do cargo correspondente — ver defaultLevelForProfileKey()/ACCESS_LEVEL_TO_MODULE_FLAGS
+  // em src/lib/permissions.ts para o mapeamento completo e o porquê de cada nível. Isso já cobre
+  // o Administrador (nível TOTAL, todas as 4 flags true) sem precisar de um caso especial aqui.
+  // Ajustável depois na tela de Permissões.
   for (const profile of PERMISSION_PROFILES) {
-    const isAdminProfile = profile.key === "administrador";
     const record = await prisma.permissionProfile.upsert({
       where: { key: profile.key },
       update: { name: profile.name },
       create: { key: profile.key, name: profile.name, isSystem: true },
     });
+    const flags = ACCESS_LEVEL_TO_MODULE_FLAGS[defaultLevelForProfileKey(profile.key)];
     for (const mod of MODULES) {
       await prisma.modulePermission.upsert({
         where: { profileId_moduleKey: { profileId: record.id, moduleKey: mod.key } },
@@ -392,10 +393,7 @@ async function main() {
         create: {
           profileId: record.id,
           moduleKey: mod.key,
-          canView: true,
-          canCreate: isAdminProfile,
-          canEdit: isAdminProfile,
-          canDelete: isAdminProfile,
+          ...flags,
         },
       });
     }
