@@ -1126,6 +1126,8 @@ model Goal {
 
   attachments   GoalAttachment[]
   notifications Notification[]
+
+  @@index([empresaId, endDate])
 }
 
 model GoalAttachment {
@@ -3132,6 +3134,9 @@ model AuditLog {
   before     String?
   after      String?
   createdAt  DateTime @default(now())
+
+  @@index([empresaId, createdAt])
+  @@index([entityType, entityId])
 }
 
 // ---------------------------------------------------------------------------

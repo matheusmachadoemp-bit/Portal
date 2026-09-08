@@ -20,6 +20,7 @@ export async function GET(req: Request) {
       ...(employeeId ? { employeeId } : {}),
     },
     orderBy: { date: "desc" },
+    take: 500,
     include: { employee: { select: { name: true, setor: true } } },
   });
   return NextResponse.json({ entries });
