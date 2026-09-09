@@ -49,6 +49,8 @@ export async function POST(req: Request) {
   const passwordHash = await bcrypt.hash(body.password || "Nord@123", 10);
   const empresaIds: string[] = body.empresaIds || [];
 
+  const permissions: { moduleKey: string; level: string }[] = body.permissions || [];
+
   const created = await prisma.user.create({
     data: {
       name: body.name,
@@ -60,6 +62,7 @@ export async function POST(req: Request) {
       defaultEmpresaId: body.defaultEmpresaId || empresaIds[0] || null,
       permissionProfileId: body.permissionProfileId || null,
       empresaAccess: { create: empresaIds.map((empresaId) => ({ empresaId })) },
+      permissions: { create: permissions.map((p) => ({ moduleKey: p.moduleKey, level: p.level as never })) },
     },
   });
 

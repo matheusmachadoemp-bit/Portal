@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { PermissionAction } from "@/lib/permissions";
+import { ACCESS_LEVEL_TO_MODULE_FLAGS, type PermissionAction } from "@/lib/permissions";
 
 // Este arquivo é separado de `@/lib/permissions` de propósito: `permissions.ts`
 // é importado por componentes client (ex.: `permissoes-client.tsx`, que tem
@@ -16,43 +16,64 @@ import type { PermissionAction } from "@/lib/permissions";
  * permitiria. Por isso `hasModulePermission` deve sempre ser chamada DEPOIS
  * do check de cargo já existente na rota, nunca antes nem no lugar dele.
  *
- * Regras:
- * - Usuário sem `permissionProfileId` (nenhum perfil atribuído): libera —
- *   comportamento atual preservado, ninguém sem perfil atribuído pode ser
- *   bloqueado por isto.
- * - Usuário com perfil, mas sem linha de `ModulePermission` para este
- *   `moduleKey` (não deveria acontecer depois do backfill da migration da
- *   branch `claude/perfis-permissao-prep`, mas é tratado defensivamente
- *   porque essa migration pode ainda não ter rodado em produção): libera —
- *   mesma lógica, nunca bloquear por ausência de configuração.
- * - Usuário com perfil e linha de `ModulePermission` para este módulo:
- *   respeita o valor gravado na flag correspondente à ação pedida (seja o
- *   valor antigo, de antes do backfill, ou o já corrigido).
+ * `subcategoryKey`, quando informado, permite checar a permissão de uma
+ * subcategoria específica dentro do módulo (ex.: "vendas" + "faturamento").
+ * Uma permissão por usuário (`UserPermission`, editada em Usuários > Novo
+ * usuário) tem prioridade sobre o perfil de permissão — é um ajuste pontual
+ * só para aquele usuário. Em cada camada, a chave da subcategoria
+ * (`${moduleKey}:${subcategoryKey}`) tem prioridade sobre a chave do módulo
+ * inteiro.
+ *
+ * Regras (aplicadas nessa ordem; a primeira que encontrar uma linha decide):
+ * 1. `UserPermission` do usuário para a subcategoria.
+ * 2. `UserPermission` do usuário para o módulo inteiro.
+ * 3. `ModulePermission` do perfil do usuário para a subcategoria.
+ * 4. `ModulePermission` do perfil do usuário para o módulo inteiro.
+ * 5. Nenhuma configuração encontrada: libera — ninguém é bloqueado só por
+ *    ausência de configuração (usuário sem perfil, perfil sem linha para
+ *    este módulo, etc.).
  */
 export async function hasModulePermission(
   userId: string,
   moduleKey: string,
-  action: PermissionAction
+  action: PermissionAction,
+  subcategoryKey?: string
 ): Promise<boolean> {
+  const compoundKey = subcategoryKey ? `${moduleKey}:${subcategoryKey}` : null;
+  const keys = compoundKey ? [moduleKey, compoundKey] : [moduleKey];
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       permissionProfileId: true,
+      permissions: {
+        where: { moduleKey: { in: keys } },
+        select: { moduleKey: true, level: true },
+      },
       permissionProfile: {
         select: {
           modulePermissions: {
-            where: { moduleKey },
-            select: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+            where: { moduleKey: { in: keys } },
+            select: { moduleKey: true, canView: true, canCreate: true, canEdit: true, canDelete: true },
           },
         },
       },
     },
   });
+  if (!user) return true;
 
-  if (!user?.permissionProfileId) return true;
+  const userOverride =
+    (compoundKey && user.permissions.find((p) => p.moduleKey === compoundKey)) ||
+    user.permissions.find((p) => p.moduleKey === moduleKey);
+  if (userOverride) return ACCESS_LEVEL_TO_MODULE_FLAGS[userOverride.level][action];
 
-  const modulePermission = user.permissionProfile?.modulePermissions[0];
-  if (!modulePermission) return true;
+  if (!user.permissionProfileId) return true;
 
-  return modulePermission[action];
+  const modulePermissions = user.permissionProfile?.modulePermissions ?? [];
+  const profileRow =
+    (compoundKey && modulePermissions.find((m) => m.moduleKey === compoundKey)) ||
+    modulePermissions.find((m) => m.moduleKey === moduleKey);
+  if (!profileRow) return true;
+
+  return profileRow[action];
 }
