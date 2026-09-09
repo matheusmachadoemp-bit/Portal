@@ -3,8 +3,8 @@ import type { AccessLevel, Role } from "@prisma/client";
 // Espelha o catálogo de módulos do menu lateral (CATEGORIES em prisma/seed.ts / tabela
 // Category). Se um módulo novo for criado no menu, ele também precisa ganhar uma entrada aqui —
 // caso contrário ele some da tela de Permissões e, pior, some do menu lateral para qualquer
-// usuário com um perfil de permissão atribuído (visibleModuleKeys só libera módulos que têm uma
-// linha de ModulePermission com canView = true; um módulo ausente daqui nunca ganha essa linha).
+// usuário com um perfil de permissão atribuído (buildVisibilityResolver só libera módulos que têm
+// uma linha de ModulePermission com canView = true; um módulo ausente daqui nunca ganha essa linha).
 export const MODULES = [
   { key: "inicio", label: "Início" },
   { key: "vendas", label: "Vendas" },
@@ -50,14 +50,35 @@ export const PERMISSION_ACTIONS: { key: PermissionAction; label: string }[] = [
   { key: "canDelete", label: "Excluir" },
 ];
 
-/** Módulos visíveis no menu para um usuário, dado seu perfil de permissão. Administradores sempre veem tudo. */
-export function visibleModuleKeys(
+/**
+ * Resolve se uma categoria (`moduleKey`) ou subcategoria (`${moduleKey}:${subKey}`) do
+ * menu lateral deve aparecer para um usuário. Combina duas camadas, na mesma ordem de
+ * prioridade usada por `hasModulePermission` em `@/lib/authz`:
+ *
+ * 1. `userOverrides` (`UserPermission`, ajuste pontual daquele usuário, editado em
+ *    Usuários > Novo usuário) — se existir uma linha para a chave, ela decide.
+ * 2. `modulePermissions` (perfil de permissão atribuído ao usuário) — lista de opt-in:
+ *    só os módulos com `canView: true` aparecem; um módulo ausente da lista fica oculto.
+ * 3. Sem perfil e sem override para a chave: visível (comportamento atual preservado).
+ *
+ * Administradores sempre veem tudo (retorna `null`, "sem restrição").
+ */
+export function buildVisibilityResolver(
   role: Role | string,
-  modulePermissions: { moduleKey: string; canView: boolean }[] | undefined
-): Set<string> | null {
-  if (role === "ADMINISTRADOR") return null; // null = sem restrição, mostra tudo
-  if (!modulePermissions) return null; // sem perfil atribuído: comportamento atual (mostra tudo)
-  return new Set(modulePermissions.filter((m) => m.canView).map((m) => m.moduleKey));
+  modulePermissions: { moduleKey: string; canView: boolean }[] | undefined,
+  userOverrides: { moduleKey: string; level: AccessLevel }[] | undefined
+): ((key: string) => boolean) | null {
+  if (role === "ADMINISTRADOR") return null;
+  if (!modulePermissions && !userOverrides?.length) return null;
+
+  const profileSet = modulePermissions ? new Set(modulePermissions.filter((m) => m.canView).map((m) => m.moduleKey)) : null;
+  const overrides = new Map((userOverrides ?? []).map((o) => [o.moduleKey, ACCESS_LEVEL_TO_MODULE_FLAGS[o.level].canView]));
+
+  return (key: string) => {
+    if (overrides.has(key)) return overrides.get(key)!;
+    if (profileSet) return profileSet.has(key);
+    return true;
+  };
 }
 
 // ADMINISTRADOR has full access to everything, always.
