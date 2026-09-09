@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus } from "lucide-react";
+import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus, AlertTriangle } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { DndContext, DragEndEvent, closestCenter } from "@dnd-kit/core";
@@ -19,6 +19,10 @@ import {
   precoIfoodSugerido,
   productTotalCost,
 } from "@/lib/ficha";
+import { differenceInCalendarDays } from "date-fns";
+
+/** Mesmo critério do painel de qualidade (bucket "Desatualizadas" removido dali): ficha sem edição há mais de 90 dias. */
+const DIAS_DESATUALIZADA = 90;
 
 type IngredientOption = {
   id: string;
@@ -242,6 +246,8 @@ export function ProdutosClient({
           const margem = margemContribuicao(totalCost, p.precoVenda);
           const taxaIfood = p.taxaIfood ?? taxaIfoodPadrao;
           const precoIfood = precoIfoodSugerido(p.precoVenda, taxaIfood);
+          const daysSinceUpdate = differenceInCalendarDays(new Date(), new Date(p.updatedAt));
+          const desatualizada = daysSinceUpdate > DIAS_DESATUALIZADA;
           return (
             <div key={p.id} className="nord-card p-4 flex flex-col gap-2">
               <div className="flex items-start justify-between gap-2">
@@ -274,6 +280,12 @@ export function ProdutosClient({
                 <button onClick={() => openEdit(p)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
                   <Pencil size={12} /> Editar
                 </button>
+                <span
+                  title={desatualizada ? `Ficha desatualizada há ${daysSinceUpdate}d (mais de ${DIAS_DESATUALIZADA} dias sem atualizar)` : `Ficha atualizada há ${daysSinceUpdate}d`}
+                  className={`shrink-0 ${desatualizada ? "text-nord-danger" : "text-nord-gray"}`}
+                >
+                  <AlertTriangle size={14} />
+                </span>
                 <button onClick={() => setConfirmDeleteId(p.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-red-400 py-1.5">
                   <Trash2 size={12} /> Excluir
                 </button>

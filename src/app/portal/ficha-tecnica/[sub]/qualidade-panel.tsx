@@ -31,7 +31,7 @@ export function QualidadePanel({
   const [config, setConfig] = useState(initialConfig);
   const [showConfig, setShowConfig] = useState(false);
   const [form, setForm] = useState({ cmvMaximoPercent: String(initialConfig.cmvMaximoPercent), diasDesatualizada: String(initialConfig.diasDesatualizada) });
-  const [openBucket, setOpenBucket] = useState<"desatualizadas" | "incompletas" | "cmvAlto" | "ok" | null>(null);
+  const [openBucket, setOpenBucket] = useState<"incompletas" | "cmvAlto" | "ok" | null>(null);
 
   const evaluated = useMemo(() => {
     const now = new Date();
@@ -47,7 +47,6 @@ export function QualidadePanel({
   }, [products, config]);
 
   const buckets = {
-    desatualizadas: evaluated.filter((p) => p.desatualizada),
     incompletas: evaluated.filter((p) => p.incompleta),
     cmvAlto: evaluated.filter((p) => p.cmvAlto),
     ok: evaluated.filter((p) => !p.desatualizada && !p.incompleta && !p.cmvAlto),
@@ -80,15 +79,7 @@ export function QualidadePanel({
         ) : undefined
       }
     >
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <button onClick={() => setOpenBucket("desatualizadas")} className="text-left">
-          <StatCard
-            label={`Desatualizadas há mais de ${config.diasDesatualizada} dias`}
-            value={`${buckets.desatualizadas.length} de ${total}`}
-            icon="Clock"
-            color="#ef4444"
-          />
-        </button>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <button onClick={() => setOpenBucket("incompletas")} className="text-left">
           <StatCard label="Fichas incompletas" value={`${buckets.incompletas.length} de ${total}`} icon="AlertTriangle" color="#f59e0b" />
         </button>
@@ -109,13 +100,11 @@ export function QualidadePanel({
         open={!!openBucket}
         onClose={() => setOpenBucket(null)}
         title={
-          openBucket === "desatualizadas"
-            ? "Fichas desatualizadas"
-            : openBucket === "incompletas"
-              ? "Fichas incompletas"
-              : openBucket === "cmvAlto"
-                ? "CMV acima do padrão"
-                : "Fichas OK"
+          openBucket === "incompletas"
+            ? "Fichas incompletas"
+            : openBucket === "cmvAlto"
+              ? "CMV acima do padrão"
+              : "Fichas OK"
         }
         widthClass="max-w-lg"
       >
