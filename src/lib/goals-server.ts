@@ -25,37 +25,50 @@ export async function processGoalAlerts(): Promise<{ checked: number; notified: 
     },
   });
 
-  let notified = 0;
+  // Uma busca de gerentes por loja distinta (não por meta) — várias metas
+  // vencidas costumam ser da mesma loja, mesmo padrão já usado em
+  // processChecklistEscalations (src/lib/checklist-server.ts).
+  const distinctEmpresaIds = [...new Set(goals.map((g) => g.empresaId))];
+  const managersByEmpresa = new Map(
+    await Promise.all(distinctEmpresaIds.map(async (empresaId) => [empresaId, await getStoreManagers(empresaId)] as const))
+  );
 
-  for (const goal of goals) {
-    const status = computeGoalStatus(goal.valorRealizado, goal.valorMeta, goal.endDate, now);
+  // Cada meta é processada (notificação + update) de forma independente das
+  // demais — dá pra rodar em paralelo em vez de uma de cada vez.
+  const notifiedCounts = await Promise.all(
+    goals.map(async (goal) => {
+      const status = computeGoalStatus(goal.valorRealizado, goal.valorMeta, goal.endDate, now);
+      let notifiedForGoal = 0;
 
-    if (status === "NAO_ATINGIDA") {
-      const managerIds = await getStoreManagers(goal.empresaId);
-      const categoryLabel = GOAL_CATEGORY_LABEL[goal.category as GoalCategoryKey] ?? goal.category;
-      const title = `Meta não atingida: ${goal.name}`;
-      const body = `${categoryLabel} — realizado ${formatNumber(goal.valorRealizado)} de ${formatNumber(goal.valorMeta)} ${goal.unidade}.`;
+      if (status === "NAO_ATINGIDA") {
+        const managerIds = managersByEmpresa.get(goal.empresaId) ?? [];
+        const categoryLabel = GOAL_CATEGORY_LABEL[goal.category as GoalCategoryKey] ?? goal.category;
+        const title = `Meta não atingida: ${goal.name}`;
+        const body = `${categoryLabel} — realizado ${formatNumber(goal.valorRealizado)} de ${formatNumber(goal.valorMeta)} ${goal.unidade}.`;
 
-      if (managerIds.length > 0) {
-        await prisma.notification.createMany({
-          data: managerIds.map((userId) => ({
-            userId,
-            type: "META_NAO_ATINGIDA",
-            title,
-            body,
-            priority: "ATENCAO" as const,
-            goalId: goal.id,
-          })),
-        });
-        notified += managerIds.length;
+        if (managerIds.length > 0) {
+          await prisma.notification.createMany({
+            data: managerIds.map((userId) => ({
+              userId,
+              type: "META_NAO_ATINGIDA",
+              title,
+              body,
+              priority: "ATENCAO" as const,
+              goalId: goal.id,
+            })),
+          });
+          notifiedForGoal = managerIds.length;
+        }
       }
-    }
 
-    await prisma.goal.update({
-      where: { id: goal.id },
-      data: { status: status as never, alertaEnviado: true },
-    });
-  }
+      await prisma.goal.update({
+        where: { id: goal.id },
+        data: { status: status as never, alertaEnviado: true },
+      });
 
-  return { checked: goals.length, notified };
+      return notifiedForGoal;
+    })
+  );
+
+  return { checked: goals.length, notified: notifiedCounts.reduce((a, b) => a + b, 0) };
 }

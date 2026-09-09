@@ -22,11 +22,10 @@ export async function GET(req: Request) {
   if (mode === "plan") {
     const amanha = new Date();
     amanha.setDate(amanha.getDate() + 1);
-    let totalCreated = 0;
-    for (const empresa of empresas) {
-      const result = await generateProductionPlan(empresa.id, amanha, null);
-      totalCreated += result.created;
-    }
+    // Cada loja gera o próprio plano de forma independente — roda em
+    // paralelo em vez de uma loja de cada vez.
+    const results = await Promise.all(empresas.map((empresa) => generateProductionPlan(empresa.id, amanha, null)));
+    const totalCreated = results.reduce((acc, r) => acc + r.created, 0);
     return NextResponse.json({ ok: true, mode, empresas: empresas.length, ordensGeradas: totalCreated });
   }
 
@@ -47,26 +46,37 @@ export async function GET(req: Request) {
       include: { productionItem: { select: { name: true } } },
     });
 
-    let notificados = 0;
-    for (const ordem of pendentes) {
-      if (effectiveProductionStatus({ prazo: ordem.prazo, status: ordem.status }) !== "ATRASADO") continue;
+    const atrasadas = pendentes.filter(
+      (ordem) => effectiveProductionStatus({ prazo: ordem.prazo, status: ordem.status }) === "ATRASADO"
+    );
 
-      await prisma.productionOrder.update({ where: { id: ordem.id }, data: { status: "ATRASADO" } });
-      await logProductionOrderHistory(ordem.id, null, "ATRASADO", "Prazo vencido sem finalizar.");
+    // Uma busca de gerentes por loja distinta (não por ordem) — várias
+    // ordens atrasadas costumam ser da mesma loja, mesmo padrão já usado em
+    // processChecklistEscalations (src/lib/checklist-server.ts).
+    const distinctEmpresaIds = [...new Set(atrasadas.map((o) => o.empresaId))];
+    const managersByEmpresa = new Map(
+      await Promise.all(distinctEmpresaIds.map(async (empresaId) => [empresaId, await getStoreManagers(empresaId)] as const))
+    );
 
-      const managerIds = await getStoreManagers(ordem.empresaId);
-      const recipientIds = new Set(managerIds);
-      if (ordem.responsavelId) recipientIds.add(ordem.responsavelId);
-      await notifyProducaoUsers(
-        Array.from(recipientIds),
-        "PRODUCAO_ATRASADA",
-        `Produção atrasada: ${ordem.productionItem.name}`,
-        `Deveria estar pronto até ${new Date(ordem.prazo).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`
-      );
-      notificados++;
-    }
+    // Cada ordem atrasada é processada de forma independente das demais.
+    await Promise.all(
+      atrasadas.map(async (ordem) => {
+        await prisma.productionOrder.update({ where: { id: ordem.id }, data: { status: "ATRASADO" } });
+        await logProductionOrderHistory(ordem.id, null, "ATRASADO", "Prazo vencido sem finalizar.");
 
-    return NextResponse.json({ ok: true, mode, verificadas: pendentes.length, notificados });
+        const managerIds = managersByEmpresa.get(ordem.empresaId) ?? [];
+        const recipientIds = new Set(managerIds);
+        if (ordem.responsavelId) recipientIds.add(ordem.responsavelId);
+        await notifyProducaoUsers(
+          Array.from(recipientIds),
+          "PRODUCAO_ATRASADA",
+          `Produção atrasada: ${ordem.productionItem.name}`,
+          `Deveria estar pronto até ${new Date(ordem.prazo).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.`
+        );
+      })
+    );
+
+    return NextResponse.json({ ok: true, mode, verificadas: pendentes.length, notificados: atrasadas.length });
   }
 
   return NextResponse.json({ error: "mode inválido" }, { status: 400 });
