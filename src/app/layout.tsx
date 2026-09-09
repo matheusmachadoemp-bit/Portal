@@ -22,6 +22,14 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "Portal Nord",
   },
+  // Next.js 16 só gera a tag "mobile-web-app-capable" (padrão moderno) a
+  // partir de appleWebApp.capable. iPhones com iOS mais antigo (antes do
+  // padrão adotado no iOS 26, que já abre qualquer atalho como app) ainda
+  // dependem da tag histórica com o prefixo "apple-", então adicionamos
+  // ela manualmente para cobrir esses aparelhos também.
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
