@@ -25,6 +25,10 @@ export function TracksClient({
 }) {
   const router = useRouter();
   const [tracks, setTracks] = useState(initialTracks);
+  const filtered = tracks.filter((t) => {
+    if (!isAdmin && t.courses.some((tc) => tc.course.status !== "PUBLICADO")) return false;
+    return true;
+  });
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TrackDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -124,7 +128,7 @@ export function TracksClient({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {tracks.map((t) => {
+        {filtered.map((t) => {
           const totalMinutes = t.courses.reduce((a, c) => a + c.course.cargaHoraria, 0);
           return (
             <div key={t.id} className="nord-card p-4">
@@ -169,7 +173,7 @@ export function TracksClient({
             </div>
           );
         })}
-        {tracks.length === 0 && <p className="text-sm text-nord-gray col-span-full text-center py-8">Nenhuma trilha cadastrada ainda.</p>}
+        {filtered.length === 0 && <p className="text-sm text-nord-gray col-span-full text-center py-8">Nenhuma trilha cadastrada ainda.</p>}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar trilha" : "Nova trilha"} widthClass="max-w-2xl">

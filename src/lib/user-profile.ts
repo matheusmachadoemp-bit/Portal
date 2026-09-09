@@ -1,10 +1,14 @@
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
 
 /**
- * Retorna o perfil (dado fresco do banco, não só o que está no token/sessão)
- * do usuário logado — usado pelo menu de perfil no topo da tela. Não lança
- * erro quando não há sessão: retorna `null` nesse caso.
+ * Retorna o perfil do usuário logado a partir da sessão (JWT), sem consultar
+ * o banco — usado pelo menu de perfil no topo da tela, que é renderizado em
+ * praticamente toda navegação, então uma consulta extra aqui pesa no tempo
+ * de carregamento de todo o portal. Nome/e-mail/cargo/foto ficam gravados no
+ * token no login (ver `auth.ts`/`auth.config.ts`) e só atualizam na próxima
+ * vez que o usuário entrar de novo (ou a cada 8h, quando a sessão expira) —
+ * uma pequena defasagem aceitável em troca de não bater no banco a cada
+ * clique no menu. Não lança erro quando não há sessão: retorna `null`.
  */
 export async function getCurrentUserProfile(): Promise<{
   id: string;
@@ -16,17 +20,11 @@ export async function getCurrentUserProfile(): Promise<{
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, name: true, email: true, avatarUrl: true, role: true },
-  });
-  if (!user) return null;
-
   return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    avatarUrl: user.avatarUrl,
-    role: user.role,
+    id: session.user.id,
+    name: session.user.name ?? "",
+    email: session.user.email ?? "",
+    avatarUrl: session.user.avatarUrl,
+    role: session.user.role,
   };
 }
