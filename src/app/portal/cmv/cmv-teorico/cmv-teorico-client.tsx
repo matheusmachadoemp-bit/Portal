@@ -1,8 +1,9 @@
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, LabelList } from "recharts";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
+import { renderPercentBarLabel } from "@/components/ui/percent-bar-label";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 
 export function CmvTeoricoClient({
@@ -59,7 +60,9 @@ export function CmvTeoricoClient({
             <XAxis type="number" stroke="var(--nord-gray)" fontSize={11} tickFormatter={(v) => `${v}%`} />
             <YAxis type="category" dataKey="name" stroke="var(--nord-gray)" fontSize={11} width={140} />
             <Tooltip contentStyle={{ background: "var(--nord-card)", border: "1px solid var(--nord-border)", borderRadius: 8, fontSize: 12 }} formatter={(v) => `${v}%`} />
-            <Bar dataKey="value" fill="#2952E3" radius={[0, 6, 6, 0]} />
+            <Bar dataKey="value" fill="#2952E3" radius={[0, 6, 6, 0]}>
+              <LabelList dataKey="value" content={renderPercentBarLabel} />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Section>
