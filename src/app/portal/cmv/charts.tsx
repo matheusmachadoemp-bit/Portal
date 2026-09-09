@@ -1,7 +1,8 @@
 "use client";
 
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar } from "recharts";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, BarChart, Bar, LabelList } from "recharts";
 import { Section } from "@/components/ui/stat-card";
+import { renderPercentBarLabel } from "@/components/ui/percent-bar-label";
 
 export function CmvCharts({
   dailySeries,
@@ -42,7 +43,9 @@ export function CmvCharts({
                 contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
                 formatter={(v) => `${v}%`}
               />
-              <Bar dataKey="value" fill="#2952E3" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="value" fill="#2952E3" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="value" content={renderPercentBarLabel} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
