@@ -8,7 +8,15 @@ import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
+// Prioriza NEXTAUTH_URL (já usada em outras partes do app, ex.: link do
+// certificado da Universidade) em vez do header Host da requisição: o Host
+// é enviado pelo cliente e não é confiável — um agente malicioso poderia
+// mandar um Host diferente do domínio real, fazendo o e-mail de recuperação
+// de senha incluir um link para um site controlado por ele, com o token
+// secreto de redefinição no caminho da URL. O Host só é usado como último
+// recurso (dev local sem a variável configurada).
 async function getOrigin(): Promise<string> {
+  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL.replace(/\/$/, "");
   const h = await headers();
   const host = h.get("host") ?? "localhost:3000";
   const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";

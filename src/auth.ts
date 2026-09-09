@@ -18,15 +18,23 @@ function isLockedOut(user: { lockedUntil: Date | null }): boolean {
   return !!user.lockedUntil && user.lockedUntil.getTime() > Date.now();
 }
 
-async function registerFailedAttempt(userId: string, currentCount: number): Promise<void> {
-  const count = currentCount + 1;
-  await prisma.user.update({
+// Incrementa atomicamente (via `increment`, não lendo e regravando um valor)
+// para que tentativas erradas simultâneas (paralelas) não pisem uma na outra
+// e escapem do bloqueio — um `findUnique` seguido de `update({ count + 1 })`
+// permite que duas requisições concorrentes leiam o mesmo valor antigo e
+// cada uma grave "+1" a partir dele, perdendo um incremento.
+async function registerFailedAttempt(userId: string): Promise<void> {
+  const updated = await prisma.user.update({
     where: { id: userId },
-    data: {
-      failedLoginAttempts: count,
-      lockedUntil: count >= MAX_ATTEMPTS ? new Date(Date.now() + LOCKOUT_MS) : undefined,
-    },
+    data: { failedLoginAttempts: { increment: 1 } },
+    select: { failedLoginAttempts: true },
   });
+  if (updated.failedLoginAttempts >= MAX_ATTEMPTS) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lockedUntil: new Date(Date.now() + LOCKOUT_MS) },
+    });
+  }
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -49,7 +57,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) {
-          await registerFailedAttempt(user.id, user.failedLoginAttempts);
+          await registerFailedAttempt(user.id);
           return null;
         }
 
