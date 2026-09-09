@@ -10,7 +10,7 @@ import { auth } from "@/auth";
 // @/lib/permissions), qualquer linha salva antes disso é lixo/placebo (valores
 // que um admin marcou sem saber que não tinham efeito) — limpa antes que essas
 // linhas antigas passem a restringir alguém de surpresa.
-export async function POST() {
+export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
