@@ -2,10 +2,11 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Portal Nord Pizza & Burger",
+    name: "Portal Grupo Nord",
     short_name: "Portal Nord",
-    description: "Portal administrativo da Nord Pizza & Burger",
-    start_url: "/portal",
+    description: "Portal administrativo do Grupo Nord",
+    start_url: "/portal/inicio",
+    scope: "/",
     display: "standalone",
     background_color: "#05070a",
     theme_color: "#05070a",

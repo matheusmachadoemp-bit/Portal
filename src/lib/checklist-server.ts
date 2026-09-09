@@ -9,6 +9,7 @@ import {
   spStartOfDay,
   weekdayFieldFor,
 } from "@/lib/checklist";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * Gera (de forma idempotente, via @@unique([templateId, date])) as
@@ -21,6 +22,8 @@ export async function generateChecklistOccurrences(empresaIds: string[], dateKey
   const day = spStartOfDay(dateKey);
   const weekdayField = weekdayFieldFor(dateKey);
 
+  // Só os campos usados para montar a ocorrência — o restante do template
+  // (descrição, regras de cobrança, etc.) não é lido aqui.
   const templates = await prisma.checklistTemplate.findMany({
     where: {
       empresaId: { in: empresaIds },
@@ -29,6 +32,7 @@ export async function generateChecklistOccurrences(empresaIds: string[], dateKey
       OR: [{ endDate: null }, { endDate: { gte: day } }],
       [weekdayField]: true,
     },
+    select: { id: true, empresaId: true, releaseTime: true, dueTime: true, responsavelId: true },
   });
 
   await Promise.all(
@@ -54,7 +58,12 @@ export async function generateChecklistOccurrences(empresaIds: string[], dateKey
 /** Recalcula (e persiste, se mudou) o status "ao vivo" de cada ocorrência. */
 export async function refreshOccurrenceStatuses(occurrenceIds: string[]) {
   if (occurrenceIds.length === 0) return;
-  const occurrences = await prisma.checklistOccurrence.findMany({ where: { id: { in: occurrenceIds } } });
+  // Só os campos usados pelo cálculo de status — não a ocorrência inteira
+  // (que carregaria justificativa/campos de comprovação sem necessidade).
+  const occurrences = await prisma.checklistOccurrence.findMany({
+    where: { id: { in: occurrenceIds } },
+    select: { id: true, releaseAt: true, dueAt: true, startedAt: true, completedAt: true, status: true },
+  });
   const now = new Date();
   await Promise.all(
     occurrences.map((o) => {
@@ -70,6 +79,67 @@ export async function refreshOccurrenceStatuses(occurrenceIds: string[]) {
       return prisma.checklistOccurrence.update({ where: { id: o.id }, data: { status: next } });
     })
   );
+}
+
+// ---------------------------------------------------------------------------
+// Ocorrências do dia, prontas para consumo (Fase 1b/2 — Tela de Início) —
+// junta os 3 passos que `loadRotinaChecklist` e `loadAlertaChecklistAtrasado`
+// (src/lib/inicio.ts) faziam cada um por conta própria: gerar as ocorrências
+// do dia, buscá-las (com o template completo) e atualizar o status "ao
+// vivo" de cada uma. As duas rotas que usam essas funções
+// (/api/inicio/rotina e /api/inicio/alertas) são chamadas em paralelo pelo
+// navegador na Tela de Início — como as duas pedem exatamente os mesmos 3
+// passos para a mesma loja+dia, `occurrencesDoDiaInFlight` coalesce
+// chamadas concorrentes (mesma chave `empresaId:dateKey`) numa única
+// execução, em vez de repetir a geração/busca/atualização duas vezes.
+//
+// Não é um cache com TTL (não guarda nada depois de resolver): a entrada
+// só existe enquanto a promise está em voo e é removida assim que ela
+// termina (sucesso ou erro), então uma chamada que chega depois que a
+// anterior já terminou sempre dispara uma busca nova — sem janela de dado
+// desatualizado. Só reduz trabalho quando as chamadas realmente se
+// sobrepõem no tempo, que é exatamente o caso descrito acima.
+// ---------------------------------------------------------------------------
+
+const occurrencesDoDiaInFlight = new Map<string, ReturnType<typeof fetchAndRefreshOccurrencesDoDia>>();
+
+async function fetchAndRefreshOccurrencesDoDia(empresaId: string, dateKey: string) {
+  await generateChecklistOccurrences([empresaId], dateKey);
+
+  const day = spStartOfDay(dateKey);
+  const occurrences = await prisma.checklistOccurrence.findMany({
+    where: { empresaId, date: day },
+    include: { template: true },
+  });
+  if (occurrences.length > 0) {
+    await refreshOccurrenceStatuses(occurrences.map((o) => o.id));
+  }
+  return occurrences;
+}
+
+/**
+ * Gera (se necessário) e devolve TODAS as ocorrências de checklist do dia
+ * `dateKey` de uma loja, com o template completo incluído e o status já
+ * atualizado no banco (`refreshOccurrenceStatuses`). O `status` de cada
+ * ocorrência no retorno é o valor de ANTES do refresh — igual ao que
+ * `loadRotinaChecklist`/`loadAlertaChecklistAtrasado` já faziam: cada
+ * chamador recalcula o status "ao vivo" localmente com
+ * `computeOccurrenceStatus` (mesma fórmula pura usada pelo refresh, com o
+ * mesmo `releaseAt`/`dueAt`/`startedAt`/`completedAt`/`status`), então não
+ * precisa reler do banco depois de persistir.
+ */
+export async function loadChecklistOccurrencesDoDia(empresaId: string, dateKey: string) {
+  const key = `${empresaId}:${dateKey}`;
+  const inFlight = occurrencesDoDiaInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const promise = fetchAndRefreshOccurrencesDoDia(empresaId, dateKey);
+  occurrencesDoDiaInFlight.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    occurrencesDoDiaInFlight.delete(key);
+  }
 }
 
 const GOAL_CATEGORY_LABEL: Record<string, string> = {
@@ -199,22 +269,25 @@ export async function processChecklistEscalations(occurrenceIds: string[]) {
       });
       const priority = CHECKLIST_ESCALATION_PRIORITY[tipo];
 
-      for (const destinatarioId of pending) {
-        const notification = await prisma.notification.create({
-          data: {
+      // Um destinatário nunca depende do outro (cada um recebe sua própria
+      // notificação/log) — dá pra disparar em paralelo em vez de um de cada vez.
+      await Promise.all(
+        pending.map(async (destinatarioId) => {
+          const notification = await createNotification({
             userId: destinatarioId,
             type: `CHECKLIST_${tipo}`,
             title,
             body,
             priority,
             checklistOccurrenceId: o.id,
-          },
-        });
-        await prisma.checklistEscalationLog.create({
-          data: { occurrenceId: o.id, tipo, destinatarioId, notificationId: notification.id },
-        });
-        notified += 1;
-      }
+            url: `/portal/tarefas/checklist/executar/${o.id}`,
+          });
+          await prisma.checklistEscalationLog.create({
+            data: { occurrenceId: o.id, tipo, destinatarioId, notificationId: notification.id },
+          });
+        })
+      );
+      notified += pending.length;
     }
 
     if (levels.includes("NAO_REALIZADO") && o.status !== "NAO_REALIZADO") {

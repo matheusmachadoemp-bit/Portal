@@ -47,35 +47,41 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // --- Atualização item a item (contagem em andamento) ---
   if (Array.isArray(body.items)) {
     const limiar = existing.empresa.metaDivergenciaContagemPercent;
-    for (const upd of body.items as { itemId: string; quantidadeContada?: number; observacao?: string; fotoUrl?: string; justificativa?: string; status?: string }[]) {
-      const item = existing.items.find((i) => i.id === upd.itemId);
-      if (!item) continue;
-      const custoUnit = ingredientCostPerUnit(item.ingredient);
-      const contada = upd.quantidadeContada;
-      let diferencaQtd: number | null = null;
-      let diferencaPercent: number | null = null;
-      let diferencaReais: number | null = null;
-      let status = upd.status ?? "PENDENTE";
-      if (contada !== undefined && contada !== null) {
-        diferencaQtd = contada - item.estoqueEsperado;
-        diferencaPercent = item.estoqueEsperado ? (diferencaQtd / item.estoqueEsperado) * 100 : contada > 0 ? 100 : 0;
-        diferencaReais = diferencaQtd * custoUnit;
-        status = Math.abs(diferencaPercent) > limiar ? "DIVERGENCIA" : "CONTADO";
-      }
-      await prisma.stockCountItem.update({
-        where: { id: upd.itemId },
-        data: {
-          quantidadeContada: contada ?? undefined,
-          diferencaQtd: diferencaQtd ?? undefined,
-          diferencaPercent: diferencaPercent ?? undefined,
-          diferencaReais: diferencaReais ?? undefined,
-          observacao: upd.observacao !== undefined ? upd.observacao || null : undefined,
-          fotoUrl: upd.fotoUrl !== undefined ? upd.fotoUrl || null : undefined,
-          justificativa: upd.justificativa !== undefined ? upd.justificativa || null : undefined,
-          status: status as never,
-        },
-      });
-    }
+    // Cada item atualiza uma linha diferente de StockCountItem — são
+    // independentes entre si, então rodam em paralelo em vez de um de cada vez.
+    await Promise.all(
+      (body.items as { itemId: string; quantidadeContada?: number; observacao?: string; fotoUrl?: string; justificativa?: string; status?: string }[]).map(
+        async (upd) => {
+          const item = existing.items.find((i) => i.id === upd.itemId);
+          if (!item) return;
+          const custoUnit = ingredientCostPerUnit(item.ingredient);
+          const contada = upd.quantidadeContada;
+          let diferencaQtd: number | null = null;
+          let diferencaPercent: number | null = null;
+          let diferencaReais: number | null = null;
+          let status = upd.status ?? "PENDENTE";
+          if (contada !== undefined && contada !== null) {
+            diferencaQtd = contada - item.estoqueEsperado;
+            diferencaPercent = item.estoqueEsperado ? (diferencaQtd / item.estoqueEsperado) * 100 : contada > 0 ? 100 : 0;
+            diferencaReais = diferencaQtd * custoUnit;
+            status = Math.abs(diferencaPercent) > limiar ? "DIVERGENCIA" : "CONTADO";
+          }
+          await prisma.stockCountItem.update({
+            where: { id: upd.itemId },
+            data: {
+              quantidadeContada: contada ?? undefined,
+              diferencaQtd: diferencaQtd ?? undefined,
+              diferencaPercent: diferencaPercent ?? undefined,
+              diferencaReais: diferencaReais ?? undefined,
+              observacao: upd.observacao !== undefined ? upd.observacao || null : undefined,
+              fotoUrl: upd.fotoUrl !== undefined ? upd.fotoUrl || null : undefined,
+              justificativa: upd.justificativa !== undefined ? upd.justificativa || null : undefined,
+              status: status as never,
+            },
+          });
+        }
+      )
+    );
   }
 
   // --- Transições de status da contagem ---

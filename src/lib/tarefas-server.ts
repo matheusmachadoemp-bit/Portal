@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { recurrenceMatchesDate } from "@/lib/tarefas";
+import { createNotification, createNotifications } from "@/lib/notifications";
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -69,23 +70,29 @@ export async function generateDueTaskOccurrences(empresaIds: string[], reference
     })),
   });
 
-  await prisma.notification.createMany({
-    data: tasks.flatMap(({ task, assigneeIds }) =>
+  await createNotifications(
+    tasks.flatMap(({ task, assigneeIds }) =>
       assigneeIds.map((userId) => ({
         userId,
         type: "NOVA_TAREFA",
         title: "Nova tarefa",
         body: `Você recebeu a tarefa "${task.title}".`,
         taskId: task.id,
+        url: "/portal/tarefas",
       }))
-    ),
-  });
+    )
+  );
 }
 
 export async function logTaskHistory(taskId: string, userId: string | null, action: string, detail?: string | null): Promise<void> {
   await prisma.taskHistory.create({ data: { taskId, userId, action, detail: detail ?? null } });
 }
 
+/** Helper genérico de notificação, reaproveitado por vários módulos (Tarefas,
+ * Loja Nord, Produção — ver notifyProducaoUsers em producao-server.ts) além
+ * de Tarefas. Quando vem com taskId, o push abre a tela de Tarefas (mesmo
+ * destino que o sino já usa pra esse caso — ver handleOpenNotification em
+ * notification-bell.tsx); sem taskId, abre a Central do portal. */
 export async function notifyUser(userId: string, type: string, title: string, body: string | null, taskId: string | null): Promise<void> {
-  await prisma.notification.create({ data: { userId, type, title, body, taskId } });
+  await createNotification({ userId, type, title, body, taskId, url: taskId ? "/portal/tarefas" : "/portal" });
 }

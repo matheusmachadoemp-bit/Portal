@@ -3,9 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ClipboardX, CalendarX, TrendingDown, PackageX, Frown, Clock, CheckCircle2, ArrowRight } from "lucide-react";
+import {
+  ClipboardX,
+  CalendarX,
+  TrendingDown,
+  PackageX,
+  Frown,
+  Clock,
+  CheckCircle2,
+  ArrowRight,
+  AlertTriangle,
+  PauseCircle,
+  CalendarClock,
+} from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { FormError } from "@/components/ui/modal";
+import type { AlertaTipo, AlertaNivel, AlertaItem } from "@/lib/inicio";
 
 // ---------------------------------------------------------------------------
 // "Alertas importantes" — GET /api/inicio/alertas?empresaId=X. Assim como a
@@ -13,27 +26,12 @@ import { FormError } from "@/components/ui/modal";
 // sempre "agora"), então este painel só refaz a busca quando a loja ativa
 // muda. Visual segue o mesmo padrão de card com borda colorida à esquerda já
 // usado em "Inteligência CRM" (src/app/portal/crm/dashboard/dashboard-client.tsx).
+//
+// AlertaTipo/AlertaNivel/AlertaItem vêm de @/lib/inicio (fonte de verdade) em
+// vez de serem redeclarados aqui — assim, se um tipo novo for adicionado lá,
+// o TypeScript acusa erro de propriedade faltando em TIPO_ICON abaixo, em vez
+// de silenciosamente renderizar `undefined` no lugar do ícone.
 // ---------------------------------------------------------------------------
-
-type AlertaTipo =
-  | "checklist_atrasado"
-  | "tarefa_vencida"
-  | "meta_abaixo_ritmo"
-  | "estoque_baixo"
-  | "avaliacao_negativa"
-  | "aprovacao_pendente";
-
-type AlertaNivel = "urgente" | "atencao" | "informativo";
-
-type AlertaItem = {
-  tipo: AlertaTipo;
-  titulo: string;
-  loja: string;
-  setor: string | null;
-  tempoAtrasoOuPrazo: string;
-  nivel: AlertaNivel;
-  actionHref: string;
-};
 
 const TIPO_ICON: Record<AlertaTipo, LucideIcon> = {
   checklist_atrasado: ClipboardX,
@@ -42,6 +40,12 @@ const TIPO_ICON: Record<AlertaTipo, LucideIcon> = {
   estoque_baixo: PackageX,
   avaliacao_negativa: Frown,
   aprovacao_pendente: Clock,
+  // Mesmos ícones já usados pelos KPIs equivalentes no dashboard da Central
+  // de Manutenção (src/app/portal/manutencao/manutencao-dashboard-client.tsx),
+  // pra manter consistência visual entre as duas telas.
+  chamado_urgente: AlertTriangle, // KPI "Chamados urgentes"
+  equipamento_parado: PauseCircle, // KPI "Equipamentos parados"
+  manutencao_preventiva_atrasada: CalendarClock, // KPI "Próximas manutenções" / ícone do submenu "Calendário preventivo"
 };
 
 // Mesmos tons de --nord-danger / --nord-warning / --nord-blue do DESIGN_SYSTEM.md.

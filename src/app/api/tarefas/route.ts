@@ -15,6 +15,14 @@ const TASK_INCLUDE = {
   _count: { select: { comments: true, attachments: true } },
 };
 
+/** Inteiro >= 1 (opcionalmente limitado a `max`) a partir de um parâmetro de query; `null`/vazio/inválido/não-inteiro/<1 caem no `fallback`. */
+function parsePositiveInt(value: string | null, fallback: number, max?: number): number {
+  if (value === null) return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return fallback;
+  return max !== undefined ? Math.min(n, max) : n;
+}
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -67,17 +75,46 @@ export async function GET(req: Request) {
     where.assignees = { some: { userId: { not: session.user.id } } };
   }
 
-  const tasks = await prisma.task.findMany({
-    where,
-    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-    include: TASK_INCLUDE,
-  });
+  // Paginação opt-in — só ativa quando a chamada manda `page` e/ou
+  // `pageSize` na query string (1-indexado; `pageSize` de 1 a 200, padrão
+  // 50). Sem esses parâmetros, a rota devolve a lista inteira em `{ tasks }`
+  // exatamente como sempre devolveu: hoje o único consumidor
+  // (src/app/portal/tarefas/tarefas-client.tsx, `?view=minhas|equipe|todas`)
+  // busca a lista inteira da aba e filtra/pagina no cliente por cima dela —
+  // mudar o formato por padrão quebraria essa tela.
+  //
+  // Uma futura tela paginada deve mandar `?page=1&pageSize=50` (mais os
+  // outros filtros já existentes, se quiser). Quando pelo menos um dos dois
+  // vem preenchido, o formato da resposta passa a ser `{ tasks, pagination:
+  // { page, pageSize, total, totalPages } }`, com `tasks` já contendo só os
+  // itens da página pedida (mesmo `where`/`orderBy` de sempre).
+  const pageParam = searchParams.get("page");
+  const pageSizeParam = searchParams.get("pageSize");
+  const paginar = pageParam !== null || pageSizeParam !== null;
+  const page = parsePositiveInt(pageParam, 1);
+  const pageSize = parsePositiveInt(pageSizeParam, 50, 200);
 
+  const [rows, total] = await Promise.all([
+    prisma.task.findMany({
+      where,
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      include: TASK_INCLUDE,
+      ...(paginar ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
+    }),
+    paginar ? prisma.task.count({ where }) : null,
+  ]);
+
+  const tasks = rows.map((t) => ({
+    ...t,
+    overdue: !!t.dueDate && t.status !== "CONCLUIDA" && t.dueDate.getTime() < Date.now(),
+  }));
+
+  if (!paginar) return NextResponse.json({ tasks });
+
+  const totalCount = total ?? 0;
   return NextResponse.json({
-    tasks: tasks.map((t) => ({
-      ...t,
-      overdue: !!t.dueDate && t.status !== "CONCLUIDA" && t.dueDate.getTime() < Date.now(),
-    })),
+    tasks,
+    pagination: { page, pageSize, total: totalCount, totalPages: Math.max(1, Math.ceil(totalCount / pageSize)) },
   });
 }
 

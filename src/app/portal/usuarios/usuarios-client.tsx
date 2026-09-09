@@ -289,7 +289,7 @@ export function UsuariosClient({
               onChange={(e) => setForm({ ...form, permissionProfileId: e.target.value })}
               className="input"
             >
-              <option value="">— nenhum (vê tudo, sem restrição) —</option>
+              <option value="">— nenhum selecionado (usa o perfil padrão do Nível de acesso) —</option>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}

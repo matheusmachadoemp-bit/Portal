@@ -4,13 +4,12 @@ import { resolveCrmPeriod, type CrmPeriodKey } from "@/lib/crm";
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, format } from "date-fns";
 import {
   spDateKey,
-  spStartOfDay,
   computeOccurrenceStatus,
   dueEscalationLevels,
   CHECKLIST_TERMINAL_STATUSES,
   CHECKLIST_PONTOS_POR_CONCLUSAO,
 } from "@/lib/checklist";
-import { generateChecklistOccurrences, refreshOccurrenceStatuses } from "@/lib/checklist-server";
+import { loadChecklistOccurrencesDoDia } from "@/lib/checklist-server";
 import { isTaskOverdue, effectiveTaskStatus } from "@/lib/tarefas";
 import { generateDueTaskOccurrences } from "@/lib/tarefas-server";
 import { computeGoalStatus, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE } from "@/lib/goals";
@@ -407,8 +406,19 @@ export async function loadRotinaTarefas(
 /**
  * Ocorrências de checklist de hoje onde o usuário é o responsável OU o
  * substituto configurado no template (`ChecklistTemplate.substitutoId`),
- * ainda não concluídas/encerradas. Reaproveita a mesma geração/atualização
- * de status de src/app/api/checklist/occurrences/route.ts.
+ * ainda não concluídas/encerradas.
+ *
+ * A geração/busca/atualização de status das ocorrências do dia vem de
+ * `loadChecklistOccurrencesDoDia` (src/lib/checklist-server.ts) — a mesma
+ * função usada por `loadAlertaChecklistAtrasado`, logo abaixo: as duas
+ * rotas que consomem essas funções (/api/inicio/rotina e
+ * /api/inicio/alertas) são chamadas em paralelo pela Tela de Início, e essa
+ * função compartilhada coalesce as duas chamadas concorrentes numa única
+ * geração/busca/atualização em vez de repetir o trabalho duas vezes (ver
+ * comentário em `loadChecklistOccurrencesDoDia`). O filtro por
+ * responsável/substituto, que antes era feito no `where` do Prisma, agora é
+ * feito aqui em JS sobre a lista completa do dia — mesmo resultado, já que
+ * `loadChecklistOccurrencesDoDia` já inclui o template completo.
  */
 export async function loadRotinaChecklist(
   empresaId: string,
@@ -418,22 +428,10 @@ export async function loadRotinaChecklist(
   now: Date = new Date()
 ): Promise<RotinaItem[]> {
   const dateKey = spDateKey(now);
-  await generateChecklistOccurrences([empresaId], dateKey);
-  const day = spStartOfDay(dateKey);
-
-  const occurrences = await prisma.checklistOccurrence.findMany({
-    where: {
-      empresaId,
-      date: day,
-      OR: [{ responsavelId: userId }, { template: { substitutoId: userId } }],
-    },
-    include: { template: { select: { name: true, description: true, setor: true } } },
-  });
-  if (occurrences.length === 0) return [];
-
-  await refreshOccurrenceStatuses(occurrences.map((o) => o.id));
+  const occurrences = await loadChecklistOccurrencesDoDia(empresaId, dateKey);
 
   return occurrences
+    .filter((o) => o.responsavelId === userId || o.template.substitutoId === userId)
     .map((o) => ({
       o,
       liveStatus: computeOccurrenceStatus({
@@ -661,6 +659,11 @@ export type AlertaItem = {
  * (urgente/atenção) reaproveita os mesmos limiares de escalonamento do
  * template (`dueEscalationLevels`, de src/lib/checklist.ts) em vez de
  * inventar um novo corte.
+ *
+ * A geração/busca/atualização de status das ocorrências do dia vem de
+ * `loadChecklistOccurrencesDoDia` (src/lib/checklist-server.ts) — ver
+ * comentário em `loadRotinaChecklist`, acima, sobre por que essa função é
+ * compartilhada entre as duas.
  */
 export async function loadAlertaChecklistAtrasado(
   empresaId: string,
@@ -668,16 +671,7 @@ export async function loadAlertaChecklistAtrasado(
   now: Date = new Date()
 ): Promise<AlertaItem[]> {
   const dateKey = spDateKey(now);
-  await generateChecklistOccurrences([empresaId], dateKey);
-  const day = spStartOfDay(dateKey);
-
-  const occurrences = await prisma.checklistOccurrence.findMany({
-    where: { empresaId, date: day },
-    include: { template: true },
-  });
-  if (occurrences.length === 0) return [];
-
-  await refreshOccurrenceStatuses(occurrences.map((o) => o.id));
+  const occurrences = await loadChecklistOccurrencesDoDia(empresaId, dateKey);
 
   const alertas: AlertaItem[] = [];
   for (const o of occurrences) {

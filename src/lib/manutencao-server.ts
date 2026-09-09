@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma, ChamadoCategoria, ChamadoPrioridade, ChamadoStatus } from "@prisma/client";
+import { createNotification } from "@/lib/notifications";
 
 export const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -77,7 +78,14 @@ export async function notifyManutencaoUser(
   body: string | null,
   chamadoId: string | null
 ): Promise<void> {
-  await prisma.notification.create({ data: { userId, type, title, body, chamadoId } });
+  await createNotification({
+    userId,
+    type,
+    title,
+    body,
+    chamadoId,
+    url: chamadoId ? `/portal/manutencao/chamados/${chamadoId}` : "/portal/manutencao",
+  });
 }
 
 /** Gerentes/administradores com acesso à loja do chamado, para notificações de urgência. */

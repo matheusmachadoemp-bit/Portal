@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
-import { hasModulePermission } from "@/lib/authz";
+import { hasModulePermission, resolveDefaultPermissionProfileId } from "@/lib/authz";
 
 async function ensureAdmin() {
   const session = await auth();
@@ -23,11 +23,47 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
 
+  // Ninguém pode alterar o próprio nível de acesso (role) nem o próprio perfil de
+  // permissão por essa rota — mesmo um Gestor com permissão para editar usuários não
+  // pode se autopromover trocando o próprio cargo, nem se dar mais acesso limpando o
+  // próprio permissionProfileId (que hoje, depois da correção do fail-open, significaria
+  // "sem acesso" — mas continua sendo uma alteração de nível de acesso que só deveria ser
+  // feita por outra pessoa com permissão para isso, nunca pelo próprio usuário).
+  if (id === user.id && (body.role !== undefined || body.permissionProfileId !== undefined)) {
+    return NextResponse.json(
+      { error: "Você não pode alterar seu próprio nível de acesso ou perfil de permissão." },
+      { status: 403 }
+    );
+  }
+
   if (body.role !== undefined && body.role === "ADMINISTRADOR" && user.role !== "ADMINISTRADOR") {
     return NextResponse.json(
       { error: "Apenas um Administrador pode conceder o nível de acesso Administrador." },
       { status: 403 }
     );
+  }
+
+  if (body.password && String(body.password).length < 6) {
+    return NextResponse.json(
+      { error: "A nova senha precisa ter pelo menos 6 caracteres." },
+      { status: 400 }
+    );
+  }
+
+  let permissionProfileId: string | null | undefined;
+  if (body.permissionProfileId !== undefined) {
+    if (body.permissionProfileId) {
+      permissionProfileId = body.permissionProfileId;
+    } else {
+      // Perfil deixado em branco: nunca deixa o usuário sem perfil de verdade (ver
+      // resolveDefaultPermissionProfileId em @/lib/authz) — resolve o padrão a partir do
+      // cargo que o usuário vai ter depois desta atualização (o novo, se `role` também
+      // veio no body; senão o que ele já tem hoje).
+      const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+      if (!target) return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
+      const nextRole = body.role ?? target.role;
+      permissionProfileId = await resolveDefaultPermissionProfileId(nextRole);
+    }
   }
 
   const data: Record<string, unknown> = {
@@ -38,7 +74,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     phone: body.phone ?? undefined,
     canViewGrupoNord: body.canViewGrupoNord !== undefined ? !!body.canViewGrupoNord : undefined,
     defaultEmpresaId: body.defaultEmpresaId !== undefined ? body.defaultEmpresaId || null : undefined,
-    permissionProfileId: body.permissionProfileId !== undefined ? body.permissionProfileId || null : undefined,
+    permissionProfileId,
   };
   if (body.password) data.passwordHash = await bcrypt.hash(body.password, 10);
 
