@@ -46,7 +46,22 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const passwordHash = await bcrypt.hash(body.password || "Nord@123", 10);
+
+  const role = body.role || "COLABORADOR";
+  if (role === "ADMINISTRADOR" && user.role !== "ADMINISTRADOR") {
+    return NextResponse.json(
+      { error: "Apenas um Administrador pode criar outro usuário com nível de acesso Administrador." },
+      { status: 403 }
+    );
+  }
+
+  if (!body.password || String(body.password).length < 6) {
+    return NextResponse.json(
+      { error: "Informe uma senha inicial com pelo menos 6 caracteres." },
+      { status: 400 }
+    );
+  }
+  const passwordHash = await bcrypt.hash(body.password, 10);
   const empresaIds: string[] = body.empresaIds || [];
 
   const permissions: { moduleKey: string; level: string }[] = body.permissions || [];
@@ -56,7 +71,7 @@ export async function POST(req: Request) {
       name: body.name,
       email: body.email.toLowerCase().trim(),
       passwordHash,
-      role: body.role || "COLABORADOR",
+      role,
       phone: body.phone || null,
       canViewGrupoNord: !!body.canViewGrupoNord,
       defaultEmpresaId: body.defaultEmpresaId || empresaIds[0] || null,

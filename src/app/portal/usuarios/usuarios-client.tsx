@@ -48,15 +48,18 @@ export function UsuariosClient({
   initialUsers,
   modules,
   currentUserId,
+  currentUserRole,
   empresas,
   profiles,
 }: {
   initialUsers: UserDTO[];
   modules: readonly { key: string; label: string; subcategories?: { key: string; label: string }[] }[];
   currentUserId: string;
+  currentUserRole: string;
   empresas: { id: string; name: string }[];
   profiles: { id: string; name: string }[];
 }) {
+  const availableRoles = currentUserRole === "ADMINISTRADOR" ? ROLES : ROLES.filter((r) => r !== "ADMINISTRADOR");
   const [users, setUsers] = useState(initialUsers);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<UserDTO | null>(null);
@@ -65,6 +68,7 @@ export function UsuariosClient({
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [empresaIds, setEmpresaIds] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
 
   function setPermission(key: string, level: string) {
@@ -96,10 +100,12 @@ export function UsuariosClient({
     setExpandedModules({});
     setEmpresaIds([]);
     setShowFormPassword(false);
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(u: UserDTO) {
+    setFormError(null);
     setEditing(u);
     setForm({
       name: u.name,
@@ -127,25 +133,31 @@ export function UsuariosClient({
   }
 
   async function submit() {
+    setFormError(null);
     const payload = {
       ...form,
       defaultEmpresaId: form.defaultEmpresaId || empresaIds[0] || null,
       permissions: Object.entries(permissions).map(([moduleKey, level]) => ({ moduleKey, level })),
       empresaIds,
     };
-    if (editing) {
-      await fetch(`/api/usuarios/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/usuarios", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    const res = editing
+      ? await fetch(`/api/usuarios/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : await fetch("/api/usuarios", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setFormError(data?.error ?? "Não foi possível salvar o usuário.");
+      return;
     }
+
     setShowForm(false);
     refresh();
   }
@@ -222,6 +234,7 @@ export function UsuariosClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar usuário" : "Novo usuário"} widthClass="max-w-xl">
+        {formError && <p className="text-xs text-nord-danger mb-3">{formError}</p>}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome">
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
@@ -236,7 +249,7 @@ export function UsuariosClient({
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="input pr-8"
-                placeholder="Nord@123"
+                placeholder={editing ? "Deixe em branco para manter a atual" : "Defina uma senha inicial"}
               />
               <button
                 type="button"
@@ -253,7 +266,7 @@ export function UsuariosClient({
           </Field>
           <Field label="Nível de acesso">
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="input">
-              {ROLES.map((r) => (
+              {availableRoles.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
