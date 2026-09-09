@@ -18,14 +18,16 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const targetUserId: string = body.userId || session.user.id;
+  const isSelfEnroll = targetUserId === session.user.id;
+  const isAdminOrGestor = canManageUsers(session.user.role);
 
   // Auto-matrícula (targetUserId === o próprio usuário logado, o caso comum: colaborador se
   // matriculando no próprio curso/trilha) é autoatendimento essencial do dia a dia e por isso NUNCA
   // passa por nenhuma checagem de perfil aqui — só matricular OUTRO colaborador é ação de gestão,
   // e já exigia canManageUsers antes desta tarefa; a checagem de perfil (canCreate) foi adicionada
   // logo depois, só dentro deste mesmo bloco.
-  if (targetUserId !== session.user.id) {
-    if (!canManageUsers(session.user.role)) {
+  if (!isSelfEnroll) {
+    if (!isAdminOrGestor) {
       return NextResponse.json({ error: "Sem permissão para matricular outros colaboradores." }, { status: 403 });
     }
     if (!(await hasModulePermission(session.user.id, "universidade", "canCreate"))) {
@@ -35,6 +37,12 @@ export async function POST(req: Request) {
       );
     }
   }
+  // Neste ponto, se !isSelfEnroll então isAdminOrGestor é garantidamente true (checado acima).
+  // A checagem de status abaixo (curso/trilha em rascunho) só se aplica à auto-matrícula de quem
+  // NÃO é admin/gestor — admin/gestor pode se auto-matricular em rascunho (útil para revisar antes
+  // de publicar) e matricular outro colaborador continua liberado por canManageUsers, sem depender
+  // do status do curso.
+  const blockDraftForSelf = isSelfEnroll && !isAdminOrGestor;
 
   if (body.trackId) {
     const track = await prisma.trainingTrack.findUnique({
@@ -42,6 +50,9 @@ export async function POST(req: Request) {
       include: { courses: { include: { course: true } } },
     });
     if (!track) return NextResponse.json({ error: "Trilha não encontrada." }, { status: 404 });
+    if (blockDraftForSelf && track.courses.some((tc) => tc.course.status !== "PUBLICADO")) {
+      return NextResponse.json({ error: "Esta trilha ainda não está disponível." }, { status: 403 });
+    }
     const enrollments = await Promise.all(
       track.courses.map((tc) => enrollUserInCourse(targetUserId, tc.courseId))
     );
@@ -49,6 +60,15 @@ export async function POST(req: Request) {
   }
 
   if (body.courseId) {
+    if (blockDraftForSelf) {
+      const course = await prisma.trainingCourse.findUnique({
+        where: { id: body.courseId },
+        select: { status: true },
+      });
+      if (!course || course.status !== "PUBLICADO") {
+        return NextResponse.json({ error: "Este curso ainda não está disponível." }, { status: 403 });
+      }
+    }
     const enrollment = await enrollUserInCourse(targetUserId, body.courseId);
     return NextResponse.json({ enrollment });
   }

@@ -52,6 +52,7 @@ export const ENROLLMENT_STATUS_OPTIONS = [
 ];
 
 export const COURSE_CATEGORY_OPTIONS = [
+  "Onboarding",
   "Boas-vindas",
   "Cultura",
   "Atendimento",
