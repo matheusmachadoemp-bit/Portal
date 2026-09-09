@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { UsuariosClient } from "./usuarios-client";
 import { MODULES } from "@/lib/permissions";
+import { getMenuCategories } from "@/lib/menu-categories";
 
 export default async function UsuariosPage() {
   const session = await auth();
@@ -18,14 +19,20 @@ export default async function UsuariosPage() {
     );
   }
 
-  const [users, empresas, profiles] = await Promise.all([
+  const [users, empresas, profiles, menuCategories] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
       include: { permissions: true, empresaAccess: true },
     }),
     prisma.empresa.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
     prisma.permissionProfile.findMany({ orderBy: { name: "asc" } }),
+    getMenuCategories(),
   ]);
+
+  const subcategoriesByModule = new Map(
+    menuCategories.map((c) => [c.key, c.subcategories.filter((s) => s.active).map((s) => ({ key: s.key, label: s.name }))])
+  );
+  const modules = MODULES.map((m) => ({ ...m, subcategories: subcategoriesByModule.get(m.key) ?? [] }));
 
   const serialized = users.map((u) => ({
     id: u.id,
@@ -47,7 +54,7 @@ export default async function UsuariosPage() {
     <PageContainer title="Usuários" subtitle="Gestão de acessos e permissões do portal">
       <UsuariosClient
         initialUsers={serialized}
-        modules={MODULES}
+        modules={modules}
         currentUserId={session.user.id}
         currentUserRole={session.user.role}
         empresas={empresas.map((e) => ({ id: e.id, name: e.name }))}

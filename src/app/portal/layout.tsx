@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/sidebar/sidebar";
 import { MobileSidebarProvider } from "@/components/sidebar/mobile-sidebar-context";
 import { redirect } from "next/navigation";
 import { getActiveEmpresaContext } from "@/lib/empresa";
-import { visibleModuleKeys } from "@/lib/permissions";
+import { buildVisibilityResolver } from "@/lib/permissions";
 import { getMenuCategories } from "@/lib/menu-categories";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -16,12 +16,23 @@ export default async function PortalLayout({ children }: { children: React.React
     getActiveEmpresaContext(),
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { permissionProfile: { select: { modulePermissions: { select: { moduleKey: true, canView: true } } } } },
+      select: {
+        permissionProfile: { select: { modulePermissions: { select: { moduleKey: true, canView: true } } } },
+        permissions: { select: { moduleKey: true, level: true } },
+      },
     }),
   ]);
 
-  const visible = visibleModuleKeys(session.user.role, dbUser?.permissionProfile?.modulePermissions);
-  const categories = visible ? allCategories.filter((c) => visible.has(c.key)) : allCategories;
+  const isVisible = buildVisibilityResolver(
+    session.user.role,
+    dbUser?.permissionProfile?.modulePermissions,
+    dbUser?.permissions
+  );
+  const categories = isVisible
+    ? allCategories
+        .filter((c) => isVisible(c.key))
+        .map((c) => ({ ...c, subcategories: c.subcategories.filter((s) => isVisible(`${c.key}:${s.key}`)) }))
+    : allCategories;
 
   if (!empresaContext) {
     return (

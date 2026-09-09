@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { Plus, Pencil, Trash2, ShieldCheck, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { format } from "date-fns";
@@ -53,7 +53,7 @@ export function UsuariosClient({
   profiles,
 }: {
   initialUsers: UserDTO[];
-  modules: readonly { key: string; label: string }[];
+  modules: readonly { key: string; label: string; subcategories?: { key: string; label: string }[] }[];
   currentUserId: string;
   currentUserRole: string;
   empresas: { id: string; name: string }[];
@@ -65,10 +65,23 @@ export function UsuariosClient({
   const [editing, setEditing] = useState<UserDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [permissions, setPermissions] = useState<Record<string, string>>({});
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [empresaIds, setEmpresaIds] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
+
+  function setPermission(key: string, level: string) {
+    setPermissions((p) => ({ ...p, [key]: level }));
+  }
+
+  function clearPermission(key: string) {
+    setPermissions((p) => {
+      const next = { ...p };
+      delete next[key];
+      return next;
+    });
+  }
 
   function toggleEmpresa(id: string) {
     setEmpresaIds((prev) => (prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]));
@@ -84,6 +97,7 @@ export function UsuariosClient({
     setEditing(null);
     setForm(emptyForm);
     setPermissions({});
+    setExpandedModules({});
     setEmpresaIds([]);
     setShowFormPassword(false);
     setFormError(null);
@@ -107,6 +121,12 @@ export function UsuariosClient({
     const perm: Record<string, string> = {};
     u.permissions.forEach((p) => (perm[p.moduleKey] = p.level));
     setPermissions(perm);
+    const expanded: Record<string, boolean> = {};
+    u.permissions.forEach((p) => {
+      const [moduleKey, subKey] = p.moduleKey.split(":");
+      if (subKey) expanded[moduleKey] = true;
+    });
+    setExpandedModules(expanded);
     setEmpresaIds(u.empresaIds);
     setShowFormPassword(false);
     setShowForm(true);
@@ -334,23 +354,69 @@ export function UsuariosClient({
 
         {form.role !== "ADMINISTRADOR" && (
           <div className="mt-5">
-            <h4 className="text-sm text-white font-medium mb-2">Permissões personalizadas por módulo</h4>
+            <h4 className="text-sm text-white font-medium mb-1">Permissões personalizadas por módulo</h4>
+            <p className="text-[11px] text-nord-gray mb-2">
+              Deixe em branco para seguir o perfil de permissão. Ajuste aqui só o que precisa ser diferente para
+              este usuário — inclusive por subcategoria, clicando na seta para abrir a lista de telas do módulo.
+            </p>
             <div className="grid grid-cols-2 gap-2">
-              {modules.map((m) => (
-                <div key={m.key} className="flex items-center justify-between bg-nord-panel border border-nord-border rounded-lg px-3 py-2">
-                  <span className="text-xs text-nord-gray">{m.label}</span>
-                  <select
-                    value={permissions[m.key] ?? "VISUALIZAR"}
-                    onChange={(e) => setPermissions((p) => ({ ...p, [m.key]: e.target.value }))}
-                    className="bg-transparent text-xs text-white outline-none"
-                  >
-                    <option value="NENHUM">Sem acesso</option>
-                    <option value="VISUALIZAR">Visualizar</option>
-                    <option value="EDITAR">Editar</option>
-                    <option value="TOTAL">Total</option>
-                  </select>
-                </div>
-              ))}
+              {modules.map((m) => {
+                const subs = m.subcategories ?? [];
+                const expanded = !!expandedModules[m.key];
+                return (
+                  <div key={m.key} className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1 min-w-0">
+                        {subs.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedModules((e) => ({ ...e, [m.key]: !e[m.key] }))}
+                            className="text-nord-gray hover:text-white shrink-0"
+                          >
+                            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                          </button>
+                        )}
+                        <span className="text-xs text-nord-gray truncate">{m.label}</span>
+                      </div>
+                      <select
+                        value={permissions[m.key] ?? "VISUALIZAR"}
+                        onChange={(e) => setPermission(m.key, e.target.value)}
+                        className="perm-select bg-transparent text-xs text-white outline-none shrink-0"
+                      >
+                        <option value="NENHUM">Sem acesso</option>
+                        <option value="VISUALIZAR">Visualizar</option>
+                        <option value="EDITAR">Editar</option>
+                        <option value="TOTAL">Total</option>
+                      </select>
+                    </div>
+                    {expanded && subs.length > 0 && (
+                      <div className="mt-2 pl-4 space-y-1.5 border-l border-nord-border">
+                        {subs.map((sub) => {
+                          const key = `${m.key}:${sub.key}`;
+                          return (
+                            <div key={key} className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] text-nord-gray truncate">{sub.label}</span>
+                              <select
+                                value={permissions[key] ?? ""}
+                                onChange={(e) =>
+                                  e.target.value ? setPermission(key, e.target.value) : clearPermission(key)
+                                }
+                                className="perm-select bg-transparent text-[11px] text-white outline-none shrink-0"
+                              >
+                                <option value="">Igual à categoria</option>
+                                <option value="NENHUM">Sem acesso</option>
+                                <option value="VISUALIZAR">Visualizar</option>
+                                <option value="EDITAR">Editar</option>
+                                <option value="TOTAL">Total</option>
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -383,6 +449,9 @@ export function UsuariosClient({
         }
         .input:focus {
           border-color: var(--nord-blue);
+        }
+        .perm-select {
+          color-scheme: dark;
         }
       `}</style>
     </Section>
