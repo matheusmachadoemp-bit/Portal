@@ -1,0 +1,29 @@
+-- Limpeza de dado pontual (sem alteração de schema) — substitui a rota
+-- GET /api/internal/user-permission-reset (removida nesta mesma leva de correções, achado 2 da
+-- auditoria de segurança do Nelson): ela apagava a tabela "UserPermission" inteira
+-- (`deleteMany({})`, sem filtro nenhum) via GET, exposta de propósito como link clicável — sem
+-- proteção CSRF (o projeto não tem checagem de Origin/Referer, e o cookie de sessão é
+-- SameSite=Lax, que é enviado em navegação GET de nível superior), sem confirmação, sem log de
+-- auditoria. Um Administrador/Gestor logado clicando nesse link sem querer apagaria toda
+-- permissão pontual por usuário configurada no sistema. Essa rota "não pode continuar existindo em
+-- produção como está" — removida.
+--
+-- Mantém, porém, o PROPÓSITO original da rota (comentário completo em
+-- prisma/migrations/.../route.ts antes de ser removido): o bloco "Permissões personalizadas por
+-- módulo" da tela Usuários > Novo usuário grava em UserPermission desde antes de qualquer coisa no
+-- sistema ler essa tabela — a primeira versão de `hasModulePermission` (src/lib/authz.ts, commit
+-- 10bb19f, 2026-09-08 01:18:02 UTC) não lia UserPermission; só passou a ler em 2026-09-09
+-- 04:57:23 UTC (commit 37fc0f8, "Corrige dropdown ilegível e ativa permissão por subcategoria em
+-- Novo usuário" — o mesmo commit também é o que ensinou `buildVisibilityResolver`,
+-- src/lib/permissions.ts, a considerar UserPermission pela primeira vez). Qualquer linha gravada
+-- antes desse instante é garantidamente "lixo/placebo": um valor que um admin marcou na tela sem
+-- ter como saber que aquilo não tinha nenhum efeito real ainda.
+--
+-- Diferente da rota original (que apagava a tabela inteira, sem olhar quando cada linha foi
+-- criada), este DELETE é delimitado por "createdAt": só remove linhas garantidamente placebo
+-- (criadas antes do enforcement existir). Linhas criadas em ou depois desse instante podem ser
+-- configuração real, feita por um admin que já sabia que aquilo passou a valer — preservadas de
+-- propósito, ao contrário do que a rota original faria se alguém a tivesse clicado depois desse
+-- ponto no tempo. Idempotente: rodar de novo não tem efeito (a segunda execução não encontra mais
+-- nenhuma linha anterior ao corte).
+DELETE FROM "UserPermission" WHERE "createdAt" < '2026-09-09 04:57:23+00'::timestamptz;

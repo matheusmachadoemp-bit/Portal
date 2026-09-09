@@ -55,13 +55,19 @@ export const PERMISSION_ACTIONS: { key: PermissionAction; label: string }[] = [
  * menu lateral deve aparecer para um usuário. Combina duas camadas, na mesma ordem de
  * prioridade usada por `hasModulePermission` em `@/lib/authz`:
  *
- * 1. `userOverrides` (`UserPermission`, ajuste pontual daquele usuário, editado em
+ * 1. `role === "ADMINISTRADOR"`: sempre vê tudo (retorna `null`, "sem restrição") —
+ *    mesma regra de `hasModulePermission`, replicada aqui de propósito para as duas
+ *    funções nunca divergirem sobre quem tem acesso garantido pelo cargo.
+ * 2. `userOverrides` (`UserPermission`, ajuste pontual daquele usuário, editado em
  *    Usuários > Novo usuário) — se existir uma linha para a chave, ela decide.
- * 2. `modulePermissions` (perfil de permissão atribuído ao usuário) — lista de opt-in:
+ * 3. `modulePermissions` (perfil de permissão atribuído ao usuário) — lista de opt-in:
  *    só os módulos com `canView: true` aparecem; um módulo ausente da lista fica oculto.
- * 3. Sem perfil e sem override para a chave: visível (comportamento atual preservado).
- *
- * Administradores sempre veem tudo (retorna `null`, "sem restrição").
+ * 4. Sem perfil e sem override para a chave: OCULTO. Até 2026-09-09 esse caso liberava
+ *    (mostrava o módulo no menu mesmo sem nenhuma configuração) — igual ao fail-open
+ *    corrigido em `hasModulePermission`: um usuário sem perfil atribuído via menu
+ *    lateral, mas as rotas por trás de cada módulo já negam de verdade (ou deveriam:
+ *    esconder do menu nunca foi proteção real por si só, é só não deixar a UI prometer
+ *    algo que a API não entrega mais).
  */
 export function buildVisibilityResolver(
   role: Role | string,
@@ -69,7 +75,6 @@ export function buildVisibilityResolver(
   userOverrides: { moduleKey: string; level: AccessLevel }[] | undefined
 ): ((key: string) => boolean) | null {
   if (role === "ADMINISTRADOR") return null;
-  if (!modulePermissions && !userOverrides?.length) return null;
 
   const profileSet = modulePermissions ? new Set(modulePermissions.filter((m) => m.canView).map((m) => m.moduleKey)) : null;
   const overrides = new Map((userOverrides ?? []).map((o) => [o.moduleKey, ACCESS_LEVEL_TO_MODULE_FLAGS[o.level].canView]));
@@ -77,7 +82,7 @@ export function buildVisibilityResolver(
   return (key: string) => {
     if (overrides.has(key)) return overrides.get(key)!;
     if (profileSet) return profileSet.has(key);
-    return true;
+    return false;
   };
 }
 
@@ -134,18 +139,35 @@ export const ACCESS_LEVEL_TO_MODULE_FLAGS: Record<AccessLevel, ModulePermissionF
   TOTAL: { canView: true, canCreate: true, canEdit: true, canDelete: true },
 };
 
-// Perfis de permissão cujo `key` espelha 1:1 um valor do enum Role — ver roleToProfileKey em
-// prisma/seed.ts, que atribui automaticamente um desses perfis a um usuário sem perfil, a partir
-// do cargo (Role) dele. Os perfis "lider", "marketing" e "financeiro" são perfis funcionais sem
-// Role equivalente no enum (atribuídos manualmente na tela de Permissões, não por cargo), então
-// não entram neste mapa.
-const PERMISSION_PROFILE_KEY_TO_ROLE: Partial<Record<string, Role>> = {
-  administrador: "ADMINISTRADOR",
-  gestor: "GESTOR",
-  gerente: "GERENTE",
-  supervisor: "SUPERVISOR",
-  funcionario: "COLABORADOR",
+// Perfil de permissão padrão para cada cargo (Role) — fonte única usada em dois lugares que
+// precisam concordar entre si:
+// 1. `prisma/seed.ts`, para atribuir automaticamente um desses perfis a qualquer usuário sem
+//    `permissionProfileId` (roda só quando o seed é executado manualmente).
+// 2. `resolveDefaultPermissionProfileId` em `@/lib/authz`, chamada pelas rotas
+//    POST/PATCH `/api/usuarios` sempre que o formulário de usuário deixa "Perfil de permissão"
+//    em branco — depois da correção do fail-open em `hasModulePermission` (usuário sem perfil
+//    atribuído fica sem acesso a nenhum módulo operacional), nenhum usuário criado/editado pela
+//    tela pode ficar sem perfil de verdade, então o backend sempre resolve um perfil padrão a
+//    partir do cargo escolhido em vez de aceitar `permissionProfileId` vazio.
+export const ROLE_TO_PERMISSION_PROFILE_KEY: Record<string, string> = {
+  ADMINISTRADOR: "administrador",
+  GESTOR: "gestor",
+  GERENTE: "gerente",
+  SUPERVISOR: "supervisor",
+  COLABORADOR: "funcionario",
 };
+
+export function defaultProfileKeyForRole(role: Role | string): string {
+  return ROLE_TO_PERMISSION_PROFILE_KEY[role as string] ?? "funcionario";
+}
+
+// Perfis de permissão cujo `key` espelha 1:1 um valor do enum Role — derivado por inversão do
+// mapa acima para as duas direções nunca ficarem incoerentes entre si. Os perfis "lider",
+// "marketing" e "financeiro" são perfis funcionais sem Role equivalente no enum (atribuídos
+// manualmente na tela de Permissões, não por cargo), então não entram neste mapa.
+const PERMISSION_PROFILE_KEY_TO_ROLE: Partial<Record<string, Role>> = Object.fromEntries(
+  Object.entries(ROLE_TO_PERMISSION_PROFILE_KEY).map(([role, key]) => [key, role as Role])
+);
 
 // Nível de acesso padrão de um perfil de permissão (PermissionProfile.key), usado para gerar as
 // flags de ModulePermission no seed. Reaproveita defaultLevelForRole(): perfis sem Role
