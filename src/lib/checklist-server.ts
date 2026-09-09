@@ -21,6 +21,8 @@ export async function generateChecklistOccurrences(empresaIds: string[], dateKey
   const day = spStartOfDay(dateKey);
   const weekdayField = weekdayFieldFor(dateKey);
 
+  // Só os campos usados para montar a ocorrência — o restante do template
+  // (descrição, regras de cobrança, etc.) não é lido aqui.
   const templates = await prisma.checklistTemplate.findMany({
     where: {
       empresaId: { in: empresaIds },
@@ -29,6 +31,7 @@ export async function generateChecklistOccurrences(empresaIds: string[], dateKey
       OR: [{ endDate: null }, { endDate: { gte: day } }],
       [weekdayField]: true,
     },
+    select: { id: true, empresaId: true, releaseTime: true, dueTime: true, responsavelId: true },
   });
 
   await Promise.all(
@@ -54,7 +57,12 @@ export async function generateChecklistOccurrences(empresaIds: string[], dateKey
 /** Recalcula (e persiste, se mudou) o status "ao vivo" de cada ocorrência. */
 export async function refreshOccurrenceStatuses(occurrenceIds: string[]) {
   if (occurrenceIds.length === 0) return;
-  const occurrences = await prisma.checklistOccurrence.findMany({ where: { id: { in: occurrenceIds } } });
+  // Só os campos usados pelo cálculo de status — não a ocorrência inteira
+  // (que carregaria justificativa/campos de comprovação sem necessidade).
+  const occurrences = await prisma.checklistOccurrence.findMany({
+    where: { id: { in: occurrenceIds } },
+    select: { id: true, releaseAt: true, dueAt: true, startedAt: true, completedAt: true, status: true },
+  });
   const now = new Date();
   await Promise.all(
     occurrences.map((o) => {
@@ -199,22 +207,26 @@ export async function processChecklistEscalations(occurrenceIds: string[]) {
       });
       const priority = CHECKLIST_ESCALATION_PRIORITY[tipo];
 
-      for (const destinatarioId of pending) {
-        const notification = await prisma.notification.create({
-          data: {
-            userId: destinatarioId,
-            type: `CHECKLIST_${tipo}`,
-            title,
-            body,
-            priority,
-            checklistOccurrenceId: o.id,
-          },
-        });
-        await prisma.checklistEscalationLog.create({
-          data: { occurrenceId: o.id, tipo, destinatarioId, notificationId: notification.id },
-        });
-        notified += 1;
-      }
+      // Um destinatário nunca depende do outro (cada um recebe sua própria
+      // notificação/log) — dá pra disparar em paralelo em vez de um de cada vez.
+      await Promise.all(
+        pending.map(async (destinatarioId) => {
+          const notification = await prisma.notification.create({
+            data: {
+              userId: destinatarioId,
+              type: `CHECKLIST_${tipo}`,
+              title,
+              body,
+              priority,
+              checklistOccurrenceId: o.id,
+            },
+          });
+          await prisma.checklistEscalationLog.create({
+            data: { occurrenceId: o.id, tipo, destinatarioId, notificationId: notification.id },
+          });
+        })
+      );
+      notified += pending.length;
     }
 
     if (levels.includes("NAO_REALIZADO") && o.status !== "NAO_REALIZADO") {

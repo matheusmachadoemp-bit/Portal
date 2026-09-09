@@ -3,7 +3,7 @@ import { PageContainer } from "@/components/page-container";
 import { ChecklistClient } from "./checklist-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { generateChecklistOccurrences, processChecklistEscalations, refreshOccurrenceStatuses } from "@/lib/checklist-server";
-import { spDateKey, spStartOfDay } from "@/lib/checklist";
+import { CHECKLIST_TERMINAL_STATUSES, spDateKey, spStartOfDay } from "@/lib/checklist";
 
 const OCCURRENCE_INCLUDE = {
   template: {
@@ -27,8 +27,14 @@ export default async function ChecklistPage() {
   await generateChecklistOccurrences(empresaIds, dateKey);
 
   const day = spStartOfDay(dateKey);
+  // Só ocorrências ainda "abertas" (não terminais) precisam ser
+  // reavaliadas/escalonadas — uma vez concluída/justificada/cancelada/não
+  // realizada, o status nunca mais muda (ver computeOccurrenceStatus e
+  // dueEscalationLevels em src/lib/checklist.ts), então reprocessá-la de
+  // novo a cada carregamento desta página seria buscar e recalcular à toa
+  // todo o histórico de checklists já fechados desta loja.
   const existing = await prisma.checklistOccurrence.findMany({
-    where: { empresaId: { in: empresaIds } },
+    where: { empresaId: { in: empresaIds }, status: { notIn: CHECKLIST_TERMINAL_STATUSES } },
     select: { id: true },
   });
   await refreshOccurrenceStatuses(existing.map((o) => o.id));

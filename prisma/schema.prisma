@@ -1430,6 +1430,8 @@ model Employee {
   uniformDeliveries       UniformDelivery[]
   documents               EmployeeDocument[]
   satisfactionInvitations SatisfactionInvitation[]
+
+  @@index([empresaId])
 }
 
 // ---------------------------------------------------------------------------
@@ -3104,6 +3106,8 @@ model TrainingXpEvent {
   amount    Int
   reason    String
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model TrainingLibraryItem {

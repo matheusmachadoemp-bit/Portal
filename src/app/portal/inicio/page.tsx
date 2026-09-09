@@ -114,7 +114,7 @@ async function getData(empresaIds: string[]) {
     taxaServicoValor: true,
   } as const;
 
-  const [thisMonth, prevMonth, today, occurrences, marketing, goals] = await Promise.all([
+  const [thisMonth, prevMonth, occurrences, marketing, goals] = await Promise.all([
     prisma.salesEntry.findMany({
       where: { empresaId: { in: empresaIds }, date: { gte: monthStart, lte: monthEnd } },
       select: monthEntrySelect,
@@ -122,10 +122,6 @@ async function getData(empresaIds: string[]) {
     prisma.salesEntry.findMany({
       where: { empresaId: { in: empresaIds }, date: { gte: prevMonthStart, lte: prevMonthEnd } },
       select: { faturamentoDelivery: true, faturamentoSalao: true, pedidosDelivery: true, pedidosBalcao: true, pedidosSalao: true },
-    }),
-    prisma.salesEntry.findMany({
-      where: { empresaId: { in: empresaIds }, date: { gte: todayStart, lte: todayEnd } },
-      select: { faturamentoDelivery: true, faturamentoSalao: true },
     }),
     prisma.occurrence.findMany({
       where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: { in: empresaIds } } },
@@ -149,7 +145,10 @@ async function getData(empresaIds: string[]) {
 
   const fatMes = sum(thisMonth, "faturamentoDelivery") + sum(thisMonth, "faturamentoSalao");
   const fatMesAnterior = sum(prevMonth, "faturamentoDelivery") + sum(prevMonth, "faturamentoSalao");
-  const fatHoje = sum(today, "faturamentoDelivery") + sum(today, "faturamentoSalao");
+  // "Hoje" está sempre dentro do mês corrente — em vez de uma 3ª consulta,
+  // reaproveita as linhas de `thisMonth` (já tem `date`) filtrando em memória.
+  const todayEntries = thisMonth.filter((e) => e.date >= todayStart && e.date <= todayEnd);
+  const fatHoje = sum(todayEntries, "faturamentoDelivery") + sum(todayEntries, "faturamentoSalao");
 
   const pedidosMes =
     sum(thisMonth, "pedidosDelivery") + sum(thisMonth, "pedidosBalcao") + sum(thisMonth, "pedidosSalao");
@@ -187,16 +186,29 @@ async function getData(empresaIds: string[]) {
     const i = 5 - idx;
     return { start: startOfMonth(subMonths(now, i)), end: endOfMonth(subMonths(now, i)) };
   });
-  const monthlyEvolution = await Promise.all(
-    monthlyRanges.map(async ({ start, end }) => {
-      const entries = await prisma.salesEntry.findMany({
-        where: { empresaId: { in: empresaIds }, date: { gte: start, lte: end } },
-        select: { faturamentoDelivery: true, faturamentoSalao: true },
-      });
-      const total = entries.reduce((acc, e) => acc + e.faturamentoDelivery + e.faturamentoSalao, 0);
-      return { month: format(start, "MMM", { locale: ptBR }), total };
-    })
-  );
+  // O último range é sempre o mês corrente (mesma janela de `thisMonth`,
+  // já carregado acima) — reaproveita `fatMes` em vez de refazer essa
+  // consulta, e busca os 5 meses anteriores numa única query (em vez de uma
+  // consulta por mês) para depois separar por mês em memória.
+  const priorRanges = monthlyRanges.slice(0, -1);
+  const priorEntries = priorRanges.length
+    ? await prisma.salesEntry.findMany({
+        where: {
+          empresaId: { in: empresaIds },
+          date: { gte: priorRanges[0].start, lte: priorRanges[priorRanges.length - 1].end },
+        },
+        select: { date: true, faturamentoDelivery: true, faturamentoSalao: true },
+      })
+    : [];
+  const totalByMonthKey = new Map<string, number>();
+  for (const e of priorEntries) {
+    const key = format(e.date, "yyyy-MM");
+    totalByMonthKey.set(key, (totalByMonthKey.get(key) ?? 0) + e.faturamentoDelivery + e.faturamentoSalao);
+  }
+  const monthlyEvolution = monthlyRanges.map(({ start }, idx) => ({
+    month: format(start, "MMM", { locale: ptBR }),
+    total: idx === monthlyRanges.length - 1 ? fatMes : totalByMonthKey.get(format(start, "yyyy-MM")) ?? 0,
+  }));
 
   return {
     fatMes,
@@ -219,35 +231,66 @@ async function getData(empresaIds: string[]) {
   };
 }
 
-async function getComparisonRow(empresa: EmpresaSummary) {
+/**
+ * Uma linha por loja da tabela "Comparativo entre lojas" (modo Grupo Nord).
+ * Antes fazia 2 consultas (SalesEntry + Occurrence) POR loja, em paralelo —
+ * mesmo resultado, mas com uma consulta de cada por loja em vez de duas no
+ * total, buscando todas as lojas de uma vez e separando por `empresaId` em
+ * memória.
+ */
+async function getComparisonRows(empresas: EmpresaSummary[]) {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
+  const empresaIds = empresas.map((e) => e.id);
 
-  const [thisMonth, occurrences] = await Promise.all([
+  const [entries, occurrences] = await Promise.all([
     prisma.salesEntry.findMany({
-      where: { empresaId: empresa.id, date: { gte: monthStart, lte: monthEnd } },
-      select: { faturamentoDelivery: true, faturamentoSalao: true, pedidosDelivery: true, pedidosBalcao: true, pedidosSalao: true, metaDiaria: true },
+      where: { empresaId: { in: empresaIds }, date: { gte: monthStart, lte: monthEnd } },
+      select: {
+        empresaId: true,
+        faturamentoDelivery: true,
+        faturamentoSalao: true,
+        pedidosDelivery: true,
+        pedidosBalcao: true,
+        pedidosSalao: true,
+        metaDiaria: true,
+      },
     }),
     prisma.occurrence.findMany({
-      where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: empresa.id } },
-      select: { type: true },
+      where: { date: { gte: monthStart, lte: monthEnd }, employee: { empresaId: { in: empresaIds } }, type: "FALTA" },
+      select: { employee: { select: { empresaId: true } } },
     }),
   ]);
 
-  const fatMes = thisMonth.reduce((a, e) => a + e.faturamentoDelivery + e.faturamentoSalao, 0);
-  const pedidosMes = thisMonth.reduce((a, e) => a + e.pedidosDelivery + e.pedidosBalcao + e.pedidosSalao, 0);
-  const metaMensal = thisMonth.reduce((a, e) => a + e.metaDiaria, 0) || 0;
+  const entriesByEmpresa = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const list = entriesByEmpresa.get(e.empresaId) ?? [];
+    list.push(e);
+    entriesByEmpresa.set(e.empresaId, list);
+  }
+  const faltasByEmpresa = new Map<string, number>();
+  for (const o of occurrences) {
+    const key = o.employee.empresaId;
+    faltasByEmpresa.set(key, (faltasByEmpresa.get(key) ?? 0) + 1);
+  }
 
-  return {
-    empresa,
-    fatMes,
-    pedidosMes,
-    ticketMedio: safeDiv(fatMes, pedidosMes),
-    metaMensal,
-    percentualMeta: pct(fatMes, metaMensal),
-    faltas: occurrences.filter((o) => o.type === "FALTA").length,
-  };
+  return empresas.map((empresa) => {
+    const thisMonth = entriesByEmpresa.get(empresa.id) ?? [];
+    const fatMes = thisMonth.reduce((a, e) => a + e.faturamentoDelivery + e.faturamentoSalao, 0);
+    const pedidosMes = thisMonth.reduce((a, e) => a + e.pedidosDelivery + e.pedidosBalcao + e.pedidosSalao, 0);
+    const metaMensal = thisMonth.reduce((a, e) => a + e.metaDiaria, 0) || 0;
+
+    return {
+      empresa,
+      fatMes,
+      pedidosMes,
+      ticketMedio: safeDiv(fatMes, pedidosMes),
+      metaMensal,
+      percentualMeta: pct(fatMes, metaMensal),
+      faltas: faltasByEmpresa.get(empresa.id) ?? 0,
+    };
+  });
 }
 
 async function InicioClassico() {
@@ -259,7 +302,7 @@ async function InicioClassico() {
   const subtitle =
     ctx?.mode === "single" ? `Visão geral da ${ctx.empresa.name}` : "Visão geral consolidada — Grupo Nord";
 
-  const comparison = ctx?.mode === "grupo" ? await Promise.all(ctx.empresas.map(getComparisonRow)) : null;
+  const comparison = ctx?.mode === "grupo" ? await getComparisonRows(ctx.empresas) : null;
 
   return (
     <PageContainer title="Início" subtitle={subtitle}>

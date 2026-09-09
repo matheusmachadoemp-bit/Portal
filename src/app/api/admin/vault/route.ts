@@ -13,9 +13,23 @@ export async function GET() {
     );
   }
 
+  // Lista nunca mostra a senha (só um endpoint dedicado revela, com log de
+  // acesso em VaultAccessLog) — não há motivo para trazer `passwordCipher`
+  // (o blob cifrado) do banco aqui, então usamos `select` em vez do padrão
+  // "todas as colunas".
   const entries = await prisma.vaultEntry.findMany({
     orderBy: { systemName: "asc" },
-    include: { createdBy: { select: { name: true } } },
+    select: {
+      id: true,
+      systemName: true,
+      site: true,
+      username: true,
+      category: true,
+      responsavel: true,
+      observacao: true,
+      updatedAt: true,
+      createdBy: { select: { name: true } },
+    },
   });
 
   const sanitized = entries.map((e) => ({
