@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { computeGoalStatus, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
+import { computeGoalStatus, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
 import { formatNumber } from "@/lib/calc";
 import { getStoreManagers } from "@/lib/manutencao-server";
+import { createNotifications } from "@/lib/notifications";
 
 /**
  * Roda diariamente (ver vercel.json): toda meta cujo período já terminou e
@@ -47,16 +48,18 @@ export async function processGoalAlerts(): Promise<{ checked: number; notified: 
         const body = `${categoryLabel} — realizado ${formatNumber(goal.valorRealizado)} de ${formatNumber(goal.valorMeta)} ${goal.unidade}.`;
 
         if (managerIds.length > 0) {
-          await prisma.notification.createMany({
-            data: managerIds.map((userId) => ({
+          const categoryKey = goal.category as GoalCategoryKey;
+          await createNotifications(
+            managerIds.map((userId) => ({
               userId,
               type: "META_NAO_ATINGIDA",
               title,
               body,
               priority: "ATENCAO" as const,
               goalId: goal.id,
-            })),
-          });
+              url: `/portal/metas/${GOAL_CATEGORY_ROUTE[categoryKey]}`,
+            }))
+          );
           notifiedForGoal = managerIds.length;
         }
       }

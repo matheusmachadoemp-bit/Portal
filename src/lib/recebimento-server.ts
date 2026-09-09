@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createNotifications } from "@/lib/notifications";
 
 const RECEIVING_INCLUDE = {
   empresa: { select: { name: true, color: true } },
@@ -200,14 +201,15 @@ export async function notifyReceivingDivergence(purchase: {
   const title = "Divergência no recebimento";
   const body = `Pedido #${numero} — ${supplierName}: ${resumo.divergencias} de ${resumo.totalItens} produto(s) com divergência. Impacto financeiro estimado: ${resumo.impactoFinanceiro >= 0 ? "+" : ""}${resumo.impactoFinanceiro.toFixed(2)}.`;
 
-  await prisma.notification.createMany({
-    data: recipientIds.map((userId) => ({
+  await createNotifications(
+    recipientIds.map((userId) => ({
       userId,
       type: "RECEBIMENTO_DIVERGENCIA",
       title,
       body,
       priority: "ATENCAO",
       purchaseId: purchase.id,
-    })),
-  });
+      url: "/portal/estoque/recebimento",
+    }))
+  );
 }
