@@ -148,6 +148,7 @@ model User {
   productionOrdersResponsavel      ProductionOrder[]          @relation("ProductionOrderResponsavel")
   productionOrdersAjustadas        ProductionOrder[]          @relation("ProductionOrderAjustePor")
   productionOrderHistoryEntries    ProductionOrderHistory[]
+  pushSubscriptions                PushSubscription[]
 }
 
 model UserPermission {
@@ -3362,6 +3363,31 @@ model Notification {
   createdAt             DateTime              @default(now())
 
   @@index([userId, read])
+}
+
+// ---------------------------------------------------------------------------
+// PUSH (Web Push / PWA) — assinatura de notificação push por dispositivo.
+// Um usuário pode ter mais de um dispositivo/navegador inscrito ao mesmo
+// tempo (ex.: celular + notebook), por isso não é 1:1 com User — cada
+// `endpoint` (identificador único que o navegador devolve ao assinar) vira
+// sua própria linha. `p256dh`/`auth` são as chaves que o navegador entrega
+// junto com o endpoint, necessárias para cifrar o payload do push (usadas
+// por `webpush.sendNotification`, ver src/lib/notifications.ts). Uma
+// assinatura expirada/inválida (o navegador revogou, o usuário desinstalou
+// o app, etc.) é removida automaticamente quando o envio falha com
+// status 404/410 — não fica lixo acumulando.
+// ---------------------------------------------------------------------------
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------------------

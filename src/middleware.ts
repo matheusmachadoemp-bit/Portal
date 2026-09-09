@@ -33,6 +33,13 @@ export default auth((req) => {
     pathname === "/favicon.ico" ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/apple-touch-icon.png" ||
+    // Service worker (public/sw.js): precisa ser público como o manifest e os
+    // ícones acima — o navegador refaz essa busca periodicamente (checagem de
+    // atualização em segundo plano, ~24h) mesmo sem uma aba autenticada aberta
+    // na hora; se ficasse atrás do login, essa checagem cairia num redirect
+    // pro /login em vez do script, e o worker instalado nunca se atualizaria.
+    // O arquivo em si não tem nada sensível — só lógica de push/notification-click.
+    pathname === "/sw.js" ||
     /^\/icon-(192|512|maskable-512)\.png$/.test(pathname);
 
   if (isPublic) return NextResponse.next();

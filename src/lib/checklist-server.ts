@@ -9,6 +9,7 @@ import {
   spStartOfDay,
   weekdayFieldFor,
 } from "@/lib/checklist";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * Gera (de forma idempotente, via @@unique([templateId, date])) as
@@ -272,15 +273,14 @@ export async function processChecklistEscalations(occurrenceIds: string[]) {
       // notificação/log) — dá pra disparar em paralelo em vez de um de cada vez.
       await Promise.all(
         pending.map(async (destinatarioId) => {
-          const notification = await prisma.notification.create({
-            data: {
-              userId: destinatarioId,
-              type: `CHECKLIST_${tipo}`,
-              title,
-              body,
-              priority,
-              checklistOccurrenceId: o.id,
-            },
+          const notification = await createNotification({
+            userId: destinatarioId,
+            type: `CHECKLIST_${tipo}`,
+            title,
+            body,
+            priority,
+            checklistOccurrenceId: o.id,
+            url: `/portal/tarefas/checklist/executar/${o.id}`,
           });
           await prisma.checklistEscalationLog.create({
             data: { occurrenceId: o.id, tipo, destinatarioId, notificationId: notification.id },
