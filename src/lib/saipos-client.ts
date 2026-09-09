@@ -1,6 +1,17 @@
 const SAIPOS_DATA_API_BASE = "https://data.saipos.io/v1";
 const MAX_RANGE_DAYS = 15;
 const PAGE_LIMIT = 1000;
+// A Saipos ocasionalmente responde 502/503/504 quando o banco deles está
+// sobrecarregado (ex.: "Timed out acquiring connection from connection
+// pool."). É uma falha temporária do lado deles, não um erro real de dados,
+// então vale tentar de novo antes de desistir da sincronização inteira.
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = [2000, 5000, 10000];
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export type SaiposSaleRecord = {
   id_sale: number;
@@ -44,17 +55,29 @@ export async function fetchSaiposSales(
       p_offset: String(offset),
     });
 
-    let res: Response;
-    try {
-      res = await fetch(`${SAIPOS_DATA_API_BASE}/search_sales?${params.toString()}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-    } catch {
-      return { ok: false, error: "Falha de conexão com a API da Saipos." };
+    let res: Response | null = null;
+    let lastError = "";
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        res = await fetch(`${SAIPOS_DATA_API_BASE}/search_sales?${params.toString()}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+      } catch {
+        lastError = "Falha de conexão com a API da Saipos.";
+        res = null;
+      }
+
+      if (res && !RETRYABLE_STATUS.has(res.status)) break;
+      if (res) lastError = `Erro ${res.status} na API da Saipos (instabilidade temporária).`;
+      if (attempt < MAX_RETRIES) await sleep(RETRY_DELAY_MS[attempt]);
+    }
+
+    if (!res) {
+      return { ok: false, error: lastError || "Falha de conexão com a API da Saipos." };
     }
 
     if (!res.ok) {
