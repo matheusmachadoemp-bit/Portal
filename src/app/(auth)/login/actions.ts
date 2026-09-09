@@ -57,6 +57,8 @@ export async function forgotPasswordAction(
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   const user = await prisma.user.findUnique({ where: { email } });
 
+  let emailWasSent = false;
+
   if (user && user.active) {
     const token = crypto.randomBytes(24).toString("hex");
 
@@ -83,8 +85,9 @@ export async function forgotPasswordAction(
     });
 
     if (count > 0) {
-      const origin = getOrigin();
+      emailWasSent = true;
       try {
+        const origin = getOrigin();
         await sendPasswordResetEmail(user.email, `${origin}/redefinir-senha/${token}`);
       } catch (err) {
         // Não expõe o erro (nem se o e-mail existe) pra quem preencheu o
@@ -92,11 +95,15 @@ export async function forgotPasswordAction(
         console.error("Falha ao enviar e-mail de redefinição de senha:", err);
       }
     }
-  } else {
-    // Equaliza o tempo de resposta com o caminho que grava o token e manda
-    // o e-mail (bem mais lento): sem isso, alguém consegue descobrir quais
-    // e-mails têm conta no portal só medindo quanto tempo essa ação demora
-    // pra responder, mesmo a mensagem devolvida sendo sempre a mesma.
+  }
+
+  // Equaliza o tempo de resposta de todo caminho que NÃO manda e-mail de
+  // verdade (e-mail sem conta, conta inativa, ou dentro da trava de 60s)
+  // com o caminho que manda (bem mais lento, por causa da chamada à
+  // Resend) — sem isso, alguém consegue descobrir quais e-mails têm conta
+  // no portal só medindo quanto tempo essa ação demora, mesmo a mensagem
+  // devolvida sendo sempre igual.
+  if (!emailWasSent) {
     const jitter = Math.floor(Math.random() * PASSWORD_RESET_TIMING_JITTER_MS);
     await new Promise((resolve) => setTimeout(resolve, jitter));
   }
