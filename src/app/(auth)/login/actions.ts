@@ -3,7 +3,17 @@
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
 import { prisma } from "@/lib/prisma";
+import { sendPasswordResetEmail } from "@/lib/email";
+import { headers } from "next/headers";
+import bcrypt from "bcryptjs";
 import crypto from "crypto";
+
+async function getOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const protocol = host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https";
+  return `${protocol}://${host}`;
+}
 
 export async function loginAction(
   _prevState: { error?: string } | undefined,
@@ -35,7 +45,7 @@ export async function forgotPasswordAction(
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   const user = await prisma.user.findUnique({ where: { email } });
 
-  if (user) {
+  if (user && user.active) {
     const token = crypto.randomBytes(24).toString("hex");
     await prisma.user.update({
       where: { id: user.id },
@@ -44,11 +54,48 @@ export async function forgotPasswordAction(
         resetTokenExp: new Date(Date.now() + 1000 * 60 * 60),
       },
     });
-    // Em produção: enviar e-mail com link de redefinição contendo o token.
+
+    const origin = await getOrigin();
+    try {
+      await sendPasswordResetEmail(user.email, `${origin}/redefinir-senha/${token}`);
+    } catch (err) {
+      // Não expõe o erro (nem se o e-mail existe) pra quem preencheu o
+      // formulário — só registra no log do servidor pra alguém investigar.
+      console.error("Falha ao enviar e-mail de redefinição de senha:", err);
+    }
   }
 
   return {
     message:
       "Se o e-mail informado existir em nossa base, você receberá instruções de recuperação de senha em instantes.",
   };
+}
+
+export async function resetPasswordAction(
+  token: string,
+  _prevState: { error?: string; success?: boolean } | undefined,
+  formData: FormData
+): Promise<{ error?: string; success?: boolean }> {
+  const novaSenha = String(formData.get("password") ?? "");
+  const confirmacao = String(formData.get("passwordConfirm") ?? "");
+
+  if (novaSenha.length < 6) {
+    return { error: "A senha precisa ter pelo menos 6 caracteres." };
+  }
+  if (novaSenha !== confirmacao) {
+    return { error: "As senhas não coincidem." };
+  }
+
+  const user = await prisma.user.findFirst({ where: { resetToken: token } });
+  if (!user || !user.resetTokenExp || user.resetTokenExp < new Date()) {
+    return { error: "Link inválido ou expirado. Solicite uma nova recuperação de senha." };
+  }
+
+  const passwordHash = await bcrypt.hash(novaSenha, 10);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, resetToken: null, resetTokenExp: null },
+  });
+
+  return { success: true };
 }

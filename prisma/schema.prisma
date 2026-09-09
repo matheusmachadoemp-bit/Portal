@@ -41,6 +41,8 @@ model User {
   phone               String?
   resetToken          String?
   resetTokenExp       DateTime?
+  failedLoginAttempts Int                @default(0)
+  lockedUntil         DateTime?
   lastLoginAt         DateTime?
   canViewGrupoNord    Boolean            @default(false)
   defaultEmpresaId    String?

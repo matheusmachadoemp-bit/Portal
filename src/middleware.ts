@@ -7,6 +7,7 @@ const { auth } = NextAuth(authConfig);
 const PUBLIC_PATHS = [
   "/login",
   "/esqueci-senha",
+  "/redefinir-senha",
   "/certificado",
   "/pesquisa",
   "/api/satisfaction/responder",
