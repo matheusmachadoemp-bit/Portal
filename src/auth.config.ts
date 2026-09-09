@@ -11,15 +11,18 @@ export const authConfig = {
       if (user) {
         token.role = (user as { role: string }).role;
         token.id = user.id as string;
+        token.avatarUrl = (user as { avatarUrl: string | null }).avatarUrl;
       }
       return token;
     },
     session: async ({ session, token }) => {
       if (session.user) {
-        (session.user as typeof session.user & { role: string; id: string }).role =
+        (session.user as typeof session.user & { role: string; id: string; avatarUrl: string | null }).role =
           token.role as string;
-        (session.user as typeof session.user & { role: string; id: string }).id =
+        (session.user as typeof session.user & { role: string; id: string; avatarUrl: string | null }).id =
           token.id as string;
+        (session.user as typeof session.user & { role: string; id: string; avatarUrl: string | null }).avatarUrl =
+          (token.avatarUrl as string | null) ?? null;
       }
       return session;
     },
