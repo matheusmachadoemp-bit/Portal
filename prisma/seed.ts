@@ -1,7 +1,13 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { allDreCategories } from "../src/lib/dre-structure";
-import { ACCESS_LEVEL_TO_MODULE_FLAGS, MODULES, PERMISSION_PROFILES, defaultLevelForProfileKey } from "../src/lib/permissions";
+import {
+  ACCESS_LEVEL_TO_MODULE_FLAGS,
+  MODULES,
+  PERMISSION_PROFILES,
+  defaultLevelForProfileKey,
+  defaultProfileKeyForRole,
+} from "../src/lib/permissions";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
@@ -399,16 +405,9 @@ async function main() {
     }
   }
 
-  const roleToProfileKey: Record<string, string> = {
-    ADMINISTRADOR: "administrador",
-    GESTOR: "gestor",
-    GERENTE: "gerente",
-    SUPERVISOR: "supervisor",
-    COLABORADOR: "funcionario",
-  };
   const usersWithoutProfile = await prisma.user.findMany({ where: { permissionProfileId: null } });
   for (const u of usersWithoutProfile) {
-    const profileKey = roleToProfileKey[u.role] ?? "funcionario";
+    const profileKey = defaultProfileKeyForRole(u.role);
     const profile = await prisma.permissionProfile.findUnique({ where: { key: profileKey } });
     if (profile) {
       await prisma.user.update({ where: { id: u.id }, data: { permissionProfileId: profile.id } });

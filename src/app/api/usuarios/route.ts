@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
-import { hasModulePermission } from "@/lib/authz";
+import { hasModulePermission, resolveDefaultPermissionProfileId } from "@/lib/authz";
 
 async function ensureAdmin() {
   const session = await auth();
@@ -66,6 +66,11 @@ export async function POST(req: Request) {
 
   const permissions: { moduleKey: string; level: string }[] = body.permissions || [];
 
+  // Nunca deixa um usuário ser criado sem `permissionProfileId`: usuário sem perfil
+  // atribuído fica sem acesso a nenhum módulo operacional (ver hasModulePermission em
+  // @/lib/authz) — se o formulário não escolheu um perfil, resolve o padrão do cargo.
+  const permissionProfileId = body.permissionProfileId || (await resolveDefaultPermissionProfileId(role));
+
   const created = await prisma.user.create({
     data: {
       name: body.name,
@@ -75,7 +80,7 @@ export async function POST(req: Request) {
       phone: body.phone || null,
       canViewGrupoNord: !!body.canViewGrupoNord,
       defaultEmpresaId: body.defaultEmpresaId || empresaIds[0] || null,
-      permissionProfileId: body.permissionProfileId || null,
+      permissionProfileId,
       empresaAccess: { create: empresaIds.map((empresaId) => ({ empresaId })) },
       permissions: { create: permissions.map((p) => ({ moduleKey: p.moduleKey, level: p.level as never })) },
     },
