@@ -25,6 +25,7 @@ function getOrigin(): string {
 
 const RESET_TOKEN_TTL_MS = 1000 * 60 * 60;
 const RESET_EMAIL_COOLDOWN_MS = 60 * 1000;
+const PASSWORD_RESET_TIMING_JITTER_MS = 1200;
 
 export async function loginAction(
   _prevState: { error?: string } | undefined,
@@ -91,6 +92,13 @@ export async function forgotPasswordAction(
         console.error("Falha ao enviar e-mail de redefinição de senha:", err);
       }
     }
+  } else {
+    // Equaliza o tempo de resposta com o caminho que grava o token e manda
+    // o e-mail (bem mais lento): sem isso, alguém consegue descobrir quais
+    // e-mails têm conta no portal só medindo quanto tempo essa ação demora
+    // pra responder, mesmo a mensagem devolvida sendo sempre a mesma.
+    const jitter = Math.floor(Math.random() * PASSWORD_RESET_TIMING_JITTER_MS);
+    await new Promise((resolve) => setTimeout(resolve, jitter));
   }
 
   return {

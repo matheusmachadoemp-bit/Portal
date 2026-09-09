@@ -24,6 +24,19 @@ function isLockedOut(user: { lockedUntil: Date | null }): boolean {
 // permite que duas requisições concorrentes leiam o mesmo valor antigo e
 // cada uma grave "+1" a partir dele, perdendo um incremento.
 async function registerFailedAttempt(userId: string): Promise<void> {
+  // Se o bloqueio anterior já expirou, reinicia o contador antes de somar a
+  // nova tentativa — sem isso o contador nunca "esfria": uma única senha
+  // errada depois do desbloqueio já reativaria os 15 minutos de novo,
+  // travando a conta indefinidamente com uma tentativa a cada 15 minutos.
+  await prisma.user.updateMany({
+    where: {
+      id: userId,
+      OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date() } }],
+      failedLoginAttempts: { gte: MAX_ATTEMPTS },
+    },
+    data: { failedLoginAttempts: 0 },
+  });
+
   const updated = await prisma.user.update({
     where: { id: userId },
     data: { failedLoginAttempts: { increment: 1 } },
