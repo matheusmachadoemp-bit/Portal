@@ -87,63 +87,75 @@ export async function generateProductionPlan(empresaId: string, targetDate: Date
     items.map((i) => ({ id: i.id, ingredientId: i.ingredientId }))
   );
 
-  let created = 0;
-  let updated = 0;
-  let skipped = 0;
+  // Cada item do laço só lê dado montado uma única vez ANTES do laço
+  // (itemDemand/existingByItemId/bom/forecastMetaByProduct/weights — nada
+  // disso é escrito dentro do laço) e só ESCREVE em linhas exclusivas suas:
+  // `ProductionForecast` tem `@@unique([productionItemId, empresaId,
+  // targetDate])` e `ProductionOrder` tem `@@unique([productionItemId,
+  // empresaId, date])` — como `productionItemId` é sempre `item.id` (único
+  // por item), dois itens nunca disputam a mesma linha. E dois itens também
+  // nunca compartilham o mesmo insumo bruto: `ProductionItem.ingredientId`
+  // é `@unique` no schema (ver prisma/schema.prisma), isto é, cada insumo
+  // só pode estar ligado a NO MÁXIMO um item de produção — a hipótese de
+  // dois itens dependerem um do outro por compartilhar `ingredientId` não
+  // se sustenta (é uma relação 1:1, garantida pelo próprio banco). Só o
+  // BOM (`bom`, buscado uma vez antes do laço) pode ter o mesmo insumo
+  // referenciado por vários PRODUTOS vendáveis — mas isso é leitura
+  // compartilhada e imutável, não escrita. Por isso é seguro paralelizar.
+  const results = await Promise.all(
+    items.map(async (item): Promise<"created" | "updated" | "skipped"> => {
+      const necessidadePrevista = itemDemand.get(item.id) ?? 0;
+      const estoqueProntoSnapshot = item.stock?.saldoAtual ?? 0;
+      const quantidadeSugerida = computeQuantidadeSugerida(necessidadePrevista, estoqueProntoSnapshot, item);
 
-  for (const item of items) {
-    const necessidadePrevista = itemDemand.get(item.id) ?? 0;
-    const estoqueProntoSnapshot = item.stock?.saldoAtual ?? 0;
-    const quantidadeSugerida = computeQuantidadeSugerida(necessidadePrevista, estoqueProntoSnapshot, item);
-
-    const existing = existingByItemId.get(item.id);
-    if (existing && (existing.ajusteEm || existing.status !== "PENDENTE")) {
-      skipped++;
-      continue;
-    }
-
-    let forecastId: string | null = null;
-    if (item.ingredientId) {
-      // Aponta pro produto vendável que gerou a necessidade (via ProductIngredient),
-      // usado só pra guardar o "como chegamos nesse número" — pega o primeiro
-      // produto do BOM que referencia esse ingrediente, suficiente pra explicar.
-      const bomLine = bom.find((b) => b.ingredientId === item.ingredientId);
-      const meta = bomLine ? forecastMetaByProduct.get(bomLine.productId) : null;
-      if (meta) {
-        const weight = weights.find((w) => w.weekday === weekday)?.percent ?? 100 / 7;
-        const forecast = await prisma.productionForecast.upsert({
-          where: { productionItemId_empresaId_targetDate: { productionItemId: item.id, empresaId, targetDate: dayStart } },
-          update: {
-            weekday,
-            weekdayWeightUsed: weight,
-            weeksUsed: JSON.stringify(meta.weeksUsed),
-            mediaSemanal: meta.mediaSemanal,
-            resultingQuantity: necessidadePrevista,
-          },
-          create: {
-            productionItemId: item.id,
-            empresaId,
-            targetDate: dayStart,
-            weekday,
-            weekdayWeightUsed: weight,
-            weeksUsed: JSON.stringify(meta.weeksUsed),
-            mediaSemanal: meta.mediaSemanal,
-            resultingQuantity: necessidadePrevista,
-          },
-        });
-        forecastId = forecast.id;
+      const existing = existingByItemId.get(item.id);
+      if (existing && (existing.ajusteEm || existing.status !== "PENDENTE")) {
+        return "skipped";
       }
-    }
 
-    const prazo = defaultPrazoFor(dayStart, item.horarioLimitePadrao);
+      let forecastId: string | null = null;
+      if (item.ingredientId) {
+        // Aponta pro produto vendável que gerou a necessidade (via ProductIngredient),
+        // usado só pra guardar o "como chegamos nesse número" — pega o primeiro
+        // produto do BOM que referencia esse ingrediente, suficiente pra explicar.
+        const bomLine = bom.find((b) => b.ingredientId === item.ingredientId);
+        const meta = bomLine ? forecastMetaByProduct.get(bomLine.productId) : null;
+        if (meta) {
+          const weight = weights.find((w) => w.weekday === weekday)?.percent ?? 100 / 7;
+          const forecast = await prisma.productionForecast.upsert({
+            where: { productionItemId_empresaId_targetDate: { productionItemId: item.id, empresaId, targetDate: dayStart } },
+            update: {
+              weekday,
+              weekdayWeightUsed: weight,
+              weeksUsed: JSON.stringify(meta.weeksUsed),
+              mediaSemanal: meta.mediaSemanal,
+              resultingQuantity: necessidadePrevista,
+            },
+            create: {
+              productionItemId: item.id,
+              empresaId,
+              targetDate: dayStart,
+              weekday,
+              weekdayWeightUsed: weight,
+              weeksUsed: JSON.stringify(meta.weeksUsed),
+              mediaSemanal: meta.mediaSemanal,
+              resultingQuantity: necessidadePrevista,
+            },
+          });
+          forecastId = forecast.id;
+        }
+      }
 
-    if (existing) {
-      await prisma.productionOrder.update({
-        where: { id: existing.id },
-        data: { necessidadePrevista, estoqueProntoSnapshot, quantidadeSugerida, forecastId, prazo, prioridade: item.prioridadePadrao },
-      });
-      updated++;
-    } else {
+      const prazo = defaultPrazoFor(dayStart, item.horarioLimitePadrao);
+
+      if (existing) {
+        await prisma.productionOrder.update({
+          where: { id: existing.id },
+          data: { necessidadePrevista, estoqueProntoSnapshot, quantidadeSugerida, forecastId, prazo, prioridade: item.prioridadePadrao },
+        });
+        return "updated";
+      }
+
       const order = await prisma.productionOrder.create({
         data: {
           productionItemId: item.id,
@@ -158,9 +170,13 @@ export async function generateProductionPlan(empresaId: string, targetDate: Date
         },
       });
       await logProductionOrderHistory(order.id, userId, "CRIADO", "Plano gerado automaticamente.");
-      created++;
-    }
-  }
+      return "created";
+    })
+  );
+
+  const created = results.filter((r) => r === "created").length;
+  const updated = results.filter((r) => r === "updated").length;
+  const skipped = results.filter((r) => r === "skipped").length;
 
   return { created, updated, skipped, totalItens: items.length };
 }
