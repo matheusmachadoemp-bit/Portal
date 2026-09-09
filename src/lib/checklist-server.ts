@@ -80,6 +80,67 @@ export async function refreshOccurrenceStatuses(occurrenceIds: string[]) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Ocorrências do dia, prontas para consumo (Fase 1b/2 — Tela de Início) —
+// junta os 3 passos que `loadRotinaChecklist` e `loadAlertaChecklistAtrasado`
+// (src/lib/inicio.ts) faziam cada um por conta própria: gerar as ocorrências
+// do dia, buscá-las (com o template completo) e atualizar o status "ao
+// vivo" de cada uma. As duas rotas que usam essas funções
+// (/api/inicio/rotina e /api/inicio/alertas) são chamadas em paralelo pelo
+// navegador na Tela de Início — como as duas pedem exatamente os mesmos 3
+// passos para a mesma loja+dia, `occurrencesDoDiaInFlight` coalesce
+// chamadas concorrentes (mesma chave `empresaId:dateKey`) numa única
+// execução, em vez de repetir a geração/busca/atualização duas vezes.
+//
+// Não é um cache com TTL (não guarda nada depois de resolver): a entrada
+// só existe enquanto a promise está em voo e é removida assim que ela
+// termina (sucesso ou erro), então uma chamada que chega depois que a
+// anterior já terminou sempre dispara uma busca nova — sem janela de dado
+// desatualizado. Só reduz trabalho quando as chamadas realmente se
+// sobrepõem no tempo, que é exatamente o caso descrito acima.
+// ---------------------------------------------------------------------------
+
+const occurrencesDoDiaInFlight = new Map<string, ReturnType<typeof fetchAndRefreshOccurrencesDoDia>>();
+
+async function fetchAndRefreshOccurrencesDoDia(empresaId: string, dateKey: string) {
+  await generateChecklistOccurrences([empresaId], dateKey);
+
+  const day = spStartOfDay(dateKey);
+  const occurrences = await prisma.checklistOccurrence.findMany({
+    where: { empresaId, date: day },
+    include: { template: true },
+  });
+  if (occurrences.length > 0) {
+    await refreshOccurrenceStatuses(occurrences.map((o) => o.id));
+  }
+  return occurrences;
+}
+
+/**
+ * Gera (se necessário) e devolve TODAS as ocorrências de checklist do dia
+ * `dateKey` de uma loja, com o template completo incluído e o status já
+ * atualizado no banco (`refreshOccurrenceStatuses`). O `status` de cada
+ * ocorrência no retorno é o valor de ANTES do refresh — igual ao que
+ * `loadRotinaChecklist`/`loadAlertaChecklistAtrasado` já faziam: cada
+ * chamador recalcula o status "ao vivo" localmente com
+ * `computeOccurrenceStatus` (mesma fórmula pura usada pelo refresh, com o
+ * mesmo `releaseAt`/`dueAt`/`startedAt`/`completedAt`/`status`), então não
+ * precisa reler do banco depois de persistir.
+ */
+export async function loadChecklistOccurrencesDoDia(empresaId: string, dateKey: string) {
+  const key = `${empresaId}:${dateKey}`;
+  const inFlight = occurrencesDoDiaInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const promise = fetchAndRefreshOccurrencesDoDia(empresaId, dateKey);
+  occurrencesDoDiaInFlight.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    occurrencesDoDiaInFlight.delete(key);
+  }
+}
+
 const GOAL_CATEGORY_LABEL: Record<string, string> = {
   GERENCIA: "Gerência",
   SALAO: "Salão",
