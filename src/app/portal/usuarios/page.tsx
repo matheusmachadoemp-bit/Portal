@@ -49,6 +49,7 @@ export default async function UsuariosPage() {
         initialUsers={serialized}
         modules={MODULES}
         currentUserId={session.user.id}
+        currentUserRole={session.user.role}
         empresas={empresas.map((e) => ({ id: e.id, name: e.name }))}
         profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
       />

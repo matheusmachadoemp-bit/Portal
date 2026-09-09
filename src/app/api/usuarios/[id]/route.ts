@@ -23,6 +23,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
 
+  if (body.role !== undefined && body.role === "ADMINISTRADOR" && user.role !== "ADMINISTRADOR") {
+    return NextResponse.json(
+      { error: "Apenas um Administrador pode conceder o nível de acesso Administrador." },
+      { status: 403 }
+    );
+  }
+
   const data: Record<string, unknown> = {
     name: body.name ?? undefined,
     email: body.email ? body.email.toLowerCase().trim() : undefined,
