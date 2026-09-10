@@ -49,6 +49,7 @@ export function ComprasClient({
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Purchase | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [supplierId, setSupplierId] = useState("");
   const [numeroNota, setNumeroNota] = useState("");
@@ -118,27 +119,33 @@ export function ComprasClient({
   }
 
   async function submit() {
+    if (submitting) return;
     setError(null);
     const validItens = itens.filter((it) => it.ingredientId && it.quantidade && it.valorUnitario);
     if (!supplierId || validItens.length === 0) {
       setError("Selecione o fornecedor e informe ao menos um item válido.");
       return;
     }
-    const res = await fetch("/api/estoque/compras", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ supplierId, numeroNota, data, frete, desconto, itens: validItens }),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Não foi possível registrar a compra.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/estoque/compras", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierId, numeroNota, data, frete, desconto, itens: validItens }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Não foi possível registrar a compra.");
+        return;
+      }
+      setShowForm(false);
+      setSupplierId("");
+      setNumeroNota("");
+      setItens([{ ingredientId: "", quantidade: "", unidade: "", valorUnitario: "" }]);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setSupplierId("");
-    setNumeroNota("");
-    setItens([{ ingredientId: "", quantidade: "", unidade: "", valorUnitario: "" }]);
-    refresh();
   }
 
   async function marcarRecebido(p: Purchase) {
@@ -321,8 +328,8 @@ export function ComprasClient({
         </div>
 
         {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
-        <button onClick={submit} className="btn-primary w-full mt-4 py-2.5">
-          Registrar compra
+        <button onClick={submit} disabled={submitting} className="btn-primary w-full mt-4 py-2.5">
+          {submitting ? "Registrando..." : "Registrar compra"}
         </button>
       </Modal>
 

@@ -98,6 +98,7 @@ export function ContasPagarClient({
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingRecurring, setSavingRecurring] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
   const [showRecurring, setShowRecurring] = useState(false);
@@ -166,6 +167,7 @@ export function ContasPagarClient({
   }
 
   async function submit() {
+    if (saving) return;
     if (!form.categoriaId) {
       setFormError("Selecione uma categoria financeira antes de salvar.");
       return;
@@ -253,21 +255,27 @@ export function ContasPagarClient({
   }
 
   async function submitRecurring() {
+    if (savingRecurring) return;
     if (!recurringForm.categoriaId || !recurringForm.bankAccountId) {
       setRecurringError("Selecione categoria e conta bancária antes de salvar.");
       return;
     }
     setRecurringError(null);
-    const result = await apiRequest("/api/financeiro/recorrentes", "POST", {
-      ...recurringForm,
-      tipo: "PAGAR",
-    });
-    if (!result.ok) {
-      setRecurringError(result.error);
-      return;
+    setSavingRecurring(true);
+    try {
+      const result = await apiRequest("/api/financeiro/recorrentes", "POST", {
+        ...recurringForm,
+        tipo: "PAGAR",
+      });
+      if (!result.ok) {
+        setRecurringError(result.error);
+        return;
+      }
+      setShowRecurring(false);
+      refresh();
+    } finally {
+      setSavingRecurring(false);
     }
-    setShowRecurring(false);
-    refresh();
   }
 
   return (
@@ -522,8 +530,12 @@ export function ContasPagarClient({
             </Field>
           )}
         </div>
-        <button onClick={submitRecurring} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Criar lançamentos recorrentes
+        <button
+          onClick={submitRecurring}
+          disabled={savingRecurring}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {savingRecurring ? "Criando..." : "Criar lançamentos recorrentes"}
         </button>
       </Modal>
 

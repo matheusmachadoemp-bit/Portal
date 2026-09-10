@@ -69,6 +69,7 @@ export function OrcamentoFormModal({
   }
 
   async function handleSubmit() {
+    if (saving) return;
     setError(null);
     if (!form.prestadorId) return setError("Selecione o prestador.");
 

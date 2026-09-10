@@ -640,22 +640,29 @@ function CategoryFormModal({
   const [name, setName] = useState(category?.name ?? "");
   const [icon, setIcon] = useState(category?.icon ?? "LayoutGrid");
   const [color, setColor] = useState(category?.color ?? "#1464F4");
+  const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
-    if (category) {
-      await fetch(`/api/menu/categories/${category.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, icon, color }),
-      });
-    } else {
-      await fetch("/api/menu", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, icon, color }),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (category) {
+        await fetch(`/api/menu/categories/${category.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, icon, color }),
+        });
+      } else {
+        await fetch("/api/menu", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, icon, color }),
+        });
+      }
+      onSaved();
+    } finally {
+      setSubmitting(false);
     }
-    onSaved();
   }
 
   return (
@@ -686,10 +693,10 @@ function CategoryFormModal({
           </button>
           <button
             onClick={submit}
-            disabled={!name.trim()}
+            disabled={!name.trim() || submitting}
             className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
           >
-            Salvar
+            {submitting ? "Salvando..." : "Salvar"}
           </button>
         </div>
       </div>
@@ -713,22 +720,29 @@ function SubcategoryFormModal({
   const [name, setName] = useState(subcategory?.name ?? "");
   const [icon, setIcon] = useState(subcategory?.icon ?? "Folder");
   const [color, setColor] = useState(subcategory?.color ?? "#1464F4");
+  const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
-    if (subcategory) {
-      await fetch(`/api/menu/subcategories/${subcategory.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, icon, color }),
-      });
-    } else if (categoryId) {
-      await fetch("/api/menu/subcategories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, icon, color, categoryId }),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (subcategory) {
+        await fetch(`/api/menu/subcategories/${subcategory.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, icon, color }),
+        });
+      } else if (categoryId) {
+        await fetch("/api/menu/subcategories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, icon, color, categoryId }),
+        });
+      }
+      onSaved();
+    } finally {
+      setSubmitting(false);
     }
-    onSaved();
   }
 
   return (
@@ -759,10 +773,10 @@ function SubcategoryFormModal({
           </button>
           <button
             onClick={submit}
-            disabled={!name.trim()}
+            disabled={!name.trim() || submitting}
             className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
           >
-            Salvar
+            {submitting ? "Salvando..." : "Salvar"}
           </button>
         </div>
       </div>

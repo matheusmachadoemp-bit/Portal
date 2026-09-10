@@ -151,6 +151,7 @@ export function ContasReceberClient({
   }
 
   async function submit() {
+    if (saving) return;
     if (!form.categoriaId) {
       setFormError("Selecione uma categoria financeira antes de salvar.");
       return;

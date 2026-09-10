@@ -69,6 +69,7 @@ export function VendasClient({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<SalesEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -172,22 +173,28 @@ export function VendasClient({
   }
 
   async function submit() {
-    const payload = { ...form };
-    if (editing) {
-      await fetch(`/api/vendas/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/vendas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const payload = { ...form };
+      if (editing) {
+        await fetch(`/api/vendas/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch("/api/vendas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -205,6 +212,7 @@ export function VendasClient({
   }
 
   async function submitImport() {
+    if (importLoading) return;
     if (!importFile) {
       setImportError("Selecione um arquivo .xlsx ou .csv antes de importar.");
       return;
@@ -552,9 +560,10 @@ export function VendasClient({
         </div>
         <button
           onClick={submit}
-          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5"
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
         >
-          Salvar lançamento
+          {submitting ? "Salvando..." : "Salvar lançamento"}
         </button>
       </Modal>
 

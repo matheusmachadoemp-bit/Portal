@@ -64,6 +64,7 @@ export function InsumosClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [priceAlert, setPriceAlert] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/ficha-tecnica/insumos");
@@ -95,29 +96,35 @@ export function InsumosClient({
   }
 
   async function submit() {
-    if (editing) {
-      const res = await fetch(`/api/ficha-tecnica/insumos/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (data.affectedProducts?.length) {
-        setPriceAlert(
-          `O preço de "${form.name}" foi atualizado. ${data.affectedProducts.length} ficha(s) técnica(s) tiveram o custo recalculado automaticamente: ${data.affectedProducts
-            .map((p: { name: string }) => p.name)
-            .join(", ")}.`
-        );
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (editing) {
+        const res = await fetch(`/api/ficha-tecnica/insumos/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+        const data = await res.json();
+        if (data.affectedProducts?.length) {
+          setPriceAlert(
+            `O preço de "${form.name}" foi atualizado. ${data.affectedProducts.length} ficha(s) técnica(s) tiveram o custo recalculado automaticamente: ${data.affectedProducts
+              .map((p: { name: string }) => p.name)
+              .join(", ")}.`
+          );
+        }
+      } else {
+        await fetch("/api/ficha-tecnica/insumos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
       }
-    } else {
-      await fetch("/api/ficha-tecnica/insumos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -341,8 +348,12 @@ export function InsumosClient({
             <input type="date" value={form.validade} onChange={(e) => setForm({ ...form, validade: e.target.value })} className="input" />
           </Field>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

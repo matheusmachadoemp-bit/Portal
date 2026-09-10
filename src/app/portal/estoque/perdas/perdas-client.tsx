@@ -34,6 +34,7 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -79,20 +80,26 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
   }
 
   async function submit() {
+    if (submitting) return;
     setError(null);
-    const res = await fetch("/api/estoque/perdas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Não foi possível registrar a perda.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/estoque/perdas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Não foi possível registrar a perda.");
+        return;
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setForm(emptyForm);
-    refresh();
   }
 
   const selectedIngredient = ingredients.find((i) => i.id === form.ingredientId);
@@ -263,8 +270,8 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
           </label>
           {valorEstimadoPreview > 0 && <p className="text-xs text-nord-gray">Valor estimado: {formatCurrency(valorEstimadoPreview)}</p>}
           {error && <p className="text-xs text-red-400">{error}</p>}
-          <button onClick={submit} disabled={!form.ingredientId || !form.quantidade} className="btn-primary w-full py-2.5">
-            Registrar perda
+          <button onClick={submit} disabled={!form.ingredientId || !form.quantidade || submitting} className="btn-primary w-full py-2.5">
+            {submitting ? "Registrando..." : "Registrar perda"}
           </button>
         </div>
       </Modal>

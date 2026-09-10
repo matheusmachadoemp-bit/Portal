@@ -27,6 +27,7 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/estoque/categorias");
@@ -61,21 +62,27 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
   }
 
   async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
     setError(null);
-    const isEdit = !!form.id;
-    const res = await fetch(isEdit ? `/api/estoque/categorias/${form.id}` : "/api/estoque/categorias", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Não foi possível salvar a categoria.");
-      return;
+    try {
+      const isEdit = !!form.id;
+      const res = await fetch(isEdit ? `/api/estoque/categorias/${form.id}` : "/api/estoque/categorias", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Não foi possível salvar a categoria.");
+        return;
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setForm(emptyForm);
-    refresh();
   }
 
   async function toggleActive(c: Category) {
@@ -169,8 +176,8 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
             </select>
           </label>
           {error && <p className="text-xs text-red-400">{error}</p>}
-          <button onClick={submit} disabled={!form.name.trim()} className="btn-primary w-full py-2.5">
-            Salvar
+          <button onClick={submit} disabled={!form.name.trim() || submitting} className="btn-primary w-full py-2.5">
+            {submitting ? "Salvando..." : "Salvar"}
           </button>
         </div>
       </Modal>

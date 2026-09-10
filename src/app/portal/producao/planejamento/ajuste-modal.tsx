@@ -21,6 +21,7 @@ export function AjusteModal({
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
+    if (loading) return;
     const quantidadeNum = Number(quantidade.replace(",", "."));
     if (!Number.isFinite(quantidadeNum) || quantidadeNum < 0) {
       setError("Informe uma quantidade válida.");

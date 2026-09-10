@@ -270,6 +270,7 @@ export function SalaoClient({
   }
 
   async function submit() {
+    if (saving) return;
     setSaving(true);
     try {
       await fetch("/api/reuniao/salao", {

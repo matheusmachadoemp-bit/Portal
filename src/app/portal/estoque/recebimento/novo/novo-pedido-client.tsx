@@ -45,6 +45,7 @@ export function NovoPedidoClient({
   }
 
   async function submit(enviarParaRecebimento: boolean) {
+    if (saving) return;
     setError(null);
     const validItens = itens.filter((it) => it.ingredientId && it.quantidade && it.valorUnitario);
     if (!supplierId || validItens.length === 0) {
@@ -229,10 +230,10 @@ export function NovoPedidoClient({
 
       <div className="flex items-center gap-3">
         <button onClick={() => submit(false)} disabled={saving} className="btn-outline flex-1 py-2.5">
-          Salvar rascunho
+          {saving ? "Salvando..." : "Salvar rascunho"}
         </button>
         <button onClick={() => submit(true)} disabled={saving} className="btn-primary flex-1 py-2.5">
-          Enviar para recebimento
+          {saving ? "Enviando..." : "Enviar para recebimento"}
         </button>
       </div>
     </div>

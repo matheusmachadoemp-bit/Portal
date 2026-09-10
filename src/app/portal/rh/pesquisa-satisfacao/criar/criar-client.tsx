@@ -140,6 +140,7 @@ export function CriarPesquisaClient({
   }
 
   async function submit(publish: boolean) {
+    if (saving) return;
     setError(null);
     if (!title.trim()) return setError("Informe o título da pesquisa.");
     if (!endDate) return setError("Informe a data de encerramento.");

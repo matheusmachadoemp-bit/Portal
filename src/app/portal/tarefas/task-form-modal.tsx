@@ -118,6 +118,7 @@ export function TaskFormModal({
   const effectiveEmpresaIds = empresas.length <= 1 ? empresas.map((e) => e.id) : form.empresaIds;
 
   async function handleSubmit() {
+    if (saving) return;
     setError(null);
     if (!form.title.trim()) return setError("Informe o título da tarefa.");
     if (effectiveEmpresaIds.length === 0) return setError("Selecione ao menos uma unidade.");

@@ -75,6 +75,7 @@ export function CategoriasClient({
   }
 
   async function submit() {
+    if (saving) return;
     if (!form.name.trim() || !form.dreKey) {
       setFormError("Nome e linha da DRE são obrigatórios.");
       return;

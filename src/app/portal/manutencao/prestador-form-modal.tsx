@@ -73,6 +73,7 @@ export function PrestadorFormModal({
   }
 
   async function handleSubmit() {
+    if (saving) return;
     setError(null);
     if (!form.nome.trim()) return setError("Informe o nome ou razão social.");
 

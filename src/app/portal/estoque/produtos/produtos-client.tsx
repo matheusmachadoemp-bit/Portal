@@ -79,6 +79,7 @@ export function ProdutosClient({
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const vencimentoLimite = useMemo(() => new Date().getTime() + 7 * 86400000, []);
 
@@ -168,21 +169,27 @@ export function ProdutosClient({
   }
 
   async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
     setError(null);
-    const isEdit = !!form.id;
-    const res = await fetch(isEdit ? `/api/ficha-tecnica/insumos/${form.id}` : "/api/ficha-tecnica/insumos", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Não foi possível salvar o produto.");
-      return;
+    try {
+      const isEdit = !!form.id;
+      const res = await fetch(isEdit ? `/api/ficha-tecnica/insumos/${form.id}` : "/api/ficha-tecnica/insumos", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Não foi possível salvar o produto.");
+        return;
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setForm(emptyForm);
-    refresh();
   }
 
   return (
@@ -410,8 +417,8 @@ export function ProdutosClient({
           </label>
         </div>
         {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
-        <button onClick={submit} disabled={!form.name.trim()} className="btn-primary w-full mt-4 py-2.5">
-          Salvar
+        <button onClick={submit} disabled={!form.name.trim() || submitting} className="btn-primary w-full mt-4 py-2.5">
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
     </Section>

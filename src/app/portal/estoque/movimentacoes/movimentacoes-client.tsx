@@ -40,6 +40,7 @@ export function MovimentacoesClient({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -71,20 +72,26 @@ export function MovimentacoesClient({
   }
 
   async function submit() {
+    if (submitting) return;
     setError(null);
-    const res = await fetch("/api/estoque/movimentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Não foi possível registrar a movimentação.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/estoque/movimentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Não foi possível registrar a movimentação.");
+        return;
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setForm(emptyForm);
-    refresh();
   }
 
   return (
@@ -205,10 +212,10 @@ export function MovimentacoesClient({
           {error && <p className="text-xs text-red-400">{error}</p>}
           <button
             onClick={submit}
-            disabled={!form.ingredientId || !form.quantidade}
+            disabled={!form.ingredientId || !form.quantidade || submitting}
             className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
           >
-            Registrar
+            {submitting ? "Registrando..." : "Registrar"}
           </button>
         </div>
       </Modal>

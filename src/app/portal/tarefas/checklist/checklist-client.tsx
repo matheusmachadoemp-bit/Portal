@@ -254,6 +254,7 @@ export function ChecklistClient({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Template | null>(null);
   const [form, setForm] = useState(emptyForm());
+  const [submitting, setSubmitting] = useState(false);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmToggleId, setConfirmToggleId] = useState<Template | null>(null);
@@ -409,30 +410,36 @@ export function ChecklistClient({
   }
 
   async function submit() {
+    if (submitting) return;
     if (form.itens.length === 0) {
       alert("Adicione ao menos um item ao checklist.");
       return;
     }
-    const payload = {
-      ...form,
-      startDate: new Date(`${form.startDate}T00:00:00`).toISOString(),
-      endDate: form.endDate ? new Date(`${form.endDate}T00:00:00`).toISOString() : null,
-    };
-    if (editing) {
-      await fetch(`/api/checklist/templates/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/checklist/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    setSubmitting(true);
+    try {
+      const payload = {
+        ...form,
+        startDate: new Date(`${form.startDate}T00:00:00`).toISOString(),
+        endDate: form.endDate ? new Date(`${form.endDate}T00:00:00`).toISOString() : null,
+      };
+      if (editing) {
+        await fetch(`/api/checklist/templates/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch("/api/checklist/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      setShowForm(false);
+      await Promise.all([refreshTemplates(), refreshOccurrences()]);
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    await Promise.all([refreshTemplates(), refreshOccurrences()]);
   }
 
   async function toggleActive(t: Template) {
@@ -1029,8 +1036,12 @@ export function ChecklistClient({
             </div>
           </div>
 
-          <button onClick={submit} className="w-full bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-            Salvar checklist
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            {submitting ? "Salvando..." : "Salvar checklist"}
           </button>
         </div>
       </Modal>

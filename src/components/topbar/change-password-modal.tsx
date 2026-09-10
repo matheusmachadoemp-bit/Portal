@@ -35,6 +35,7 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
   }, [success]);
 
   async function handleSubmit() {
+    if (saving) return;
     setError(null);
 
     if (!senhaAtual || !novaSenha || !confirmarSenha) {
