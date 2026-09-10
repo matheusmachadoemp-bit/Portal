@@ -16,7 +16,6 @@ export function ConfiguracoesEstoqueClient({
   canEdit: boolean;
 }) {
   const activeEmpresa = empresas.find((e) => e.id === activeEmpresaId);
-  const [metaCmv, setMetaCmv] = useState(String(activeEmpresa?.metaCmvPercent ?? 30));
   const [divergencia, setDivergencia] = useState(String(activeEmpresa?.metaDivergenciaContagemPercent ?? 3));
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +26,7 @@ export function ConfiguracoesEstoqueClient({
     const res = await fetch("/api/estoque/configuracoes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ metaCmvPercent: metaCmv, metaDivergenciaContagemPercent: divergencia }),
+      body: JSON.stringify({ metaDivergenciaContagemPercent: divergencia }),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
@@ -64,11 +63,7 @@ export function ConfiguracoesEstoqueClient({
 
       {canEdit && activeEmpresa && (
         <Section title={`Editar configurações — ${activeEmpresa.name}`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg">
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta de CMV (%)</span>
-              <input className="input" type="number" value={metaCmv} onChange={(e) => setMetaCmv(e.target.value)} />
-            </label>
+          <div className="max-w-sm">
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Limiar de divergência de contagem (%)</span>
               <input className="input" type="number" value={divergencia} onChange={(e) => setDivergencia(e.target.value)} />
@@ -76,6 +71,9 @@ export function ConfiguracoesEstoqueClient({
           </div>
           <p className="text-xs text-nord-gray mt-2">
             Divergências de contagem acima deste percentual exigirão justificativa antes da finalização.
+          </p>
+          <p className="text-xs text-nord-gray mt-2">
+            A meta de CMV agora é editada em CMV → Comparativo Real x Teórico.
           </p>
           {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
           {saved && <p className="text-xs text-emerald-400 mt-2">Configurações salvas.</p>}

@@ -24,6 +24,7 @@ export default async function ConfiguracoesEstoquePage() {
     <PageContainer title="Estoque" subtitle="Configurações">
       <div className="space-y-6">
         <ConfiguracoesEstoqueClient
+          key={ctx?.mode === "single" ? ctx.empresa.id : "grupo"}
           empresas={empresas}
           activeEmpresaId={ctx?.mode === "single" ? ctx.empresa.id : null}
           canEdit={ctx?.mode === "single"}
