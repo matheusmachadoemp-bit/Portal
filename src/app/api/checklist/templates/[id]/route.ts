@@ -10,7 +10,7 @@ const WEEKDAYS = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "do
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit", "checklist"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite editar checklists." },
       { status: 403 }
@@ -125,7 +125,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canDelete"))) {
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canDelete", "checklist"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite excluir checklists." },
       { status: 403 }
