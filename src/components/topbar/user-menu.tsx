@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Bell, BellOff, ChevronRight, Coins, KeyRound, LogOut, Pencil } from "lucide-react";
+import { Bell, BellOff, ChevronRight, Coins, KeyRound, LogOut, Pencil, Send } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { logoutAction } from "@/app/actions/logout";
 import { sanitizeFileName } from "@/lib/upload";
@@ -58,6 +58,58 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return output;
 }
 
+type PushTestSubscriptionResult = {
+  endpoint: string;
+  ok: boolean;
+  statusCode?: number;
+  error?: string;
+};
+
+/** Formato devolvido por `POST /api/push/test` — ver
+ * src/app/api/push/test/route.ts. `reason`/`detail` só vêm preenchidos
+ * quando `ok` é falso; `sent`/`subscriptions` só vêm quando a rota chegou a
+ * tentar enviar de verdade (passou da checagem de VAPID e de assinatura). */
+type PushTestResponse = {
+  ok: boolean;
+  reason?: string;
+  detail?: string;
+  sent?: number;
+  subscriptions?: PushTestSubscriptionResult[];
+  subjectWarning?: string;
+};
+
+/** Monta a mensagem exibida ao usuário a partir da resposta real da rota de
+ * teste — nunca um texto genérico tipo "algo deu errado": o objetivo desta
+ * ferramenta é diagnóstico, então o usuário (mesmo não técnico) precisa
+ * conseguir ler/copiar o motivo exato pra repassar adiante. */
+function formatPushTestMessage(data: PushTestResponse): string {
+  const lines: string[] = [];
+
+  if (data.ok) {
+    lines.push(
+      data.sent && data.sent > 1
+        ? `Notificação de teste enviada com sucesso para os ${data.sent} aparelhos cadastrados neste usuário.`
+        : "Notificação de teste enviada com sucesso pelo servidor. Se não aparecer em alguns segundos neste aparelho, confira em Ajustes > Notificações > Portal Nord (no iPhone) se as notificações estão permitidas."
+    );
+  } else if (data.reason === "vapid_not_configured") {
+    lines.push(`As notificações push não estão configuradas no servidor. ${data.detail ?? ""}`.trim());
+  } else if (data.reason === "vapid_invalid") {
+    lines.push(`A configuração de push no servidor está inválida. ${data.detail ?? ""}`.trim());
+  } else if (data.reason === "no_subscription") {
+    lines.push(data.detail ?? "Nenhuma assinatura de push encontrada para o seu usuário no servidor.");
+  } else {
+    lines.push(data.detail ?? "Falha ao enviar a notificação de teste.");
+    for (const sub of data.subscriptions ?? []) {
+      if (sub.ok) continue;
+      lines.push(`• ${sub.endpoint}: ${sub.error ?? "erro desconhecido"}${sub.statusCode ? ` (HTTP ${sub.statusCode})` : ""}`);
+    }
+  }
+
+  if (data.subjectWarning) lines.push(data.subjectWarning);
+
+  return lines.join("\n");
+}
+
 // Menu de perfil no canto superior direito de toda tela autenticada: foto/
 // iniciais do usuário, nome/e-mail, saldo de pontos (Loja Nord), atalho para
 // trocar a própria senha e sair do portal.
@@ -88,6 +140,12 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
   const [notifChecking, setNotifChecking] = useState(true);
   const [notifBusy, setNotifBusy] = useState(false);
   const [notifMessage, setNotifMessage] = useState<string | null>(null);
+  // Botão "Enviar notificação de teste" (só aparece com notifOn) — ver
+  // handleTestNotification. testMessage mostra o resultado real devolvido
+  // por POST /api/push/test (sucesso ou o motivo exato da falha), nunca uma
+  // mensagem genérica.
+  const [testBusy, setTestBusy] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -139,6 +197,7 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
   const loadNotifState = useCallback(async () => {
     setNotifChecking(true);
     setNotifMessage(null);
+    setTestMessage(null);
     if (
       typeof window === "undefined" ||
       !("Notification" in window) ||
@@ -267,6 +326,32 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
     }
   }
 
+  /** Dispara `POST /api/push/test` e mostra o resultado real na tela — ver
+   * formatPushTestMessage. Existe pra diagnosticar em produção um caso em
+   * que a ativação "funcionou" (permissão concedida, assinatura salva) mas
+   * o aviso não chega de fato no aparelho; nem o líder nem quem desenvolve
+   * o Portal têm acesso ao banco de produção nem aos logs do servidor a
+   * partir do ambiente de trabalho, então esta é a única forma de ver o
+   * motivo exato de uma falha de envio depois de publicado. */
+  async function handleTestNotification() {
+    if (testBusy) return;
+    setTestBusy(true);
+    setTestMessage(null);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const data: PushTestResponse | null = await res.json().catch(() => null);
+      if (!data) {
+        setTestMessage(`Não foi possível interpretar a resposta do servidor (HTTP ${res.status}). Tente novamente em instantes.`);
+        return;
+      }
+      setTestMessage(formatPushTestMessage(data));
+    } catch {
+      setTestMessage("Não foi possível testar agora — confira sua conexão com a internet e tente de novo.");
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
   async function handleAvatarChange(fileList: FileList | null) {
     const file = fileList?.[0];
     if (!file) return;
@@ -392,6 +477,20 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
                 {notifLabel}
               </button>
               {notifMessage && <p className="text-[11px] text-nord-warning px-1 pb-2 leading-snug">{notifMessage}</p>}
+
+              {notifOn && (
+                <button
+                  onClick={handleTestNotification}
+                  disabled={testBusy || notifBusy}
+                  className="w-full flex items-center gap-2 text-sm text-nord-gray hover:text-white px-1 py-2.5 rounded-lg hover:bg-white/5 transition disabled:opacity-60"
+                >
+                  <Send size={15} />
+                  {testBusy ? "Enviando teste..." : "Enviar notificação de teste"}
+                </button>
+              )}
+              {testMessage && (
+                <p className="text-[11px] text-nord-warning px-1 pb-2 leading-snug whitespace-pre-line">{testMessage}</p>
+              )}
 
               <form action={logoutAction}>
                 <button
