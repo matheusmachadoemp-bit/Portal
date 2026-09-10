@@ -77,6 +77,7 @@ export function RespostaClient({ token, survey, empresa }: { token: string; surv
   }
 
   async function submit() {
+    if (submitting) return;
     setSubmitting(true);
     setError(null);
     try {

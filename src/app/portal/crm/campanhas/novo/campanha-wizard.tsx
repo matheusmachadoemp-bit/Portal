@@ -70,6 +70,7 @@ export function CampanhaWizard({
   }
 
   async function submit() {
+    if (submitting) return;
     setSubmitting(true);
     setError(null);
     const res = await fetch("/api/crm/campanhas", {

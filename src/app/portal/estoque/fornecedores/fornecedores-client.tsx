@@ -50,6 +50,7 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [historicoSupplier, setHistoricoSupplier] = useState<Supplier | null>(null);
   const [historico, setHistorico] = useState<{
     totalRecebimentos: number;
@@ -108,21 +109,27 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
   }
 
   async function submit() {
+    if (submitting) return;
     setError(null);
-    const isEdit = !!form.id;
-    const res = await fetch(isEdit ? `/api/estoque/fornecedores/${form.id}` : "/api/estoque/fornecedores", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Não foi possível salvar o fornecedor.");
-      return;
+    setSubmitting(true);
+    try {
+      const isEdit = !!form.id;
+      const res = await fetch(isEdit ? `/api/estoque/fornecedores/${form.id}` : "/api/estoque/fornecedores", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Não foi possível salvar o fornecedor.");
+        return;
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setForm(emptyForm);
-    refresh();
   }
 
   return (
@@ -275,8 +282,8 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
           </label>
         </div>
         {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
-        <button onClick={submit} disabled={!form.razaoSocial.trim()} className="btn-primary w-full mt-4 py-2.5">
-          Salvar
+        <button onClick={submit} disabled={!form.razaoSocial.trim() || submitting} className="btn-primary w-full mt-4 py-2.5">
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

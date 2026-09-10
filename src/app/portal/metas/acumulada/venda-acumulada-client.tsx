@@ -34,6 +34,7 @@ export function VendaAcumuladaClient({
   const [entries, setEntries] = useState(initialEntries);
   const [showForm, setShowForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     employeeId: "",
     amount: "",
@@ -64,14 +65,20 @@ export function VendaAcumuladaClient({
   }
 
   async function submit() {
-    await fetch("/api/venda-acumulada", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setShowForm(false);
-    setForm({ employeeId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), note: "" });
-    refresh();
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await fetch("/api/venda-acumulada", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setShowForm(false);
+      setForm({ employeeId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), note: "" });
+      refresh();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function doDelete() {
@@ -230,10 +237,10 @@ export function VendaAcumuladaClient({
           </label>
           <button
             onClick={submit}
-            disabled={!form.employeeId || !form.amount}
+            disabled={!form.employeeId || !form.amount || submitting}
             className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
           >
-            Salvar
+            {submitting ? "Salvando..." : "Salvar"}
           </button>
         </div>
       </Modal>

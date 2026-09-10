@@ -69,6 +69,7 @@ export function CaixaClient({
   }
 
   async function submit() {
+    if (saving) return;
     if (!form.bankAccountId || !form.valor) {
       setFormError("Selecione a conta e informe o valor.");
       return;

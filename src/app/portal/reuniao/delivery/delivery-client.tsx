@@ -217,6 +217,7 @@ export function DeliveryClient({
   }
 
   async function submit() {
+    if (saving) return;
     setSaving(true);
     try {
       await fetch("/api/reuniao/delivery", {

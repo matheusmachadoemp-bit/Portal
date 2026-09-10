@@ -103,6 +103,7 @@ export function ProdutosClient({
   }
 
   async function submit() {
+    if (saving) return;
     if (!form.name || !form.categoryId) {
       setError("Nome e categoria são obrigatórios.");
       return;

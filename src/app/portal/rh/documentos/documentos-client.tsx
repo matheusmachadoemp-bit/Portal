@@ -103,7 +103,7 @@ export function DocumentosClient({
   }
 
   async function submit() {
-    if (!file) return;
+    if (uploading || !file) return;
     setUploading(true);
     try {
       const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });

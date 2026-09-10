@@ -73,21 +73,25 @@ export function SegmentosClient({
   }
 
   async function salvar() {
+    if (saving) return;
     if (!name.trim()) return;
     setSaving(true);
-    const res = await fetch("/api/crm/segmentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, criteria }),
-    });
-    if (res.ok) {
-      setShowBuilder(false);
-      setName("");
-      setDescription("");
-      setCriteria({});
-      router.refresh();
+    try {
+      const res = await fetch("/api/crm/segmentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description, criteria }),
+      });
+      if (res.ok) {
+        setShowBuilder(false);
+        setName("");
+        setDescription("");
+        setCriteria({});
+        router.refresh();
+      }
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function excluir(id: string) {

@@ -70,6 +70,7 @@ export function UsuariosClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   function setPermission(key: string, level: string) {
     setPermissions((p) => ({ ...p, [key]: level }));
@@ -133,33 +134,39 @@ export function UsuariosClient({
   }
 
   async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
     setFormError(null);
-    const payload = {
-      ...form,
-      defaultEmpresaId: form.defaultEmpresaId || empresaIds[0] || null,
-      permissions: Object.entries(permissions).map(([moduleKey, level]) => ({ moduleKey, level })),
-      empresaIds,
-    };
-    const res = editing
-      ? await fetch(`/api/usuarios/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      : await fetch("/api/usuarios", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+    try {
+      const payload = {
+        ...form,
+        defaultEmpresaId: form.defaultEmpresaId || empresaIds[0] || null,
+        permissions: Object.entries(permissions).map(([moduleKey, level]) => ({ moduleKey, level })),
+        empresaIds,
+      };
+      const res = editing
+        ? await fetch(`/api/usuarios/${editing.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await fetch("/api/usuarios", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setFormError(data?.error ?? "Não foi possível salvar o usuário.");
-      return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setFormError(data?.error ?? "Não foi possível salvar o usuário.");
+        return;
+      }
+
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -421,8 +428,12 @@ export function UsuariosClient({
           </div>
         )}
 
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar usuário
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {submitting ? "Salvando..." : "Salvar usuário"}
         </button>
       </Modal>
 

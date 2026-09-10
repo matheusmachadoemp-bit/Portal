@@ -112,6 +112,7 @@ export function ColaboradoresClient({
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -178,21 +179,27 @@ export function ColaboradoresClient({
   }
 
   async function submit() {
-    if (editing) {
-      await fetch(`/api/rh/employees/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/rh/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (editing) {
+        await fetch(`/api/rh/employees/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/rh/employees", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      setShowForm(false);
+      await refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -459,8 +466,12 @@ export function ColaboradoresClient({
             <input value={form.lastTrainingName} onChange={(e) => setForm({ ...form, lastTrainingName: e.target.value })} className="input" />
           </Field>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

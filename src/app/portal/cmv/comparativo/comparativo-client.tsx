@@ -51,6 +51,7 @@ export function ComparativoClient({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [metaCmv, setMetaCmv] = useState(metaCmvPercent);
   const [editingMeta, setEditingMeta] = useState(false);
   const [metaDraft, setMetaDraft] = useState(String(metaCmvPercent));
@@ -62,6 +63,7 @@ export function ComparativoClient({
   const classificacao = classificarCmv(cmvRealPercent, metaCmv, cmvRealPercent > 0 || cmvTeoricoPercent > 0);
 
   async function salvarMeta() {
+    if (metaSaving) return;
     setMetaError(null);
     const valor = Number(metaDraft);
     if (!Number.isFinite(valor) || valor <= 0 || valor >= 100) {
@@ -69,19 +71,22 @@ export function ComparativoClient({
       return;
     }
     setMetaSaving(true);
-    const res = await fetch("/api/estoque/configuracoes", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ metaCmvPercent: valor }),
-    });
-    setMetaSaving(false);
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setMetaError(d.error ?? "Não foi possível salvar a meta.");
-      return;
+    try {
+      const res = await fetch("/api/estoque/configuracoes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metaCmvPercent: valor }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setMetaError(d.error ?? "Não foi possível salvar a meta.");
+        return;
+      }
+      setMetaCmv(valor);
+      setEditingMeta(false);
+    } finally {
+      setMetaSaving(false);
     }
-    setMetaCmv(valor);
-    setEditingMeta(false);
   }
 
   async function refreshPlans() {
@@ -97,24 +102,30 @@ export function ComparativoClient({
   }
 
   async function submit() {
+    if (submitting) return;
     setError(null);
     if (!form.problema || !form.acaoCorretiva) {
       setError("Descreva o problema e a ação corretiva.");
       return;
     }
-    const res = await fetch("/api/estoque/planos-acao", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Não foi possível criar o plano de ação.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/estoque/planos-acao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Não foi possível criar o plano de ação.");
+        return;
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      await refreshPlans();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setForm(emptyForm);
-    refreshPlans();
   }
 
   async function updateStatus(plan: Plan, status: string) {
@@ -296,8 +307,8 @@ export function ComparativoClient({
             <input className="input" type="date" value={form.prazo} onChange={(e) => setForm({ ...form, prazo: e.target.value })} />
           </label>
           {error && <p className="text-xs text-red-400">{error}</p>}
-          <button onClick={submit} className="btn-primary w-full py-2.5">
-            Salvar plano de ação
+          <button onClick={submit} disabled={submitting} className="btn-primary w-full py-2.5 disabled:opacity-50">
+            {submitting ? "Salvando..." : "Salvar plano de ação"}
           </button>
         </div>
       </Modal>

@@ -64,6 +64,7 @@ export function LancamentosClient({
   const [lines, setLines] = useState<ItemLine[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/vendas/lancamentos");
@@ -123,23 +124,29 @@ export function LancamentosClient({
   const total = lines.reduce((sum, l) => sum + (Number(l.quantidade) || 0) * (Number(l.precoUnitario) || 0), 0);
 
   async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
     setError(null);
-    const res = await fetch("/api/vendas/lancamentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        garcomId: form.garcomId || null,
-        items: lines.filter((l) => l.nome && l.quantidade),
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Não foi possível registrar a venda.");
-      return;
+    try {
+      const res = await fetch("/api/vendas/lancamentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          garcomId: form.garcomId || null,
+          items: lines.filter((l) => l.nome && l.quantidade),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Não foi possível registrar a venda.");
+        return;
+      }
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -364,10 +371,10 @@ export function LancamentosClient({
         {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
         <button
           onClick={submit}
-          disabled={lines.length === 0}
+          disabled={lines.length === 0 || submitting}
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
         >
-          Salvar venda
+          {submitting ? "Salvando..." : "Salvar venda"}
         </button>
       </Modal>
 

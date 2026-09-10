@@ -33,6 +33,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<VaultEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -67,21 +68,27 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
   }
 
   async function submit() {
-    if (editing) {
-      await fetch(`/api/admin/vault/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/admin/vault", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (editing) {
+        await fetch(`/api/admin/vault/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/admin/vault", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -224,8 +231,12 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
             </Field>
           </div>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 
