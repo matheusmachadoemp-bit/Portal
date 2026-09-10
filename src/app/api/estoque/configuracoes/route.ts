@@ -26,16 +26,29 @@ export async function PATCH(req: Request) {
   }
 
   const body = await req.json();
-  const metaCmvPercent = Number(body.metaCmvPercent);
-  const metaDivergenciaContagemPercent = Number(body.metaDivergenciaContagemPercent);
-  if (!Number.isFinite(metaCmvPercent) || metaCmvPercent <= 0 || metaCmvPercent >= 100) {
-    return NextResponse.json({ error: "Informe uma meta de CMV válida entre 0 e 100." }, { status: 400 });
-  }
-  if (!Number.isFinite(metaDivergenciaContagemPercent) || metaDivergenciaContagemPercent < 0 || metaDivergenciaContagemPercent >= 100) {
-    return NextResponse.json({ error: "Informe um limiar de divergência válido entre 0 e 100." }, { status: 400 });
+  const data: { metaCmvPercent?: number; metaDivergenciaContagemPercent?: number } = {};
+
+  if (body.metaCmvPercent !== undefined) {
+    const metaCmvPercent = Number(body.metaCmvPercent);
+    if (!Number.isFinite(metaCmvPercent) || metaCmvPercent <= 0 || metaCmvPercent >= 100) {
+      return NextResponse.json({ error: "Informe uma meta de CMV válida entre 0 e 100." }, { status: 400 });
+    }
+    data.metaCmvPercent = metaCmvPercent;
   }
 
-  await prisma.empresa.update({ where: { id: empresa.id }, data: { metaCmvPercent, metaDivergenciaContagemPercent } });
+  if (body.metaDivergenciaContagemPercent !== undefined) {
+    const metaDivergenciaContagemPercent = Number(body.metaDivergenciaContagemPercent);
+    if (!Number.isFinite(metaDivergenciaContagemPercent) || metaDivergenciaContagemPercent < 0 || metaDivergenciaContagemPercent >= 100) {
+      return NextResponse.json({ error: "Informe um limiar de divergência válido entre 0 e 100." }, { status: 400 });
+    }
+    data.metaDivergenciaContagemPercent = metaDivergenciaContagemPercent;
+  }
 
-  return NextResponse.json({ metaCmvPercent, metaDivergenciaContagemPercent });
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "Nenhuma configuração informada." }, { status: 400 });
+  }
+
+  await prisma.empresa.update({ where: { id: empresa.id }, data });
+
+  return NextResponse.json(data);
 }

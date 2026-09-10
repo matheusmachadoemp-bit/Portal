@@ -872,7 +872,7 @@ export async function loadAlertaAprovacaoPendente(
       setor: c.setor,
       tempoAtrasoOuPrazo: `aguardando aprovação há ${formatDuracao(now.getTime() - c.updatedAt.getTime())}`,
       nivel: diasEntre(c.updatedAt, now) >= DIAS_LIMITE_URGENTE ? "urgente" : "atencao",
-      actionHref: c.type === "SEMANAL" ? "/portal/estoque/contagem-semanal" : "/portal/estoque/contagem-mensal",
+      actionHref: "/portal/estoque/contagem",
     });
   }
 

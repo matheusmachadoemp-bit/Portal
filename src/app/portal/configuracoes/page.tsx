@@ -32,6 +32,7 @@ export default async function ConfiguracoesPage() {
   return (
     <PageContainer title="Configurações" subtitle="Conta, integrações e auditoria">
       <ConfiguracoesClient
+        key={ctx?.mode === "single" ? ctx.empresa.id : "grupo"}
         userName={session.user.name ?? ""}
         userEmail={session.user.email ?? ""}
         userRole={session.user.role}

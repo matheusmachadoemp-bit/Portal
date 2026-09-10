@@ -171,8 +171,7 @@ const CATEGORIES = [
     contentType: "estoque",
     subs: [
       { key: "dashboard", name: "Visão Geral", icon: "LayoutDashboard" },
-      { key: "contagem-semanal", name: "Contagem Semanal", icon: "ClipboardCheck" },
-      { key: "contagem-mensal", name: "Contagem Mensal", icon: "CalendarCheck2" },
+      { key: "contagem", name: "Contagem de Estoque", icon: "ClipboardCheck" },
       { key: "historico-contagens", name: "Histórico de Contagens", icon: "History" },
       { key: "produtos", name: "Produtos", icon: "Package" },
       { key: "categorias", name: "Categorias", icon: "Tags" },

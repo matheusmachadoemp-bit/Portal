@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Pencil } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -33,6 +34,7 @@ export function ComparativoClient({
   perdasPorSetorChart,
   plans: initialPlans,
   canCreate,
+  canEditMeta,
 }: {
   cmvRealPercent: number;
   cmvTeoricoPercent: number;
@@ -43,15 +45,44 @@ export function ComparativoClient({
   perdasPorSetorChart: { name: string; value: number }[];
   plans: Plan[];
   canCreate: boolean;
+  canEditMeta: boolean;
 }) {
   const [plans, setPlans] = useState(initialPlans);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [metaCmv, setMetaCmv] = useState(metaCmvPercent);
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [metaDraft, setMetaDraft] = useState(String(metaCmvPercent));
+  const [metaError, setMetaError] = useState<string | null>(null);
+  const [metaSaving, setMetaSaving] = useState(false);
 
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaValor = custoConsumido - cmvTeoricoValor;
-  const classificacao = classificarCmv(cmvRealPercent, metaCmvPercent, cmvRealPercent > 0 || cmvTeoricoPercent > 0);
+  const classificacao = classificarCmv(cmvRealPercent, metaCmv, cmvRealPercent > 0 || cmvTeoricoPercent > 0);
+
+  async function salvarMeta() {
+    setMetaError(null);
+    const valor = Number(metaDraft);
+    if (!Number.isFinite(valor) || valor <= 0 || valor >= 100) {
+      setMetaError("Informe uma meta válida entre 0 e 100.");
+      return;
+    }
+    setMetaSaving(true);
+    const res = await fetch("/api/estoque/configuracoes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metaCmvPercent: valor }),
+    });
+    setMetaSaving(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setMetaError(d.error ?? "Não foi possível salvar a meta.");
+      return;
+    }
+    setMetaCmv(valor);
+    setEditingMeta(false);
+  }
 
   async function refreshPlans() {
     const res = await fetch("/api/estoque/planos-acao");
@@ -98,27 +129,52 @@ export function ComparativoClient({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="col-span-2 md:col-span-3">
+        <div className="col-span-2 md:col-span-2">
           <SortableStatCards
             storageKey="estoque-comparativo-kpi-order"
-            className="grid grid-cols-2 md:grid-cols-3 gap-4"
+            className="grid grid-cols-2 gap-4"
             cards={[
               { key: "cmv-real", label: "CMV Real", value: formatPercent(cmvRealPercent), icon: "Warehouse", hint: formatCurrency(custoConsumido) },
               { key: "cmv-teorico", label: "CMV Teórico", value: formatPercent(cmvTeoricoPercent), icon: "Calculator", hint: formatCurrency(cmvTeoricoValor) },
-              {
-                key: "diferenca",
-                label: "Diferença",
-                value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
-                icon: diferencaPP > 0 ? "TriangleAlert" : "CheckCircle2",
-                color: diferencaPP > 0 ? "#ef4444" : "#22c55e",
-                hint: formatCurrency(diferencaValor),
-              },
             ]}
           />
         </div>
-        <div className="nord-card p-4 flex flex-col justify-center items-start gap-2">
-          <span className="text-xs text-nord-gray">Classificação do resultado</span>
-          <Badge tone={classificacao.tone}>{classificacao.label}</Badge>
+        <div className="col-span-2 nord-card p-4 flex flex-col justify-center gap-2 border-t-2" style={{ borderTopColor: diferencaPP > 0 ? "#ef4444" : "#22c55e" }}>
+          <span className="text-xs text-nord-gray">Diferença</span>
+          <span className="text-white text-2xl font-semibold tracking-tight">
+            {diferencaPP >= 0 ? "+" : ""}{diferencaPP.toFixed(1)} p.p.
+          </span>
+          <span className="text-xs text-nord-gray">{formatCurrency(diferencaValor)}</span>
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <Badge tone={classificacao.tone}>{classificacao.label}</Badge>
+            {editingMeta ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  className="input w-16 py-1 text-xs"
+                  type="number"
+                  value={metaDraft}
+                  onChange={(e) => setMetaDraft(e.target.value)}
+                  autoFocus
+                />
+                <span className="text-xs text-nord-gray">%</span>
+                <button onClick={salvarMeta} disabled={metaSaving} className="text-xs text-nord-blue-light hover:underline">
+                  Salvar
+                </button>
+                <button onClick={() => { setEditingMeta(false); setMetaDraft(String(metaCmv)); setMetaError(null); }} className="text-xs text-nord-gray hover:text-white">
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => canEditMeta && setEditingMeta(true)}
+                disabled={!canEditMeta}
+                className="flex items-center gap-1 text-xs text-nord-gray hover:text-white disabled:hover:text-nord-gray disabled:cursor-default"
+              >
+                Meta: {metaCmv}% {canEditMeta && <Pencil size={11} />}
+              </button>
+            )}
+          </div>
+          {metaError && <p className="text-xs text-red-400">{metaError}</p>}
         </div>
       </div>
 
