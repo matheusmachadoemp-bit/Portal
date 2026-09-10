@@ -30,7 +30,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canCreate"))) {
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canCreate", "checklist"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite criar checklists." },
       { status: 403 }

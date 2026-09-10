@@ -4,6 +4,8 @@ import { ChecklistClient } from "./checklist-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { generateChecklistOccurrences, processChecklistEscalations, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { CHECKLIST_TERMINAL_STATUSES, spDateKey, spStartOfDay } from "@/lib/checklist";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 const OCCURRENCE_INCLUDE = {
   template: {
@@ -20,9 +22,22 @@ const OCCURRENCE_INCLUDE = {
 };
 
 export default async function ChecklistPage() {
+  const session = await auth();
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const dateKey = spDateKey();
+  // "Criar/editar checklist" é uma ação distinta de "executar checklist" (feita
+  // em /tarefas/checklist/executar/[id], sem depender desta flag) — por isso a
+  // tela só libera o botão "Novo checklist" e os ícones de editar/duplicar/
+  // desativar/excluir para quem tem permissão canCreate no módulo "tarefas"
+  // (perfil Chef/Garçom, por padrão, só visualiza e executa). Sem esse check
+  // aqui, qualquer usuário com uma loja selecionada via a UI, mesmo sem a
+  // permissão — a API já bloqueia a criação (ver POST /api/checklist/templates),
+  // mas o botão continuava aparecendo pra quem nunca conseguiria usá-lo.
+  const canCreate =
+    ctx?.mode === "single" &&
+    !!session?.user?.id &&
+    (await hasModulePermission(session.user.id, "tarefas", "canCreate", "checklist"));
 
   await generateChecklistOccurrences(empresaIds, dateKey);
 
@@ -86,7 +101,7 @@ export default async function ChecklistPage() {
         initialTemplates={serializedTemplates}
         users={users}
         dateKey={dateKey}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );
