@@ -143,67 +143,70 @@ export function CourseBuilderModal({
   async function submit() {
     if (saving) return;
     setSaving(true);
-    const payload = {
-      name,
-      category: category || null,
-      description,
-      cargo: cargo || null,
-      empresaId: empresaId || null,
-      instructor,
-      cargaHoraria: Number(cargaHoraria) || 0,
-      status,
-      mandatory,
-      imageUrl,
-      modules: modules
-        .filter((m) => m.title.trim())
-        .map((m) => ({
-          title: m.title,
-          type: m.type,
-          videoUrl: m.videoUrl || undefined,
-          durationSeconds: Number(m.durationSeconds) || 0,
-          pdfUrl: m.pdfUrl || undefined,
-          content: m.content || undefined,
-        })),
-      quiz: hasQuiz
-        ? {
-            minScore: Number(minScore) || 70,
-            maxAttempts: Number(maxAttempts) || 3,
-            questions: questions
-              .filter((q) => q.text.trim())
-              .map((q) => ({
-                text: q.text,
-                type: q.type,
-                options: q.type === "DISSERTATIVA" ? [] : q.options.filter((o) => o.text.trim()),
-              })),
-          }
-        : null,
-    };
+    try {
+      const payload = {
+        name,
+        category: category || null,
+        description,
+        cargo: cargo || null,
+        empresaId: empresaId || null,
+        instructor,
+        cargaHoraria: Number(cargaHoraria) || 0,
+        status,
+        mandatory,
+        imageUrl,
+        modules: modules
+          .filter((m) => m.title.trim())
+          .map((m) => ({
+            title: m.title,
+            type: m.type,
+            videoUrl: m.videoUrl || undefined,
+            durationSeconds: Number(m.durationSeconds) || 0,
+            pdfUrl: m.pdfUrl || undefined,
+            content: m.content || undefined,
+          })),
+        quiz: hasQuiz
+          ? {
+              minScore: Number(minScore) || 70,
+              maxAttempts: Number(maxAttempts) || 3,
+              questions: questions
+                .filter((q) => q.text.trim())
+                .map((q) => ({
+                  text: q.text,
+                  type: q.type,
+                  options: q.type === "DISSERTATIVA" ? [] : q.options.filter((o) => o.text.trim()),
+                })),
+            }
+          : null,
+      };
 
-    let courseId = course?.id;
-    if (course) {
-      await fetch(`/api/university/courses/${course.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      const res = await fetch("/api/university/courses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      courseId = data.course?.id;
-      if (courseId) {
-        await fetch(`/api/university/courses/${courseId}`, {
+      let courseId = course?.id;
+      if (course) {
+        await fetch(`/api/university/courses/${course.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modules: payload.modules, quiz: payload.quiz }),
+          body: JSON.stringify(payload),
         });
+      } else {
+        const res = await fetch("/api/university/courses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        courseId = data.course?.id;
+        if (courseId) {
+          await fetch(`/api/university/courses/${courseId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ modules: payload.modules, quiz: payload.quiz }),
+          });
+        }
       }
+      onSaved();
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
   }
 
   return (
