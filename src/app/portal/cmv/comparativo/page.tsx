@@ -69,6 +69,7 @@ export default async function ComparativoPage() {
     <PageContainer title="CMV" subtitle="Comparativo Real x Teórico" backHref="/portal/cmv" backLabel="CMV">
       <div className="space-y-6">
         <ComparativoClient
+          key={ctx?.mode === "single" ? ctx.empresa.id : "grupo"}
           cmvRealPercent={cmvRealPercent}
           cmvTeoricoPercent={cmvTeoricoPercent}
           custoConsumido={custoConsumido}
@@ -87,6 +88,7 @@ export default async function ComparativoPage() {
             createdByName: p.createdBy.name,
           }))}
           canCreate={ctx?.mode === "single"}
+          canEditMeta={ctx?.mode === "single"}
         />
       </div>
     </PageContainer>
