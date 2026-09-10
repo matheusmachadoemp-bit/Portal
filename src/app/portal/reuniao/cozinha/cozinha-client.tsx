@@ -215,6 +215,7 @@ export function CozinhaClient({
   }
 
   async function submit() {
+    if (saving) return;
     setSaving(true);
     try {
       await fetch("/api/reuniao/cozinha", {

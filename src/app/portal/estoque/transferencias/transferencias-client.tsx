@@ -51,6 +51,9 @@ export function TransferenciasClient({
   const [recebendo, setRecebendo] = useState<Transfer | null>(null);
   const [responsavelRecebimento, setResponsavelRecebimento] = useState("");
   const [quantidades, setQuantidades] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [recebendoSubmitting, setRecebendoSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/estoque/transferencias");
@@ -91,6 +94,7 @@ export function TransferenciasClient({
   }
 
   async function submit() {
+    if (submitting) return;
     setError(null);
     const validItens = itens
       .filter((it) => it.ingredientId && it.quantidade)
@@ -99,29 +103,40 @@ export function TransferenciasClient({
       setError("Selecione a loja de destino e ao menos um item.");
       return;
     }
-    const res = await fetch("/api/estoque/transferencias", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ destinoEmpresaId, responsavelEnvio, observacao, itens: validItens }),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Não foi possível registrar a transferência.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/estoque/transferencias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destinoEmpresaId, responsavelEnvio, observacao, itens: validItens }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Não foi possível registrar a transferência.");
+        return;
+      }
+      setShowForm(false);
+      setDestinoEmpresaId("");
+      setItens([{ ingredientId: "", quantidade: "" }]);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setDestinoEmpresaId("");
-    setItens([{ ingredientId: "", quantidade: "" }]);
-    refresh();
   }
 
   async function marcarEnviada(t: Transfer) {
-    await fetch(`/api/estoque/transferencias/${t.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "ENVIADA", responsavelEnvio: t.responsavelEnvio }),
-    });
-    refresh();
+    if (enviando) return;
+    setEnviando(true);
+    try {
+      await fetch(`/api/estoque/transferencias/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ENVIADA", responsavelEnvio: t.responsavelEnvio }),
+      });
+      refresh();
+    } finally {
+      setEnviando(false);
+    }
   }
 
   function openRecebimento(t: Transfer) {
@@ -133,18 +148,23 @@ export function TransferenciasClient({
   }
 
   async function confirmarRecebimento() {
-    if (!recebendo) return;
-    await fetch(`/api/estoque/transferencias/${recebendo.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: "RECEBIDA",
-        responsavelRecebimento,
-        quantidadesRecebidas: recebendo.items.map((it) => ({ itemId: it.id, quantidade: Number(quantidades[it.id] ?? it.quantidadeEnviada) })),
-      }),
-    });
-    setRecebendo(null);
-    refresh();
+    if (!recebendo || recebendoSubmitting) return;
+    setRecebendoSubmitting(true);
+    try {
+      await fetch(`/api/estoque/transferencias/${recebendo.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "RECEBIDA",
+          responsavelRecebimento,
+          quantidadesRecebidas: recebendo.items.map((it) => ({ itemId: it.id, quantidade: Number(quantidades[it.id] ?? it.quantidadeEnviada) })),
+        }),
+      });
+      setRecebendo(null);
+      refresh();
+    } finally {
+      setRecebendoSubmitting(false);
+    }
   }
 
   return (
@@ -188,8 +208,8 @@ export function TransferenciasClient({
                     </td>
                     <td className="py-2.5 pr-4 text-right space-x-2 whitespace-nowrap">
                       {canCreate && isOrigem && t.status === "SOLICITADA" && (
-                        <button onClick={() => marcarEnviada(t)} className="text-xs text-nord-blue-light hover:underline">
-                          Marcar enviada
+                        <button onClick={() => marcarEnviada(t)} disabled={enviando} className="text-xs text-nord-blue-light hover:underline disabled:opacity-50">
+                          {enviando ? "Marcando..." : "Marcar enviada"}
                         </button>
                       )}
                       {canCreate && t.status === "ENVIADA" && (
@@ -253,8 +273,8 @@ export function TransferenciasClient({
             <input className="input" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
           </label>
           {error && <p className="text-xs text-red-400">{error}</p>}
-          <button onClick={submit} className="btn-primary w-full py-2.5">
-            Solicitar transferência
+          <button onClick={submit} disabled={submitting} className="btn-primary w-full py-2.5 disabled:opacity-50">
+            {submitting ? "Solicitando..." : "Solicitar transferência"}
           </button>
         </div>
       </Modal>
@@ -280,8 +300,8 @@ export function TransferenciasClient({
                 </div>
               ))}
             </div>
-            <button onClick={confirmarRecebimento} className="btn-primary w-full py-2.5">
-              Confirmar recebimento
+            <button onClick={confirmarRecebimento} disabled={recebendoSubmitting} className="btn-primary w-full py-2.5 disabled:opacity-50">
+              {recebendoSubmitting ? "Confirmando..." : "Confirmar recebimento"}
             </button>
           </div>
         )}

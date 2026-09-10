@@ -20,21 +20,28 @@ export function ConfiguracoesEstoqueClient({
   const [divergencia, setDivergencia] = useState(String(activeEmpresa?.metaDivergenciaContagemPercent ?? 3));
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function salvar() {
-    setError(null);
-    setSaved(false);
-    const res = await fetch("/api/estoque/configuracoes", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ metaCmvPercent: metaCmv, metaDivergenciaContagemPercent: divergencia }),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Não foi possível salvar as configurações.");
-      return;
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      setError(null);
+      setSaved(false);
+      const res = await fetch("/api/estoque/configuracoes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metaCmvPercent: metaCmv, metaDivergenciaContagemPercent: divergencia }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Não foi possível salvar as configurações.");
+        return;
+      }
+      setSaved(true);
+    } finally {
+      setSubmitting(false);
     }
-    setSaved(true);
   }
 
   return (
@@ -79,8 +86,8 @@ export function ConfiguracoesEstoqueClient({
           </p>
           {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
           {saved && <p className="text-xs text-emerald-400 mt-2">Configurações salvas.</p>}
-          <button onClick={salvar} className="btn-primary mt-4">
-            Salvar
+          <button onClick={salvar} disabled={submitting} className="btn-primary mt-4 disabled:opacity-60">
+            {submitting ? "Salvando..." : "Salvar"}
           </button>
         </Section>
       )}

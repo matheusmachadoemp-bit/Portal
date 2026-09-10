@@ -95,6 +95,7 @@ export function GestaoClient({
   const [pontosForm, setPontosForm] = useState(emptyPontosForm);
   const [lancandoPontos, setLancandoPontos] = useState(false);
   const [pontosMsg, setPontosMsg] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   function openNew() {
     setEditing(null);
@@ -137,41 +138,47 @@ export function GestaoClient({
   }
 
   async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
     setError(null);
-    const payload = {
-      nome: form.nome,
-      descricao: form.descricao || null,
-      categoria: form.categoria,
-      imagemUrl: form.imagemUrl || null,
-      pontos: Number(form.pontos),
-      estoque: form.estoque === "" ? null : Number(form.estoque),
-      estoqueMinimo: form.estoqueMinimo === "" ? null : Number(form.estoqueMinimo),
-      limitePorColaborador: form.limitePorColaborador === "" ? null : Number(form.limitePorColaborador),
-      disponivelDe: form.disponivelDe || null,
-      disponivelAte: form.disponivelAte || null,
-      empresaIds: form.empresaIds,
-      exigeAprovacao: form.exigeAprovacao,
-      regras: form.regras || null,
-      active: form.active,
-    };
+    try {
+      const payload = {
+        nome: form.nome,
+        descricao: form.descricao || null,
+        categoria: form.categoria,
+        imagemUrl: form.imagemUrl || null,
+        pontos: Number(form.pontos),
+        estoque: form.estoque === "" ? null : Number(form.estoque),
+        estoqueMinimo: form.estoqueMinimo === "" ? null : Number(form.estoqueMinimo),
+        limitePorColaborador: form.limitePorColaborador === "" ? null : Number(form.limitePorColaborador),
+        disponivelDe: form.disponivelDe || null,
+        disponivelAte: form.disponivelAte || null,
+        empresaIds: form.empresaIds,
+        exigeAprovacao: form.exigeAprovacao,
+        regras: form.regras || null,
+        active: form.active,
+      };
 
-    const res = await fetch(editing ? `/api/loja-nord/rewards/${editing.id}` : "/api/loja-nord/rewards", {
-      method: editing ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error ?? "Não foi possível salvar o brinde.");
-      return;
-    }
+      const res = await fetch(editing ? `/api/loja-nord/rewards/${editing.id}` : "/api/loja-nord/rewards", {
+        method: editing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Não foi possível salvar o brinde.");
+        return;
+      }
 
-    if (editing) {
-      setRewards((list) => list.map((r) => (r.id === editing.id ? data.reward : r)));
-    } else {
-      setRewards((list) => [data.reward, ...list]);
+      if (editing) {
+        setRewards((list) => list.map((r) => (r.id === editing.id ? data.reward : r)));
+      } else {
+        setRewards((list) => [data.reward, ...list]);
+      }
+      setShowForm(false);
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
   }
 
   async function toggleActive(r: RewardDTO) {
@@ -217,6 +224,7 @@ export function GestaoClient({
   }
 
   async function submitPontos() {
+    if (lancandoPontos) return;
     setPontosMsg(null);
     if (!pontosForm.userId || !pontosForm.pontos || !pontosForm.descricao.trim()) {
       setPontosMsg("Preencha colaborador, quantidade de pontos e descrição.");
@@ -571,9 +579,10 @@ export function GestaoClient({
 
         <button
           onClick={submit}
-          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5"
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg py-2.5"
         >
-          Salvar
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

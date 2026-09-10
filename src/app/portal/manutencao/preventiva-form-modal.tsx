@@ -69,6 +69,7 @@ export function PreventivaFormModal({
   }
 
   async function handleSubmit() {
+    if (saving) return;
     setError(null);
     if (!form.equipamentoId) return setError("Selecione o equipamento.");
     if (!form.tipoServico.trim()) return setError("Informe o tipo de serviço.");

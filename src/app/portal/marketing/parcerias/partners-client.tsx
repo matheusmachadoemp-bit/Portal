@@ -43,6 +43,7 @@ export function PartnersClient({
   const [editing, setEditing] = useState<Partner | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const ranking = useMemo(() => {
     return [...partners].sort((a, b) => retornoOf(b) - retornoOf(a));

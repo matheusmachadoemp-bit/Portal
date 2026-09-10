@@ -237,6 +237,7 @@ export function GerenteClient({
   }
 
   async function submit() {
+    if (saving) return;
     setSaving(true);
     try {
       await fetch("/api/reuniao/gerente", {

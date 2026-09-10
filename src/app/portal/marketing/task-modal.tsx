@@ -95,39 +95,43 @@ export function TaskModal({
   }
 
   async function submit() {
+    if (saving) return;
     if (!title.trim()) return;
     setSaving(true);
-    const payload = {
-      title,
-      description,
-      objetivo,
-      category: category || null,
-      socialNetwork: socialNetwork || null,
-      format: format || null,
-      status,
-      priority,
-      date: date || null,
-      time: time || null,
-      responsavelId: responsavelId || null,
-      campaignId: campaignId || null,
-      tags,
-      checklist: JSON.stringify(checklist),
-    };
-    if (task) {
-      await fetch(`/api/marketing/tasks/${task.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/marketing/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    try {
+      const payload = {
+        title,
+        description,
+        objetivo,
+        category: category || null,
+        socialNetwork: socialNetwork || null,
+        format: format || null,
+        status,
+        priority,
+        date: date || null,
+        time: time || null,
+        responsavelId: responsavelId || null,
+        campaignId: campaignId || null,
+        tags,
+        checklist: JSON.stringify(checklist),
+      };
+      if (task) {
+        await fetch(`/api/marketing/tasks/${task.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch("/api/marketing/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onSaved();
   }
 
   async function sendComment() {

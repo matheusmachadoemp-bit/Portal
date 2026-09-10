@@ -44,6 +44,7 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
   const [showFormPassword, setShowFormPassword] = useState(false);
   const [loadingSenha, setLoadingSenha] = useState(false);
   const [senhaError, setSenhaError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/admin/courses");
@@ -100,21 +101,27 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
   }
 
   async function submit() {
-    if (editing) {
-      await fetch(`/api/admin/courses/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/admin/courses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (editing) {
+        await fetch(`/api/admin/courses/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/admin/courses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -236,8 +243,12 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
             </Field>
           </div>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

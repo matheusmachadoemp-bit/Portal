@@ -62,6 +62,7 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
   const [attachGoal, setAttachGoal] = useState<GoalDTO | null>(null);
   const [attachName, setAttachName] = useState("");
   const [attachUrl, setAttachUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const [search, setSearch] = useState("");
   const [filterSetor, setFilterSetor] = useState("");
@@ -116,23 +117,29 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
   }
 
   async function submit() {
-    const { mes, ...rest } = form;
-    const payload = { ...rest, ...monthToDateRange(mes) };
-    if (editing) {
-      await fetch(`/api/metas/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/metas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const { mes, ...rest } = form;
+      const payload = { ...rest, ...monthToDateRange(mes) };
+      if (editing) {
+        await fetch(`/api/metas/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch("/api/metas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -363,8 +370,12 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
             </Field>
           </div>
         </div>
-        <button onClick={submit} className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-          Salvar meta
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {submitting ? "Salvando..." : "Salvar meta"}
         </button>
       </Modal>
 

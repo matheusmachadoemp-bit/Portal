@@ -48,6 +48,7 @@ export function ComparativoClient({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaValor = custoConsumido - cmvTeoricoValor;
@@ -66,24 +67,30 @@ export function ComparativoClient({
   }
 
   async function submit() {
+    if (submitting) return;
     setError(null);
     if (!form.problema || !form.acaoCorretiva) {
       setError("Descreva o problema e a ação corretiva.");
       return;
     }
-    const res = await fetch("/api/estoque/planos-acao", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Não foi possível criar o plano de ação.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/estoque/planos-acao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Não foi possível criar o plano de ação.");
+        return;
+      }
+      setShowForm(false);
+      setForm(emptyForm);
+      await refreshPlans();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    setForm(emptyForm);
-    refreshPlans();
   }
 
   async function updateStatus(plan: Plan, status: string) {
@@ -240,8 +247,8 @@ export function ComparativoClient({
             <input className="input" type="date" value={form.prazo} onChange={(e) => setForm({ ...form, prazo: e.target.value })} />
           </label>
           {error && <p className="text-xs text-red-400">{error}</p>}
-          <button onClick={submit} className="btn-primary w-full py-2.5">
-            Salvar plano de ação
+          <button onClick={submit} disabled={submitting} className="btn-primary w-full py-2.5 disabled:opacity-50">
+            {submitting ? "Salvando..." : "Salvar plano de ação"}
           </button>
         </div>
       </Modal>

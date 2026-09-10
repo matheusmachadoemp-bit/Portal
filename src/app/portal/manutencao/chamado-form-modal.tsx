@@ -89,6 +89,7 @@ export function ChamadoFormModal({
   }
 
   async function submit(status: "RASCUNHO" | "ABERTO") {
+    if (saving) return;
     setError(null);
     if (!form.titulo.trim()) return setError("Informe o título do chamado.");
     if (!form.descricao.trim()) return setError("Descreva o problema.");

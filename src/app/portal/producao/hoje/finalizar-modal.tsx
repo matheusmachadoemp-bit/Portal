@@ -24,6 +24,7 @@ export function FinalizarModal({
   const comparison = Number.isFinite(quantidadeNum) ? compareProducedToPlanned(planejado, quantidadeNum, 10) : null;
 
   async function submit() {
+    if (loading) return;
     if (!Number.isFinite(quantidadeNum) || quantidadeNum < 0) {
       setError("Informe uma quantidade válida.");
       return;

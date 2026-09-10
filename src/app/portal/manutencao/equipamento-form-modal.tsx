@@ -100,6 +100,7 @@ export function EquipamentoFormModal({
   }
 
   async function handleSubmit() {
+    if (saving) return;
     setError(null);
     if (!form.nome.trim()) return setError("Informe o nome do equipamento.");
     if (!form.setor.trim()) return setError("Informe o setor.");

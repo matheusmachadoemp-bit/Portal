@@ -101,6 +101,7 @@ export function ManutencaoRegistroModal({
   }
 
   async function handleSubmit() {
+    if (saving) return;
     setError(null);
     if (!form.servicoExecutado.trim()) return setError("Descreva o serviço executado.");
     if (!form.data) return setError("Informe a data da manutenção.");
