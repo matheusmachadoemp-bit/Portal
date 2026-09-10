@@ -35,6 +35,15 @@ export function weekdayFieldFor(dateKey: string): (typeof WEEKDAY_FIELDS)[number
   return WEEKDAY_FIELDS[spWeekday(dateKey)];
 }
 
+/** Formata uma quantidade de minutos como "Xh Ymin" (ou só "Ymin" quando menos de 1h). */
+export function formatMinutes(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${minutes}min`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}min`;
+}
+
 /** Pontos ganhos pelo responsável a cada checklist concluído. */
 export const CHECKLIST_PONTOS_POR_CONCLUSAO = 10;
 

@@ -25,7 +25,7 @@ import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
-import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, spDateKey } from "@/lib/checklist";
+import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, formatMinutes, spDateKey } from "@/lib/checklist";
 
 type ItemTemplate = {
   id: string;
@@ -653,7 +653,7 @@ export function ChecklistClient({
                   )}
                   <span className="text-xs text-nord-gray w-28 text-right shrink-0 flex items-center justify-end gap-1">
                     <Clock size={12} />
-                    {due >= now.getTime() ? `${remaining} min restantes` : `${-remaining} min de atraso`}
+                    {due >= now.getTime() ? `${formatMinutes(remaining)} restantes` : `${formatMinutes(-remaining)} de atraso`}
                   </span>
                   <Badge tone={CHECKLIST_STATUS_TONE[o.status as keyof typeof CHECKLIST_STATUS_TONE]}>
                     {CHECKLIST_STATUS_LABEL[o.status as keyof typeof CHECKLIST_STATUS_LABEL]}

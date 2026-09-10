@@ -8,7 +8,7 @@ import { ArrowLeft, Camera, CheckCircle2, Circle, Clock, AlertTriangle, Loader2 
 import { Badge } from "@/components/ui/stat-card";
 import { sanitizeFileName } from "@/lib/upload";
 import { GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
-import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE } from "@/lib/checklist";
+import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, formatMinutes } from "@/lib/checklist";
 
 type Photo = { id: string; fileUrl: string; fileName: string; itemResponseId: string | null };
 type ItemResponse = {
@@ -201,7 +201,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
         {!isDone && (
           <p className="text-xs flex items-center gap-1.5 text-amber-400">
             <Clock size={12} />
-            {remaining >= 0 ? `${remaining} min restantes` : `${-remaining} min de atraso`}
+            {remaining >= 0 ? `${formatMinutes(remaining)} restantes` : `${formatMinutes(-remaining)} de atraso`}
           </p>
         )}
         <div className="flex items-center gap-2">
