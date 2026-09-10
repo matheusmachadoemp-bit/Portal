@@ -82,21 +82,27 @@ export function PartnersClient({
   }
 
   async function submit() {
-    if (editing) {
-      await fetch(`/api/marketing/partners/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/marketing/partners", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (editing) {
+        await fetch(`/api/marketing/partners/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/marketing/partners", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      setShowForm(false);
+      await refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -234,10 +240,10 @@ export function PartnersClient({
         </div>
         <button
           onClick={submit}
-          disabled={!form.nome.trim() || !form.cupom.trim()}
+          disabled={!form.nome.trim() || !form.cupom.trim() || submitting}
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
         >
-          Salvar
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

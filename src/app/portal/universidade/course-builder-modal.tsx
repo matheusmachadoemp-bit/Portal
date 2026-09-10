@@ -141,6 +141,7 @@ export function CourseBuilderModal({
   }
 
   async function submit() {
+    if (saving) return;
     setSaving(true);
     const payload = {
       name,

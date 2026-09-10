@@ -37,6 +37,7 @@ export function IdeasClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [promoted, setPromoted] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
 
   const filtered = useMemo(
     () => (filterCategory ? ideas.filter((i) => i.category === filterCategory) : ideas),
@@ -50,14 +51,20 @@ export function IdeasClient({
   }
 
   async function submit() {
-    await fetch("/api/marketing/ideas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setShowForm(false);
-    setForm(emptyForm);
-    refresh();
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await fetch("/api/marketing/ideas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setShowForm(false);
+      setForm(emptyForm);
+      await refresh();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function setStatus(idea: Idea, status: string) {
@@ -222,10 +229,10 @@ export function IdeasClient({
         </div>
         <button
           onClick={submit}
-          disabled={!form.title.trim()}
+          disabled={!form.title.trim() || submitting}
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
         >
-          Salvar
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

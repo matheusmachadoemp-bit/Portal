@@ -34,6 +34,7 @@ export function TracksClient({
   const [form, setForm] = useState(emptyForm);
   const [courseIds, setCourseIds] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/university/tracks");
@@ -80,22 +81,28 @@ export function TracksClient({
   }
 
   async function submit() {
-    const payload = { ...form, courseIds };
-    if (editing) {
-      await fetch(`/api/university/tracks/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      await fetch("/api/university/tracks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const payload = { ...form, courseIds };
+      if (editing) {
+        await fetch(`/api/university/tracks/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch("/api/university/tracks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      setShowForm(false);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -234,10 +241,10 @@ export function TracksClient({
         </div>
         <button
           onClick={submit}
-          disabled={!form.name.trim()}
+          disabled={!form.name.trim() || submitting}
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
         >
-          Salvar
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 

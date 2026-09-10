@@ -78,6 +78,7 @@ export function ContasBancariasClient({
   }
 
   async function submit() {
+    if (saving) return;
     if (!form.name.trim()) {
       setFormError("Informe o nome da conta.");
       return;

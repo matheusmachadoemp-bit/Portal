@@ -52,6 +52,7 @@ export function CampaignsClient({
   const [editing, setEditing] = useState<Campaign | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/marketing/campaigns");
@@ -83,21 +84,27 @@ export function CampaignsClient({
   }
 
   async function submit() {
-    if (editing) {
-      await fetch(`/api/marketing/campaigns/${editing.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-    } else {
-      await fetch("/api/marketing/campaigns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (editing) {
+        await fetch(`/api/marketing/campaigns/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/marketing/campaigns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      setShowForm(false);
+      await refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setShowForm(false);
-    refresh();
   }
 
   async function doDelete() {
@@ -228,10 +235,10 @@ export function CampaignsClient({
         </div>
         <button
           onClick={submit}
-          disabled={!form.name.trim()}
+          disabled={!form.name.trim() || submitting}
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
         >
-          Salvar
+          {submitting ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
 
