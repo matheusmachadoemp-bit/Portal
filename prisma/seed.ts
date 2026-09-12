@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type FechamentoTipoResposta, type FechamentoGravidade } from "@prisma/client";
 import { allDreCategories } from "../src/lib/dre-structure";
 import {
   ACCESS_LEVEL_TO_MODULE_FLAGS,
@@ -7,12 +7,17 @@ import {
   PERMISSION_PROFILES,
   defaultLevelForProfileKey,
   defaultProfileKeyForRole,
+  type ModulePermissionFlags,
 } from "../src/lib/permissions";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
+
+// Cargos padrão do Fechamento do Dia — usado tanto no seed do catálogo (mais abaixo) quanto
+// no bloco de permissões por subcategoria logo a seguir.
+const FECHAMENTO_CARGO_KEYS = ["gerencia", "salao", "cozinha"] as const;
 
 const CATEGORIES = [
   { key: "inicio", name: "Início", icon: "Home", order: 0, contentType: "dashboard", subs: [] },
@@ -402,6 +407,47 @@ async function main() {
         },
       });
     }
+
+    // Fechamento do Dia: além do nível genérico que o loop acima já aplicou na chave do
+    // módulo inteiro ("fechamento-dia" está em MODULES, então já ganhou canView para todos;
+    // canExecute/canCreate/canEdit para administrador/gestor/gerente/supervisor; canDelete só
+    // administrador — mesmo ACCESS_LEVEL_TO_MODULE_FLAGS de sempre), as 3 subcategorias por
+    // cargo ("fechamento-dia:gerencia/salao/cozinha") precisam de um nível DIFERENTE por
+    // perfil (decisão do usuário sobre este módulo): perfis operacionais (funcionário/
+    // supervisor/líder) executam qualquer um dos 3 cargos — quem de fato preenche qual cargo
+    // em cada loja é `FechamentoCargo.responsavelId`, não o perfil de permissão; "gerente" só
+    // executa a subcategoria "gerencia" (preenche o próprio formulário) e só visualiza
+    // "salao"/"cozinha"; "gestor" só visualiza os 3 (supervisiona, não preenche pessoalmente);
+    // "administrador" tem acesso total aos 3; "marketing"/"financeiro" não ganham linha de
+    // subcategoria (ficam só com o canView herdado da chave do módulo inteiro). Mesma lógica
+    // replicada em prisma/migrations/20260912200000_fechamento_dia_fase1 (backfill para
+    // perfis já existentes em produção, já que o deploy automático nunca roda este seed).
+    const fechamentoFlagsForCargo = (cargoKey: string): ModulePermissionFlags | null => {
+      if (profile.key === "administrador") {
+        return { canView: true, canExecute: true, canCreate: true, canEdit: true, canDelete: true };
+      }
+      if (["supervisor", "lider", "funcionario"].includes(profile.key)) {
+        return { canView: true, canExecute: true, canCreate: false, canEdit: false, canDelete: false };
+      }
+      if (profile.key === "gerente") {
+        return cargoKey === "gerencia"
+          ? { canView: true, canExecute: true, canCreate: false, canEdit: false, canDelete: false }
+          : { canView: true, canExecute: false, canCreate: false, canEdit: false, canDelete: false };
+      }
+      if (profile.key === "gestor") {
+        return { canView: true, canExecute: false, canCreate: false, canEdit: false, canDelete: false };
+      }
+      return null; // marketing/financeiro: sem linha de subcategoria
+    };
+    for (const cargoKey of FECHAMENTO_CARGO_KEYS) {
+      const cargoFlags = fechamentoFlagsForCargo(cargoKey);
+      if (!cargoFlags) continue;
+      await prisma.modulePermission.upsert({
+        where: { profileId_moduleKey: { profileId: record.id, moduleKey: `fechamento-dia:${cargoKey}` } },
+        update: {},
+        create: { profileId: record.id, moduleKey: `fechamento-dia:${cargoKey}`, ...cargoFlags },
+      });
+    }
   }
 
   const usersWithoutProfile = await prisma.user.findMany({ where: { permissionProfileId: null } });
@@ -410,6 +456,375 @@ async function main() {
     const profile = await prisma.permissionProfile.findUnique({ where: { key: profileKey } });
     if (profile) {
       await prisma.user.update({ where: { id: u.id }, data: { permissionProfileId: profile.id } });
+    }
+  }
+
+  // --- Fechamento do Dia (Fase 1): catálogo por loja (categorias/cargos/perguntas) ---
+  // Escopado por empresa (decisão do usuário): cada loja existente hoje ganha seu próprio
+  // conjunto de categorias/cargos/perguntas, de forma independente — uma loja nova cadastrada
+  // depois NÃO herda isso automaticamente, precisa ser incluída aqui (ou, na fase de
+  // Configurações, cadastrada pela própria tela). `createdById` usa o usuário Administrador
+  // (`admin`, já criado acima) como "autor" do catálogo auto-gerado, mesma lógica de qualquer
+  // outro dado seedado automaticamente.
+  console.log("Seeding Fechamento do Dia (catálogo por loja)...");
+
+  const FECHAMENTO_CATEGORIAS = [
+    "Equipe",
+    "Cliente",
+    "Produto",
+    "Equipamento",
+    "Delivery",
+    "Salão",
+    "Cozinha",
+    "Estoque",
+    "Outro",
+  ];
+
+  type FechamentoPerguntaSeed = {
+    texto: string;
+    tipo: FechamentoTipoResposta;
+    obrigatoria?: boolean; // default true
+    abreOcorrencia?: boolean;
+    categoriaSugerida?: string; // nome de uma das FECHAMENTO_CATEGORIAS
+    gravidadeSugerida?: FechamentoGravidade;
+    opcoes?: string[]; // só para tipo MULTIPLA_ESCOLHA
+    /// Perguntas condicionais ("se SIM, abre campo"): só entram na
+    /// FechamentoResposta quando a resposta desta pergunta bater com
+    /// `valorPaiQueExibe` (sempre "true" nesta fase, já que todo pai
+    /// condicional do catálogo inicial é SIM_NAO) — a checagem de
+    /// obrigatoriedade condicional é feita pela rota de submissão, não pelo
+    /// banco.
+    filhas?: FechamentoPerguntaSeed[];
+  };
+
+  // Texto literal fornecido pelo líder do projeto (colado a partir do pedido original do
+  // usuário) — substituiu a reconstrução própria da primeira versão deste seed, que tinha
+  // ficado bem diferente do pedido (principalmente no Gerente). Ver ressalva sobre "Produção
+  // foi suficiente?" no relatório final: o texto original manda abrir detalhamento quando SIM
+  // pras 7 perguntas do Chef de Cozinha por igual, mas nesta específica SIM é o resultado bom
+  // (diferente das outras 6, onde SIM é problema) — aplicado literalmente por ora.
+  const FECHAMENTO_PERGUNTAS_COMPARTILHADAS: FechamentoPerguntaSeed[] = [
+    { texto: "Anexar foto (opcional)", tipo: "FOTO", obrigatoria: false },
+  ];
+
+  const FECHAMENTO_CARGOS: {
+    key: (typeof FECHAMENTO_CARGO_KEYS)[number];
+    nome: string;
+    icon: string;
+    ordem: number;
+    perguntas: FechamentoPerguntaSeed[];
+  }[] = [
+    {
+      key: "gerencia",
+      nome: "Gerente",
+      icon: "Briefcase",
+      ordem: 0,
+      perguntas: [
+        { texto: "Como você avalia a operação hoje?", tipo: "NOTA_1_5" },
+        {
+          texto: "Como foi o movimento da loja?",
+          tipo: "MULTIPLA_ESCOLHA",
+          opcoes: ["Fraco", "Normal", "Forte", "Muito Forte"],
+        },
+        {
+          texto: "Como estava a equipe?",
+          tipo: "MULTIPLA_ESCOLHA",
+          opcoes: ["Completa", "Falta", "Atraso", "Problema de escala"],
+        },
+        {
+          // Diferente das perguntas categorizadas do Salão/Cozinha: aqui não há
+          // `categoriaSugerida` fixo no pai — a categoria é uma escolha de quem preenche,
+          // feita na primeira filha ("Categoria") em vez de vir pré-definida no catálogo.
+          texto: "Houve algum problema relevante?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          filhas: [
+            // "Categoria" e "O que aconteceu?" são obrigatórias de verdade (mas só quando
+            // visíveis: a rota de submissão nunca exige uma filha que ainda nem apareceu,
+            // já que o pai "Houve algum problema relevante?" pode ter sido respondido NÃO —
+            // ver fechamentoPerguntaObrigatoriaAgora em src/lib/fechamento.ts). "Como foi
+            // resolvido?"/"Ficou alguma pendência para amanhã?" são só um campo complementar
+            // opcional — continuam opcionais mesmo com o pai em SIM, de propósito.
+            {
+              texto: "Categoria",
+              tipo: "MULTIPLA_ESCOLHA",
+              obrigatoria: true,
+              opcoes: ["Equipe", "Cliente", "Produto", "Equipamento", "Delivery", "Salão", "Cozinha", "Estoque", "Outro"],
+            },
+            { texto: "O que aconteceu?", tipo: "TEXTO", obrigatoria: true },
+            { texto: "Como foi resolvido?", tipo: "TEXTO", obrigatoria: false },
+            { texto: "Ficou alguma pendência para amanhã?", tipo: "TEXTO", obrigatoria: false },
+          ],
+        },
+        { texto: "O que funcionou bem hoje?", tipo: "TEXTO", obrigatoria: false },
+        { texto: "O que precisamos melhorar amanhã?", tipo: "TEXTO", obrigatoria: false },
+      ],
+    },
+    {
+      key: "salao",
+      nome: "Chef de Salão",
+      icon: "Utensils",
+      ordem: 1,
+      perguntas: [
+        { texto: "Como foi o salão hoje?", tipo: "NOTA_1_5" },
+        {
+          texto: "Houve reclamação de cliente?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Cliente",
+          gravidadeSugerida: "IMPORTANTE",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Houve elogio de cliente?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Cliente",
+          gravidadeSugerida: "INFORMATIVO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Alguma mesa teve demora?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Salão",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Houve erro de pedido?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Produto",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Faltou algum produto?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Estoque",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Algum garçom precisou de orientação?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Equipe",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Houve problema de limpeza/organização?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Salão",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        { texto: "Destaque positivo do salão hoje", tipo: "TEXTO", obrigatoria: false },
+        { texto: "Principal problema do salão hoje", tipo: "TEXTO", obrigatoria: false },
+        { texto: "Existe alguma pendência para amanhã?", tipo: "TEXTO", obrigatoria: false },
+      ],
+    },
+    {
+      key: "cozinha",
+      nome: "Chef de Cozinha",
+      icon: "ChefHat",
+      ordem: 2,
+      perguntas: [
+        { texto: "Como foi a cozinha hoje?", tipo: "NOTA_1_5" },
+        {
+          // Ver ressalva no relatório final: aqui SIM = resultado bom (diferente das outras 6
+          // perguntas SIM_NAO deste cargo, onde SIM = problema) — texto original manda abrir
+          // detalhamento quando SIM pras 7 igualmente, aplicado literalmente por ora.
+          texto: "Produção foi suficiente?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Cozinha",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Faltou algum insumo?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Estoque",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Houve desperdício ou perda?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Estoque",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Houve prato devolvido?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Produto",
+          gravidadeSugerida: "IMPORTANTE",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Algum equipamento apresentou problema?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Equipamento",
+          gravidadeSugerida: "IMPORTANTE",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Houve atraso relevante?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Cozinha",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Houve problema de padrão ou qualidade?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Produto",
+          gravidadeSugerida: "IMPORTANTE",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        { texto: "Produto que mais apresentou problema", tipo: "PRODUTO", obrigatoria: false },
+        { texto: "Principal motivo", tipo: "TEXTO", obrigatoria: false },
+        { texto: "O que precisa ser preparado, comprado ou corrigido amanhã?", tipo: "TEXTO", obrigatoria: false },
+      ],
+    },
+  ];
+
+  const todasEmpresasFechamento = await prisma.empresa.findMany();
+  for (const empresaFechamento of todasEmpresasFechamento) {
+    const categoriaPorNome = new Map<string, string>();
+    let catOrdem = 0;
+    for (const nome of FECHAMENTO_CATEGORIAS) {
+      const cat = await prisma.fechamentoCategoria.upsert({
+        where: { empresaId_nome: { empresaId: empresaFechamento.id, nome } },
+        update: { ordem: catOrdem },
+        create: { empresaId: empresaFechamento.id, nome, ordem: catOrdem },
+      });
+      categoriaPorNome.set(nome, cat.id);
+      catOrdem++;
+    }
+
+    const cargoIdByKey = new Map<string, string>();
+    for (const cargoSeed of FECHAMENTO_CARGOS) {
+      const cargo = await prisma.fechamentoCargo.upsert({
+        where: { empresaId_key: { empresaId: empresaFechamento.id, key: cargoSeed.key } },
+        update: { nome: cargoSeed.nome, icon: cargoSeed.icon, ordem: cargoSeed.ordem },
+        create: {
+          empresaId: empresaFechamento.id,
+          key: cargoSeed.key,
+          nome: cargoSeed.nome,
+          icon: cargoSeed.icon,
+          ordem: cargoSeed.ordem,
+          // Horário padrão (ajustável depois, na tela de Configurações — fase futura, ou
+          // direto no banco): liberação às 21h, prazo até a virada do dia. `responsavelId`
+          // fica em branco de propósito — o seed não tem como saber quem hoje ocupa cada
+          // cargo em cada loja (ver decisão nº 4 do relatório).
+          horarioLiberacao: "21:00",
+          horarioLimite: "23:59",
+          createdById: admin.id,
+        },
+      });
+      cargoIdByKey.set(cargoSeed.key, cargo.id);
+    }
+    const todosCargoIds = [...cargoIdByKey.values()];
+
+    // Perguntas específicas de cada cargo (+ filhas condicionais, "se SIM, abre campo").
+    for (const cargoSeed of FECHAMENTO_CARGOS) {
+      const cargoId = cargoIdByKey.get(cargoSeed.key)!;
+      let ordem = 0;
+
+      const upsertPergunta = async (spec: FechamentoPerguntaSeed, perguntaPaiId?: string): Promise<void> => {
+        const currentOrdem = ordem++;
+        const camposComuns = {
+          tipo: spec.tipo,
+          obrigatoria: spec.obrigatoria ?? true,
+          ordem: currentOrdem,
+          abreOcorrencia: spec.abreOcorrencia ?? false,
+          categoriaSugeridaId: spec.categoriaSugerida ? (categoriaPorNome.get(spec.categoriaSugerida) ?? null) : null,
+          gravidadeSugerida: spec.gravidadeSugerida ?? null,
+          perguntaPaiId: perguntaPaiId ?? null,
+          valorPaiQueExibe: perguntaPaiId ? "true" : null,
+        };
+
+        // Idempotência feita a mão (busca por empresa+texto+pai, depois cria ou atualiza) em
+        // vez de um upsert por índice único do banco: perguntas filhas podem repetir o mesmo
+        // texto entre pais diferentes (o texto literal pedido é "Descrição" para 7 perguntas
+        // distintas do mesmo cargo, cada uma condicionada a um pai diferente) — `texto` sozinho
+        // não identifica mais uma pergunta dentro da empresa, só `texto` + `perguntaPaiId`
+        // juntos (ver comentário de `FechamentoPergunta` no schema.prisma).
+        const existente = await prisma.fechamentoPergunta.findFirst({
+          where: { empresaId: empresaFechamento.id, texto: spec.texto, perguntaPaiId: perguntaPaiId ?? null },
+        });
+        const pergunta = existente
+          ? await prisma.fechamentoPergunta.update({ where: { id: existente.id }, data: camposComuns })
+          : await prisma.fechamentoPergunta.create({
+              data: { empresaId: empresaFechamento.id, texto: spec.texto, createdById: admin.id, ...camposComuns },
+            });
+
+        if (spec.opcoes) {
+          let opcaoOrdem = 0;
+          for (const opcaoTexto of spec.opcoes) {
+            await prisma.fechamentoPerguntaOpcao.upsert({
+              where: { perguntaId_texto: { perguntaId: pergunta.id, texto: opcaoTexto } },
+              update: { ordem: opcaoOrdem },
+              create: { perguntaId: pergunta.id, texto: opcaoTexto, ordem: opcaoOrdem },
+            });
+            opcaoOrdem++;
+          }
+        }
+
+        await prisma.fechamentoPerguntaCargo.upsert({
+          where: { perguntaId_cargoId: { perguntaId: pergunta.id, cargoId } },
+          update: {},
+          create: { perguntaId: pergunta.id, cargoId },
+        });
+
+        if (spec.filhas) {
+          for (const filha of spec.filhas) {
+            await upsertPergunta(filha, pergunta.id);
+          }
+        }
+      };
+
+      for (const spec of cargoSeed.perguntas) {
+        await upsertPergunta(spec);
+      }
+    }
+
+    // Perguntas compartilhadas pelos 3 cargos — mesma linha de FechamentoPergunta, ligada aos
+    // 3 cargos via FechamentoPerguntaCargo (em vez de 3 linhas com o mesmo texto). `ordem`
+    // fixa alta (1000+) para sempre aparecer depois das específicas de cada cargo, não
+    // importa quantas cada um tenha.
+    let sharedOrdem = 1000;
+    for (const spec of FECHAMENTO_PERGUNTAS_COMPARTILHADAS) {
+      const camposCompartilhados = { tipo: spec.tipo, obrigatoria: spec.obrigatoria ?? true, ordem: sharedOrdem };
+      const existente = await prisma.fechamentoPergunta.findFirst({
+        where: { empresaId: empresaFechamento.id, texto: spec.texto, perguntaPaiId: null },
+      });
+      const pergunta = existente
+        ? await prisma.fechamentoPergunta.update({ where: { id: existente.id }, data: camposCompartilhados })
+        : await prisma.fechamentoPergunta.create({
+            data: { empresaId: empresaFechamento.id, texto: spec.texto, createdById: admin.id, ...camposCompartilhados },
+          });
+      for (const cargoId of todosCargoIds) {
+        await prisma.fechamentoPerguntaCargo.upsert({
+          where: { perguntaId_cargoId: { perguntaId: pergunta.id, cargoId } },
+          update: {},
+          create: { perguntaId: pergunta.id, cargoId },
+        });
+      }
+      sharedOrdem++;
     }
   }
 
