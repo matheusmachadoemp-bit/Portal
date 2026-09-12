@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, LabelList } from "recharts";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
+import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { LOSS_REASONS, LOSS_REASON_LABEL, SECTORS } from "@/lib/estoque";
@@ -133,7 +134,9 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
               <XAxis type="number" stroke="var(--nord-gray)" fontSize={11} />
               <YAxis type="category" dataKey="name" stroke="var(--nord-gray)" fontSize={11} width={140} />
               <Tooltip contentStyle={{ background: "var(--nord-card)", border: "1px solid var(--nord-border)", borderRadius: 8, fontSize: 12 }} formatter={(v) => formatCurrency(Number(v))} />
-              <Bar dataKey="value" fill="#ef4444" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="value" fill="#ef4444" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="value" content={makeBarValueLabel(formatCurrency)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -144,7 +147,9 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
               <XAxis type="number" stroke="var(--nord-gray)" fontSize={11} />
               <YAxis type="category" dataKey="name" stroke="var(--nord-gray)" fontSize={11} width={140} />
               <Tooltip contentStyle={{ background: "var(--nord-card)", border: "1px solid var(--nord-border)", borderRadius: 8, fontSize: 12 }} formatter={(v) => formatCurrency(Number(v))} />
-              <Bar dataKey="value" fill="#f59e0b" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="value" fill="#f59e0b" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="value" content={makeBarValueLabel(formatCurrency)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
