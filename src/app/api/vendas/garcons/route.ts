@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
-  const periodo = (searchParams.get("periodo") as RollingPeriodKey) || "30dias";
+  const periodo = (searchParams.get("periodo") as RollingPeriodKey) || "mes-atual";
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
