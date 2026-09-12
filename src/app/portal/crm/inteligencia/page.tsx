@@ -6,10 +6,18 @@ import { computeClienteMetrics } from "@/lib/crm";
 import { computeRfv, RFV_SEGMENT_TONE } from "@/lib/rfv";
 import { SALE_CHANNEL_LABEL } from "@/lib/vendas-analytics";
 import { subDays } from "date-fns";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 export default async function InteligenciaPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "crm", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

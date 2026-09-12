@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ChamadoDetailClient } from "./chamado-detail-client";
 import { auth } from "@/auth";
-import { notFound } from "next/navigation";
+import { hasModulePermission } from "@/lib/authz";
+import { notFound, redirect } from "next/navigation";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -10,6 +11,9 @@ export default async function ChamadoDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const session = await auth();
   if (!session?.user) notFound();
+  if (!(await hasModulePermission(session.user.id, "manutencao", "canView"))) {
+    redirect("/portal/inicio");
+  }
 
   const [chamado, teamMembers, prestadores] = await Promise.all([
     prisma.chamado.findUnique({

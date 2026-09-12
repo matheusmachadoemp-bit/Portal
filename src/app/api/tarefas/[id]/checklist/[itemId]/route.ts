@@ -10,12 +10,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id, itemId } = await params;
 
-  const task = await prisma.task.findUnique({ where: { id } });
+  const task = await prisma.task.findUnique({ where: { id }, include: { assignees: true } });
   if (!task) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, task.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+  // Marcar/desmarcar um item do checklist é o responsável executando a PRÓPRIA tarefa
+  // atribuída — diferente de "editar a tarefa". Libera também para quem está em
+  // `assignees`, mesmo sem canEdit no módulo inteiro (um perfil "só executa" — ex.: Chef,
+  // Garçom — precisa continuar riscando os itens da própria tarefa).
+  const isAssignee = task.assignees.some((a) => a.userId === session.user.id);
+  if (!isAssignee && !(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite atualizar itens do checklist da tarefa." },
       { status: 403 }

@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { DashboardClient } from "./dashboard/dashboard-client";
 import { canManageUsers } from "@/lib/permissions";
@@ -9,6 +11,10 @@ const OVERDUE_DAYS = 7;
 
 export default async function UniversidadePage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const now = new Date();
 
   const [

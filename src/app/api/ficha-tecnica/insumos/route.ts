@@ -7,6 +7,12 @@ import { hasModulePermission } from "@/lib/authz";
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "ficha-tecnica", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver a Ficha Técnica." },
+      { status: 403 }
+    );
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

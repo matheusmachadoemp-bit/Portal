@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { format } from "date-fns";
 import type { Prisma } from "@prisma/client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 
 function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return "";
@@ -18,6 +19,9 @@ function toCsv(rows: Record<string, unknown>[]): string {
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    return NextResponse.json({ error: "Seu perfil de permissão não permite ver a Universidade." }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type") ?? "treinamentos";

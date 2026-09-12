@@ -2,8 +2,16 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { LancamentosClient } from "./lancamentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function LancamentosPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "vendas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canCreate = ctx?.mode === "single";

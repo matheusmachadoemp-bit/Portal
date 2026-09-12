@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { ConfiguracoesClient } from "./configuracoes-client";
 import { getActiveEmpresaContext } from "@/lib/empresa";
@@ -9,7 +10,16 @@ export default async function ConfiguracoesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const isAdmin = session.user.role === "ADMINISTRADOR" || session.user.role === "GESTOR";
+  // "Minha conta" (nome/e-mail/cargo + trocar a própria senha, logo abaixo) é
+  // autoatendimento — igual usuarios/me e usuarios/me/senha — e continua
+  // liberado pra qualquer usuário logado, independente de perfil. Só a parte
+  // administrativa da tela (auditoria + integrações iFood/Saipos/Meta Ads,
+  // incluindo os campos hasToken/syncEnabled apontados pelo Nelson) depende de
+  // canView em "configuracoes", em conjunto com a checagem de cargo que já
+  // existia: perfil pode restringir além do cargo, nunca liberar além dele.
+  const isAdmin =
+    (session.user.role === "ADMINISTRADOR" || session.user.role === "GESTOR") &&
+    (await hasModulePermission(session.user.id, "configuracoes", "canView"));
   const ctx = await getActiveEmpresaContext();
 
   const auditLogs = isAdmin
@@ -38,10 +48,10 @@ export default async function ConfiguracoesPage() {
         userRole={session.user.role}
         isAdmin={isAdmin}
         auditLogs={serializedLogs}
-        taxaIfoodPadrao={ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : null}
-        empresaNome={ctx?.mode === "single" ? ctx.empresa.name : null}
+        taxaIfoodPadrao={isAdmin && ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : null}
+        empresaNome={isAdmin && ctx?.mode === "single" ? ctx.empresa.name : null}
         saipos={
-          ctx?.mode === "single"
+          isAdmin && ctx?.mode === "single"
             ? {
                 lojaId: ctx.empresa.saiposLojaId,
                 syncEnabled: ctx.empresa.saiposSyncEnabled,
@@ -51,7 +61,7 @@ export default async function ConfiguracoesPage() {
             : null
         }
         metaAds={
-          ctx?.mode === "single"
+          isAdmin && ctx?.mode === "single"
             ? {
                 adAccountId: ctx.empresa.metaAdsAdAccountId,
                 adAccountName: ctx.empresa.metaAdsAdAccountName,

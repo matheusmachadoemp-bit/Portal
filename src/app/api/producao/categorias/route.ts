@@ -7,6 +7,9 @@ import { hasModulePermission } from "@/lib/authz";
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "producao", "canView"))) {
+    return NextResponse.json({ error: "Seu perfil de permissão não permite ver a Produção." }, { status: 403 });
+  }
 
   const categorias = await prisma.productionCategory.findMany({ orderBy: { order: "asc" } });
   return NextResponse.json({ categorias });

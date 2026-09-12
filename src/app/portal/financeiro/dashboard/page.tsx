@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -172,6 +175,11 @@ async function getData() {
 }
 
 export default async function FinanceiroDashboardPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const d = await getData();
 
   return (

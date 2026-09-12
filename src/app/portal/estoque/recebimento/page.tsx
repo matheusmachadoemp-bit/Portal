@@ -5,9 +5,15 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 import { loadRecebimentoDashboard } from "@/lib/recebimento-server";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function RecebimentoPage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canCreate = ctx?.mode === "single" && RECEBIMENTO_MANAGE_ROLES.includes(session?.user?.role ?? "");

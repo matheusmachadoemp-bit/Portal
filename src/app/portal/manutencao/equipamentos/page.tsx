@@ -1,9 +1,17 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { EquipamentosClient } from "./equipamentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 export default async function EquipamentosPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "manutencao", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

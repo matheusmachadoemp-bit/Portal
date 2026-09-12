@@ -8,6 +8,12 @@ import { hasModulePermission } from "@/lib/authz";
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "crm", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver o CRM." },
+      { status: 403 }
+    );
+  }
 
   const { id } = await params;
   const ctx = await getActiveEmpresaContext();

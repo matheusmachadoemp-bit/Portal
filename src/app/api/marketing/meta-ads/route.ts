@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { defaultMetaAdsRange, loadActiveMetaAdsCampaigns, loadMetaAdsInsightSummary } from "@/lib/meta-ads-insights";
+import { hasModulePermission } from "@/lib/authz";
 
 /**
  * Resumo de Meta Ads (cards + campanhas ativas) para um período customizado,
@@ -10,6 +11,9 @@ import { defaultMetaAdsRange, loadActiveMetaAdsCampaigns, loadMetaAdsInsightSumm
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "marketing", "canView"))) {
+    return NextResponse.json({ error: "Seu perfil de permissão não permite ver o Marketing." }, { status: 403 });
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

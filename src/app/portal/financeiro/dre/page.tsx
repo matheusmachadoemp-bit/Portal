@@ -1,9 +1,17 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { computeDre } from "@/lib/dre";
 import { DreClient } from "./dre-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function DrePage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const now = new Date();
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

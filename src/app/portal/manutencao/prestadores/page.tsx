@@ -1,12 +1,18 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { PrestadoresClient } from "./prestadores-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
 
 export default async function PrestadoresPage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "manutencao", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

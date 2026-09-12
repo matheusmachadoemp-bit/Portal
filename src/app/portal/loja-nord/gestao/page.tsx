@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { StatCard } from "@/components/ui/stat-card";
 import { startOfMonth, endOfMonth } from "date-fns";
@@ -11,6 +12,13 @@ const GESTOR_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 export default async function GestaoLojaNordPage() {
   const session = await auth();
   if (!session?.user || !GESTOR_ROLES.includes(session.user.role)) {
+    redirect("/portal/loja-nord/loja");
+  }
+  // Perfil de Permissão é uma camada ADICIONAL à checagem de cargo acima — permite que um
+  // Administrador restrinja um GESTOR/GERENTE/SUPERVISOR específico de ver a Gestão da Loja
+  // Nord, mesmo o cargo dele normalmente permitindo (mesmo raciocínio de Usuários no lote
+  // crítico; ver comentário em @/lib/authz).
+  if (!(await hasModulePermission(session.user.id, "loja-nord", "canView"))) {
     redirect("/portal/loja-nord/loja");
   }
 

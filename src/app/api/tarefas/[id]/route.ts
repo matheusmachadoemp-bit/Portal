@@ -24,6 +24,9 @@ const TASK_DETAIL_INCLUDE = {
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canView"))) {
+    return NextResponse.json({ error: "Seu perfil de permissão não permite ver as Tarefas." }, { status: 403 });
+  }
   const { id } = await params;
 
   const task = await prisma.task.findUnique({ where: { id }, include: TASK_DETAIL_INCLUDE });

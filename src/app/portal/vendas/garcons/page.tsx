@@ -6,8 +6,16 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { subDays } from "date-fns";
 import { Trophy } from "lucide-react";
 import { GarconsImportButton } from "./garcons-import-button";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function GarconsDesempenhoPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "vendas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const since = subDays(new Date(), 30);

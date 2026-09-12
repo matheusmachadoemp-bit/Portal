@@ -1,9 +1,17 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { HojeClient } from "./hoje-client";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 export default async function ProducaoHojePage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "producao", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

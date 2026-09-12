@@ -1,10 +1,18 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { ConciliacaoClient } from "./conciliacao-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { resolveMatchLabels } from "@/lib/bank-reconciliation";
 
 export default async function ConciliacaoBancariaPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

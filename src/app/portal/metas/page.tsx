@@ -2,8 +2,16 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { MetasOverviewClient } from "./metas-overview-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function MetasOverviewPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "metas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

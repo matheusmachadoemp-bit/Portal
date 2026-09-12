@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { DashboardClient } from "./dashboard/dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -6,6 +9,11 @@ import { computeHrInsights } from "@/lib/rh-insights";
 import { startOfMonth, subMonths, addMonths, format, differenceInYears } from "date-fns";
 
 export default async function RhPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

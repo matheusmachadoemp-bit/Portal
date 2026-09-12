@@ -1,9 +1,17 @@
+import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { ManutencaoDashboardClient } from "./manutencao-dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getManutencaoDashboardData } from "@/lib/manutencao-server";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 export default async function ManutencaoDashboardPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "manutencao", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

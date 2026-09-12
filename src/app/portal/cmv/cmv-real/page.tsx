@@ -4,10 +4,18 @@ import { CmvRealClient } from "./cmv-real-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { breakdownMovimentacoesNoPeriodo, cmvRealValor, valorEstoqueEm } from "@/lib/cmv";
 import { subDays } from "date-fns";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 const PERIOD_DAYS = 30;
 
 export default async function CmvRealPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "cmv", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();

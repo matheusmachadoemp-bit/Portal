@@ -8,10 +8,18 @@ import { computeRfv } from "@/lib/rfv";
 import { CAMPAIGN_STATUS_LABEL } from "@/lib/crm";
 import { startOfMonth, subMonths, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export type ReportDef = { key: string; title: string; description: string; headers: string[]; rows: (string | number)[][] };
 
 export default async function RelatoriosPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "crm", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

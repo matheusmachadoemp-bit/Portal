@@ -5,11 +5,19 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { breakdownMovimentacoesNoPeriodo, cmvRealValor, cmvTeoricoPercentCatalogo, valorEstoqueEm } from "@/lib/cmv";
 import { productTotalCost } from "@/lib/ficha";
 import { startOfWeek, subDays, subWeeks } from "date-fns";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 const PERIOD_DAYS = 30;
 const WEEKS_SERIE = 8;
 
 export default async function ComparativoPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "cmv", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();
