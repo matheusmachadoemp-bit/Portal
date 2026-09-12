@@ -26,8 +26,8 @@ export type SortableStatCardConfig = {
   href?: string;
 };
 
-function SortableCard({ id, children }: { id: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+function SortableCard({ id, locked, children }: { id: string; locked: boolean; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: locked });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -35,14 +35,16 @@ function SortableCard({ id, children }: { id: string; children: React.ReactNode 
   };
   return (
     <div ref={setNodeRef} style={style} className="relative group">
-      <button
-        {...attributes}
-        {...listeners}
-        className="absolute top-2 right-2 z-10 text-nord-gray/0 group-hover:text-nord-gray/60 hover:!text-white cursor-grab active:cursor-grabbing transition-colors"
-        aria-label="Reordenar card"
-      >
-        <GripVertical size={14} />
-      </button>
+      {!locked && (
+        <button
+          {...attributes}
+          {...listeners}
+          className="absolute top-2 right-2 z-10 text-nord-gray/0 group-hover:text-nord-gray/60 hover:!text-white cursor-grab active:cursor-grabbing transition-colors"
+          aria-label="Reordenar card"
+        >
+          <GripVertical size={14} />
+        </button>
+      )}
       {children}
     </div>
   );
@@ -57,10 +59,13 @@ export function SortableCardGrid({
   storageKey,
   items,
   className = "grid grid-cols-2 md:grid-cols-4 gap-4",
+  locked = false,
 }: {
   storageKey: string;
   items: { key: string; content: React.ReactNode }[];
   className?: string;
+  /** Quando true, desativa o arrastar/soltar — usado pra restringir a reordenação a quem administra a tela. */
+  locked?: boolean;
 }) {
   const defaultOrder = items.map((c) => c.key);
   const [order, setOrder] = useState<string[]>(defaultOrder);
@@ -106,7 +111,7 @@ export function SortableCardGrid({
             const item = byKey.get(key);
             if (!item) return null;
             return (
-              <SortableCard key={key} id={key}>
+              <SortableCard key={key} id={key} locked={locked}>
                 {item.content}
               </SortableCard>
             );
@@ -126,15 +131,19 @@ export function SortableStatCards({
   storageKey,
   cards,
   className = "grid grid-cols-2 md:grid-cols-4 gap-4",
+  locked = false,
 }: {
   storageKey: string;
   cards: SortableStatCardConfig[];
   className?: string;
+  /** Quando true, desativa o arrastar/soltar — usado pra restringir a reordenação a quem administra a tela. */
+  locked?: boolean;
 }) {
   return (
     <SortableCardGrid
       storageKey={storageKey}
       className={className}
+      locked={locked}
       items={cards.map((card) => ({
         key: card.key,
         content: (
