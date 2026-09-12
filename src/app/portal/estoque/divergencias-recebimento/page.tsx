@@ -4,9 +4,15 @@ import { DivergenciasClient } from "./divergencias-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function DivergenciasRecebimentoPage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const canResolve = RECEBIMENTO_MANAGE_ROLES.includes(session?.user?.role ?? "");
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

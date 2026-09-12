@@ -7,6 +7,14 @@ import { hasModulePermission } from "@/lib/authz";
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Venda Acumulada é uma subcategoria do menu Metas (não tem moduleKey própria em
+  // src/lib/permissions.ts), então usa a mesma chave "metas" (mesmo padrão do POST/DELETE abaixo).
+  if (!(await hasModulePermission(session.user.id, "metas", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver a Venda Acumulada." },
+      { status: 403 }
+    );
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

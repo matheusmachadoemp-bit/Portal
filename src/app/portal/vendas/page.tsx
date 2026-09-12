@@ -3,8 +3,16 @@ import { PageContainer } from "@/components/page-container";
 import { VendasClient } from "./vendas-client";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function VendasPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "vendas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

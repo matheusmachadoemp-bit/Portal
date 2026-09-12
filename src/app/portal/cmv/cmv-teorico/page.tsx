@@ -5,10 +5,18 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { productTotalCost, cmvPercent, PRODUCT_CATEGORY_LABEL } from "@/lib/ficha";
 import { cmvTeoricoPercentCatalogo } from "@/lib/cmv";
 import { subDays } from "date-fns";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 const PERIOD_DAYS = 30;
 
 export default async function CmvTeoricoPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "cmv", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();

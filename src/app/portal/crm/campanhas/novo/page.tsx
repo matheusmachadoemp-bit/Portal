@@ -4,12 +4,20 @@ import { getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
 import { computeClienteMetrics, computeAutoSegments } from "@/lib/crm";
 import { CampanhaWizard } from "./campanha-wizard";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function NovaCampanhaPage({
   searchParams,
 }: {
   searchParams: Promise<{ clientes?: string; autoSegmento?: string; segmentoId?: string }>;
 }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "crm", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const sp = await searchParams;
   const ctx = await getActiveEmpresaContext();
 
