@@ -70,6 +70,17 @@ export const PERMISSION_ACTIONS: { key: PermissionAction; label: string }[] = [
  *    lateral, mas as rotas por trás de cada módulo já negam de verdade (ou deveriam:
  *    esconder do menu nunca foi proteção real por si só, é só não deixar a UI prometer
  *    algo que a API não entrega mais).
+ *
+ * Uma subcategoria sem override próprio ("Igual à categoria", a opção em branco na
+ * tela de Usuários) precisa herdar a visibilidade da CATEGORIA inteira — não existe
+ * (nem pode existir hoje: a tela de Perfis de Permissão só configura módulos inteiros,
+ * nunca subcategorias) uma linha de `ModulePermission` do perfil para a chave composta
+ * "categoria:subcategoria", então checar `profileSet.has(chaveComposta)` direto sempre
+ * dava falso — a subcategoria nunca aparecia pra ninguém que dependesse do perfil,
+ * mesmo com "Igual à categoria" selecionado. Por isso, na ausência de um override
+ * específico pra subcategoria, o fallback é pra chave da categoria (override pessoal
+ * dela, senão o perfil) — o mesmo critério de herança que `hasModulePermission`
+ * (@/lib/authz) já aplica pra Ver/Criar/Editar/Excluir.
  */
 export function buildVisibilityResolver(
   role: Role | string,
@@ -83,7 +94,10 @@ export function buildVisibilityResolver(
 
   return (key: string) => {
     if (overrides.has(key)) return overrides.get(key)!;
-    if (profileSet) return profileSet.has(key);
+    const colonIndex = key.indexOf(":");
+    const moduleKey = colonIndex === -1 ? key : key.slice(0, colonIndex);
+    if (moduleKey !== key && overrides.has(moduleKey)) return overrides.get(moduleKey)!;
+    if (profileSet) return profileSet.has(moduleKey);
     return false;
   };
 }

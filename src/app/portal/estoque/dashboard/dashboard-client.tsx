@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, LabelList } from "recharts";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
+import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/calc";
 import { format } from "date-fns";
 import { STOCK_MOVEMENT_LABEL } from "@/lib/estoque";
@@ -167,12 +168,14 @@ export function EstoqueDashboardClient({
 
       <Section title={`Movimentações por tipo (últimos ${periodDays} dias)`}>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={movementsByType.map((m) => ({ ...m, label: STOCK_MOVEMENT_LABEL[m.type as keyof typeof STOCK_MOVEMENT_LABEL] }))}>
+          <BarChart data={movementsByType.map((m) => ({ ...m, label: STOCK_MOVEMENT_LABEL[m.type as keyof typeof STOCK_MOVEMENT_LABEL] }))} margin={{ top: 16 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--nord-border)" />
             <XAxis dataKey="label" stroke="var(--nord-gray)" fontSize={12} />
             <YAxis stroke="var(--nord-gray)" fontSize={12} allowDecimals={false} />
             <Tooltip contentStyle={{ background: "var(--nord-card)", border: "1px solid var(--nord-border)", borderRadius: 8, fontSize: 12 }} />
-            <Bar dataKey="count" fill="#2952E3" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="count" fill="#2952E3" radius={[4, 4, 0, 0]}>
+              <LabelList dataKey="count" content={makeColumnValueLabel(formatNumber)} />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Section>

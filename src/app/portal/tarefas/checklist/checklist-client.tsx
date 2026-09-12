@@ -232,12 +232,15 @@ export function ChecklistClient({
   users,
   dateKey,
   canCreate,
+  showGrupoModeNotice,
 }: {
   initialOccurrences: Occurrence[];
   initialTemplates: Template[];
   users: { id: string; name: string }[];
   dateKey: string;
   canCreate: boolean;
+  /** Só true pra quem teria permissão de criar/editar checklist, mas está no modo Grupo Nord sem loja selecionada — não deve aparecer pra quem simplesmente não tem essa permissão (perfil "só executa"). */
+  showGrupoModeNotice: boolean;
 }) {
   const router = useRouter();
   const [occurrences, setOccurrences] = useState(initialOccurrences);
@@ -535,7 +538,7 @@ export function ChecklistClient({
 
   return (
     <div className="space-y-6">
-      {!canCreate && (
+      {showGrupoModeNotice && (
         <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para criar
           ou editar checklists.
@@ -593,7 +596,8 @@ export function ChecklistClient({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar checklist..."
-              className="input pl-8 w-48"
+              className="input w-48"
+              style={{ paddingLeft: "2rem" }}
             />
           </div>
           {canCreate && (
@@ -610,6 +614,7 @@ export function ChecklistClient({
       <SortableStatCards
         storageKey="checklist-kpi-order"
         className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
+        locked={!canCreate}
         cards={[
           { key: "previstos", label: "Previstos hoje", value: String(kpis.previstos), icon: "ListChecks", color: "#1464F4" },
           {

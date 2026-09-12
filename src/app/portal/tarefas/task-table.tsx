@@ -15,7 +15,7 @@ import { SectorBadge } from "./sector-badge";
 import { ResponsavelBadge } from "./responsavel-badge";
 import type { TaskDTO } from "./types";
 
-type SortField = "title" | "empresa" | "sectorKey" | "dueDate" | "priority" | "status";
+type SortField = "title" | "sectorKey" | "dueDate" | "priority" | "status";
 type SortDir = "asc" | "desc";
 
 function formatDueDate(dueDate: string | null, dueTime: string | null): string {
@@ -23,18 +23,6 @@ function formatDueDate(dueDate: string | null, dueTime: string | null): string {
   const d = new Date(dueDate);
   const date = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
   return dueTime ? `${date} ${dueTime}` : date;
-}
-
-// Prazo tranquilo em branco, perto de vencer (24h) em laranja, vencido em vermelho.
-const PRAZO_PROXIMO_HORAS = 24;
-
-function prazoClass(t: TaskDTO): string {
-  if (t.overdue) return "text-red-400 font-medium";
-  if (t.dueDate && t.status !== "CONCLUIDA") {
-    const horasRestantes = (new Date(t.dueDate).getTime() - Date.now()) / (1000 * 60 * 60);
-    if (horasRestantes <= PRAZO_PROXIMO_HORAS) return "text-orange-400 font-medium";
-  }
-  return "text-white";
 }
 
 export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: TaskDTO) => void }) {
@@ -57,9 +45,6 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
       switch (sortField) {
         case "title":
           cmp = a.title.localeCompare(b.title);
-          break;
-        case "empresa":
-          cmp = a.empresa.name.localeCompare(b.empresa.name);
           break;
         case "sectorKey":
           cmp = a.sectorKey.localeCompare(b.sectorKey);
@@ -108,7 +93,6 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
           <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
             <Th field="title">Tarefa</Th>
             <th className="py-2 pr-4">Responsável</th>
-            <Th field="empresa">Unidade</Th>
             <Th field="sectorKey">Setor</Th>
             <Th field="dueDate">Prazo</Th>
             <Th field="priority">Prioridade</Th>
@@ -159,15 +143,9 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
                   )}
                 </td>
                 <td className="py-2.5 pr-4">
-                  <span className="inline-flex items-center gap-1.5 text-nord-gray">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.empresa.color }} />
-                    {t.empresa.name}
-                  </span>
-                </td>
-                <td className="py-2.5 pr-4">
                   <SectorBadge sectorKey={t.sectorKey} />
                 </td>
-                <td className={`py-2.5 pr-4 ${prazoClass(t)}`}>{formatDueDate(t.dueDate, t.dueTime)}</td>
+                <td className="py-2.5 pr-4 text-white">{formatDueDate(t.dueDate, t.dueTime)}</td>
                 <td className="py-2.5 pr-4">
                   <span className="inline-flex items-center gap-1 text-xs" style={{ color: TASK_PRIORITY_COLOR[t.priority] }}>
                     {TASK_PRIORITY_LABEL[t.priority]}

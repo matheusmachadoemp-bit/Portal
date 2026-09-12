@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trophy, Pencil, FileDown } from "lucide-react";
+import { Pencil, FileDown } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
@@ -459,15 +459,6 @@ export function GerenteClient({
         className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
         items={cards}
       />
-
-      {premiacaoTotal > 0 && (
-        <div className="nord-card p-4 flex items-center gap-3 bg-amber-950/10 border-amber-900/40">
-          <Trophy size={20} className="text-amber-400 shrink-0" />
-          <span className="text-sm text-white">
-            Premiação total do mês: <strong>{formatCurrency(premiacaoTotal)}</strong>
-          </span>
-        </div>
-      )}
 
       {canCreate && showMetas && (
         <Section title="Metas e premiação do período">

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
+import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatMinutes } from "@/lib/university";
+import { formatNumber } from "@/lib/calc";
 import { AlertTriangle, ClipboardCheck, Star, Trophy, ArrowRight } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -19,6 +21,7 @@ import {
   YAxis,
   Tooltip,
   Legend,
+  LabelList,
 } from "recharts";
 
 const COLORS = ["#2952E3", "#a855f7", "#22c55e", "#eab308", "#ef4444", "#14b8a6", "#f97316"];
@@ -145,7 +148,9 @@ export function DashboardClient({
                 <XAxis type="number" stroke="#9a9aa2" fontSize={11} />
                 <YAxis type="category" dataKey="name" stroke="#9a9aa2" fontSize={11} width={140} />
                 <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-                <Bar dataKey="matriculas" fill="#2952E3" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="matriculas" fill="#2952E3" radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="matriculas" content={makeBarValueLabel(formatNumber)} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </Section>

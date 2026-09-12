@@ -15,7 +15,7 @@ export default async function GarconsDesempenhoPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const range = resolveRollingPeriod("30dias");
+  const range = resolveRollingPeriod("mes-atual");
 
   const ranking = await loadGarcomRanking(empresaIds, range.from, range.to);
 

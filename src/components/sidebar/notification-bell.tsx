@@ -28,6 +28,11 @@ const PRIORITY_BORDER: Record<string, string> = {
   CRITICA: "border-red-500",
 };
 
+// Prefixo gerado por processReuniaoMetaReminders (@/lib/reuniao-server) — o
+// texto depois do prefixo é a chave da subcategoria em maiúsculas (ex.:
+// "REUNIAO_METAS_PENDENTE_GERENTE" -> "gerente").
+const REUNIAO_METAS_PENDENTE_PREFIX = "REUNIAO_METAS_PENDENTE_";
+
 const PANEL_WIDTH = 320;
 const PANEL_MARGIN = 8;
 
@@ -95,6 +100,10 @@ export function NotificationBell() {
     else if (n.chamadoId) router.push(`/portal/manutencao/chamados/${n.chamadoId}`);
     else if (n.purchaseId) router.push("/portal/estoque/recebimento");
     else if (n.goalCategory) router.push(`/portal/metas/${GOAL_CATEGORY_ROUTE[n.goalCategory]}`);
+    else if (n.type.startsWith(REUNIAO_METAS_PENDENTE_PREFIX)) {
+      const sub = n.type.slice(REUNIAO_METAS_PENDENTE_PREFIX.length).toLowerCase();
+      router.push(`/portal/reuniao/${sub}`);
+    }
   }
 
   return (

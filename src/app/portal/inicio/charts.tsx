@@ -14,8 +14,10 @@ import {
   BarChart,
   Bar,
   Legend,
+  LabelList,
 } from "recharts";
 import { Section } from "@/components/ui/stat-card";
+import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency } from "@/lib/calc";
 
 const COLORS = ["#2952E3", "#4d70ff"];
@@ -82,7 +84,7 @@ export function DashboardCharts({
       <div className="xl:col-span-3">
         <Section title="Evolução mensal do faturamento">
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={monthlyEvolution}>
+            <BarChart data={monthlyEvolution} margin={{ top: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
               <XAxis dataKey="month" stroke="#9a9aa2" fontSize={11} />
               <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
@@ -90,7 +92,9 @@ export function DashboardCharts({
                 contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
                 formatter={(v) => formatCurrency(Number(v))}
               />
-              <Bar dataKey="total" fill="#2952E3" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="total" fill="#2952E3" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="total" content={makeColumnValueLabel(formatCurrency)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
