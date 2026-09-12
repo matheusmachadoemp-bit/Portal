@@ -145,18 +145,37 @@ export async function computeGerenteMetrics(empresaId: string, periodo: string) 
 }
 
 /**
+ * Regra do portal: toda subcategoria de Reunião que tenha metas/premiação
+ * mensais (uma linha por empresa/período, só criada quando alguém salva o
+ * formulário) precisa desse lembrete — ao adicionar uma nova subcategoria
+ * de Reunião com esse formato, adicionar aqui também.
+ */
+const REUNIAO_META_SUBS = [
+  { key: "gerente", label: "Reunião Gerente", findMeeting: (empresaId: string, periodo: string) => prisma.gerenteMeeting.findUnique({ where: { empresaId_periodo: { empresaId, periodo } }, select: { id: true } }) },
+  { key: "salao", label: "Reunião Salão", findMeeting: (empresaId: string, periodo: string) => prisma.salaoMeeting.findUnique({ where: { empresaId_periodo: { empresaId, periodo } }, select: { id: true } }) },
+  { key: "delivery", label: "Reunião Delivery", findMeeting: (empresaId: string, periodo: string) => prisma.deliveryMeeting.findUnique({ where: { empresaId_periodo: { empresaId, periodo } }, select: { id: true } }) },
+  { key: "cozinha", label: "Reunião Cozinha", findMeeting: (empresaId: string, periodo: string) => prisma.kitchenMeeting.findUnique({ where: { empresaId_periodo: { empresaId, periodo } }, select: { id: true } }) },
+] as const;
+
+/** Prefixo comum dos `type` de Notification gerados por essa rotina — ver notification-bell.tsx. */
+export const REUNIAO_METAS_PENDENTE_PREFIX = "REUNIAO_METAS_PENDENTE_";
+
+/**
  * Roda diariamente (ver vercel.json), mas só faz alguma coisa no dia 25 (hora
  * de São Paulo) — o resto do mês retorna sem checar nada. No dia 25, as metas
- * do mês seguinte ainda não existem (só são criadas quando alguém salva o
- * formulário "Metas e premiação" em Reunião Gerente), então usar a ausência
- * dessa linha em GerenteMeeting é o próprio sinal de "ainda não foi
- * definida" — sem precisar de mais uma tabela/flag só pra isso.
+ * do mês seguinte ainda não existem em nenhuma subcategoria de Reunião (só
+ * são criadas quando alguém salva o formulário "Metas e premiação" daquela
+ * tela), então usar a ausência dessa linha é o próprio sinal de "ainda não
+ * foi definida" — sem precisar de mais uma tabela/flag só pra isso.
  *
  * Ex.: hoje é 25/09 → o mês seguinte é outubro (período "2026-10") → avisa
- * Gerente e Administrador de cada loja que ainda não tem essa linha, com
- * prazo até o dia 05/10 (dia 5 do mês seguinte).
+ * Gerente e Administrador de cada loja, para cada subcategoria (Gerente,
+ * Salão, Delivery, Cozinha) que ainda não tem essa linha, com prazo até o
+ * dia 05/10 (dia 5 do mês seguinte). "Reunião Liderança" ainda não tem
+ * metas/premiação implementadas (tela "Em construção"), por isso não entra
+ * na lista acima ainda.
  */
-export async function processGerenteMetaReminders(now: Date = new Date()): Promise<{ notified: number }> {
+export async function processReuniaoMetaReminders(now: Date = new Date()): Promise<{ notified: number }> {
   const todayKey = spDateKey(now);
   const day = Number(todayKey.slice(8, 10));
   if (day !== 25) return { notified: 0 };
@@ -170,41 +189,51 @@ export async function processGerenteMetaReminders(now: Date = new Date()): Promi
     { day: "2-digit", month: "2-digit", timeZone: "UTC" }
   );
 
-  const empresas = await prisma.empresa.findMany({ where: { active: true }, select: { id: true } });
+  const empresas = await prisma.empresa.findMany({ where: { active: true }, select: { id: true, name: true } });
 
   let notified = 0;
-  for (const empresa of empresas) {
-    const jaDefinida = await prisma.gerenteMeeting.findUnique({
-      where: { empresaId_periodo: { empresaId: empresa.id, periodo: targetPeriodo } },
-      select: { id: true },
-    });
-    if (jaDefinida) continue;
+  for (const sub of REUNIAO_META_SUBS) {
+    const notificationType = `${REUNIAO_METAS_PENDENTE_PREFIX}${sub.key.toUpperCase()}`;
 
-    const managerIds = await getStoreManagers(empresa.id);
-    if (managerIds.length === 0) continue;
+    for (const empresa of empresas) {
+      const jaDefinida = await sub.findMeeting(empresa.id, targetPeriodo);
+      if (jaDefinida) continue;
 
-    // Evita duplicar caso o cron seja re-executado no mesmo dia (ex.: retry do Vercel).
-    const jaNotificadoHoje = await prisma.notification.findFirst({
-      where: {
-        type: "REUNIAO_GERENTE_METAS_PENDENTE",
-        userId: { in: managerIds },
-        createdAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) },
-      },
-      select: { id: true },
-    });
-    if (jaNotificadoHoje) continue;
+      const managerIds = await getStoreManagers(empresa.id);
+      if (managerIds.length === 0) continue;
 
-    await createNotifications(
-      managerIds.map((userId) => ({
-        userId,
-        type: "REUNIAO_GERENTE_METAS_PENDENTE",
-        title: "Defina as metas da Reunião Gerente",
-        body: `Configure as metas e premiação de ${targetLabel} até ${deadlineLabel}.`,
-        priority: "ATENCAO" as const,
-        url: "/portal/reuniao/gerente",
-      }))
-    );
-    notified += managerIds.length;
+      // O título leva o nome da loja de propósito: além de deixar claro pra quem
+      // administra mais de uma loja (ex.: o Administrador) qual delas está com
+      // metas pendentes, isso também é o que distingue essa checagem de duplicidade
+      // por loja — sem incluir a loja aqui, o Administrador (que aparece em
+      // managerIds de todas as lojas) ficaria marcado como "já notificado hoje" já
+      // na primeira loja processada e nunca receberia o aviso das demais.
+      const title = `Defina as metas da ${sub.label} — ${empresa.name}`;
+
+      // Evita duplicar caso o cron seja re-executado no mesmo dia (ex.: retry do Vercel).
+      const jaNotificadoHoje = await prisma.notification.findFirst({
+        where: {
+          type: notificationType,
+          title,
+          userId: { in: managerIds },
+          createdAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) },
+        },
+        select: { id: true },
+      });
+      if (jaNotificadoHoje) continue;
+
+      await createNotifications(
+        managerIds.map((userId) => ({
+          userId,
+          type: notificationType,
+          title,
+          body: `Configure as metas e premiação de ${targetLabel} até ${deadlineLabel}.`,
+          priority: "ATENCAO" as const,
+          url: `/portal/reuniao/${sub.key}`,
+        }))
+      );
+      notified += managerIds.length;
+    }
   }
 
   return { notified };
