@@ -68,7 +68,7 @@ export async function hasModulePermission(
         select: {
           modulePermissions: {
             where: { moduleKey: { in: keys } },
-            select: { moduleKey: true, canView: true, canCreate: true, canEdit: true, canDelete: true },
+            select: { moduleKey: true, canView: true, canExecute: true, canCreate: true, canEdit: true, canDelete: true },
           },
         },
       },

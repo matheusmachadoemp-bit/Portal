@@ -17,6 +17,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const modulePermissions = (body.modulePermissions ?? []) as {
     moduleKey: string;
     canView: boolean;
+    canExecute: boolean;
     canCreate: boolean;
     canEdit: boolean;
     canDelete: boolean;
@@ -26,11 +27,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     modulePermissions.map((m) =>
       prisma.modulePermission.upsert({
         where: { profileId_moduleKey: { profileId: id, moduleKey: m.moduleKey } },
-        update: { canView: !!m.canView, canCreate: !!m.canCreate, canEdit: !!m.canEdit, canDelete: !!m.canDelete },
+        update: { canView: !!m.canView, canExecute: !!m.canExecute, canCreate: !!m.canCreate, canEdit: !!m.canEdit, canDelete: !!m.canDelete },
         create: {
           profileId: id,
           moduleKey: m.moduleKey,
           canView: !!m.canView,
+          canExecute: !!m.canExecute,
           canCreate: !!m.canCreate,
           canEdit: !!m.canEdit,
           canDelete: !!m.canDelete,

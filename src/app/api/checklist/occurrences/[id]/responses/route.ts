@@ -21,11 +21,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
   // Responder um item é "executar" o checklist, não "editar o template" — por isso
-  // só exige canView na subcategoria "checklist" (não canEdit no módulo "tarefas"
-  // inteiro, que também cobre a tela de Tarefas/kanban e a criação/edição de
-  // templates). Um perfil restrito a só visualizar/executar checklists (ex.:
-  // Chef, Garçom) precisa continuar respondendo itens normalmente.
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canView", "checklist"))) {
+  // só exige canExecute na subcategoria "checklist" (não canEdit no módulo
+  // "tarefas" inteiro, que também cobre a tela de Tarefas/kanban e a criação/
+  // edição de templates, nem canView, que é só leitura de verdade — ver
+  // ACCESS_LEVEL_TO_MODULE_FLAGS em @/lib/permissions). Um perfil restrito a
+  // só executar checklists (ex.: Chef, Garçom) precisa continuar respondendo
+  // itens normalmente.
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canExecute", "checklist"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite responder itens do checklist." },
       { status: 403 }

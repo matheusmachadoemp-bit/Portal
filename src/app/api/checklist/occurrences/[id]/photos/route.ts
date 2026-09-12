@@ -24,10 +24,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
   // Anexar foto faz parte de "executar" o checklist, não de "editar o template" —
-  // por isso exige só canView na subcategoria "checklist" (não canCreate no módulo
-  // "tarefas" inteiro), pra um perfil restrito a executar (ex.: Chef, Garçom)
-  // continuar conseguindo comprovar itens normalmente.
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canView", "checklist"))) {
+  // por isso exige só canExecute na subcategoria "checklist" (não canCreate no
+  // módulo "tarefas" inteiro, nem canView, que é só leitura de verdade — ver
+  // ACCESS_LEVEL_TO_MODULE_FLAGS em @/lib/permissions), pra um perfil
+  // restrito a executar (ex.: Chef, Garçom) continuar conseguindo comprovar
+  // itens normalmente.
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canExecute", "checklist"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite anexar fotos ao checklist." },
       { status: 403 }
