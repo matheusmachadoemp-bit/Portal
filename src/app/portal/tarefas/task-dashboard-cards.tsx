@@ -88,9 +88,14 @@ export function TaskDashboardCards({ tasks }: { tasks: TaskDTO[] }) {
           ) : (
             <ul className="space-y-2">
               {stats.proximosVencimentos.map((t) => (
-                <li key={t.id} className="flex items-center justify-between text-xs">
-                  <span className="text-white truncate max-w-[60%]">{t.title}</span>
-                  <span className="text-nord-gray">
+                <li key={t.id} className="flex items-center justify-between text-xs gap-2">
+                  <div className="min-w-0 max-w-[55%]">
+                    <p className="text-white truncate">{t.title}</p>
+                    <p className="text-nord-gray truncate">
+                      {t.assignees.length === 0 ? "ninguém atribuído" : t.assignees.map((a) => a.user.name).join(", ")}
+                    </p>
+                  </div>
+                  <span className="text-nord-gray shrink-0">
                     {new Date(t.dueDate!).toLocaleDateString("pt-BR")}
                     {t.dueTime ? ` ${t.dueTime}` : ""}
                   </span>
