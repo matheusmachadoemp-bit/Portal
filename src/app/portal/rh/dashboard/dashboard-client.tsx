@@ -3,6 +3,7 @@
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
+import { makeBarValueLabel, makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatNumber, formatPercent, formatCurrency } from "@/lib/calc";
 import { RhTabs } from "../rh-tabs";
 import {
@@ -16,6 +17,7 @@ import {
   Tooltip,
   CartesianGrid,
   Legend,
+  LabelList,
 } from "recharts";
 import type { HrInsight } from "@/lib/rh-insights";
 
@@ -111,14 +113,18 @@ export function DashboardClient({
 
         <Section title="Admissões x Demissões">
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={admissoesXDemissoes}>
+            <BarChart data={admissoesXDemissoes} margin={{ top: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
               <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
               <YAxis stroke="#9a9aa2" fontSize={11} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="admissoes" name="Admissões" fill="#22c55e" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="demissoes" name="Demissões" fill="#ef4444" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="admissoes" name="Admissões" fill="#22c55e" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="admissoes" content={makeColumnValueLabel(formatNumber)} />
+              </Bar>
+              <Bar dataKey="demissoes" name="Demissões" fill="#ef4444" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="demissoes" content={makeColumnValueLabel(formatNumber)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -130,7 +136,9 @@ export function DashboardClient({
               <XAxis type="number" stroke="#9a9aa2" fontSize={11} />
               <YAxis type="category" dataKey="setor" stroke="#9a9aa2" fontSize={10} width={100} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="faltas" fill="#ef4444" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="faltas" fill="#ef4444" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="faltas" content={makeBarValueLabel(formatNumber)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -142,7 +150,9 @@ export function DashboardClient({
               <XAxis type="number" stroke="#9a9aa2" fontSize={11} />
               <YAxis type="category" dataKey="nome" stroke="#9a9aa2" fontSize={10} width={100} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="atrasos" fill="#eab308" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="atrasos" fill="#eab308" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="atrasos" content={makeBarValueLabel(formatNumber)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -150,12 +160,14 @@ export function DashboardClient({
         <div className="xl:col-span-2">
           <Section title="Custos de folha (últimos 6 meses)">
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={custosFolha}>
+              <BarChart data={custosFolha} margin={{ top: 16 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
                 <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
                 <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
                 <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} formatter={(v) => formatCurrency(Number(v))} />
-                <Bar dataKey="valor" name="Custo" fill="#2952E3" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="valor" name="Custo" fill="#2952E3" radius={[6, 6, 0, 0]}>
+                  <LabelList dataKey="valor" content={makeColumnValueLabel(formatCurrency)} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </Section>

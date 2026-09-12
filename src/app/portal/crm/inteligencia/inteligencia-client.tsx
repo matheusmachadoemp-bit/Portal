@@ -12,8 +12,10 @@ import {
   Cell,
   ScatterChart,
   Scatter,
+  LabelList,
 } from "recharts";
 import { Section, Badge } from "@/components/ui/stat-card";
+import { makeBarValueLabel, makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/calc";
 
 type Produto = { nome: string; quantidade: number; compradores: number };
@@ -84,7 +86,9 @@ export function InteligenciaClient({
               <XAxis type="number" stroke="#9a9aa2" fontSize={11} allowDecimals={false} />
               <YAxis type="category" dataKey="nome" stroke="#9a9aa2" fontSize={10} width={130} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="quantidade" name="Quantidade" fill="#2952E3" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="quantidade" name="Quantidade" fill="#2952E3" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="quantidade" content={makeBarValueLabel(formatNumber)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -132,18 +136,22 @@ export function InteligenciaClient({
             <div>
               <p className="text-[11px] text-nord-gray mb-1">Dia da semana</p>
               <ResponsiveContainer width="100%" height={90}>
-                <BarChart data={diaDist}>
+                <BarChart data={diaDist} margin={{ top: 14 }}>
                   <XAxis dataKey="label" stroke="#9a9aa2" fontSize={9} interval={0} tick={{ fontSize: 9 }} />
-                  <Bar dataKey="count" fill="#2952E3" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill="#2952E3" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="count" content={makeColumnValueLabel(formatNumber)} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
             <div>
               <p className="text-[11px] text-nord-gray mb-1">Horário</p>
               <ResponsiveContainer width="100%" height={90}>
-                <BarChart data={horaDist}>
+                <BarChart data={horaDist} margin={{ top: 14 }}>
                   <XAxis dataKey="label" stroke="#9a9aa2" fontSize={9} interval={0} tick={{ fontSize: 9 }} />
-                  <Bar dataKey="count" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill="#22c55e" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="count" content={makeColumnValueLabel(formatNumber)} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>

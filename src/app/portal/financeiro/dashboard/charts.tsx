@@ -11,8 +11,10 @@ import {
   Legend,
   BarChart,
   Bar,
+  LabelList,
 } from "recharts";
 import { Section } from "@/components/ui/stat-card";
+import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency } from "@/lib/calc";
 
 export function FinanceCharts({
@@ -65,7 +67,9 @@ export function FinanceCharts({
               contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
               formatter={(v) => formatCurrency(Number(v))}
             />
-            <Bar dataKey="value" fill="#ef4444" radius={[0, 6, 6, 0]} />
+            <Bar dataKey="value" fill="#ef4444" radius={[0, 6, 6, 0]}>
+              <LabelList dataKey="value" content={makeBarValueLabel(formatCurrency)} />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Section>
@@ -80,7 +84,9 @@ export function FinanceCharts({
               contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
               formatter={(v) => formatCurrency(Number(v))}
             />
-            <Bar dataKey="value" fill="#22c55e" radius={[0, 6, 6, 0]} />
+            <Bar dataKey="value" fill="#22c55e" radius={[0, 6, 6, 0]}>
+              <LabelList dataKey="value" content={makeBarValueLabel(formatCurrency)} />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Section>

@@ -14,10 +14,12 @@ import {
   CartesianGrid,
   Legend,
   Cell,
+  LabelList,
 } from "recharts";
 import { Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
+import { makeBarValueLabel, makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatNumber, formatPercent, formatCurrency } from "@/lib/calc";
 import { CRM_PERIOD_OPTIONS, type CrmPeriodKey } from "@/lib/crm";
 import type { CrmDashboardData } from "@/lib/crm-dashboard";
@@ -205,6 +207,7 @@ export function CrmDashboardClient({ initialKey, initialData }: { initialKey: Cr
                 formatter={(v) => formatCurrency(Number(v))}
               />
               <Bar dataKey="receita" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="receita" content={makeColumnValueLabel(formatCurrency)} />
                 {receitaPorTipo.map((entry, idx) => (
                   <Cell key={entry.tipo} fill={["#2952E3", "#22c55e", "#a855f7", "#f59e0b"][idx % 4]} />
                 ))}
@@ -220,7 +223,9 @@ export function CrmDashboardClient({ initialKey, initialData }: { initialKey: Cr
               <XAxis type="number" stroke="#9a9aa2" fontSize={11} allowDecimals={false} />
               <YAxis type="category" dataKey="label" stroke="#9a9aa2" fontSize={11} width={110} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="count" fill="#2952E3" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="count" fill="#2952E3" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="count" content={makeBarValueLabel(formatNumber)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
@@ -233,6 +238,7 @@ export function CrmDashboardClient({ initialKey, initialData }: { initialKey: Cr
               <YAxis type="category" dataKey="label" stroke="#9a9aa2" fontSize={11} width={150} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
               <Bar dataKey="count" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="count" content={makeBarValueLabel(formatNumber)} />
                 {risco.map((entry) => (
                   <Cell key={entry.key} fill={TONE_COLOR[entry.tone]} />
                 ))}
