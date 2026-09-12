@@ -223,50 +223,6 @@ export function FeriasClient({
         </Section>
       )}
 
-      <Section
-        title="Calendário"
-        action={
-          <div className="flex items-center gap-2">
-            <button onClick={() => setCalendarMonth((m) => subMonths(m, 1))} className="text-nord-gray hover:text-white">
-              <ChevronLeft size={16} />
-            </button>
-            <span className="text-xs text-white w-24 text-center">{format(calendarMonth, "MMMM yyyy")}</span>
-            <button onClick={() => setCalendarMonth((m) => addMonths(m, 1))} className="text-nord-gray hover:text-white">
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-nord-gray mb-2">
-          {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
-            <span key={i}>{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: calendarDays.leadingBlanks }).map((_, i) => (
-            <div key={`blank-${i}`} />
-          ))}
-          {calendarDays.days.map((day) => {
-            const dayVacations = vacationsOnDay(day);
-            return (
-              <div
-                key={day.toISOString()}
-                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs ${
-                  dayVacations.length > 0
-                    ? "bg-nord-blue/20 text-nord-blue-light font-medium"
-                    : isSameMonth(day, calendarMonth)
-                      ? "text-nord-gray"
-                      : "text-nord-gray/30"
-                }`}
-                title={dayVacations.map((v) => v.employee.name).join(", ")}
-              >
-                {format(day, "d")}
-              </div>
-            );
-          })}
-        </div>
-      </Section>
-
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -317,6 +273,50 @@ export function FeriasClient({
           </tbody>
         </table>
       </div>
+
+      <Section
+        title="Calendário"
+        action={
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCalendarMonth((m) => subMonths(m, 1))} className="text-nord-gray hover:text-white">
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-xs text-white w-24 text-center">{format(calendarMonth, "MMMM yyyy")}</span>
+            <button onClick={() => setCalendarMonth((m) => addMonths(m, 1))} className="text-nord-gray hover:text-white">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-nord-gray mb-2">
+          {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
+            <span key={i}>{d}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: calendarDays.leadingBlanks }).map((_, i) => (
+            <div key={`blank-${i}`} />
+          ))}
+          {calendarDays.days.map((day) => {
+            const dayVacations = vacationsOnDay(day);
+            return (
+              <div
+                key={day.toISOString()}
+                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs ${
+                  dayVacations.length > 0
+                    ? "bg-nord-blue/20 text-nord-blue-light font-medium"
+                    : isSameMonth(day, calendarMonth)
+                      ? "text-nord-gray"
+                      : "text-nord-gray/30"
+                }`}
+                title={dayVacations.map((v) => v.employee.name).join(", ")}
+              >
+                {format(day, "d")}
+              </div>
+            );
+          })}
+        </div>
+      </Section>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar período de férias" : "Solicitar férias"}>
         <div className="grid grid-cols-2 gap-3">
