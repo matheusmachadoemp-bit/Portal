@@ -96,7 +96,14 @@ export const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
 
 // Filtro de período "rolling" (últimos N dias), usado nos mini-filtros de
 // cada card (Vendas por Hora, Forma de Pagamento, Área de Entrega).
-export type RollingPeriodKey = "hoje" | "ontem" | "7dias" | "30dias" | "personalizado";
+export type RollingPeriodKey =
+  | "hoje"
+  | "ontem"
+  | "7dias"
+  | "30dias"
+  | "mes-atual"
+  | "mes-passado"
+  | "personalizado";
 
 export function resolveRollingPeriod(key: RollingPeriodKey, custom?: { from?: string; to?: string }): { from: Date; to: Date } {
   const now = new Date();
@@ -107,6 +114,10 @@ export function resolveRollingPeriod(key: RollingPeriodKey, custom?: { from?: st
       return { from: startOfDay(subDays(now, 1)), to: endOfDay(subDays(now, 1)) };
     case "7dias":
       return { from: startOfDay(subDays(now, 6)), to: endOfDay(now) };
+    case "mes-atual":
+      return { from: startOfMonth(now), to: endOfDay(now) };
+    case "mes-passado":
+      return { from: startOfMonth(subMonths(now, 1)), to: endOfMonth(subMonths(now, 1)) };
     case "personalizado":
       if (custom?.from && custom?.to) {
         return { from: startOfDay(new Date(custom.from)), to: endOfDay(new Date(custom.to)) };
@@ -117,11 +128,23 @@ export function resolveRollingPeriod(key: RollingPeriodKey, custom?: { from?: st
   }
 }
 
+// Usado nos mini-filtros de Faturamento (Vendas por Hora, Forma de Pagamento,
+// Área de Entrega) — mantém "30 dias" como opção aqui.
 export const ROLLING_PERIOD_OPTIONS: { key: RollingPeriodKey; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "ontem", label: "Ontem" },
   { key: "7dias", label: "7 dias" },
   { key: "30dias", label: "30 dias" },
+  { key: "personalizado", label: "Personalizado" },
+];
+
+// Usado no ranking de Desempenho por Garçom — sem "30 dias", com mês atual/passado.
+export const GARCOM_PERIOD_OPTIONS: { key: RollingPeriodKey; label: string }[] = [
+  { key: "hoje", label: "Hoje" },
+  { key: "ontem", label: "Ontem" },
+  { key: "7dias", label: "7 dias" },
+  { key: "mes-atual", label: "Mês atual" },
+  { key: "mes-passado", label: "Mês passado" },
   { key: "personalizado", label: "Personalizado" },
 ];
 

@@ -40,13 +40,19 @@ export default async function ChecklistPage() {
   // "Criar/editar checklist" é uma ação distinta de "executar checklist" (feita
   // em /tarefas/checklist/executar/[id], sem depender desta flag) — por isso a
   // tela só libera o botão "Novo checklist" e os ícones de editar/duplicar/
-  // desativar/excluir para quem tem permissão canCreate no módulo "tarefas"
+  // desativar/excluir, a reordenação dos cards de KPI e a visão de todos os
+  // checklists da loja pra quem tem permissão canCreate no módulo "tarefas"
   // (perfil Chef/Garçom, por padrão, só visualiza e executa). Sem esse check
   // aqui, qualquer usuário com uma loja selecionada via a UI, mesmo sem a
   // permissão — a API já bloqueia a criação (ver POST /api/checklist/templates),
   // mas o botão continuava aparecendo pra quem nunca conseguiria usá-lo.
-  const canCreate =
-    ctx?.mode === "single" && (await hasModulePermission(session.user.id, "tarefas", "canCreate", "checklist"));
+  const canManageChecklist = await hasModulePermission(session.user.id, "tarefas", "canCreate", "checklist");
+  const canCreate = ctx?.mode === "single" && canManageChecklist;
+  // O aviso de "modo Grupo Nord" só faz sentido pra quem TERIA permissão de
+  // criar/editar se selecionasse uma loja — mostrar essa dica pra um perfil
+  // "só executa" (sem essa permissão em loja nenhuma) seria enganoso, como se
+  // trocar de loja resolvesse algo pra ele.
+  const showGrupoModeNotice = canManageChecklist && ctx?.mode !== "single";
 
   await generateChecklistOccurrences(empresaIds, dateKey);
 
@@ -66,7 +72,10 @@ export default async function ChecklistPage() {
 
   const [occurrences, templates, users] = await Promise.all([
     prisma.checklistOccurrence.findMany({
-      where: { empresaId: { in: empresaIds }, date: day },
+      // Quem só executa (sem canManageChecklist) enxerga apenas os checklists
+      // dos quais é o responsável — "Agenda do dia" e "Tabela de checklists"
+      // usam essa mesma lista, então o filtro aqui já resolve as duas telas.
+      where: { empresaId: { in: empresaIds }, date: day, ...(canManageChecklist ? {} : { responsavelId: session.user.id }) },
       include: OCCURRENCE_INCLUDE,
       orderBy: { dueAt: "asc" },
     }),
@@ -111,6 +120,7 @@ export default async function ChecklistPage() {
         users={users}
         dateKey={dateKey}
         canCreate={canCreate}
+        showGrupoModeNotice={showGrupoModeNotice}
       />
     </PageContainer>
   );
