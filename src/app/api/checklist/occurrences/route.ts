@@ -44,8 +44,13 @@ export async function GET(req: Request) {
   await refreshOccurrenceStatuses(existing.map((o) => o.id));
   await processChecklistEscalations(existing.map((o) => o.id));
 
+  // Mesmo critério da página (server component): quem só executa (sem
+  // canCreate na subcategoria "checklist") só pode ver os checklists dos
+  // quais é responsável — essa rota é chamada ao trocar a data no seletor,
+  // então precisa repetir o mesmo filtro aplicado no carregamento inicial.
+  const canManageChecklist = await hasModulePermission(session.user.id, "tarefas", "canCreate", "checklist");
   const occurrences = await prisma.checklistOccurrence.findMany({
-    where: { empresaId: { in: empresaIds }, date: day },
+    where: { empresaId: { in: empresaIds }, date: day, ...(canManageChecklist ? {} : { responsavelId: session.user.id }) },
     include: OCCURRENCE_INCLUDE,
     orderBy: { dueAt: "asc" },
   });
