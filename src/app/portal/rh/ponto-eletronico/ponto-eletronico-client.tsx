@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, Upload, AlertTriangle } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatNumber } from "@/lib/calc";
 import { pontoAlerts, type TimeEntryLike } from "@/lib/rh-helpers";
 import { format } from "date-fns";
@@ -19,6 +20,7 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  LabelList,
 } from "recharts";
 
 type TimeEntryDTO = TimeEntryLike & {
@@ -256,24 +258,30 @@ export function PontoEletronicoClient({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Section title="Horas trabalhadas por mês">
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={monthlyData}>
+            <BarChart data={monthlyData} margin={{ top: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
               <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
               <YAxis stroke="#9a9aa2" fontSize={11} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="horas" name="Horas" fill="#2952E3" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="horas" name="Horas" fill="#2952E3" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="horas" content={makeColumnValueLabel((v) => formatNumber(v, 1))} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
         <Section title="Atrasos e faltas por mês">
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={monthlyData}>
+            <BarChart data={monthlyData} margin={{ top: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
               <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
               <YAxis stroke="#9a9aa2" fontSize={11} />
               <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="atrasos" name="Atrasos" fill="#eab308" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="faltas" name="Faltas" fill="#ef4444" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="atrasos" name="Atrasos" fill="#eab308" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="atrasos" content={makeColumnValueLabel(formatNumber)} />
+              </Bar>
+              <Bar dataKey="faltas" name="Faltas" fill="#ef4444" radius={[6, 6, 0, 0]}>
+                <LabelList dataKey="faltas" content={makeColumnValueLabel(formatNumber)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>

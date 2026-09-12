@@ -1,6 +1,7 @@
 "use client";
 
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LabelList } from "recharts";
+import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency } from "@/lib/calc";
 
 /** "YYYY-MM-DD" -> "dd/MM", sem passar por Date (evita o fuso mudar o dia). */
@@ -14,7 +15,7 @@ export function DesempenhoChart({ serie }: { serie: { data: string; faturamento:
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={chartData}>
+      <BarChart data={chartData} margin={{ top: 16 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
         <XAxis dataKey="dia" stroke="#9a9aa2" fontSize={11} />
         <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
@@ -23,7 +24,9 @@ export function DesempenhoChart({ serie }: { serie: { data: string; faturamento:
           labelStyle={{ color: "#fff" }}
           formatter={(v) => formatCurrency(Number(v))}
         />
-        <Bar dataKey="faturamento" fill="#2952E3" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="faturamento" fill="#2952E3" radius={[6, 6, 0, 0]}>
+          <LabelList dataKey="faturamento" content={makeColumnValueLabel(formatCurrency)} />
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );

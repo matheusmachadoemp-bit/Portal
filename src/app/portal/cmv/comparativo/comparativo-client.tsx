@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { Pencil } from "lucide-react";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, LabelList } from "recharts";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
+import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 import { format } from "date-fns";
 import { ACTION_PLAN_STATUS_LABEL, ACTION_PLAN_STATUS_TONE, classificarCmv, COMPARATIVO_CAUSAS } from "@/lib/estoque";
@@ -211,7 +212,9 @@ export function ComparativoClient({
               <XAxis type="number" stroke="var(--nord-gray)" fontSize={11} />
               <YAxis type="category" dataKey="name" stroke="var(--nord-gray)" fontSize={11} width={140} />
               <Tooltip contentStyle={{ background: "var(--nord-card)", border: "1px solid var(--nord-border)", borderRadius: 8, fontSize: 12 }} formatter={(v) => formatCurrency(Number(v))} />
-              <Bar dataKey="value" fill="#ef4444" radius={[0, 6, 6, 0]} />
+              <Bar dataKey="value" fill="#ef4444" radius={[0, 6, 6, 0]}>
+                <LabelList dataKey="value" content={makeBarValueLabel(formatCurrency)} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </Section>
