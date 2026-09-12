@@ -34,7 +34,6 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { logoutAction } from "@/app/actions/logout";
 import { StoreSwitcher } from "./store-switcher";
-import { NotificationBell } from "./notification-bell";
 import { useMobileSidebar } from "./mobile-sidebar-context";
 import type { CategoryDTO, SubcategoryDTO } from "./types";
 
@@ -226,7 +225,6 @@ export function Sidebar({
           </div>
         )}
         <div className="flex items-center gap-1">
-          {!collapsed && <NotificationBell />}
           <button
             onClick={() => setCollapsed((v) => !v)}
             className="hidden md:block text-nord-gray hover:text-white"

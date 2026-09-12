@@ -3,6 +3,7 @@
 import { Search, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMobileSidebar } from "@/components/sidebar/mobile-sidebar-context";
+import { NotificationBell } from "@/components/sidebar/notification-bell";
 import { UserMenu, type UserProfile } from "./user-menu";
 
 function nowInSaoPaulo() {
@@ -61,6 +62,7 @@ export function Topbar({
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <div className="relative hidden md:block">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nord-gray" />
           <input
