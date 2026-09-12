@@ -1,0 +1,22 @@
+name: Manter banco acordado (Neon)
+
+# Ping periódico pra evitar o autosuspend do Neon (plano Free): sem uso por
+# alguns minutos, o Neon desliga o compute do banco, e a próxima consulta
+# real do usuário paga o custo de "acordar" o banco (vários segundos). O
+# Vercel Cron do plano Hobby só roda 1x por dia, então usamos o cron do
+# GitHub Actions aqui, que aceita esse intervalo curto.
+on:
+  schedule:
+    - cron: "*/4 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a rota de keep-alive
+        run: |
+          curl -sS -o /dev/null -w "status=%{http_code}\n" \
+            --max-time 20 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.portalnord.com.br/api/cron/keep-alive"
