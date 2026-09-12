@@ -1,13 +1,19 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ChamadosClient } from "./chamados-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
 export default async function ChamadosPage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "manutencao", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { Section, StatCard, Badge } from "@/components/ui/stat-card";
@@ -13,6 +14,9 @@ export default async function PainelGestorPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canManageUsers(session.user.role)) redirect("/portal/universidade");
+  if (!(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
 
   const now = new Date();
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { PlayerClient } from "./player-client";
@@ -8,6 +9,9 @@ export default async function CoursePlayerPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const session = await auth();
   if (!session?.user) redirect("/login");
+  if (!(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
 
   const course = await prisma.trainingCourse.findUnique({
     where: { id },

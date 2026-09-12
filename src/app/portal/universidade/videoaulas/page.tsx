@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
@@ -10,6 +11,9 @@ import { ENROLLMENT_STATUS_OPTIONS } from "@/lib/university";
 export default async function VideoaulasPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  if (!(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
 
   const enrollments = await prisma.trainingEnrollment.findMany({
     where: { userId: session.user.id },

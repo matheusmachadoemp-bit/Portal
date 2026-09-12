@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { Badge, ProgressBar } from "@/components/ui/stat-card";
@@ -9,6 +10,9 @@ import { canManageUsers } from "@/lib/permissions";
 export default async function ColaboradoresPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  if (!(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
 
   const isAdmin = canManageUsers(session.user.role);
 

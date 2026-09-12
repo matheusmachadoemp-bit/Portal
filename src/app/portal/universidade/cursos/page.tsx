@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { CoursesClient } from "./courses-client";
 import { canManageUsers } from "@/lib/permissions";
@@ -7,6 +9,9 @@ import { getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function CursosPage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
   const ctx = await getActiveEmpresaContext();
 
   const [courses, myEnrollments, empresas] = await Promise.all([

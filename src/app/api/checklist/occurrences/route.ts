@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { generateChecklistOccurrences, processChecklistEscalations, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { spDateKey, spStartOfDay } from "@/lib/checklist";
+import { hasModulePermission } from "@/lib/authz";
 
 const OCCURRENCE_INCLUDE = {
   template: {
@@ -22,6 +23,9 @@ const OCCURRENCE_INCLUDE = {
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canView", "checklist"))) {
+    return NextResponse.json({ error: "Seu perfil de permissão não permite ver o Checklist." }, { status: 403 });
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

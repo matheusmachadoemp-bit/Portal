@@ -1,10 +1,18 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { DashboardClient } from "./dashboard/dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { startOfWeek, endOfWeek } from "date-fns";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 export default async function MarketingPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "marketing", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();
