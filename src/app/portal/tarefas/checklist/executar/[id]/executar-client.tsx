@@ -84,13 +84,20 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
 
   async function saveResponse(itemTemplateId: string, patch: Record<string, unknown>) {
     setSaving(itemTemplateId);
+    setError(null);
     try {
-      await fetch(`/api/checklist/occurrences/${occurrence.id}/responses`, {
+      const res = await fetch(`/api/checklist/occurrences/${occurrence.id}/responses`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemTemplateId, ...patch }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Não foi possível salvar a resposta.");
+      }
       await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a resposta.");
     } finally {
       setSaving(null);
     }
@@ -120,11 +127,15 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
 
   async function uploadPhoto(file: File, itemResponseId: string | null) {
     const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
-    await fetch(`/api/checklist/occurrences/${occurrence.id}/photos`, {
+    const res = await fetch(`/api/checklist/occurrences/${occurrence.id}/photos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fileUrl: blob.url, fileName: file.name, mimeType: file.type, itemResponseId }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Não foi possível enviar a foto.");
+    }
     await refresh();
   }
 
