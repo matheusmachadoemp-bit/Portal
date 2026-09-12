@@ -17,6 +17,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, count.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
+  if (!(await hasModulePermission(session.user.id, "estoque", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver o Estoque." },
+      { status: 403 }
+    );
+  }
   return NextResponse.json({ count });
 }
 

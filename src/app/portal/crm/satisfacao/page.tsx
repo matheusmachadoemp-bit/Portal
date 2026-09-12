@@ -4,6 +4,9 @@ import { SatisfacaoClient } from "./satisfacao-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { startOfMonth, subMonths, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 function npsScore(promotores: number, neutros: number, detratores: number) {
   const total = promotores + neutros + detratores;
@@ -12,6 +15,11 @@ function npsScore(promotores: number, neutros: number, detratores: number) {
 }
 
 export default async function SatisfacaoPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "crm", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const isGrupo = ctx?.mode === "grupo";

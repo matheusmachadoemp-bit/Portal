@@ -8,11 +8,19 @@ import { cmvPercent, productTotalCost, PRODUCT_CATEGORY_LABEL } from "@/lib/fich
 import { cmvRealValor, cmvTeoricoPercentCatalogo, valorComprasNoPeriodo, valorEstoqueEm } from "@/lib/cmv";
 import { CmvCharts } from "./charts";
 import { startOfDay, subDays } from "date-fns";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 const DIAS_SERIE = 14;
 const DIVERGENCIA_ALERTA_PP = 3;
 
 export default async function CmvPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "cmv", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();

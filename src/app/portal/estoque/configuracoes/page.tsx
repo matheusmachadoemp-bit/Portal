@@ -3,9 +3,15 @@ import { PageContainer } from "@/components/page-container";
 import { ConfiguracoesEstoqueClient } from "./configuracoes-client";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, getUserEmpresas } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function ConfiguracoesEstoquePage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
 
   // Só as lojas que o usuário logado pode acessar (`getUserEmpresas` já

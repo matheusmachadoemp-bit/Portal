@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { MetasClient } from "./metas-client";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 const SUB_MAP: Record<string, { category: string; label: string }> = {
   gerencia: { category: "GERENCIA", label: "Metas da Gerência" },
@@ -14,6 +16,11 @@ const SUB_MAP: Record<string, { category: string; label: string }> = {
 };
 
 export default async function MetasSubPage({ params }: { params: Promise<{ sub: string }> }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "metas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const { sub } = await params;
   const info = SUB_MAP[sub];
   if (!info) notFound();

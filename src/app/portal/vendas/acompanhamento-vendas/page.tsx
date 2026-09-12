@@ -4,8 +4,16 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeAcompanhamento } from "@/lib/acompanhamento-analytics";
 import { resolvePeriod } from "@/lib/periods";
 import { format } from "date-fns";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function AcompanhamentoVendasPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "vendas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

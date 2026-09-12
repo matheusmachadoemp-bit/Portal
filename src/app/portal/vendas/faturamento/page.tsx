@@ -4,8 +4,16 @@ import { FaturamentoClient } from "./faturamento-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { buildHalfHourBuckets, computeFaturamentoSummary } from "@/lib/faturamento-analytics";
 import { resolveRollingPeriod } from "@/lib/periods";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function FaturamentoPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "vendas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 

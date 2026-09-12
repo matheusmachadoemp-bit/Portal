@@ -5,9 +5,13 @@ import { NovoPedidoClient } from "./novo-pedido-client";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { hasModulePermission } from "@/lib/authz";
 
 export default async function NovoPedidoRecebimentoPage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
+    redirect("/portal/inicio");
+  }
   if (!RECEBIMENTO_MANAGE_ROLES.includes(session?.user?.role ?? "")) redirect("/portal/estoque/recebimento");
 
   const empresa = await requireActiveSingleEmpresa();

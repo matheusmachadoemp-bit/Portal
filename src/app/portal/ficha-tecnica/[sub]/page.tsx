@@ -1,13 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { StatCard } from "@/components/ui/stat-card";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ProdutosClient } from "./produtos-client";
 import { InsumosClient } from "./insumos-client";
 import { QualidadePanel } from "./qualidade-panel";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { productTotalCost, cmvPercent } from "@/lib/ficha";
 import { formatPercent } from "@/lib/calc";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 const SUB_MAP: Record<string, { category: string; label: string }> = {
   "pizzas-salgadas": { category: "PIZZA_SALGADA", label: "Pizzas Salgadas" },
@@ -22,6 +24,11 @@ const SUB_MAP: Record<string, { category: string; label: string }> = {
 };
 
 export default async function FichaTecnicaSubPage({ params }: { params: Promise<{ sub: string }> }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "ficha-tecnica", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const { sub } = await params;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

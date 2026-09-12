@@ -4,8 +4,16 @@ import { SegmentosClient } from "./segmentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { loadClientesCompletos } from "@/lib/crm-data";
 import { computeClienteMetrics, computeAutoSegments, matchesCriteria, type SegmentCriteria } from "@/lib/crm";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function SegmentosPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "crm", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const isGrupo = ctx?.mode === "grupo";

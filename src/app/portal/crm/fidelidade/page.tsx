@@ -3,8 +3,16 @@ import { PageContainer } from "@/components/page-container";
 import { FidelidadeClient } from "./fidelidade-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeClienteMetrics } from "@/lib/crm";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
 
 export default async function FidelidadePage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "crm", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
