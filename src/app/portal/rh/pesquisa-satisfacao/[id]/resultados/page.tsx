@@ -1,11 +1,18 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { SATISFACTION_STATUS_LABEL } from "@/lib/satisfaction";
 import { ResultadosClient } from "./resultados-client";
 
 export default async function ResultadosPesquisaPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const { id } = await params;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

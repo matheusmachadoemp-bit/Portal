@@ -1,10 +1,18 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { ColaboradoresClient } from "./colaboradores-client";
 import { startOfMonth } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function ColaboradoresPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const now = new Date();
   const monthStart = startOfMonth(now);
   const ctx = await getActiveEmpresaContext();

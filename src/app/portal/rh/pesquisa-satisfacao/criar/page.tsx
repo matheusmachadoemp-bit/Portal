@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL } from "@/lib/goals";
@@ -14,6 +17,11 @@ const DETAIL_INCLUDE = {
 };
 
 export default async function CriarPesquisaPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const { id } = await searchParams;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

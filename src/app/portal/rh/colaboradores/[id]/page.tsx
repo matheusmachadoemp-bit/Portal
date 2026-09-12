@@ -1,10 +1,17 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { EmployeeProfileClient } from "./employee-profile-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 export default async function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const { id } = await params;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

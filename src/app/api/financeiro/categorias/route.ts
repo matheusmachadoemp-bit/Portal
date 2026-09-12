@@ -9,6 +9,12 @@ import { hasModulePermission } from "@/lib/authz";
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver o Financeiro." },
+      { status: 403 }
+    );
+  }
   const categories = await getFinancialCategories();
   return NextResponse.json({ categories, dreOptions: allDreCategories() });
 }
