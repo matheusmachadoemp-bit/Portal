@@ -10,15 +10,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const task = await prisma.task.findUnique({ where: { id }, include: { checklist: true } });
+  const task = await prisma.task.findUnique({ where: { id }, include: { checklist: true, assignees: true } });
   if (!task) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, task.empresaId))) {
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
-  // Transição de status de uma tarefa já existente (envia comprovação e avança o status),
-  // nunca cria uma Task nova — mesmo critério de canEdit já usado em estoque/contagens/[id]
-  // e estoque/transferencias/[id].
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+  // Comprovar é o responsável executando a PRÓPRIA tarefa atribuída — diferente de "editar a
+  // tarefa" (uma ação de quem administra o módulo Tarefas). Por isso libera também para quem
+  // está em `assignees`, mesmo sem canEdit no módulo inteiro (um perfil "só executa" — ex.:
+  // Chef, Garçom — precisa continuar comprovando as próprias tarefas).
+  const isAssignee = task.assignees.some((a) => a.userId === session.user.id);
+  if (!isAssignee && !(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite comprovar tarefas." },
       { status: 403 }

@@ -103,10 +103,17 @@ export function TaskDetailPanel({
 
   async function handleIniciar() {
     if (!task) return;
+    setError(null);
     setBusy(true);
     try {
-      await fetch(`/api/tarefas/${task.id}/iniciar`, { method: "POST" });
+      const res = await fetch(`/api/tarefas/${task.id}/iniciar`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Não foi possível iniciar a tarefa.");
+      }
       await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível iniciar a tarefa.");
     } finally {
       setBusy(false);
     }
@@ -114,11 +121,17 @@ export function TaskDetailPanel({
 
   async function toggleChecklistItem(itemId: string, done: boolean) {
     if (!task) return;
-    await fetch(`/api/tarefas/${task.id}/checklist/${itemId}`, {
+    setError(null);
+    const res = await fetch(`/api/tarefas/${task.id}/checklist/${itemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Não foi possível atualizar o item do checklist.");
+      return;
+    }
     await reload();
   }
 
