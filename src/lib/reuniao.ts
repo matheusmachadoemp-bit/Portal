@@ -34,6 +34,14 @@ export function previousPeriodo(periodo: string) {
   return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+export function nextPeriodo(periodo: string) {
+  const [yearStr, monthStr] = periodo.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const next = new Date(Date.UTC(year, month, 1));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 /**
  * Resolve quais até 3 períodos entram no comparativo do PDF/gráfico.
  * Se o usuário escolheu meses manualmente (ex.: Jan/2025 x Jan/2026, ou
