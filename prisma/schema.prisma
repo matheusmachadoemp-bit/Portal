@@ -152,6 +152,14 @@ model User {
   productionOrdersAjustadas        ProductionOrder[]          @relation("ProductionOrderAjustePor")
   productionOrderHistoryEntries    ProductionOrderHistory[]
   pushSubscriptions                PushSubscription[]
+  fechamentoCargosResponsavel      FechamentoCargo[]          @relation("FechamentoCargoResponsavel")
+  fechamentoCargosSubstituto       FechamentoCargo[]          @relation("FechamentoCargoSubstituto")
+  fechamentoCargosSuperior         FechamentoCargo[]          @relation("FechamentoCargoSuperior")
+  fechamentoCargosCriados          FechamentoCargo[]          @relation("FechamentoCargoCreatedBy")
+  fechamentoPerguntasCriadas       FechamentoPergunta[]
+  fechamentoSubmissoesEnviadas     FechamentoSubmissao[]      @relation("FechamentoSubmissaoEnviadoPor")
+  fechamentoRespostasColaborador   FechamentoResposta[]       @relation("FechamentoRespostaColaborador")
+  fechamentoEscalationLogs         FechamentoEscalationLog[]
 }
 
 model UserPermission {
@@ -181,15 +189,15 @@ model PermissionProfile {
 }
 
 model ModulePermission {
-  id        String            @id @default(cuid())
-  profileId String
-  profile   PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  moduleKey String
-  canView   Boolean           @default(false)
-  canExecute Boolean          @default(false)
-  canCreate Boolean           @default(false)
-  canEdit   Boolean           @default(false)
-  canDelete Boolean           @default(false)
+  id         String            @id @default(cuid())
+  profileId  String
+  profile    PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  moduleKey  String
+  canView    Boolean           @default(false)
+  canExecute Boolean           @default(false)
+  canCreate  Boolean           @default(false)
+  canEdit    Boolean           @default(false)
+  canDelete  Boolean           @default(false)
 
   @@unique([profileId, moduleKey])
 }
@@ -304,6 +312,10 @@ model Empresa {
   productionForecasts       ProductionForecast[]
   productionWeekdayWeights  ProductionWeekdayWeight[]
   productionSettings        ProductionSettings?
+  fechamentoCargos          FechamentoCargo[]
+  fechamentoPerguntas       FechamentoPergunta[]
+  fechamentoCategorias      FechamentoCategoria[]
+  fechamentoSubmissoes      FechamentoSubmissao[]
 }
 
 model UserEmpresaAccess {
@@ -2069,9 +2081,10 @@ model Product {
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
-  ingredients       ProductIngredient[]
-  saleItems         SaleItem[]
-  importedSaleItems ImportedSaleItem[]
+  ingredients         ProductIngredient[]
+  saleItems           SaleItem[]
+  importedSaleItems   ImportedSaleItem[]
+  fechamentoRespostas FechamentoResposta[]
 }
 
 model ProductIngredient {
@@ -4118,4 +4131,323 @@ model ProductionSettings {
   semanasParaMedia    Int      @default(4)
   toleranciaAlertaPct Float    @default(10)
   updatedAt           DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// FECHAMENTO DO DIA — Diário Operacional dos líderes (Gerente / Chef de
+// Salão / Chef de Cozinha). Baseado em PROPOSTA-FECHAMENTO-DIA.md (worktree
+// fechamento-dia-plano), com os ajustes confirmados pelo usuário:
+// (1) catálogo por loja — `empresaId` em Cargo/Pergunta/Categoria, cada loja
+//     do Grupo Nord configura o próprio catálogo, sem compartilhar com as
+//     outras (mesmo padrão multi-loja de `ChecklistTemplate`);
+// (2) todo colaborador tem login (`User`) — nenhum fluxo desta fase
+//     depende de um cenário "colaborador sem User";
+// (3) plano de ação do Fechamento é um model PRÓPRIO (`FechamentoPlanoAcao`,
+//     fase futura), nunca reaproveita o `ActionPlan` do Estoque;
+// (4) autorização usa `hasModulePermission(userId, "fechamento-dia", ação,
+//     cargo.key)` em cima dos perfis de permissão JÁ EXISTENTES — nenhum
+//     perfil novo foi criado para "Chef de Cozinha"/"Chef de Salão"; quem de
+//     fato ocupa cada cargo em cada loja é `FechamentoCargo.responsavelId`
+//     (ajustado depois, fora desta fase), não o perfil de permissão.
+//
+// FASE 1 (esta): catálogo (Cargo/Pergunta/PerguntaCargo/PerguntaOpcao/
+// Categoria) + submissão/resposta do dia + o esqueleto de escalonamento
+// (tabela, sem motor de disparo). AINDA NÃO EXISTEM (chegam em fases
+// futuras, cada uma sua própria migration): `FechamentoOcorrencia` (+ as
+// FKs de transformação em Task/Chamado/Occurrence-RH/Purchase/
+// CustomerNote), `FechamentoPlanoAcao` (+ join com Ocorrência) e
+// `FechamentoDestaque`. Por isso `FechamentoPergunta.abreOcorrencia` /
+// `.categoriaSugerida` / `.gravidadeSugerida` já existem no catálogo (são
+// metadado de configuração, não dependem de Ocorrência existir), mas
+// NENHUMA rota desta fase gera Ocorrência a partir de uma resposta — isso
+// nasce junto com o model, na fase "transformar em ação". Pelo mesmo
+// motivo, `FechamentoEscalationLog` já nasce agora (evita reabrir migration
+// na fase de cron/notificação, mesmo racional do resto do Portal), mas o
+// motor que a preenche (equivalente a `processChecklistEscalations`) fica
+// para essa fase futura.
+//
+// Ajuste em cima do rascunho original da proposta: `FechamentoCargo.
+// responsavel` é `User?` (opcional) — no rascunho estava com
+// `responsavelId String?` mas `responsavel User` sem "?", o que o Prisma
+// rejeita (campo de relação obrigatório não pode nascer de FK opcional).
+// A correção também é necessária na prática: o seed cria os 3 cargos por
+// loja sem saber ainda quem é o responsável de cada um.
+// ---------------------------------------------------------------------------
+
+enum FechamentoTipoResposta {
+  SIM_NAO
+  TEXTO
+  MULTIPLA_ESCOLHA
+  NOTA_1_5
+  NUMERO
+  PRODUTO // referencia Product (Ficha Técnica) — "produto que mais apresentou problema"
+  COLABORADOR // referencia User — todo colaborador tem login (decisão do usuário)
+  FOTO
+  ANEXO
+}
+
+/// Metadado de sugestão em `FechamentoPergunta.gravidadeSugerida` — a
+/// Ocorrência (que também terá um campo `gravidade` de verdade, ajustável
+/// pelo usuário) nasce numa fase futura.
+enum FechamentoGravidade {
+  INFORMATIVO
+  ATENCAO
+  IMPORTANTE
+  CRITICO
+}
+
+enum FechamentoSubmissaoStatus {
+  PENDENTE
+  ENVIADO
+  ATRASADO
+}
+
+/// Mesmos 4 primeiros níveis de `ChecklistEscalationType` (sem
+/// "NAO_REALIZADO": diferente do Checklist, o Fechamento não muda sozinho
+/// para um estado terminal só por atraso — fica ATRASADO até alguém
+/// enviar).
+enum FechamentoEscalationType {
+  AVISO_ANTES
+  NO_LIMITE
+  ATRASO_RESPONSAVEL
+  ALERTA_CRITICO
+}
+
+/// Catálogo de cargos responsáveis pelo Fechamento — Gerente/Chef de
+/// Salão/Chef de Cozinha no seed inicial, mas cadastrável por loja (cargo
+/// novo = linha nova, sem deploy — CRUD via tela de Configurações é fase
+/// futura). Escopado por empresa: cada loja do Grupo Nord tem seus
+/// próprios cargos/horários/responsáveis, mesmo padrão multi-loja de
+/// `ChecklistTemplate`.
+model FechamentoCargo {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  key       String // "gerencia" | "salao" | "cozinha" | ... (mesmo vocabulário já usado em Metas)
+  nome      String // "Gerente", "Chef de Salão", "Chef de Cozinha"
+  icon      String  @default("UserCog")
+  ordem     Int     @default(0)
+  ativo     Boolean @default(true)
+
+  // Responsável / substituto / escalonamento — mesmo padrão de
+  // ChecklistTemplate. As 3 pessoas são opcionais: o cargo pode existir
+  // antes de alguém ser designado (a atribuição real acontece na tela de
+  // Configurações/Permissões, fora desta fase).
+  responsavelId           String?
+  responsavel             User?   @relation("FechamentoCargoResponsavel", fields: [responsavelId], references: [id])
+  substitutoId            String?
+  substituto              User?   @relation("FechamentoCargoSubstituto", fields: [substitutoId], references: [id])
+  superiorEscalonamentoId String?
+  superiorEscalonamento   User?   @relation("FechamentoCargoSuperior", fields: [superiorEscalonamentoId], references: [id])
+
+  // Prazo — mesmo padrão de ChecklistTemplate (horário + dias da semana).
+  horarioLiberacao String // "HH:mm" America/Sao_Paulo
+  horarioLimite    String // "HH:mm" America/Sao_Paulo
+  segunda          Boolean @default(true)
+  terca            Boolean @default(true)
+  quarta           Boolean @default(true)
+  quinta           Boolean @default(true)
+  sexta            Boolean @default(true)
+  sabado           Boolean @default(true)
+  domingo          Boolean @default(true)
+
+  // Cobrança automática — mesmos nomes/semântica de ChecklistTemplate (o
+  // motor que efetivamente dispara é implementado na fase de integrações).
+  avisoAntesMinutos             Int @default(30)
+  avisoAtrasoResponsavelMinutos Int @default(10)
+  alertaCriticoMinutos          Int @default(30)
+
+  createdById String
+  createdBy   User     @relation("FechamentoCargoCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  perguntas  FechamentoPerguntaCargo[]
+  submissoes FechamentoSubmissao[]
+
+  @@unique([empresaId, key])
+  @@index([empresaId])
+}
+
+/// Catálogo de perguntas (CRUD via tela de Configurações é fase futura —
+/// nesta fase só o seed popula). Uma pergunta pode estar em mais de um
+/// cargo ao mesmo tempo (join `FechamentoPerguntaCargo`) — ex.: "Anexar
+/// foto (opcional)" é compartilhada pelos 3 formulários da mesma loja em
+/// vez de existir 3 vezes com o mesmo texto.
+model FechamentoPergunta {
+  id          String                 @id @default(cuid())
+  empresaId   String
+  empresa     Empresa                @relation(fields: [empresaId], references: [id])
+  texto       String
+  orientacao  String?
+  tipo        FechamentoTipoResposta @default(TEXTO)
+  obrigatoria Boolean                @default(true)
+  ordem       Int                    @default(0)
+  /// Pergunta removida do formulário que já tem resposta é desativada,
+  /// nunca excluída — mesma lição já aplicada em Checklist/Pesquisa de
+  /// Satisfação.
+  ativa       Boolean                @default(true)
+
+  /// Metadado para a fase de Ocorrência (futura): quando true, uma
+  /// resposta "afirmativa" (SIM, ou a opção/nota configurada como gatilho,
+  /// dependendo do tipo) deveria abrir o mini-formulário fixo de ocorrência
+  /// e gerar uma `FechamentoOcorrencia`. Nesta fase o campo só é
+  /// armazenado como configuração — nenhuma rota gera Ocorrência (o model
+  /// ainda não existe).
+  abreOcorrencia Boolean @default(false)
+
+  /// Conditional genérico: mostra esta pergunta só quando a pergunta "pai"
+  /// foi respondida com determinado valor — é o mecanismo usado nesta fase
+  /// para os "se SIM, abre campo" dos 3 formulários (perguntas filhas de
+  /// texto/produto/colaborador, condicionadas a uma pergunta SIM_NAO ou
+  /// MULTIPLA_ESCOLHA "pai"). Convenção de `valorPaiQueExibe`: "true"/
+  /// "false" (espelha `FechamentoResposta.valorBooleano`) quando o pai é
+  /// SIM_NAO; o `texto` da opção escolhida quando o pai é MULTIPLA_ESCOLHA.
+  perguntaPaiId    String?
+  perguntaPai      FechamentoPergunta?  @relation("FechamentoPerguntaCondicional", fields: [perguntaPaiId], references: [id])
+  valorPaiQueExibe String?
+  condicionais     FechamentoPergunta[] @relation("FechamentoPerguntaCondicional")
+
+  /// Pré-preenchimento sugerido do mini-formulário de ocorrência (fase
+  /// futura) quando `abreOcorrencia = true` — o líder ainda pode ajustar
+  /// antes de salvar.
+  categoriaSugeridaId String?
+  categoriaSugerida   FechamentoCategoria? @relation(fields: [categoriaSugeridaId], references: [id])
+  gravidadeSugerida   FechamentoGravidade?
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cargos    FechamentoPerguntaCargo[]
+  opcoes    FechamentoPerguntaOpcao[]
+  respostas FechamentoResposta[]
+
+  // Sem `@@unique([empresaId, texto])` de propósito: uma primeira versão deste schema tinha
+  // esse índice (pra permitir upsert idempotente por texto no seed), mas o texto literal do
+  // catálogo pede perguntas filhas com o MESMO texto ("Descrição") condicionadas a pais
+  // diferentes dentro da mesma empresa — `texto` sozinho não identifica mais uma pergunta de
+  // forma única. A idempotência do seed agora é feita a mão (busca por empresa+texto+pai antes
+  // de criar, em vez de depender de um índice único do banco) — ver prisma/seed.ts.
+  @@index([empresaId])
+  @@index([perguntaPaiId])
+}
+
+model FechamentoPerguntaCargo {
+  perguntaId String
+  pergunta   FechamentoPergunta @relation(fields: [perguntaId], references: [id], onDelete: Cascade)
+  cargoId    String
+  cargo      FechamentoCargo    @relation(fields: [cargoId], references: [id], onDelete: Cascade)
+
+  @@id([perguntaId, cargoId])
+}
+
+model FechamentoPerguntaOpcao {
+  id         String             @id @default(cuid())
+  perguntaId String
+  pergunta   FechamentoPergunta @relation(fields: [perguntaId], references: [id], onDelete: Cascade)
+  texto      String
+  ordem      Int                @default(0)
+
+  respostas FechamentoResposta[]
+
+  @@unique([perguntaId, texto])
+}
+
+/// Categorias de problema (seed inicial: Equipe/Cliente/Produto/
+/// Equipamento/Delivery/Salão/Cozinha/Estoque/Outro) — tabela editável, não
+/// enum: é dado de negócio puro (sem widget associado), mesma regra que o
+/// CLAUDE.md já aplica a campos assim (nunca deixar cair em "Outro" por
+/// falta de opção cadastrada).
+model FechamentoCategoria {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  nome      String
+  icon      String  @default("AlertTriangle")
+  ordem     Int     @default(0)
+  ativa     Boolean @default(true)
+
+  perguntasQueSugerem FechamentoPergunta[]
+
+  @@unique([empresaId, nome])
+}
+
+/// Uma submissão = o fechamento de UM cargo em UM dia. Espelha
+/// `ChecklistOccurrence` (execução concreta de um "template" numa data
+/// específica, gerada de forma idempotente).
+model FechamentoSubmissao {
+  id        String          @id @default(cuid())
+  empresaId String
+  empresa   Empresa         @relation(fields: [empresaId], references: [id])
+  cargoId   String
+  cargo     FechamentoCargo @relation(fields: [cargoId], references: [id])
+  data      DateTime // dia do fechamento (00:00 America/Sao_Paulo)
+  releaseAt DateTime
+  dueAt     DateTime
+
+  /// Cache do status — igual `ChecklistOccurrence.status`: o status "ao
+  /// vivo" é recomputado a cada leitura (`computeFechamentoStatus`, em
+  /// `src/lib/fechamento.ts`); esta coluna só persiste o valor nas
+  /// transições reais, não é a fonte da verdade sozinha.
+  status FechamentoSubmissaoStatus @default(PENDENTE)
+
+  notaGeral    Int? // 1-5, nota geral do dia (não é resposta de uma pergunta do catálogo)
+  enviadoPorId String?
+  enviadoPor   User?     @relation("FechamentoSubmissaoEnviadoPor", fields: [enviadoPorId], references: [id])
+  enviadoEm    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  respostas      FechamentoResposta[]
+  escalationLogs FechamentoEscalationLog[]
+
+  @@unique([cargoId, data])
+  @@index([empresaId, data])
+}
+
+/// Idempotência do disparo de cobrança automática — cópia de
+/// `ChecklistEscalationLog`. A TABELA nasce nesta fase; o motor que a
+/// preenche (equivalente a `processChecklistEscalations`) é implementado
+/// junto com a fase de integrações/cron.
+model FechamentoEscalationLog {
+  id             String                   @id @default(cuid())
+  submissaoId    String
+  submissao      FechamentoSubmissao      @relation(fields: [submissaoId], references: [id], onDelete: Cascade)
+  tipo           FechamentoEscalationType
+  destinatarioId String
+  destinatario   User                     @relation(fields: [destinatarioId], references: [id], onDelete: Cascade)
+  notificationId String?
+  createdAt      DateTime                 @default(now())
+
+  @@unique([submissaoId, tipo, destinatarioId])
+}
+
+model FechamentoResposta {
+  id          String              @id @default(cuid())
+  submissaoId String
+  submissao   FechamentoSubmissao @relation(fields: [submissaoId], references: [id], onDelete: Cascade)
+  perguntaId  String
+  pergunta    FechamentoPergunta  @relation(fields: [perguntaId], references: [id])
+
+  valorBooleano Boolean?
+  valorTexto    String?
+  valorNumero   Float?
+  valorNota     Int?
+  opcaoId       String?
+  opcao         FechamentoPerguntaOpcao? @relation(fields: [opcaoId], references: [id])
+  produtoId     String?
+  produto       Product?                 @relation(fields: [produtoId], references: [id])
+  colaboradorId String?
+  colaborador   User?                    @relation("FechamentoRespostaColaborador", fields: [colaboradorId], references: [id])
+  /// Sempre validado contra o domínio do Blob (mesmo `isValidBlobUrl` já
+  /// usado em manutencao-server.ts), nunca uma URL arbitrária do cliente.
+  fotoUrl       String?
+  anexoUrl      String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([submissaoId, perguntaId])
 }
