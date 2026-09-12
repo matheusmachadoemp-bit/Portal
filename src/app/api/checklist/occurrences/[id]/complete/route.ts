@@ -23,10 +23,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     },
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
-  // Transição de status de uma execução já existente (marca como concluída), nunca cria uma
-  // ChecklistOccurrence nova (isso é feito por geração automática) — mesmo critério de canEdit
-  // já usado em estoque/contagens/[id] e estoque/transferencias/[id].
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+  // Concluir é "executar" o checklist até o fim, não "editar o template" — por
+  // isso exige só canExecute na subcategoria "checklist" (não canEdit no
+  // módulo "tarefas" inteiro, nem canView, que é só leitura de verdade — ver
+  // ACCESS_LEVEL_TO_MODULE_FLAGS em @/lib/permissions), pra um perfil
+  // restrito a executar (ex.: Chef, Garçom) continuar conseguindo concluir
+  // normalmente.
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canExecute", "checklist"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite concluir execuções de checklist." },
       { status: 403 }
