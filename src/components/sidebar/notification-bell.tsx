@@ -95,6 +95,7 @@ export function NotificationBell() {
     else if (n.chamadoId) router.push(`/portal/manutencao/chamados/${n.chamadoId}`);
     else if (n.purchaseId) router.push("/portal/estoque/recebimento");
     else if (n.goalCategory) router.push(`/portal/metas/${GOAL_CATEGORY_ROUTE[n.goalCategory]}`);
+    else if (n.type === "REUNIAO_GERENTE_METAS_PENDENTE") router.push("/portal/reuniao/gerente");
   }
 
   return (

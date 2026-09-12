@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { breakdownMovimentacoesNoPeriodo, cmvRealValor, valorEstoqueEm } from "@/lib/cmv";
 import { safeDiv } from "@/lib/calc";
-import { periodoRange } from "@/lib/reuniao";
+import { periodoRange, periodoLabel, nextPeriodo } from "@/lib/reuniao";
+import { spDateKey } from "@/lib/checklist";
+import { getStoreManagers } from "@/lib/manutencao-server";
+import { createNotifications } from "@/lib/notifications";
 
 /**
  * CMV real (%) e desperdício (R$) do mês, calculados a partir do Estoque
@@ -139,4 +142,70 @@ export async function computeGerenteMetrics(empresaId: string, periodo: string) 
     npsPercent: salao.npsPercent,
     cancelamentoDeliveryPercent: delivery.cancelamentoPercent,
   };
+}
+
+/**
+ * Roda diariamente (ver vercel.json), mas só faz alguma coisa no dia 25 (hora
+ * de São Paulo) — o resto do mês retorna sem checar nada. No dia 25, as metas
+ * do mês seguinte ainda não existem (só são criadas quando alguém salva o
+ * formulário "Metas e premiação" em Reunião Gerente), então usar a ausência
+ * dessa linha em GerenteMeeting é o próprio sinal de "ainda não foi
+ * definida" — sem precisar de mais uma tabela/flag só pra isso.
+ *
+ * Ex.: hoje é 25/09 → o mês seguinte é outubro (período "2026-10") → avisa
+ * Gerente e Administrador de cada loja que ainda não tem essa linha, com
+ * prazo até o dia 05/10 (dia 5 do mês seguinte).
+ */
+export async function processGerenteMetaReminders(now: Date = new Date()): Promise<{ notified: number }> {
+  const todayKey = spDateKey(now);
+  const day = Number(todayKey.slice(8, 10));
+  if (day !== 25) return { notified: 0 };
+
+  const periodoAtual = todayKey.slice(0, 7);
+  const targetPeriodo = nextPeriodo(periodoAtual);
+  const targetLabel = periodoLabel(targetPeriodo);
+  const { start: targetStart } = periodoRange(targetPeriodo);
+  const deadlineLabel = new Date(Date.UTC(targetStart.getUTCFullYear(), targetStart.getUTCMonth(), 5)).toLocaleDateString(
+    "pt-BR",
+    { day: "2-digit", month: "2-digit", timeZone: "UTC" }
+  );
+
+  const empresas = await prisma.empresa.findMany({ where: { active: true }, select: { id: true } });
+
+  let notified = 0;
+  for (const empresa of empresas) {
+    const jaDefinida = await prisma.gerenteMeeting.findUnique({
+      where: { empresaId_periodo: { empresaId: empresa.id, periodo: targetPeriodo } },
+      select: { id: true },
+    });
+    if (jaDefinida) continue;
+
+    const managerIds = await getStoreManagers(empresa.id);
+    if (managerIds.length === 0) continue;
+
+    // Evita duplicar caso o cron seja re-executado no mesmo dia (ex.: retry do Vercel).
+    const jaNotificadoHoje = await prisma.notification.findFirst({
+      where: {
+        type: "REUNIAO_GERENTE_METAS_PENDENTE",
+        userId: { in: managerIds },
+        createdAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (jaNotificadoHoje) continue;
+
+    await createNotifications(
+      managerIds.map((userId) => ({
+        userId,
+        type: "REUNIAO_GERENTE_METAS_PENDENTE",
+        title: "Defina as metas da Reunião Gerente",
+        body: `Configure as metas e premiação de ${targetLabel} até ${deadlineLabel}.`,
+        priority: "ATENCAO" as const,
+        url: "/portal/reuniao/gerente",
+      }))
+    );
+    notified += managerIds.length;
+  }
+
+  return { notified };
 }
