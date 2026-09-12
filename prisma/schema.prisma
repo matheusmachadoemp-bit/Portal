@@ -926,6 +926,11 @@ model MarketingEntry {
   createdBy           User?                @relation(fields: [createdById], references: [id])
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
+
+  // Buscado por empresaId (Tela de Início, Marketing > Tráfego pago/Redes
+  // sociais) sempre com orderBy date desc — mesmo padrão de SalesEntry, mas
+  // sem índice até agora.
+  @@index([empresaId, date])
 }
 
 // ---------------------------------------------------------------------------
@@ -1455,6 +1460,8 @@ model WaiterSaleEntry {
   createdAt   DateTime @default(now())
 
   @@index([employeeId])
+  // Metas > Venda acumulada busca por empresaId com orderBy date desc.
+  @@index([empresaId, date])
 }
 
 enum OccurrenceType {
@@ -2830,6 +2837,10 @@ model CashMovement {
   createdById   String
   createdBy     User             @relation(fields: [createdById], references: [id])
   createdAt     DateTime         @default(now())
+
+  // Financeiro > Caixa da empresa busca por empresaId com orderBy date desc
+  // (take 200) — mesmo padrão de SalesEntry, mas sem índice até agora.
+  @@index([empresaId, date])
 }
 
 model BankReconciliationImport {
@@ -3365,6 +3376,12 @@ model Notification {
   createdAt             DateTime              @default(now())
 
   @@index([userId, read])
+  // O sino de notificações (`GET /api/notificacoes`) busca as 30 mais
+  // recentes do usuário com orderBy createdAt desc a cada 60s, em toda
+  // sessão logada — o índice acima (userId, read) não cobre esse orderBy;
+  // sem isso, essa consulta faz sequential scan + sort a cada chamada,
+  // rodando o tempo todo em segundo plano para todo mundo logado.
+  @@index([userId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
