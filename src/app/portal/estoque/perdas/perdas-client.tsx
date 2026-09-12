@@ -31,6 +31,8 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
   const [losses, setLosses] = useState(initialLosses);
   const [motivoFilter, setMotivoFilter] = useState("");
   const [setorFilter, setSetorFilter] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +43,12 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
       losses.filter((l) => {
         if (motivoFilter && l.motivo !== motivoFilter) return false;
         if (setorFilter && l.setor !== setorFilter) return false;
+        const data = new Date(l.data);
+        if (from && data < new Date(from)) return false;
+        if (to && data > new Date(`${to}T23:59:59`)) return false;
         return true;
       }),
-    [losses, motivoFilter, setorFilter]
+    [losses, motivoFilter, setorFilter, from, to]
   );
 
   const valorTotal = filtered.reduce((s, l) => s + l.valorEstimado, 0);
@@ -151,6 +156,8 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
           <Toolbar
             filters={
               <>
+                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
+                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
                 <select className="input w-48" value={motivoFilter} onChange={(e) => setMotivoFilter(e.target.value)}>
                   <option value="">Todos os motivos</option>
                   {LOSS_REASONS.map((m) => (
