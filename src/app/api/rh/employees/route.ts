@@ -12,6 +12,12 @@ export async function GET() {
   if (!MANAGER_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
   }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver o RH." },
+      { status: 403 }
+    );
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

@@ -1,10 +1,18 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { FluxoCaixaClient } from "./fluxo-client";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 export default async function FluxoDeCaixaPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const since = subDays(new Date(), 180);
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

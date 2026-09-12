@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import { hasModulePermission } from "@/lib/authz";
 import { UsuariosClient } from "./usuarios-client";
 import { MODULES } from "@/lib/permissions";
 import { getMenuCategories } from "@/lib/menu-categories";
@@ -10,6 +11,18 @@ export default async function UsuariosPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
+    return (
+      <PageContainer title="Usuários">
+        <div className="nord-card p-8 text-center text-nord-gray">
+          Você não tem permissão para acessar esta área.
+        </div>
+      </PageContainer>
+    );
+  }
+  // Perfil de Permissão é uma camada ADICIONAL à checagem de cargo acima — permite que um
+  // Administrador restrinja um GESTOR específico de ver Usuários, mesmo o cargo dele
+  // normalmente permitindo (ver comentário em @/lib/authz).
+  if (!(await hasModulePermission(session.user.id, "usuarios", "canView"))) {
     return (
       <PageContainer title="Usuários">
         <div className="nord-card p-8 text-center text-nord-gray">

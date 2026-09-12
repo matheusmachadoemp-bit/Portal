@@ -1,8 +1,22 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 import { PageContainer } from "@/components/page-container";
 import { SenhasClient } from "./senhas-client";
 
+// Mesma checagem de cargo (não de perfil) usada pela API irmã
+// (`src/app/api/admin/vault/route.ts`): o Cofre de senhas é sensível demais para depender
+// só do Perfil de Permissão (módulo "administrativo", que também cobre cursos/cartilhas/logo/
+// arquivos — bem mais amplo e liberado por padrão para praticamente todo mundo). Fica restrito
+// a ADMINISTRADOR/GESTOR por cargo, igual a API.
+const VAULT_ROLES = ["ADMINISTRADOR", "GESTOR"];
+
 export default async function SenhasPage() {
+  const session = await auth();
+  if (!session?.user || !VAULT_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+
   const entries = await prisma.vaultEntry.findMany({
     orderBy: { systemName: "asc" },
     include: { createdBy: { select: { name: true } } },

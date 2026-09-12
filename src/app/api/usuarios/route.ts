@@ -14,6 +14,12 @@ async function ensureAdmin() {
 export async function GET() {
   const user = await ensureAdmin();
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await hasModulePermission(user.id, "usuarios", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver Usuários." },
+      { status: 403 }
+    );
+  }
 
   const users = await prisma.user.findMany({
     orderBy: { name: "asc" },

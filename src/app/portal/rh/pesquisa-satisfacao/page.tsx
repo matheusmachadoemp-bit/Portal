@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeENPS } from "@/lib/satisfaction";
 import { PesquisaSatisfacaoClient } from "./pesquisa-satisfacao-client";
@@ -9,6 +11,9 @@ const CAN_CREATE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
 export default async function PesquisaSatisfacaoPage() {
   const [session, ctx] = await Promise.all([auth(), getActiveEmpresaContext()]);
+  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    redirect("/portal/inicio");
+  }
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const [surveys, empresas, notasEnps] = await Promise.all([
