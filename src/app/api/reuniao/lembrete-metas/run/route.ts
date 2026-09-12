@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { processGerenteMetaReminders } from "@/lib/reuniao-server";
+import { processReuniaoMetaReminders } from "@/lib/reuniao-server";
 
 /** Disparo agendado (Vercel Cron, ver vercel.json), autenticado via CRON_SECRET. */
 export async function GET(req: Request) {
@@ -8,7 +8,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await processGerenteMetaReminders();
+  const result = await processReuniaoMetaReminders();
 
   return NextResponse.json({ ok: true, ...result });
 }

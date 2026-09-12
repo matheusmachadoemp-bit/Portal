@@ -42,6 +42,24 @@ contra um arquivo real antes de publicar e conferir quantas linhas caem em
 categorias genéricas — se for uma fatia significativa, investigar e adicionar
 a categoria certa em vez de aceitar "Outros" como resposta final.
 
+# Reunião: lembrete de metas em toda subcategoria
+
+Toda subcategoria de "Reunião" que tenha metas/premiação mensais (uma linha
+por empresa/período, criada só quando o formulário "Metas e premiação" é
+salvo — ex.: `GerenteMeeting`, `SalaoMeeting`, `DeliveryMeeting`,
+`KitchenMeeting` no `prisma/schema.prisma`) precisa do mesmo lembrete
+automático: todo dia 25 (horário de Brasília), se as metas do mês seguinte
+ainda não tiverem sido definidas para aquela subcategoria, notificar o
+Gerente e o Administrador da loja, com prazo até o dia 05 do mês seguinte.
+
+Isso já está implementado de forma central em `processReuniaoMetaReminders`
+(`src/lib/reuniao-server.ts`), disparado pelo cron
+`/api/reuniao/lembrete-metas/run` (ver `vercel.json`). Ao criar uma nova
+subcategoria de Reunião com metas/premiação (ex.: quando "Reunião
+Liderança" sair de "Em construção" e ganhar seu próprio modelo), adicionar
+uma entrada em `REUNIAO_META_SUBS` nesse arquivo — não criar um cron nem
+uma rota de notificação separada para ela.
+
 # Subcategorias
 
 Sempre que o usuário pedir uma "subcategoria" nova, ela deve ser criada no

@@ -17,7 +17,7 @@
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/reuniao/gerente/lembrete-metas/run",
+      "path": "/api/reuniao/lembrete-metas/run",
       "schedule": "0 11 * * *"
     },
     {
