@@ -1,10 +1,18 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { levelForXp } from "@/lib/university";
 import { Trophy, Medal } from "lucide-react";
 
 export default async function RankingPage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const [xpByUser, certificatesByUser, hoursByUser] = await Promise.all([
     prisma.trainingXpEvent.groupBy({ by: ["userId"], _sum: { amount: true } }),
     prisma.trainingCertificate.groupBy({ by: ["userId"], _count: { id: true } }),

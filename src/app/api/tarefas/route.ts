@@ -26,6 +26,9 @@ function parsePositiveInt(value: string | null, fallback: number, max?: number):
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canView"))) {
+    return NextResponse.json({ error: "Seu perfil de permissão não permite ver as Tarefas." }, { status: 403 });
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

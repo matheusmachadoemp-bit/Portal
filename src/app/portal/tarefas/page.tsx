@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { TarefasClient } from "./tarefas-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -16,6 +18,10 @@ const TASK_INCLUDE = {
 
 export default async function TarefasPage() {
   const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "tarefas", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
@@ -50,8 +56,8 @@ export default async function TarefasPage() {
         initialTasks={serialized}
         users={users}
         empresas={empresas.map((e) => ({ id: e.id, name: e.name, color: e.color }))}
-        currentUserId={session!.user.id}
-        currentUserRole={session!.user.role}
+        currentUserId={session.user.id}
+        currentUserRole={session.user.role}
       />
     </PageContainer>
   );

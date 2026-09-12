@@ -1,9 +1,11 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ExecutarClient } from "./executar-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { refreshOccurrenceStatuses } from "@/lib/checklist-server";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 const DETAIL_INCLUDE = {
   template: { include: { itens: { where: { ativo: true }, orderBy: { ordem: "asc" as const } } } },
@@ -14,6 +16,11 @@ const DETAIL_INCLUDE = {
 };
 
 export default async function ExecutarChecklistPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "tarefas", "canView", "checklist"))) {
+    redirect("/portal/inicio");
+  }
+
   const { id } = await params;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

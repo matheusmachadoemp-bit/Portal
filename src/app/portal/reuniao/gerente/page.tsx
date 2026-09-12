@@ -1,11 +1,19 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { GerenteClient } from "./gerente-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
 import { computeGerenteMetrics } from "@/lib/reuniao-server";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 export default async function ReuniaoGerentePage() {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "reuniao", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const periodo = currentPeriodo();

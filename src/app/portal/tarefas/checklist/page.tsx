@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ChecklistClient } from "./checklist-client";
@@ -23,6 +24,16 @@ const OCCURRENCE_INCLUDE = {
 
 export default async function ChecklistPage() {
   const session = await auth();
+  // Bloqueio real de acesso à tela (e não só ao botão "Novo checklist" abaixo):
+  // antes, esta página buscava e exibia todas as ocorrências/templates de
+  // checklist da loja pra qualquer usuário logado, sem checar canView nenhum —
+  // o único check de permissão existente aqui (canCreate, alguns parágrafos
+  // abaixo) só decidia mostrar ou esconder o botão "Novo checklist", nunca
+  // impediu a busca/exibição do conteúdo em si.
+  if (!session?.user || !(await hasModulePermission(session.user.id, "tarefas", "canView", "checklist"))) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const dateKey = spDateKey();
@@ -35,9 +46,7 @@ export default async function ChecklistPage() {
   // permissão — a API já bloqueia a criação (ver POST /api/checklist/templates),
   // mas o botão continuava aparecendo pra quem nunca conseguiria usá-lo.
   const canCreate =
-    ctx?.mode === "single" &&
-    !!session?.user?.id &&
-    (await hasModulePermission(session.user.id, "tarefas", "canCreate", "checklist"));
+    ctx?.mode === "single" && (await hasModulePermission(session.user.id, "tarefas", "canCreate", "checklist"));
 
   await generateChecklistOccurrences(empresaIds, dateKey);
 

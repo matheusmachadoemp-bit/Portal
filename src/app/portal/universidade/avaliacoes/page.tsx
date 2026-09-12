@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { Section, Badge } from "@/components/ui/stat-card";
@@ -9,6 +10,9 @@ import { format } from "date-fns";
 export default async function AvaliacoesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  if (!(await hasModulePermission(session.user.id, "universidade", "canView"))) {
+    redirect("/portal/inicio");
+  }
 
   const [attempts, pendingEnrollments] = await Promise.all([
     prisma.trainingAttempt.findMany({

@@ -1,6 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { ComingSoon } from "@/components/ui/coming-soon";
+import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 const SUB_MAP: Record<string, { label: string; icon: string }> = {
   salao: { label: "Reunião Salão", icon: "Utensils" },
@@ -11,6 +13,11 @@ const SUB_MAP: Record<string, { label: string; icon: string }> = {
 };
 
 export default async function ReuniaoSubPage({ params }: { params: Promise<{ sub: string }> }) {
+  const session = await auth();
+  if (!session?.user || !(await hasModulePermission(session.user.id, "reuniao", "canView"))) {
+    redirect("/portal/inicio");
+  }
+
   const { sub } = await params;
   const meta = SUB_MAP[sub];
   if (!meta) notFound();
