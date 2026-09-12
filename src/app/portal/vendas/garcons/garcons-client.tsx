@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Trophy } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { ROLLING_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
+import { GARCOM_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
 import { GarconsImportButton } from "./garcons-import-button";
 import type { GarcomRanking } from "@/lib/garcons";
 
@@ -16,7 +16,7 @@ export function GarconsClient({
   canCreate: boolean;
 }) {
   const [ranking, setRanking] = useState(initialRanking);
-  const [periodo, setPeriodo] = useState<RollingPeriodKey>("30dias");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,7 +54,7 @@ export function GarconsClient({
       >
         <div className="mb-4">
           <div className="flex flex-wrap gap-1.5">
-            {ROLLING_PERIOD_OPTIONS.map((opt) => (
+            {GARCOM_PERIOD_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
                 onClick={() => {
