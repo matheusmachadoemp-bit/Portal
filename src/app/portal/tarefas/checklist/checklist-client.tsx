@@ -21,10 +21,10 @@ import {
   History,
   Trophy,
 } from "lucide-react";
-import { Badge, Section } from "@/components/ui/stat-card";
+import { Badge, ColorBadge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
-import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
+import { GOAL_CATEGORIES, GOAL_CATEGORY_COLOR, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
 import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, formatMinutes, spDateKey } from "@/lib/checklist";
 
 type ItemTemplate = {
@@ -683,7 +683,6 @@ export function ChecklistClient({
             <thead>
               <tr className="text-left text-xs text-white border-b border-nord-border">
                 <th className="py-2 px-3">Checklist</th>
-                <th className="py-2 px-3">Loja</th>
                 <th className="py-2 px-3">Setor</th>
                 <th className="py-2 px-3">Responsável</th>
                 <th className="py-2 px-3">Liberação</th>
@@ -699,9 +698,10 @@ export function ChecklistClient({
                 return (
                   <tr key={o.id} className="border-b border-nord-border/50">
                     <td className="py-2 px-3 text-white">{o.template.name}</td>
-                    <td className="py-2 px-3 text-nord-gray">{o.template.empresa.name}</td>
-                    <td className="py-2 px-3 text-nord-gray">
-                      {GOAL_CATEGORY_LABEL[o.template.setor as GoalCategoryKey] ?? o.template.setor}
+                    <td className="py-2 px-3">
+                      <ColorBadge color={GOAL_CATEGORY_COLOR[o.template.setor as GoalCategoryKey] ?? "#9a9aa2"}>
+                        {GOAL_CATEGORY_LABEL[o.template.setor as GoalCategoryKey] ?? o.template.setor}
+                      </ColorBadge>
                     </td>
                     <td className="py-2 px-3 text-nord-gray">{o.responsavel?.name ?? "-"}</td>
                     <td className="py-2 px-3 text-nord-gray font-mono">{formatTime(o.releaseAt)}</td>
@@ -786,7 +786,7 @@ export function ChecklistClient({
               })}
               {agenda.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="text-center text-sm text-nord-gray py-8">
+                  <td colSpan={8} className="text-center text-sm text-nord-gray py-8">
                     Nenhum checklist cadastrado ainda.
                   </td>
                 </tr>

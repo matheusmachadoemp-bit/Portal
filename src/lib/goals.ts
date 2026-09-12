@@ -10,6 +10,16 @@ export const GOAL_CATEGORY_LABEL: Record<GoalCategoryKey, string> = {
   ADMINISTRATIVO: "Administrativo",
 };
 
+/** Cor padrão de cada setor — usada em qualquer lugar que precise diferenciar setor visualmente (ex.: badge na tabela de checklists). */
+export const GOAL_CATEGORY_COLOR: Record<GoalCategoryKey, string> = {
+  GERENCIA: "#2952E3",
+  SALAO: "#22c55e",
+  COZINHA: "#f97316",
+  DELIVERY: "#a855f7",
+  MARKETING: "#ec4899",
+  ADMINISTRATIVO: "#64748b",
+};
+
 export const GOAL_CATEGORY_ROUTE: Record<GoalCategoryKey, string> = {
   GERENCIA: "gerencia",
   SALAO: "salao",

@@ -122,6 +122,18 @@ export function Badge({
   );
 }
 
+/** Como `Badge`, mas com uma cor arbitrária (hex) em vez de um tone fixo — para categorias com paleta própria (ex.: setor). */
+export function ColorBadge({ children, color }: { children: ReactNode; color: string }) {
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+      style={{ backgroundColor: `${color}26`, color }}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function ProgressBar({ percent, color = "#1464F4" }: { percent: number; color?: string }) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
