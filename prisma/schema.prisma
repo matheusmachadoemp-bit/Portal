@@ -26,6 +26,7 @@ enum Role {
 enum AccessLevel {
   NENHUM
   VISUALIZAR
+  EXECUTAR
   EDITAR
   TOTAL
 }
@@ -185,6 +186,7 @@ model ModulePermission {
   profile   PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   moduleKey String
   canView   Boolean           @default(false)
+  canExecute Boolean          @default(false)
   canCreate Boolean           @default(false)
   canEdit   Boolean           @default(false)
   canDelete Boolean           @default(false)

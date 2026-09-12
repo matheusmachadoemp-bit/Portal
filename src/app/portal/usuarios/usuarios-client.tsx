@@ -392,6 +392,7 @@ export function UsuariosClient({
                       >
                         <option value="NENHUM">Sem acesso</option>
                         <option value="VISUALIZAR">Visualizar</option>
+                        <option value="EXECUTAR">Executar</option>
                         <option value="EDITAR">Editar</option>
                         <option value="TOTAL">Total</option>
                       </select>
@@ -413,6 +414,7 @@ export function UsuariosClient({
                                 <option value="">Igual à categoria</option>
                                 <option value="NENHUM">Sem acesso</option>
                                 <option value="VISUALIZAR">Visualizar</option>
+                                <option value="EXECUTAR">Executar</option>
                                 <option value="EDITAR">Editar</option>
                                 <option value="TOTAL">Total</option>
                               </select>

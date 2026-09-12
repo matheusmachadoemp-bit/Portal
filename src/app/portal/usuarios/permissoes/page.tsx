@@ -27,6 +27,7 @@ export default async function PermissoesPage() {
     modulePermissions: p.modulePermissions.map((m) => ({
       moduleKey: m.moduleKey,
       canView: m.canView,
+      canExecute: m.canExecute,
       canCreate: m.canCreate,
       canEdit: m.canEdit,
       canDelete: m.canDelete,

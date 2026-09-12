@@ -6,7 +6,14 @@ import { Section } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { PERMISSION_ACTIONS, type PermissionAction } from "@/lib/permissions";
 
-type ModulePermissionDTO = { moduleKey: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean };
+type ModulePermissionDTO = {
+  moduleKey: string;
+  canView: boolean;
+  canExecute: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+};
 type ProfileDTO = { id: string; name: string; modulePermissions: ModulePermissionDTO[] };
 
 const PROFILE_ICON: Record<string, string> = {
@@ -36,7 +43,7 @@ export function PermissoesClient({
 
   const matrix = useMemo(() => {
     const byModule = new Map(active?.modulePermissions.map((m) => [m.moduleKey, m]));
-    return modules.map((mod) => byModule.get(mod.key) ?? { moduleKey: mod.key, canView: false, canCreate: false, canEdit: false, canDelete: false });
+    return modules.map((mod) => byModule.get(mod.key) ?? { moduleKey: mod.key, canView: false, canExecute: false, canCreate: false, canEdit: false, canDelete: false });
   }, [active, modules]);
 
   function updateCell(moduleKey: string, action: PermissionAction, value: boolean) {
@@ -47,7 +54,7 @@ export function PermissoesClient({
         const exists = p.modulePermissions.some((m) => m.moduleKey === moduleKey);
         const next = exists
           ? p.modulePermissions.map((m) => (m.moduleKey === moduleKey ? { ...m, [action]: value } : m))
-          : [...p.modulePermissions, { moduleKey, canView: false, canCreate: false, canEdit: false, canDelete: false, [action]: value }];
+          : [...p.modulePermissions, { moduleKey, canView: false, canExecute: false, canCreate: false, canEdit: false, canDelete: false, [action]: value }];
         return { ...p, modulePermissions: next };
       })
     );
@@ -60,7 +67,7 @@ export function PermissoesClient({
         if (p.id !== activeId) return p;
         const byModule = new Map(p.modulePermissions.map((m) => [m.moduleKey, m]));
         const next = modules.map((mod) => ({
-          ...(byModule.get(mod.key) ?? { moduleKey: mod.key, canView: false, canCreate: false, canEdit: false, canDelete: false }),
+          ...(byModule.get(mod.key) ?? { moduleKey: mod.key, canView: false, canExecute: false, canCreate: false, canEdit: false, canDelete: false }),
           [action]: value,
         }));
         return { ...p, modulePermissions: next };
@@ -76,8 +83,8 @@ export function PermissoesClient({
         const byModule = new Map(p.modulePermissions.map((m) => [m.moduleKey, m]));
         const next = modules.map((mod) =>
           mod.key === moduleKey
-            ? { moduleKey, canView: value, canCreate: value, canEdit: value, canDelete: value }
-            : (byModule.get(mod.key) ?? { moduleKey: mod.key, canView: false, canCreate: false, canEdit: false, canDelete: false })
+            ? { moduleKey, canView: value, canExecute: value, canCreate: value, canEdit: value, canDelete: value }
+            : (byModule.get(mod.key) ?? { moduleKey: mod.key, canView: false, canExecute: false, canCreate: false, canEdit: false, canDelete: false })
         );
         return { ...p, modulePermissions: next };
       })
@@ -89,7 +96,7 @@ export function PermissoesClient({
     setProfiles((prev) =>
       prev.map((p) =>
         p.id === activeId
-          ? { ...p, modulePermissions: modules.map((mod) => ({ moduleKey: mod.key, canView: value, canCreate: value, canEdit: value, canDelete: value })) }
+          ? { ...p, modulePermissions: modules.map((mod) => ({ moduleKey: mod.key, canView: value, canExecute: value, canCreate: value, canEdit: value, canDelete: value })) }
           : p
       )
     );
@@ -190,7 +197,7 @@ export function PermissoesClient({
                       <input
                         type="checkbox"
                         className="accent-nord-blue"
-                        checked={row.canView && row.canCreate && row.canEdit && row.canDelete}
+                        checked={row.canView && row.canExecute && row.canCreate && row.canEdit && row.canDelete}
                         onChange={(e) => toggleRow(mod.key, e.target.checked)}
                       />
                     </td>

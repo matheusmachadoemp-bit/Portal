@@ -59,7 +59,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where: { id, empresaId: { in: empresaIdsForContext(ctx) } },
   });
   if (!occurrence) return NextResponse.json({ error: "Checklist não encontrado." }, { status: 404 });
-  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit"))) {
+  if (!(await hasModulePermission(session.user.id, "tarefas", "canEdit", "checklist"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite atualizar execuções de checklist." },
       { status: 403 }

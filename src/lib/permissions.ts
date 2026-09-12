@@ -42,9 +42,10 @@ export const PERMISSION_PROFILES = [
   { key: "financeiro", name: "Financeiro" },
 ] as const;
 
-export type PermissionAction = "canView" | "canCreate" | "canEdit" | "canDelete";
+export type PermissionAction = "canView" | "canExecute" | "canCreate" | "canEdit" | "canDelete";
 export const PERMISSION_ACTIONS: { key: PermissionAction; label: string }[] = [
   { key: "canView", label: "Ver" },
+  { key: "canExecute", label: "Executar" },
   { key: "canCreate", label: "Criar" },
   { key: "canEdit", label: "Editar" },
   { key: "canDelete", label: "Excluir" },
@@ -111,32 +112,44 @@ export function defaultLevelForRole(role: Role): "VISUALIZAR" | "EDITAR" | "TOTA
 
 export type ModulePermissionFlags = {
   canView: boolean;
+  canExecute: boolean;
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
 };
 
-// Mapeamento entre AccessLevel e as 4 flags de ModulePermission (Ver/Criar/Editar/Excluir).
+// Mapeamento entre AccessLevel e as 5 flags de ModulePermission (Ver/Executar/Criar/Editar/Excluir).
 //
 // Por que este mapeamento e não outro: `defaultLevelForRole()` não varia por módulo — ela recebe
 // só o cargo (Role) e devolve um único nível aplicado a todos os módulos igualmente (não há
 // parâmetro de módulo na assinatura da função), então um mapeamento AccessLevel -> flags também
 // único (não por módulo) é consistente com a única fonte da verdade que já existe. Os níveis são
 // cumulativos, cada um incluindo as permissões do nível anterior, na mesma ordem em que já são
-// exibidos como colunas na tela de Permissões (Ver, Criar, Editar, Excluir):
+// exibidos como colunas na tela de Permissões (Ver, Executar, Criar, Editar, Excluir):
 // - NENHUM: nenhuma ação liberada (não é produzido por defaultLevelForRole() hoje, mas mapeado
 //   aqui para o enum ficar completo).
-// - VISUALIZAR: só enxerga a tela — era o único nível com efeito real até esta tarefa (controla
-//   a visibilidade do módulo no menu lateral).
-// - EDITAR: vê, cria e edita, mas não exclui. Reflete os cargos de liderança operacional do dia a
-//   dia (Gestor/Gerente/Supervisor): já alteram dado rotineiramente, mas excluir é uma ação mais
-//   destrutiva/rara, por isso fica fora deste nível.
-// - TOTAL: as 4 ações liberadas — hoje, só o perfil Administrador.
+// - VISUALIZAR: só enxerga a tela — era o único nível com efeito real até a introdução das
+//   permissões por subcategoria (controla a visibilidade do módulo no menu lateral). Fica
+//   propositalmente sem `canExecute`: "ver" não deveria implicar em conseguir alterar estado
+//   nenhum, nem mesmo o de "executar" — ver achado de segurança abaixo.
+// - EXECUTAR: além de ver, pode "rodar" a ação operacional do módulo sem poder criar/editar/
+//   excluir a configuração por trás dela — hoje usado só pela subcategoria "tarefas:checklist"
+//   (responder itens, anexar foto, concluir a execução do dia), pra separar "quem só executa o
+//   checklist" (ex.: Chef, Garçom) de "quem administra o template do checklist" (canCreate/
+//   canEdit/canDelete). Introduzido depois que o PR #194 usou `canView` pra liberar essas rotas
+//   de execução e o Strix (achado CWE-863) apontou que isso deixava "ver" implicar em "escrever
+//   + ganhar pontos de recompensa" — sem essa ação própria não dava pra expressar "só executa"
+//   sem também dar acesso de edição do template.
+// - EDITAR: vê, executa, cria e edita, mas não exclui. Reflete os cargos de liderança operacional
+//   do dia a dia (Gestor/Gerente/Supervisor): já alteram dado rotineiramente, mas excluir é uma
+//   ação mais destrutiva/rara, por isso fica fora deste nível.
+// - TOTAL: as 5 ações liberadas — hoje, só o perfil Administrador.
 export const ACCESS_LEVEL_TO_MODULE_FLAGS: Record<AccessLevel, ModulePermissionFlags> = {
-  NENHUM: { canView: false, canCreate: false, canEdit: false, canDelete: false },
-  VISUALIZAR: { canView: true, canCreate: false, canEdit: false, canDelete: false },
-  EDITAR: { canView: true, canCreate: true, canEdit: true, canDelete: false },
-  TOTAL: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  NENHUM: { canView: false, canExecute: false, canCreate: false, canEdit: false, canDelete: false },
+  VISUALIZAR: { canView: true, canExecute: false, canCreate: false, canEdit: false, canDelete: false },
+  EXECUTAR: { canView: true, canExecute: true, canCreate: false, canEdit: false, canDelete: false },
+  EDITAR: { canView: true, canExecute: true, canCreate: true, canEdit: true, canDelete: false },
+  TOTAL: { canView: true, canExecute: true, canCreate: true, canEdit: true, canDelete: true },
 };
 
 // Perfil de permissão padrão para cada cargo (Role) — fonte única usada em dois lugares que
