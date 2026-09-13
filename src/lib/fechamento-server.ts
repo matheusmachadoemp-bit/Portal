@@ -4,6 +4,67 @@ import { spDateKey, spDateTime, spStartOfDay, weekdayFieldFor } from "@/lib/chec
 import { computeFechamentoStatus } from "@/lib/fechamento";
 import { createNotification } from "@/lib/notifications";
 import { getStoreManagers } from "@/lib/manutencao-server";
+import { hasModulePermission } from "@/lib/authz";
+
+/**
+ * Decide se um usuário pode de fato preencher o formulário de UM `FechamentoCargo` específico —
+ * ajuste de segurança pedido depois de confirmar (contra dados reais) que o `canExecute` do
+ * perfil de permissão sozinho é uma checagem GENÉRICA demais: todo perfil "funcionário"/
+ * "supervisor"/"líder" tem `canExecute` para os 3 cargos ao mesmo tempo, então ele nunca
+ * garantiu que quem está enviando é de fato quem ocupa ESTE cargo nesta loja — só que o perfil
+ * dele, em geral, permite executar formulários do módulo.
+ *
+ * Combina as duas camadas (as DUAS precisam passar — decisão de manter `canExecute` como um
+ * filtro a mais, não substituí-lo: um perfil sem `canExecute` nenhum continua barrado mesmo que
+ * o `Employee` vinculado tenha o cargo certo, ex. alguém suspenso/com perfil revogado):
+ *
+ * 1. `canExecute` do perfil de permissão pra este cargo (`hasModulePermission`, como já era).
+ * 2. `User.employee.cargo` (ficha de RH vinculada ao login) bater, por igualdade exata de
+ *    texto, com `FechamentoCargo.nome` — sem normalização de acento/maiúscula por ora (decisão
+ *    registrada no relatório: ajuste fácil depois, se aparecer divergência real nos dados).
+ *
+ * Administrador sempre libera, sem depender de ficha de RH nenhuma (mesmo critério de sempre —
+ * nem chega a cair no `canExecute`, que já libera geral pra ADMINISTRADOR). "Gestor" (perfil que
+ * hoje só tem `canView` nas subcategorias de cargo, nunca `canExecute`) NÃO ganhou nenhum bypass
+ * especial aqui — decisão do usuário registrada no relatório: só administrador dispensa a ficha
+ * de RH: um gestor que precisar preencher em nome de alguém em emergência precisa, por ora, ter
+ * uma ficha de `Employee` vinculada com o cargo certo, igual qualquer outro usuário.
+ *
+ * Usado tanto pela rota de submissão (que retorna 403 com `motivo` como mensagem de erro) quanto
+ * pela rota de status do dia (que só usa `pode`, pra decidir se mostra o botão "Preencher
+ * Agora" — sem isso, o botão podia aparecer pra alguém que a submissão real barra, uma
+ * inconsistência que o próprio usuário pediu pra evitar).
+ */
+export async function podeExecutarFechamentoCargo(
+  userId: string,
+  role: string,
+  cargo: { key: string; nome: string }
+): Promise<{ pode: boolean; motivo?: string }> {
+  if (role === "ADMINISTRADOR") return { pode: true };
+
+  const podeExecutarPerfil = await hasModulePermission(userId, "fechamento-dia", "canExecute", cargo.key);
+  if (!podeExecutarPerfil) {
+    return { pode: false, motivo: `Seu perfil de permissão não permite preencher o formulário de ${cargo.nome}.` };
+  }
+
+  const usuario = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { employee: { select: { cargo: true } } },
+  });
+  if (!usuario?.employee) {
+    return {
+      pode: false,
+      motivo: `Seu usuário não está vinculado a uma ficha de RH com o cargo de ${cargo.nome}. Peça a um administrador para vincular seu usuário à ficha certa em Usuários.`,
+    };
+  }
+  if (usuario.employee.cargo !== cargo.nome) {
+    return {
+      pode: false,
+      motivo: `Seu cargo cadastrado no RH ("${usuario.employee.cargo}") não corresponde a este formulário (${cargo.nome}).`,
+    };
+  }
+  return { pode: true };
+}
 
 /**
  * Gera (de forma idempotente, via @@unique([cargoId, data])) as submissões

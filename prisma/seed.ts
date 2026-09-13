@@ -386,6 +386,77 @@ async function main() {
     create: { userId: gerente.id, empresaId: nordPizza.id },
   });
 
+  // --- Fechamento do Dia (ajuste de segurança): usuários de teste vinculados a ficha de RH ---
+  // A rota de submissão passou a exigir que o usuário logado tenha um `Employee` vinculado cujo
+  // `cargo` bata com `FechamentoCargo.nome` (ver `podeExecutarFechamentoCargo`, em
+  // @/lib/fechamento-server) — perfil "supervisor" (`canExecute` já libera os 3 cargos) pra
+  // isolar o teste na checagem nova, não na de perfil. Só o necessário pra validar os 3 cargos +
+  // os 2 casos de negação (sem ficha / cargo errado) — o vínculo de `gerente@nordpizza.com` com
+  // sua ficha "Gerente Nord" é feito mais abaixo, junto da criação dos `Employee` (seção RH).
+  const chefSalaoPass = await bcrypt.hash("ChefSalao@2026", 10);
+  const chefSalao = await prisma.user.upsert({
+    where: { email: "chef-salao@nordpizza.com" },
+    update: { passwordHash: chefSalaoPass, defaultEmpresaId: nordPizza.id, role: "SUPERVISOR" },
+    create: {
+      name: "Mariana Alves",
+      email: "chef-salao@nordpizza.com",
+      passwordHash: chefSalaoPass,
+      role: "SUPERVISOR",
+      defaultEmpresaId: nordPizza.id,
+    },
+  });
+
+  const chefCozinhaPass = await bcrypt.hash("ChefCozinha@2026", 10);
+  const chefCozinha = await prisma.user.upsert({
+    where: { email: "chef-cozinha@nordpizza.com" },
+    update: { passwordHash: chefCozinhaPass, defaultEmpresaId: nordPizza.id, role: "SUPERVISOR" },
+    create: {
+      name: "Rafael Torres",
+      email: "chef-cozinha@nordpizza.com",
+      passwordHash: chefCozinhaPass,
+      role: "SUPERVISOR",
+      defaultEmpresaId: nordPizza.id,
+    },
+  });
+
+  // Sem nenhum Employee vinculado, de propósito — caso de teste "usuário sem ficha de RH" (nega).
+  const semRhPass = await bcrypt.hash("SemRh@2026", 10);
+  const semRh = await prisma.user.upsert({
+    where: { email: "sem-rh@nordpizza.com" },
+    update: { passwordHash: semRhPass, defaultEmpresaId: nordPizza.id, role: "SUPERVISOR" },
+    create: {
+      name: "Usuário Sem Ficha de RH (teste)",
+      email: "sem-rh@nordpizza.com",
+      passwordHash: semRhPass,
+      role: "SUPERVISOR",
+      defaultEmpresaId: nordPizza.id,
+    },
+  });
+
+  // Vinculado a uma ficha existente cujo cargo NÃO é nenhum dos 3 do Fechamento do Dia (ver
+  // vínculo com "Ana Souza" — cargo "Atendente" — na seção RH mais abaixo) — caso de teste
+  // "vínculo com cargo errado" (nega).
+  const cargoErradoPass = await bcrypt.hash("CargoErrado@2026", 10);
+  const cargoErrado = await prisma.user.upsert({
+    where: { email: "cargo-errado@nordpizza.com" },
+    update: { passwordHash: cargoErradoPass, defaultEmpresaId: nordPizza.id, role: "SUPERVISOR" },
+    create: {
+      name: "Usuário Com Cargo Errado (teste)",
+      email: "cargo-errado@nordpizza.com",
+      passwordHash: cargoErradoPass,
+      role: "SUPERVISOR",
+      defaultEmpresaId: nordPizza.id,
+    },
+  });
+
+  for (const u of [chefSalao, chefCozinha, semRh, cargoErrado]) {
+    await prisma.userEmpresaAccess.upsert({
+      where: { userId_empresaId: { userId: u.id, empresaId: nordPizza.id } },
+      update: {},
+      create: { userId: u.id, empresaId: nordPizza.id },
+    });
+  }
+
   for (const cat of CATEGORIES) {
     const category = await prisma.category.upsert({
       where: { key: cat.key },
@@ -1147,6 +1218,53 @@ async function main() {
         },
       }),
     ]);
+
+    // Fechamento do Dia (ajuste de segurança): ficha de RH pros 3 cargos de liderança do
+    // módulo, vinculadas aos Users de teste criados mais acima — dá pra validar de ponta a
+    // ponta a checagem "Employee.cargo bate com FechamentoCargo.nome" sem precisar de nenhum
+    // vínculo manual depois do seed. `cargo` aqui precisa ser EXATAMENTE igual ao
+    // `FechamentoCargo.nome` do catálogo (seed mais abaixo, seção "Fechamento do Dia") —
+    // "Gerente"/"Chef de Salão"/"Chef de Cozinha", comparação sem normalização (decisão
+    // registrada no relatório).
+    const employeeGerente = await prisma.employee.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Gerente Nord",
+        cargo: "Gerente",
+        setor: "Gerência",
+        admissionDate: new Date(2021, 0, 1),
+        status: "ATIVO",
+      },
+    });
+    const employeeChefSalao = await prisma.employee.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Mariana Alves",
+        cargo: "Chef de Salão",
+        setor: "Salão",
+        admissionDate: new Date(2022, 4, 12),
+        status: "ATIVO",
+        gestorResponsavel: "Gerente Nord",
+      },
+    });
+    const employeeChefCozinha = await prisma.employee.create({
+      data: {
+        empresaId: nordPizza.id,
+        name: "Rafael Torres",
+        cargo: "Chef de Cozinha",
+        setor: "Cozinha",
+        admissionDate: new Date(2022, 4, 12),
+        status: "ATIVO",
+        gestorResponsavel: "Gerente Nord",
+      },
+    });
+    await prisma.user.update({ where: { id: gerente.id }, data: { employeeId: employeeGerente.id } });
+    await prisma.user.update({ where: { id: chefSalao.id }, data: { employeeId: employeeChefSalao.id } });
+    await prisma.user.update({ where: { id: chefCozinha.id }, data: { employeeId: employeeChefCozinha.id } });
+    // "cargo-errado": vinculado de propósito à ficha de Ana Souza (cargo "Atendente",
+    // employees[1] — não é nenhum dos 3 cargos do Fechamento do Dia).
+    await prisma.user.update({ where: { id: cargoErrado.id }, data: { employeeId: employees[1].id } });
+    // "sem-rh" fica sem `employeeId` de propósito (nunca setado) — caso de teste "sem ficha".
 
     await prisma.occurrence.create({
       data: {

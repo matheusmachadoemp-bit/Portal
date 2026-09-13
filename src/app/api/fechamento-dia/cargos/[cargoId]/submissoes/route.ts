@@ -3,10 +3,9 @@ import type { FechamentoTipoResposta } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { hasModulePermission } from "@/lib/authz";
 import { spDateKey, spDateTime, spStartOfDay } from "@/lib/checklist";
 import { fechamentoPerguntasFaltando } from "@/lib/fechamento";
-import { gerarFechamentoOcorrencias } from "@/lib/fechamento-server";
+import { gerarFechamentoOcorrencias, podeExecutarFechamentoCargo } from "@/lib/fechamento-server";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 type RespostaInput = {
@@ -45,11 +44,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
     return NextResponse.json({ error: "Sem acesso a esta loja." }, { status: 403 });
   }
 
-  if (!(await hasModulePermission(session.user.id, "fechamento-dia", "canExecute", cargo.key))) {
-    return NextResponse.json(
-      { error: `Seu perfil de permissão não permite preencher o formulário de ${cargo.nome}.` },
-      { status: 403 }
-    );
+  const { pode, motivo } = await podeExecutarFechamentoCargo(session.user.id, session.user.role, cargo);
+  if (!pode) {
+    return NextResponse.json({ error: motivo }, { status: 403 });
   }
 
   const body = await req.json().catch(() => null);

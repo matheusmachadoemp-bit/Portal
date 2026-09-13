@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { spDateKey } from "@/lib/checklist";
-import { loadFechamentoSubmissoesDoDia } from "@/lib/fechamento-server";
+import { loadFechamentoSubmissoesDoDia, podeExecutarFechamentoCargo } from "@/lib/fechamento-server";
 
 /**
  * Status do dia: um card por cargo (Gerente/Chef de Salão/Chef de Cozinha,
@@ -42,10 +42,15 @@ export async function GET(req: Request) {
 
   const cards = await Promise.all(
     cargos.map(async (cargo) => {
-      const [podeVisualizar, podeExecutar] = await Promise.all([
+      // `podeExecutar` usa a MESMA checagem de `POST .../submissoes` (canExecute do perfil +
+      // ficha de RH com o cargo certo) — sem isso, o botão "Preencher Agora" podia aparecer pra
+      // alguém que a submissão de verdade barra (ver `podeExecutarFechamentoCargo`, em
+      // @/lib/fechamento-server).
+      const [podeVisualizar, execucao] = await Promise.all([
         hasModulePermission(session.user.id, "fechamento-dia", "canView", cargo.key),
-        hasModulePermission(session.user.id, "fechamento-dia", "canExecute", cargo.key),
+        podeExecutarFechamentoCargo(session.user.id, session.user.role, cargo),
       ]);
+      const podeExecutar = execucao.pode;
       const submissao = submissaoByCargoId.get(cargo.id) ?? null;
       return {
         cargo: {

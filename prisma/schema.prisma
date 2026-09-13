@@ -50,6 +50,18 @@ model User {
   defaultEmpresa      Empresa?           @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
   permissionProfileId String?
   permissionProfile   PermissionProfile? @relation(fields: [permissionProfileId], references: [id])
+  /// Vínculo com a ficha de funcionário (RH) deste login — nulável dos dois lados
+  /// (nem todo `Employee` tem login no Portal, nem todo `User` — ex.: administrador
+  /// do sistema — precisa ter ficha de funcionário). `@unique` garante 1:1 no banco:
+  /// um `Employee` nunca fica vinculado a mais de um `User` ao mesmo tempo. Fonte da
+  /// verdade, a partir de agora, de "qual cargo de RH este usuário ocupa" — usado
+  /// pelo Fechamento do Dia para restringir quem pode preencher o formulário de cada
+  /// cargo (`FechamentoCargo.nome` comparado a `Employee.cargo`), em vez de depender
+  /// só do perfil de permissão genérico. Definido pela própria tela de Usuários
+  /// (`POST`/`PATCH /api/usuarios`), nunca inferido por adivinhação (nome/e-mail não
+  /// são confiáveis — conferido contra os dados reais do seed antes desta decisão).
+  employeeId          String?            @unique
+  employee            Employee?          @relation(fields: [employeeId], references: [id])
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -1445,6 +1457,9 @@ model Employee {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
+  /// Ponta inversa de `User.employeeId` (a FK/`@unique` vivem lá) — o login (se
+  /// existir) que corresponde a esta ficha de funcionário.
+  user                    User?
   occurrences             Occurrence[]
   waiterSales             WaiterSaleEntry[]
   sales                   Sale[]
