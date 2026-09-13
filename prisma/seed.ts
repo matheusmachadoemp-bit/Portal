@@ -292,6 +292,41 @@ const CATEGORIES = [
       { key: "regras", name: "Regras de Pontuação", icon: "BookOpen" },
     ],
   },
+  {
+    // Fase 4 (Parte 1): item de menu do módulo já existente desde a Fase 1 (schema/seed/rotas
+    // criados então; a chave "fechamento-dia" já era usada por MODULES, em
+    // src/lib/permissions.ts, e pelas rotas /api/fechamento-dia/**, então precisa ser
+    // exatamente esta aqui, sem variação). Só UMA subcategoria própria ("Ocorrências") — de
+    // propósito, sem uma segunda subcategoria "Status do Dia":
+    //
+    // - Clicar na CATEGORIA em si (não numa subcategoria) sempre navega para
+    //   `/portal/${cat.key}` (ver `CategoryRow` em src/components/sidebar/sidebar.tsx, linha
+    //   ~455: `router.push(`/portal/${cat.key}`)`, incondicional, com ou sem subcategorias) —
+    //   ou seja, "Fechamento do Dia" já leva direto para `/portal/fechamento-dia` (a tela
+    //   "Status do Dia" que o Caio construiu na Fase 2) sem precisar de nenhuma subcategoria
+    //   para isso.
+    // - Toda SUBCATEGORIA, por outro lado, sempre navega para `/portal/${cat.key}/${sub.key}`
+    //   (`SubRow`, mesma linha ~564) — não existe jeito de uma subcategoria apontar para a
+    //   rota "nua" da categoria (Subcategory não tem nenhum campo de URL própria no schema).
+    //   Uma suposta subcategoria "Status do Dia" (key ex.: "status-do-dia") cairia em
+    //   `/portal/fechamento-dia/status-do-dia`, uma rota que não existe (404) — o pedido
+    //   original citava essa subcategoria apontando pra `/portal/fechamento-dia`, que já é a
+    //   rota da categoria.
+    // - Isso é exatamente o padrão já usado por "Tarefas" (bare `/portal/tarefas` = quadro
+    //   principal de tarefas, com UMA subcategoria "Checklist" apontando para
+    //   `/portal/tarefas/checklist`) alguns itens acima nesta mesma lista — replicado aqui de
+    //   propósito em vez de inventar uma subcategoria redundante/quebrada.
+    //
+    // Ver bloco de permissão logo abaixo (`fechamento-dia:ocorrencias`) para a visibilidade
+    // restrita desta subcategoria a quem tem canEdit no módulo — decisão registrada no
+    // relatório da Fase 4.
+    key: "fechamento-dia",
+    name: "Fechamento do Dia",
+    icon: "Sunset",
+    order: 19,
+    contentType: "fechamento-dia",
+    subs: [{ key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" }],
+  },
 ];
 
 async function main() {
@@ -448,6 +483,32 @@ async function main() {
         create: { profileId: record.id, moduleKey: `fechamento-dia:${cargoKey}`, ...cargoFlags },
       });
     }
+
+    // Fechamento do Dia (Fase 4, Parte 1): a subcategoria "Ocorrências" do menu lateral (tela de
+    // gestão — ver/editar/transformar ocorrências de qualquer cargo) faz mais sentido visível só
+    // pra quem já tem canEdit no módulo como um todo (administrador/gestor/gerente/supervisor —
+    // o mesmo grupo do `flags` calculado acima a partir de `defaultLevelForProfileKey`, já que
+    // EDITAR/TOTAL são os únicos níveis com canEdit=true), não pra quem só executa o
+    // preenchimento diário (líder/funcionário) nem pra marketing/financeiro. Isso só tem efeito
+    // de verdade porque `buildVisibilityResolver` (src/lib/permissions.ts) passou a checar a
+    // chave composta "categoria:subcategoria" do perfil ANTES de cair para a chave da categoria
+    // inteira — sem esse ajuste, uma linha aqui seria ignorada pelo menu (ver comentário da
+    // função e o relatório da Fase 4). Note que "canView" aqui reaproveita `flags.canEdit` (não
+    // um valor fixo por perfil): é a mesma condição "tem canEdit no módulo", calculada uma única
+    // vez por perfil.
+    await prisma.modulePermission.upsert({
+      where: { profileId_moduleKey: { profileId: record.id, moduleKey: "fechamento-dia:ocorrencias" } },
+      update: {},
+      create: {
+        profileId: record.id,
+        moduleKey: "fechamento-dia:ocorrencias",
+        canView: flags.canEdit,
+        canExecute: flags.canEdit,
+        canCreate: flags.canEdit,
+        canEdit: flags.canEdit,
+        canDelete: flags.canDelete,
+      },
+    });
   }
 
   const usersWithoutProfile = await prisma.user.findMany({ where: { permissionProfileId: null } });
