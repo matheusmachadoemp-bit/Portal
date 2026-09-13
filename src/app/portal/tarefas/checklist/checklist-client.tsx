@@ -10,7 +10,6 @@ import {
   Copy,
   UserCog,
   Camera,
-  Clock,
   Search,
   ChevronDown,
   ChevronUp,
@@ -25,7 +24,7 @@ import { Badge, ColorBadge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_COLOR, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
-import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, formatMinutes, spDateKey } from "@/lib/checklist";
+import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, spDateKey } from "@/lib/checklist";
 
 type ItemTemplate = {
   id: string;
@@ -221,10 +220,6 @@ type OccurrenceDetail = {
   fotos: DetailPhoto[];
   escalationLogs: { id: string; tipo: string; destinatario: { name: string }; createdAt: string }[];
 };
-
-function minutesDiff(a: Date, b: Date) {
-  return Math.round((a.getTime() - b.getTime()) / 60000);
-}
 
 export function ChecklistClient({
   initialOccurrences,
@@ -643,9 +638,6 @@ export function ChecklistClient({
         ) : (
           <div className="space-y-2">
             {agenda.map((o) => {
-              const now = new Date();
-              const due = new Date(o.dueAt).getTime();
-              const remaining = minutesDiff(new Date(o.dueAt), now);
               return (
                 <button
                   key={o.id}
@@ -655,18 +647,16 @@ export function ChecklistClient({
                   <span className="w-14 shrink-0 text-sm font-mono text-white">{formatTime(o.dueAt)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-white text-sm font-medium truncate">{o.template.name}</p>
-                    <p className="text-xs text-nord-gray truncate">
-                      {o.template.empresa.name} · {GOAL_CATEGORY_LABEL[o.template.setor as GoalCategoryKey] ?? o.template.setor}
-                      {o.responsavel ? ` · ${o.responsavel.name}` : ""}
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <ColorBadge color={GOAL_CATEGORY_COLOR[o.template.setor as GoalCategoryKey] ?? "#9a9aa2"}>
+                        {GOAL_CATEGORY_LABEL[o.template.setor as GoalCategoryKey] ?? o.template.setor}
+                      </ColorBadge>
+                      {o.responsavel && <span className="text-xs text-nord-gray truncate">{o.responsavel.name}</span>}
+                    </div>
                   </div>
                   {o.template.fotoChecklist !== "SEM_FOTO" && (
                     <Camera size={14} className={o.template.fotoChecklist === "OBRIGATORIA" ? "text-amber-400" : "text-nord-gray"} />
                   )}
-                  <span className="text-xs text-nord-gray w-28 text-right shrink-0 flex items-center justify-end gap-1">
-                    <Clock size={12} />
-                    {due >= now.getTime() ? `${formatMinutes(remaining)} restantes` : `${formatMinutes(-remaining)} de atraso`}
-                  </span>
                   <Badge tone={CHECKLIST_STATUS_TONE[o.status as keyof typeof CHECKLIST_STATUS_TONE]}>
                     {CHECKLIST_STATUS_LABEL[o.status as keyof typeof CHECKLIST_STATUS_LABEL]}
                   </Badge>
