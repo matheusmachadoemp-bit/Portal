@@ -94,3 +94,33 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ meeting });
 }
+
+export async function DELETE(req: Request) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Excluir um fechamento de mês já lançado é mais destrutivo que criar/editar (perde o
+  // histórico de metas/premiação daquele período) — por isso exige canDelete, não canEdit,
+  // mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
+  if (!(await hasModulePermission(session.user.id, "reuniao", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir o fechamento da reunião de gerente." },
+      { status: 403 }
+    );
+  }
+
+  const empresa = await requireActiveSingleEmpresa();
+  if (!empresa) {
+    return NextResponse.json(
+      { error: "Selecione uma loja específica (não é possível excluir no modo Grupo Nord)." },
+      { status: 400 }
+    );
+  }
+
+  const { searchParams } = new URL(req.url);
+  const periodo = searchParams.get("periodo");
+  if (!periodo) return NextResponse.json({ error: "Período não informado." }, { status: 400 });
+
+  await prisma.gerenteMeeting.deleteMany({ where: { empresaId: empresa.id, periodo } });
+
+  return NextResponse.json({ ok: true });
+}
