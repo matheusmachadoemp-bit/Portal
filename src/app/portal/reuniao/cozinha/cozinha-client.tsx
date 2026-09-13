@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trophy, Pencil, FileDown } from "lucide-react";
+import { Trophy, Pencil, FileDown, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
+import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
@@ -85,6 +86,9 @@ export function CozinhaClient({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showMetas, setShowMetas] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const mounted = useRef(false);
@@ -234,6 +238,27 @@ export function CozinhaClient({
     setCurrent(m);
     setForm(buildForm(m));
     setMetrics({ cmvPercent: m.cmvPercent, desperdicioValor: m.desperdicioValor ?? 0, faturamento: 0 });
+    setShowMetas(true);
+  }
+
+  async function doDelete() {
+    if (deleting || !current) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/reuniao/cozinha?periodo=${current.periodo}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error || "Não foi possível excluir esta reunião.");
+        return;
+      }
+      setConfirmDelete(false);
+      setCurrent(null);
+      setForm(buildForm(null));
+      await refresh(selectedPeriodo);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const cards = [
@@ -279,19 +304,7 @@ export function CozinhaClient({
           color="#a855f7"
           label="Tempo Pedido"
           status={statusOf(bateuTempo)}
-          valueSlot={
-            canCreate ? (
-              <input
-                type="number"
-                value={form.tempoPedidoMinutos}
-                onChange={(e) => setForm({ ...form, tempoPedidoMinutos: e.target.value })}
-                placeholder="minutos"
-                className="input"
-              />
-            ) : (
-              <span className="text-2xl font-semibold text-white">{tempoValor ?? "-"} min</span>
-            )
-          }
+          valueSlot={<span className="text-2xl font-semibold text-white">{tempoValor ?? "-"} min</span>}
           metaText={`Meta: até ${formatNumber(tempoMeta, 0)} min`}
           premio={Number(form.premiacaoTempoPedido) || 0}
           comparison={compTempo}
@@ -306,19 +319,7 @@ export function CozinhaClient({
           color="#14b8a6"
           label="Organização"
           status={statusOf(bateuOrganizacao)}
-          valueSlot={
-            canCreate ? (
-              <input
-                type="number"
-                value={form.organizacaoPercent}
-                onChange={(e) => setForm({ ...form, organizacaoPercent: e.target.value })}
-                placeholder="%"
-                className="input"
-              />
-            ) : (
-              <span className="text-2xl font-semibold text-white">{organizacaoValor ?? "-"}%</span>
-            )
-          }
+          valueSlot={<span className="text-2xl font-semibold text-white">{organizacaoValor ?? "-"}%</span>}
           metaText={`Meta: mín. ${formatNumber(organizacaoMeta, 0)}%`}
           premio={Number(form.premiacaoOrganizacao) || 0}
           comparison={compOrganizacao}
@@ -349,8 +350,8 @@ export function CozinhaClient({
             <FileDown size={13} /> Exportar PDF
           </button>
           {canCreate && (
-            <button onClick={() => setShowMetas((s) => !s)} className="text-xs text-nord-blue-light hover:underline">
-              {showMetas ? "Ocultar metas e premiação" : "Editar metas e premiação"}
+            <button onClick={() => setShowMetas(true)} className="text-xs text-nord-blue-light hover:underline">
+              Editar metas e premiação
             </button>
           )}
         </div>
@@ -371,44 +372,117 @@ export function CozinhaClient({
         </div>
       )}
 
-      {canCreate && showMetas && (
-        <Section title="Metas e premiação do período">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta CMV (%)</span>
-              <input type="number" value={form.cmvMetaPercent} onChange={(e) => setForm({ ...form, cmvMetaPercent: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta Desperdício (R$)</span>
-              <input type="number" value={form.desperdicioMetaValor} onChange={(e) => setForm({ ...form, desperdicioMetaValor: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta Tempo Pedido (min)</span>
-              <input type="number" value={form.tempoPedidoMetaMinutos} onChange={(e) => setForm({ ...form, tempoPedidoMetaMinutos: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta Organização (%)</span>
-              <input type="number" value={form.organizacaoMetaPercent} onChange={(e) => setForm({ ...form, organizacaoMetaPercent: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação CMV (R$)</span>
-              <input type="number" value={form.premiacaoCmv} onChange={(e) => setForm({ ...form, premiacaoCmv: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação Desperdício (R$)</span>
-              <input type="number" value={form.premiacaoDesperdicio} onChange={(e) => setForm({ ...form, premiacaoDesperdicio: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação Tempo Pedido (R$)</span>
-              <input type="number" value={form.premiacaoTempoPedido} onChange={(e) => setForm({ ...form, premiacaoTempoPedido: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação Organização (R$)</span>
-              <input type="number" value={form.premiacaoOrganizacao} onChange={(e) => setForm({ ...form, premiacaoOrganizacao: e.target.value })} className="input" />
-            </label>
+      <Modal
+        open={showMetas}
+        onClose={() => setShowMetas(false)}
+        title={`Metas e premiação — ${periodoLabel(selectedPeriodo)}`}
+        widthClass="max-w-2xl"
+      >
+        <div className="space-y-5">
+          <div>
+            <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Tempo Pedido (min)</span>
+                <input
+                  type="number"
+                  value={form.tempoPedidoMinutos}
+                  onChange={(e) => setForm({ ...form, tempoPedidoMinutos: e.target.value })}
+                  placeholder="minutos"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Organização e Limpeza (%)</span>
+                <input
+                  type="number"
+                  value={form.organizacaoPercent}
+                  onChange={(e) => setForm({ ...form, organizacaoPercent: e.target.value })}
+                  placeholder="%"
+                  className="input"
+                />
+              </label>
+            </div>
           </div>
-        </Section>
-      )}
+
+          <div>
+            <h4 className="text-white text-sm font-medium mb-3">Metas e premiação</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta CMV (%)</span>
+                <input type="number" value={form.cmvMetaPercent} onChange={(e) => setForm({ ...form, cmvMetaPercent: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta Desperdício (R$)</span>
+                <input type="number" value={form.desperdicioMetaValor} onChange={(e) => setForm({ ...form, desperdicioMetaValor: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta Tempo Pedido (min)</span>
+                <input type="number" value={form.tempoPedidoMetaMinutos} onChange={(e) => setForm({ ...form, tempoPedidoMetaMinutos: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta Organização (%)</span>
+                <input type="number" value={form.organizacaoMetaPercent} onChange={(e) => setForm({ ...form, organizacaoMetaPercent: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação CMV (R$)</span>
+                <input type="number" value={form.premiacaoCmv} onChange={(e) => setForm({ ...form, premiacaoCmv: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação Desperdício (R$)</span>
+                <input type="number" value={form.premiacaoDesperdicio} onChange={(e) => setForm({ ...form, premiacaoDesperdicio: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação Tempo Pedido (R$)</span>
+                <input type="number" value={form.premiacaoTempoPedido} onChange={(e) => setForm({ ...form, premiacaoTempoPedido: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação Organização (R$)</span>
+                <input type="number" value={form.premiacaoOrganizacao} onChange={(e) => setForm({ ...form, premiacaoOrganizacao: e.target.value })} className="input" />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-nord-border">
+            {current ? (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+              >
+                <Trash2 size={13} /> Excluir esta reunião
+              </button>
+            ) : (
+              <span />
+            )}
+            <button
+              onClick={async () => {
+                await submit();
+                setShowMetas(false);
+              }}
+              disabled={saving}
+              className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+            >
+              {saving ? "Salvando..." : current ? "Salvar alterações" : "Criar metas do período"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Excluir reunião"
+        message={
+          deleteError ||
+          `Tem certeza que deseja excluir o fechamento de ${periodoLabel(selectedPeriodo)}? As metas, premiação e resultados desse período serão perdidos.`
+        }
+        onConfirm={doDelete}
+        onCancel={() => {
+          setConfirmDelete(false);
+          setDeleteError(null);
+        }}
+        confirmLabel={deleting ? "Excluindo..." : "Excluir"}
+        danger
+      />
 
       {canCreate && (
         <Section title="Observações da reunião">

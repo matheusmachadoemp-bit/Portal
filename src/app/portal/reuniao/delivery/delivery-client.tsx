@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trophy, Pencil, FileDown } from "lucide-react";
+import { Trophy, Pencil, FileDown, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
+import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
@@ -86,6 +87,9 @@ export function DeliveryClient({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showMetas, setShowMetas] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const mounted = useRef(false);
@@ -236,6 +240,27 @@ export function DeliveryClient({
     setCurrent(m);
     setForm(buildForm(m));
     setMetrics({ cancelamentoPercent: m.cancelamentoPercent });
+    setShowMetas(true);
+  }
+
+  async function doDelete() {
+    if (deleting || !current) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/reuniao/delivery?periodo=${current.periodo}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error || "Não foi possível excluir esta reunião.");
+        return;
+      }
+      setConfirmDelete(false);
+      setCurrent(null);
+      setForm(buildForm(null));
+      await refresh(selectedPeriodo);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const cards = [
@@ -266,20 +291,7 @@ export function DeliveryClient({
           color="#f59e0b"
           label="Avaliações (iFood)"
           status={statusOf(bateuAvaliacao)}
-          valueSlot={
-            canCreate ? (
-              <input
-                type="number"
-                step="0.1"
-                value={form.avaliacaoNota}
-                onChange={(e) => setForm({ ...form, avaliacaoNota: e.target.value })}
-                placeholder="nota"
-                className="input"
-              />
-            ) : (
-              <span className="text-2xl font-semibold text-white">{avaliacaoValor ?? "-"}</span>
-            )
-          }
+          valueSlot={<span className="text-2xl font-semibold text-white">{avaliacaoValor ?? "-"}</span>}
           metaText={`Meta: mín. ${formatNumber(avaliacaoMeta, 1)}`}
           premio={Number(form.premiacaoAvaliacao) || 0}
           comparison={compAvaliacao}
@@ -294,19 +306,7 @@ export function DeliveryClient({
           color="#1464F4"
           label="Tempo de Entrega"
           status={statusOf(bateuTempoEntrega)}
-          valueSlot={
-            canCreate ? (
-              <input
-                type="number"
-                value={form.tempoEntregaMinutos}
-                onChange={(e) => setForm({ ...form, tempoEntregaMinutos: e.target.value })}
-                placeholder="minutos"
-                className="input"
-              />
-            ) : (
-              <span className="text-2xl font-semibold text-white">{tempoEntregaValor ?? "-"} min</span>
-            )
-          }
+          valueSlot={<span className="text-2xl font-semibold text-white">{tempoEntregaValor ?? "-"} min</span>}
           metaText={`Meta: até ${formatNumber(tempoEntregaMeta, 0)} min`}
           premio={Number(form.premiacaoTempoEntrega) || 0}
           comparison={compTempoEntrega}
@@ -321,19 +321,7 @@ export function DeliveryClient({
           color="#a855f7"
           label="Chamados"
           status={statusOf(bateuChamados)}
-          valueSlot={
-            canCreate ? (
-              <input
-                type="number"
-                value={form.chamadosPercent}
-                onChange={(e) => setForm({ ...form, chamadosPercent: e.target.value })}
-                placeholder="%"
-                className="input"
-              />
-            ) : (
-              <span className="text-2xl font-semibold text-white">{chamadosValor === null ? "-" : `${chamadosValor}%`}</span>
-            )
-          }
+          valueSlot={<span className="text-2xl font-semibold text-white">{chamadosValor === null ? "-" : `${chamadosValor}%`}</span>}
           metaText={`Meta: até ${formatNumber(chamadosMeta, 1)}%`}
           premio={Number(form.premiacaoChamados) || 0}
           comparison={compChamados}
@@ -364,8 +352,8 @@ export function DeliveryClient({
             <FileDown size={13} /> Exportar PDF
           </button>
           {canCreate && (
-            <button onClick={() => setShowMetas((s) => !s)} className="text-xs text-nord-blue-light hover:underline">
-              {showMetas ? "Ocultar metas e premiação" : "Editar metas e premiação"}
+            <button onClick={() => setShowMetas(true)} className="text-xs text-nord-blue-light hover:underline">
+              Editar metas e premiação
             </button>
           )}
         </div>
@@ -386,44 +374,128 @@ export function DeliveryClient({
         </div>
       )}
 
-      {canCreate && showMetas && (
-        <Section title="Metas e premiação do período">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta Cancelamento (%)</span>
-              <input type="number" value={form.cancelamentoMetaPercent} onChange={(e) => setForm({ ...form, cancelamentoMetaPercent: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta Avaliações</span>
-              <input type="number" step="0.1" value={form.avaliacaoMetaNota} onChange={(e) => setForm({ ...form, avaliacaoMetaNota: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta Tempo de Entrega (min)</span>
-              <input type="number" value={form.tempoEntregaMetaMinutos} onChange={(e) => setForm({ ...form, tempoEntregaMetaMinutos: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Meta Chamados (%)</span>
-              <input type="number" value={form.chamadosMetaPercent} onChange={(e) => setForm({ ...form, chamadosMetaPercent: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação Cancelamento (R$)</span>
-              <input type="number" value={form.premiacaoCancelamento} onChange={(e) => setForm({ ...form, premiacaoCancelamento: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação Avaliações (R$)</span>
-              <input type="number" value={form.premiacaoAvaliacao} onChange={(e) => setForm({ ...form, premiacaoAvaliacao: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação Tempo de Entrega (R$)</span>
-              <input type="number" value={form.premiacaoTempoEntrega} onChange={(e) => setForm({ ...form, premiacaoTempoEntrega: e.target.value })} className="input" />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Premiação Chamados (R$)</span>
-              <input type="number" value={form.premiacaoChamados} onChange={(e) => setForm({ ...form, premiacaoChamados: e.target.value })} className="input" />
-            </label>
+      <Modal
+        open={showMetas}
+        onClose={() => setShowMetas(false)}
+        title={`Metas e premiação — ${periodoLabel(selectedPeriodo)}`}
+        widthClass="max-w-2xl"
+      >
+        <div className="space-y-5">
+          <div>
+            <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Avaliações (iFood)</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={form.avaliacaoNota}
+                  onChange={(e) => setForm({ ...form, avaliacaoNota: e.target.value })}
+                  placeholder="nota"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Tempo de Entrega (min)</span>
+                <input
+                  type="number"
+                  value={form.tempoEntregaMinutos}
+                  onChange={(e) => setForm({ ...form, tempoEntregaMinutos: e.target.value })}
+                  placeholder="minutos"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Chamados (%)</span>
+                <input
+                  type="number"
+                  value={form.chamadosPercent}
+                  onChange={(e) => setForm({ ...form, chamadosPercent: e.target.value })}
+                  placeholder="%"
+                  className="input"
+                />
+              </label>
+            </div>
           </div>
-        </Section>
-      )}
+
+          <div>
+            <h4 className="text-white text-sm font-medium mb-3">Metas e premiação</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta Cancelamento (%)</span>
+                <input type="number" value={form.cancelamentoMetaPercent} onChange={(e) => setForm({ ...form, cancelamentoMetaPercent: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta Avaliações</span>
+                <input type="number" step="0.1" value={form.avaliacaoMetaNota} onChange={(e) => setForm({ ...form, avaliacaoMetaNota: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta Tempo de Entrega (min)</span>
+                <input type="number" value={form.tempoEntregaMetaMinutos} onChange={(e) => setForm({ ...form, tempoEntregaMetaMinutos: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Meta Chamados (%)</span>
+                <input type="number" value={form.chamadosMetaPercent} onChange={(e) => setForm({ ...form, chamadosMetaPercent: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação Cancelamento (R$)</span>
+                <input type="number" value={form.premiacaoCancelamento} onChange={(e) => setForm({ ...form, premiacaoCancelamento: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação Avaliações (R$)</span>
+                <input type="number" value={form.premiacaoAvaliacao} onChange={(e) => setForm({ ...form, premiacaoAvaliacao: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação Tempo de Entrega (R$)</span>
+                <input type="number" value={form.premiacaoTempoEntrega} onChange={(e) => setForm({ ...form, premiacaoTempoEntrega: e.target.value })} className="input" />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Premiação Chamados (R$)</span>
+                <input type="number" value={form.premiacaoChamados} onChange={(e) => setForm({ ...form, premiacaoChamados: e.target.value })} className="input" />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-nord-border">
+            {current ? (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+              >
+                <Trash2 size={13} /> Excluir esta reunião
+              </button>
+            ) : (
+              <span />
+            )}
+            <button
+              onClick={async () => {
+                await submit();
+                setShowMetas(false);
+              }}
+              disabled={saving}
+              className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+            >
+              {saving ? "Salvando..." : current ? "Salvar alterações" : "Criar metas do período"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Excluir reunião"
+        message={
+          deleteError ||
+          `Tem certeza que deseja excluir o fechamento de ${periodoLabel(selectedPeriodo)}? As metas, premiação e resultados desse período serão perdidos.`
+        }
+        onConfirm={doDelete}
+        onCancel={() => {
+          setConfirmDelete(false);
+          setDeleteError(null);
+        }}
+        confirmLabel={deleting ? "Excluindo..." : "Excluir"}
+        danger
+      />
 
       {canCreate && (
         <Section title="Observações da reunião">
