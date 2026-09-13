@@ -7,6 +7,7 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { classifyKpi, formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 import { format } from "date-fns";
 import {
   ResponsiveContainer,
@@ -476,10 +477,22 @@ function MetaAdsView({
 }) {
   const [summary, setSummary] = useState(initialSummary);
   const [campaigns, setCampaigns] = useState(initialCampaigns);
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("personalizado");
   const [startDate, setStartDate] = useState(initialRange.start.slice(0, 10));
   const [endDate, setEndDate] = useState(initialRange.end.slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function selectPeriodo(key: RollingPeriodKey) {
+    setPeriodo(key);
+    if (key === "personalizado") return;
+    const range = resolveRollingPeriod(key);
+    const start = format(range.from, "yyyy-MM-dd");
+    const end = format(range.to, "yyyy-MM-dd");
+    setStartDate(start);
+    setEndDate(end);
+    applyRange(start, end);
+  }
 
   async function applyRange(start: string, end: string) {
     setLoading(true);
@@ -521,27 +534,44 @@ function MetaAdsView({
   return (
     <div className="space-y-6">
       <div className="nord-card p-3 flex flex-wrap items-end gap-3">
-        <label className="block">
-          <span className="block text-xs text-nord-gray mb-1">De</span>
-          <input
-            type="date"
-            value={startDate}
-            max={endDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="input !w-auto"
-          />
-        </label>
-        <label className="block">
-          <span className="block text-xs text-nord-gray mb-1">Até</span>
-          <input
-            type="date"
-            value={endDate}
-            min={startDate}
-            max={format(new Date(), "yyyy-MM-dd")}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="input !w-auto"
-          />
-        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {STANDARD_PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => selectPeriodo(opt.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {periodo === "personalizado" && (
+          <>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">De</span>
+              <input
+                type="date"
+                value={startDate}
+                max={endDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="input !w-auto"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Até</span>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate}
+                max={format(new Date(), "yyyy-MM-dd")}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="input !w-auto"
+              />
+            </label>
+          </>
+        )}
         <button
           onClick={handleApply}
           disabled={loading}

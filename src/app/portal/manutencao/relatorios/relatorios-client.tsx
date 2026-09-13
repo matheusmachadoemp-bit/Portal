@@ -7,6 +7,8 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency } from "@/lib/calc";
 import { exportRowsToExcel } from "@/lib/export-utils";
 import { CHAMADO_PRIORIDADE_LABEL } from "@/lib/manutencao";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
+import { format } from "date-fns";
 
 type KeyValor = { key: string; valor: number };
 type KeyTotal = { key: string; total: number };
@@ -43,6 +45,7 @@ export function RelatoriosClient({
   prestadores: Option[];
 }) {
   const [data, setData] = useState(initialData);
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [setor, setSetor] = useState("");
@@ -51,11 +54,14 @@ export function RelatoriosClient({
   const [loading, setLoading] = useState(false);
 
   async function applyFilters() {
+    if (periodo === "personalizado" && (!from || !to)) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
+      const range = resolveRollingPeriod(periodo, { from, to });
+      const params = new URLSearchParams({
+        from: format(range.from, "yyyy-MM-dd"),
+        to: format(range.to, "yyyy-MM-dd"),
+      });
       if (setor) params.set("setor", setor);
       if (equipamentoId) params.set("equipamentoId", equipamentoId);
       if (prestadorId) params.set("prestadorId", prestadorId);
@@ -68,6 +74,7 @@ export function RelatoriosClient({
   }
 
   function limparFiltros() {
+    setPeriodo("mes-atual");
     setFrom("");
     setTo("");
     setSetor("");
@@ -93,13 +100,25 @@ export function RelatoriosClient({
       <Section title="Filtros">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="text-xs text-nord-gray mb-1 block">De</label>
-            <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <label className="text-xs text-nord-gray mb-1 block">Período</label>
+            <select className="input w-40" value={periodo} onChange={(e) => setPeriodo(e.target.value as RollingPeriodKey)}>
+              {STANDARD_PERIOD_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
           </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Até</label>
-            <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
-          </div>
+          {periodo === "personalizado" && (
+            <>
+              <div>
+                <label className="text-xs text-nord-gray mb-1 block">De</label>
+                <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-nord-gray mb-1 block">Até</label>
+                <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
+              </div>
+            </>
+          )}
           <div>
             <label className="text-xs text-nord-gray mb-1 block">Setor</label>
             <input className="input w-40" value={setor} onChange={(e) => setSetor(e.target.value)} placeholder="Ex.: Cozinha" />

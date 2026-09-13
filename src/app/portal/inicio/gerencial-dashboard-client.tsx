@@ -13,15 +13,20 @@ import { RotinaPanel } from "./rotina-panel";
 import { AlertasPanel } from "./alertas-panel";
 import { MetasPanel } from "./metas-panel";
 import { LojaNordPanel } from "./loja-nord-panel";
+import type { PeriodoInicio } from "@/lib/inicio";
 
 type EmpresaDTO = { id: string; key: string; name: string; color: string; logo: string | null };
 
-type PeriodoChave = "hoje" | "7dias" | "mes" | "custom";
+type PeriodoChave = PeriodoInicio;
 
+// Padrão de filtro de período do portal (ver CLAUDE.md) — "custom" aqui é só
+// o apelido que a API de Início já usa para "personalizado".
 const PERIODO_OPTIONS: { key: PeriodoChave; label: string }[] = [
   { key: "hoje", label: "Hoje" },
+  { key: "ontem", label: "Ontem" },
   { key: "7dias", label: "Últimos 7 dias" },
   { key: "mes", label: "Este mês" },
+  { key: "mes-passado", label: "Mês passado" },
   { key: "custom", label: "Personalizado" },
 ];
 

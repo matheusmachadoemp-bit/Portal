@@ -13,6 +13,7 @@ import {
 export type PeriodKey =
   | "hoje"
   | "ontem"
+  | "7dias"
   | "semana"
   | "semana-anterior"
   | "mes"
@@ -38,6 +39,13 @@ export function resolvePeriod(
         to: endOfDay(subDays(now, 1)),
         prevFrom: startOfDay(subDays(now, 2)),
         prevTo: endOfDay(subDays(now, 2)),
+      };
+    case "7dias":
+      return {
+        from: startOfDay(subDays(now, 6)),
+        to: endOfDay(now),
+        prevFrom: startOfDay(subDays(now, 13)),
+        prevTo: endOfDay(subDays(now, 7)),
       };
     case "semana":
       return {
@@ -84,13 +92,17 @@ export function resolvePeriod(
   }
 }
 
+// Padrão de filtro de período do portal — mesmas 6 opções em todas as telas
+// que filtram um relatório/lista por período (ver CLAUDE.md). "semana" e
+// "semana-anterior" continuam existindo em PeriodKey/resolvePeriod só para uso
+// interno (ex.: comparativo fixo de Acompanhamento de Vendas), sem aparecer
+// como opção neste seletor.
 export const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "ontem", label: "Ontem" },
-  { key: "semana", label: "Esta semana" },
-  { key: "semana-anterior", label: "Semana anterior" },
+  { key: "7dias", label: "Últimos 7 dias" },
   { key: "mes", label: "Este mês" },
-  { key: "mes-anterior", label: "Mês anterior" },
+  { key: "mes-anterior", label: "Mês passado" },
   { key: "personalizado", label: "Personalizado" },
 ];
 
@@ -128,22 +140,14 @@ export function resolveRollingPeriod(key: RollingPeriodKey, custom?: { from?: st
   }
 }
 
-// Usado nos mini-filtros de Faturamento (Vendas por Hora, Forma de Pagamento,
-// Área de Entrega) — mantém "30 dias" como opção aqui.
-export const ROLLING_PERIOD_OPTIONS: { key: RollingPeriodKey; label: string }[] = [
+// Padrão de filtro de período do portal (janela "rolling", sem prevFrom/
+// prevTo) — mesmas 6 opções em todas as telas que filtram por período e não
+// precisam de comparação com o período anterior (ver CLAUDE.md).
+export const STANDARD_PERIOD_OPTIONS: { key: RollingPeriodKey; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "ontem", label: "Ontem" },
-  { key: "7dias", label: "7 dias" },
-  { key: "30dias", label: "30 dias" },
-  { key: "personalizado", label: "Personalizado" },
-];
-
-// Usado no ranking de Desempenho por Garçom — sem "30 dias", com mês atual/passado.
-export const GARCOM_PERIOD_OPTIONS: { key: RollingPeriodKey; label: string }[] = [
-  { key: "hoje", label: "Hoje" },
-  { key: "ontem", label: "Ontem" },
-  { key: "7dias", label: "7 dias" },
-  { key: "mes-atual", label: "Mês atual" },
+  { key: "7dias", label: "Últimos 7 dias" },
+  { key: "mes-atual", label: "Este mês" },
   { key: "mes-passado", label: "Mês passado" },
   { key: "personalizado", label: "Personalizado" },
 ];

@@ -3,29 +3,44 @@
 import { useMemo, useState } from "react";
 import { Toolbar } from "@/components/ui/toolbar";
 import { compareProducedToPlanned, PRODUCTION_STATUS_LABEL } from "@/lib/producao";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 import type { ProductionOrderDTO } from "../types";
 
 export function HistoricoClient({ initialOrdens }: { initialOrdens: ProductionOrderDTO[] }) {
   const [ordens] = useState(initialOrdens);
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const range = useMemo(() => {
+    if (periodo === "personalizado" && (!from || !to)) return null;
+    return resolveRollingPeriod(periodo, { from, to });
+  }, [periodo, from, to]);
+
   const filtered = useMemo(() => {
     return ordens.filter((o) => {
+      if (!range) return true;
       const date = new Date(o.date);
-      if (from && date < new Date(from)) return false;
-      if (to && date > new Date(to)) return false;
-      return true;
+      return date >= range.from && date <= range.to;
     });
-  }, [ordens, from, to]);
+  }, [ordens, range]);
 
   return (
     <div className="space-y-4">
       <Toolbar
         filters={
           <>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
+            <select className="input w-40" value={periodo} onChange={(e) => setPeriodo(e.target.value as RollingPeriodKey)}>
+              {STANDARD_PERIOD_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+            {periodo === "personalizado" && (
+              <>
+                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
+                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
+              </>
+            )}
           </>
         }
         exportFilename="historico-producao"

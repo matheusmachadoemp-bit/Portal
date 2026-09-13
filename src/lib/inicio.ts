@@ -52,12 +52,14 @@ export function perfilPodeVerPainelGerencial(perfil: PerfilInicio): boolean {
 // para a chave "personalizado" dessa mesma função.
 // ---------------------------------------------------------------------------
 
-export type PeriodoInicio = "hoje" | "7dias" | "mes" | "custom";
+export type PeriodoInicio = "hoje" | "ontem" | "7dias" | "mes" | "mes-passado" | "custom";
 
 export type RangeComparativo = { from: Date; to: Date; prevFrom: Date; prevTo: Date };
 
+const PERIODO_INICIO_VALUES: PeriodoInicio[] = ["hoje", "ontem", "7dias", "mes", "mes-passado", "custom"];
+
 function normalizePeriodoInicio(periodo?: string | null): PeriodoInicio {
-  if (periodo === "hoje" || periodo === "7dias" || periodo === "mes" || periodo === "custom") return periodo;
+  if (PERIODO_INICIO_VALUES.includes(periodo as PeriodoInicio)) return periodo as PeriodoInicio;
   return "mes";
 }
 
