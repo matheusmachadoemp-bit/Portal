@@ -59,8 +59,8 @@ export const CHECKLIST_STATUS_LABEL: Record<ChecklistOccurrenceStatus, string> =
   CANCELADO: "Cancelado",
 };
 
-export const CHECKLIST_STATUS_TONE: Record<ChecklistOccurrenceStatus, "default" | "success" | "warning" | "danger" | "info"> = {
-  AGENDADO: "default",
+export const CHECKLIST_STATUS_TONE: Record<ChecklistOccurrenceStatus, "default" | "success" | "warning" | "danger" | "info" | "purple"> = {
+  AGENDADO: "purple",
   DISPONIVEL: "info",
   EM_ANDAMENTO: "info",
   CONCLUIDO_NO_PRAZO: "success",

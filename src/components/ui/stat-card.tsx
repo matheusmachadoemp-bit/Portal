@@ -106,7 +106,7 @@ export function Badge({
   tone = "default",
 }: {
   children: ReactNode;
-  tone?: "default" | "success" | "warning" | "danger" | "info";
+  tone?: "default" | "success" | "warning" | "danger" | "info" | "purple";
 }) {
   const tones: Record<string, string> = {
     default: "bg-white/10 text-nord-gray",
@@ -114,9 +114,22 @@ export function Badge({
     warning: "bg-nord-warning/15 text-nord-warning",
     danger: "bg-nord-danger/15 text-nord-danger",
     info: "bg-nord-blue/15 text-nord-blue-light",
+    purple: "bg-purple-500/15 text-purple-400",
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${tones[tone]}`}>
+      {children}
+    </span>
+  );
+}
+
+/** Como `Badge`, mas com uma cor arbitrária (hex) em vez de um tone fixo — para categorias com paleta própria (ex.: setor). */
+export function ColorBadge({ children, color }: { children: ReactNode; color: string }) {
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium"
+      style={{ backgroundColor: `${color}26`, color }}
+    >
       {children}
     </span>
   );
