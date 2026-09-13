@@ -6,6 +6,7 @@ import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { spDateKey, spDateTime, spStartOfDay } from "@/lib/checklist";
 import { fechamentoPerguntasFaltando } from "@/lib/fechamento";
+import { gerarFechamentoOcorrencias } from "@/lib/fechamento-server";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 type RespostaInput = {
@@ -214,5 +215,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
     })
   );
 
-  return NextResponse.json({ submissao, respostas: respostasCriadas, atrasado });
+  // Gera (de forma idempotente) as Ocorrências das respostas "afirmativas" a perguntas com
+  // abreOcorrencia=true — sempre depois de gravar as respostas, já que a extração de
+  // categoria/descrição lê as respostas das perguntas-filha (ver gerarFechamentoOcorrencias,
+  // em @/lib/fechamento-server).
+  const ocorrencias = await gerarFechamentoOcorrencias(submissao.id);
+
+  return NextResponse.json({ submissao, respostas: respostasCriadas, atrasado, ocorrencias });
 }

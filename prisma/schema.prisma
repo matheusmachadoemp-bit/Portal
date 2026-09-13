@@ -53,113 +53,115 @@ model User {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  permissions                      UserPermission[]
-  empresaAccess                    UserEmpresaAccess[]
-  menuPreferences                  MenuPreference?
-  auditLogs                        AuditLog[]
-  salesEntries                     SalesEntry[]
-  marketingEntries                 MarketingEntry[]
-  marketingTasksResponsavel        MarketingTask[]            @relation("MarketingTaskResponsavel")
-  marketingTasksCreated            MarketingTask[]            @relation("MarketingTaskCreatedBy")
-  marketingComments                MarketingComment[]
-  marketingCampaignsResponsavel    MarketingCampaign[]        @relation("MarketingCampaignResponsavel")
-  marketingCampaignsCreated        MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
-  marketingFiles                   MarketingFile[]
-  marketingIdeas                   MarketingIdea[]
-  marketingPartners                MarketingPartner[]
-  kitchenMeetings                  KitchenMeeting[]
-  salaoMeetings                    SalaoMeeting[]
-  deliveryMeetings                 DeliveryMeeting[]
-  gerenteMeetings                  GerenteMeeting[]
-  goals                            Goal[]
-  waiterSalesCreated               WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
-  stockMovementsCreated            StockMovement[]            @relation("StockMovementCreatedBy")
-  purchasesCreated                 Purchase[]                 @relation("PurchaseCreatedBy")
-  purchasesResponsavelRecebimento  Purchase[]                 @relation("PurchaseResponsavelRecebimento")
-  receivingItemsResolvidos         ReceivingItem[]            @relation("ReceivingItemResolvidoPor")
-  transfersCreated                 Transfer[]                 @relation("TransferCreatedBy")
-  lossesCreated                    Loss[]                     @relation("LossCreatedBy")
-  stockCountsCreated               StockCount[]               @relation("StockCountCreatedBy")
-  actionPlansCreated               ActionPlan[]               @relation("ActionPlanCreatedBy")
-  salesCreated                     Sale[]                     @relation("SaleCreatedBy")
-  vaultEntries                     VaultEntry[]
-  vaultAccess                      VaultAccessLog[]
-  courses                          Course[]
-  files                            FileItem[]
-  products                         Product[]
-  occurrences                      Occurrence[]               @relation("OccurrenceCreatedBy")
-  rhFinanceEntries                 EmployeeFinanceEntry[]     @relation("RhFinanceCreatedBy")
-  vacationsCreated                 Vacation[]                 @relation("VacationCreatedBy")
-  uniformDeliveriesCreated         UniformDelivery[]          @relation("UniformCreatedBy")
-  employeeDocumentsCreated         EmployeeDocument[]         @relation("EmployeeDocumentCreatedBy")
-  payables                         Payable[]
-  receivables                      Receivable[]
-  cashMovements                    CashMovement[]
-  recurringTemplates               RecurringTemplate[]
-  bankReconciliationImports        BankReconciliationImport[]
-  trainingCoursesCreated           TrainingCourse[]
-  trainingEnrollments              TrainingEnrollment[]
-  trainingAttempts                 TrainingAttempt[]
-  trainingCertificates             TrainingCertificate[]
-  trainingBadges                   TrainingUserBadge[]
-  trainingXpEvents                 TrainingXpEvent[]
-  trainingLibraryItems             TrainingLibraryItem[]
-  customerNotesAuthored            CustomerNote[]             @relation("CustomerNoteAuthor")
-  crmSegmentsCreated               CrmSegment[]               @relation("CrmSegmentCreatedBy")
-  campaignsCreated                 Campaign[]                 @relation("CampaignCreatedBy")
-  automationsCreated               Automation[]               @relation("AutomationCreatedBy")
-  npsResponsesAssigned             NpsResponse[]              @relation("NpsResponsavel")
-  tasksCreated                     Task[]                     @relation("TaskCreatedBy")
-  tasksToValidate                  Task[]                     @relation("TaskValidator")
-  taskAssignments                  TaskAssignee[]
-  taskChecklistItemsDone           TaskChecklistItem[]
-  taskComments                     TaskComment[]
-  taskAttachments                  TaskAttachment[]
-  taskProofsSubmitted              TaskProof[]
-  taskValidations                  TaskValidation[]
-  taskHistoryEntries               TaskHistory[]
-  taskRecurrencesCreated           TaskRecurrence[]           @relation("TaskRecurrenceCreatedBy")
-  taskRecurrencesToValidate        TaskRecurrence[]           @relation("TaskRecurrenceValidator")
-  notifications                    Notification[]
-  checklistTemplatesCreated        ChecklistTemplate[]        @relation("ChecklistTemplateCreatedBy")
-  checklistTemplatesResponsavel    ChecklistTemplate[]        @relation("ChecklistTemplateResponsavel")
-  checklistTemplatesSubstituto     ChecklistTemplate[]        @relation("ChecklistTemplateSubstituto")
-  checklistOccurrences             ChecklistOccurrence[]      @relation("ChecklistOccurrenceResponsavel")
-  checklistItemResponses           ChecklistItemResponse[]
-  checklistPhotos                  ChecklistPhoto[]
-  checklistEscalationLogs          ChecklistEscalationLog[]
-  checklistPontos                  ChecklistPontos[]
-  equipamentosCriados              Equipamento[]              @relation("EquipamentoCreatedBy")
-  chamadosSolicitados              Chamado[]                  @relation("ChamadoSolicitante")
-  chamadosResponsavel              Chamado[]                  @relation("ChamadoResponsavel")
-  chamadoComentarios               ChamadoComentario[]
-  chamadoHistoricoEntries          ChamadoHistorico[]
-  manutencaoAnexos                 ManutencaoAnexo[]
-  manutencaoRegistrosResponsavel   ManutencaoRegistro[]       @relation("ManutencaoRegistroResponsavel")
-  manutencaoRegistrosCriados       ManutencaoRegistro[]       @relation("ManutencaoRegistroCreatedBy")
-  prestadoresCriados               Prestador[]                @relation("PrestadorCreatedBy")
-  orcamentosCriados                Orcamento[]                @relation("OrcamentoCreatedBy")
-  manutencaoPreventivasResponsavel ManutencaoPreventiva[]     @relation("ManutencaoPreventivaResponsavel")
-  manutencaoPreventivasCriadas     ManutencaoPreventiva[]     @relation("ManutencaoPreventivaCreatedBy")
-  satisfactionSurveysCreated       SatisfactionSurvey[]       @relation("SatisfactionSurveyCreatedBy")
-  lojaNordTransactions             LojaNordPointTransaction[] @relation("LojaNordTransactionUser")
-  lojaNordTransactionsLancadas     LojaNordPointTransaction[] @relation("LojaNordTransactionCriador")
-  lojaNordRedemptions              LojaNordRedemption[]       @relation("LojaNordRedemptionUser")
-  lojaNordRedemptionsAprovadas     LojaNordRedemption[]       @relation("LojaNordRedemptionAprovador")
-  productionItemsCriados           ProductionItem[]           @relation("ProductionItemCreatedBy")
-  productionStockMovementsCriados  ProductionStockMovement[]  @relation("ProductionStockMovementCreatedBy")
-  productionOrdersResponsavel      ProductionOrder[]          @relation("ProductionOrderResponsavel")
-  productionOrdersAjustadas        ProductionOrder[]          @relation("ProductionOrderAjustePor")
-  productionOrderHistoryEntries    ProductionOrderHistory[]
-  pushSubscriptions                PushSubscription[]
-  fechamentoCargosResponsavel      FechamentoCargo[]          @relation("FechamentoCargoResponsavel")
-  fechamentoCargosSubstituto       FechamentoCargo[]          @relation("FechamentoCargoSubstituto")
-  fechamentoCargosSuperior         FechamentoCargo[]          @relation("FechamentoCargoSuperior")
-  fechamentoCargosCriados          FechamentoCargo[]          @relation("FechamentoCargoCreatedBy")
-  fechamentoPerguntasCriadas       FechamentoPergunta[]
-  fechamentoSubmissoesEnviadas     FechamentoSubmissao[]      @relation("FechamentoSubmissaoEnviadoPor")
-  fechamentoRespostasColaborador   FechamentoResposta[]       @relation("FechamentoRespostaColaborador")
-  fechamentoEscalationLogs         FechamentoEscalationLog[]
+  permissions                        UserPermission[]
+  empresaAccess                      UserEmpresaAccess[]
+  menuPreferences                    MenuPreference?
+  auditLogs                          AuditLog[]
+  salesEntries                       SalesEntry[]
+  marketingEntries                   MarketingEntry[]
+  marketingTasksResponsavel          MarketingTask[]            @relation("MarketingTaskResponsavel")
+  marketingTasksCreated              MarketingTask[]            @relation("MarketingTaskCreatedBy")
+  marketingComments                  MarketingComment[]
+  marketingCampaignsResponsavel      MarketingCampaign[]        @relation("MarketingCampaignResponsavel")
+  marketingCampaignsCreated          MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
+  marketingFiles                     MarketingFile[]
+  marketingIdeas                     MarketingIdea[]
+  marketingPartners                  MarketingPartner[]
+  kitchenMeetings                    KitchenMeeting[]
+  salaoMeetings                      SalaoMeeting[]
+  deliveryMeetings                   DeliveryMeeting[]
+  gerenteMeetings                    GerenteMeeting[]
+  goals                              Goal[]
+  waiterSalesCreated                 WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
+  stockMovementsCreated              StockMovement[]            @relation("StockMovementCreatedBy")
+  purchasesCreated                   Purchase[]                 @relation("PurchaseCreatedBy")
+  purchasesResponsavelRecebimento    Purchase[]                 @relation("PurchaseResponsavelRecebimento")
+  receivingItemsResolvidos           ReceivingItem[]            @relation("ReceivingItemResolvidoPor")
+  transfersCreated                   Transfer[]                 @relation("TransferCreatedBy")
+  lossesCreated                      Loss[]                     @relation("LossCreatedBy")
+  stockCountsCreated                 StockCount[]               @relation("StockCountCreatedBy")
+  actionPlansCreated                 ActionPlan[]               @relation("ActionPlanCreatedBy")
+  salesCreated                       Sale[]                     @relation("SaleCreatedBy")
+  vaultEntries                       VaultEntry[]
+  vaultAccess                        VaultAccessLog[]
+  courses                            Course[]
+  files                              FileItem[]
+  products                           Product[]
+  occurrences                        Occurrence[]               @relation("OccurrenceCreatedBy")
+  rhFinanceEntries                   EmployeeFinanceEntry[]     @relation("RhFinanceCreatedBy")
+  vacationsCreated                   Vacation[]                 @relation("VacationCreatedBy")
+  uniformDeliveriesCreated           UniformDelivery[]          @relation("UniformCreatedBy")
+  employeeDocumentsCreated           EmployeeDocument[]         @relation("EmployeeDocumentCreatedBy")
+  payables                           Payable[]
+  receivables                        Receivable[]
+  cashMovements                      CashMovement[]
+  recurringTemplates                 RecurringTemplate[]
+  bankReconciliationImports          BankReconciliationImport[]
+  trainingCoursesCreated             TrainingCourse[]
+  trainingEnrollments                TrainingEnrollment[]
+  trainingAttempts                   TrainingAttempt[]
+  trainingCertificates               TrainingCertificate[]
+  trainingBadges                     TrainingUserBadge[]
+  trainingXpEvents                   TrainingXpEvent[]
+  trainingLibraryItems               TrainingLibraryItem[]
+  customerNotesAuthored              CustomerNote[]             @relation("CustomerNoteAuthor")
+  crmSegmentsCreated                 CrmSegment[]               @relation("CrmSegmentCreatedBy")
+  campaignsCreated                   Campaign[]                 @relation("CampaignCreatedBy")
+  automationsCreated                 Automation[]               @relation("AutomationCreatedBy")
+  npsResponsesAssigned               NpsResponse[]              @relation("NpsResponsavel")
+  tasksCreated                       Task[]                     @relation("TaskCreatedBy")
+  tasksToValidate                    Task[]                     @relation("TaskValidator")
+  taskAssignments                    TaskAssignee[]
+  taskChecklistItemsDone             TaskChecklistItem[]
+  taskComments                       TaskComment[]
+  taskAttachments                    TaskAttachment[]
+  taskProofsSubmitted                TaskProof[]
+  taskValidations                    TaskValidation[]
+  taskHistoryEntries                 TaskHistory[]
+  taskRecurrencesCreated             TaskRecurrence[]           @relation("TaskRecurrenceCreatedBy")
+  taskRecurrencesToValidate          TaskRecurrence[]           @relation("TaskRecurrenceValidator")
+  notifications                      Notification[]
+  checklistTemplatesCreated          ChecklistTemplate[]        @relation("ChecklistTemplateCreatedBy")
+  checklistTemplatesResponsavel      ChecklistTemplate[]        @relation("ChecklistTemplateResponsavel")
+  checklistTemplatesSubstituto       ChecklistTemplate[]        @relation("ChecklistTemplateSubstituto")
+  checklistOccurrences               ChecklistOccurrence[]      @relation("ChecklistOccurrenceResponsavel")
+  checklistItemResponses             ChecklistItemResponse[]
+  checklistPhotos                    ChecklistPhoto[]
+  checklistEscalationLogs            ChecklistEscalationLog[]
+  checklistPontos                    ChecklistPontos[]
+  equipamentosCriados                Equipamento[]              @relation("EquipamentoCreatedBy")
+  chamadosSolicitados                Chamado[]                  @relation("ChamadoSolicitante")
+  chamadosResponsavel                Chamado[]                  @relation("ChamadoResponsavel")
+  chamadoComentarios                 ChamadoComentario[]
+  chamadoHistoricoEntries            ChamadoHistorico[]
+  manutencaoAnexos                   ManutencaoAnexo[]
+  manutencaoRegistrosResponsavel     ManutencaoRegistro[]       @relation("ManutencaoRegistroResponsavel")
+  manutencaoRegistrosCriados         ManutencaoRegistro[]       @relation("ManutencaoRegistroCreatedBy")
+  prestadoresCriados                 Prestador[]                @relation("PrestadorCreatedBy")
+  orcamentosCriados                  Orcamento[]                @relation("OrcamentoCreatedBy")
+  manutencaoPreventivasResponsavel   ManutencaoPreventiva[]     @relation("ManutencaoPreventivaResponsavel")
+  manutencaoPreventivasCriadas       ManutencaoPreventiva[]     @relation("ManutencaoPreventivaCreatedBy")
+  satisfactionSurveysCreated         SatisfactionSurvey[]       @relation("SatisfactionSurveyCreatedBy")
+  lojaNordTransactions               LojaNordPointTransaction[] @relation("LojaNordTransactionUser")
+  lojaNordTransactionsLancadas       LojaNordPointTransaction[] @relation("LojaNordTransactionCriador")
+  lojaNordRedemptions                LojaNordRedemption[]       @relation("LojaNordRedemptionUser")
+  lojaNordRedemptionsAprovadas       LojaNordRedemption[]       @relation("LojaNordRedemptionAprovador")
+  productionItemsCriados             ProductionItem[]           @relation("ProductionItemCreatedBy")
+  productionStockMovementsCriados    ProductionStockMovement[]  @relation("ProductionStockMovementCreatedBy")
+  productionOrdersResponsavel        ProductionOrder[]          @relation("ProductionOrderResponsavel")
+  productionOrdersAjustadas          ProductionOrder[]          @relation("ProductionOrderAjustePor")
+  productionOrderHistoryEntries      ProductionOrderHistory[]
+  pushSubscriptions                  PushSubscription[]
+  fechamentoCargosResponsavel        FechamentoCargo[]          @relation("FechamentoCargoResponsavel")
+  fechamentoCargosSubstituto         FechamentoCargo[]          @relation("FechamentoCargoSubstituto")
+  fechamentoCargosSuperior           FechamentoCargo[]          @relation("FechamentoCargoSuperior")
+  fechamentoCargosCriados            FechamentoCargo[]          @relation("FechamentoCargoCreatedBy")
+  fechamentoPerguntasCriadas         FechamentoPergunta[]
+  fechamentoSubmissoesEnviadas       FechamentoSubmissao[]      @relation("FechamentoSubmissaoEnviadoPor")
+  fechamentoRespostasColaborador     FechamentoResposta[]       @relation("FechamentoRespostaColaborador")
+  fechamentoEscalationLogs           FechamentoEscalationLog[]
+  fechamentoOcorrenciasTransformadas FechamentoOcorrencia[]     @relation("FechamentoOcorrenciaTransformadoPor")
+  fechamentoOcorrenciasResolvidas    FechamentoOcorrencia[]     @relation("FechamentoOcorrenciaResolvidoPor")
 }
 
 model UserPermission {
@@ -316,6 +318,7 @@ model Empresa {
   fechamentoPerguntas       FechamentoPergunta[]
   fechamentoCategorias      FechamentoCategoria[]
   fechamentoSubmissoes      FechamentoSubmissao[]
+  fechamentoOcorrencias     FechamentoOcorrencia[]
 }
 
 model UserEmpresaAccess {
@@ -3237,14 +3240,15 @@ model Task {
   updatedAt          DateTime        @updatedAt
   completedAt        DateTime?
 
-  assignees     TaskAssignee[]
-  checklist     TaskChecklistItem[]
-  comments      TaskComment[]
-  attachments   TaskAttachment[]
-  proofs        TaskProof[]
-  validations   TaskValidation[]
-  history       TaskHistory[]
-  notifications Notification[]
+  assignees             TaskAssignee[]
+  checklist             TaskChecklistItem[]
+  comments              TaskComment[]
+  attachments           TaskAttachment[]
+  proofs                TaskProof[]
+  validations           TaskValidation[]
+  history               TaskHistory[]
+  notifications         Notification[]
+  fechamentoOcorrencias FechamentoOcorrencia[]
 
   @@unique([recurrenceId, dueDate])
   @@index([empresaId, status])
@@ -3370,25 +3374,27 @@ enum NotificationPriority {
 }
 
 model Notification {
-  id                    String                @id @default(cuid())
-  userId                String
-  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type                  String
-  title                 String
-  body                  String?
-  priority              NotificationPriority?
-  taskId                String?
-  task                  Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  checklistOccurrenceId String?
-  checklistOccurrence   ChecklistOccurrence?  @relation(fields: [checklistOccurrenceId], references: [id], onDelete: Cascade)
-  chamadoId             String?
-  chamado               Chamado?              @relation(fields: [chamadoId], references: [id], onDelete: SetNull)
-  goalId                String?
-  goal                  Goal?                 @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  purchaseId            String?
-  purchase              Purchase?             @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  read                  Boolean               @default(false)
-  createdAt             DateTime              @default(now())
+  id                     String                @id @default(cuid())
+  userId                 String
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                   String
+  title                  String
+  body                   String?
+  priority               NotificationPriority?
+  taskId                 String?
+  task                   Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  checklistOccurrenceId  String?
+  checklistOccurrence    ChecklistOccurrence?  @relation(fields: [checklistOccurrenceId], references: [id], onDelete: Cascade)
+  chamadoId              String?
+  chamado                Chamado?              @relation(fields: [chamadoId], references: [id], onDelete: SetNull)
+  goalId                 String?
+  goal                   Goal?                 @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  purchaseId             String?
+  purchase               Purchase?             @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  fechamentoOcorrenciaId String?
+  fechamentoOcorrencia   FechamentoOcorrencia? @relation(fields: [fechamentoOcorrenciaId], references: [id], onDelete: Cascade)
+  read                   Boolean               @default(false)
+  createdAt              DateTime              @default(now())
 
   @@index([userId, read])
   // O sino de notificações (`GET /api/notificacoes`) busca as 30 mais
@@ -3563,12 +3569,13 @@ model Chamado {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
-  comentarios   ChamadoComentario[]
-  anexos        ManutencaoAnexo[]
-  historico     ChamadoHistorico[]
-  registros     ManutencaoRegistro[]
-  orcamentos    Orcamento[]
-  notifications Notification[]
+  comentarios           ChamadoComentario[]
+  anexos                ManutencaoAnexo[]
+  historico             ChamadoHistorico[]
+  registros             ManutencaoRegistro[]
+  orcamentos            Orcamento[]
+  notifications         Notification[]
+  fechamentoOcorrencias FechamentoOcorrencia[]
 
   @@index([empresaId, status])
   @@index([empresaId, prioridade])
@@ -4262,8 +4269,9 @@ model FechamentoCargo {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  perguntas  FechamentoPerguntaCargo[]
-  submissoes FechamentoSubmissao[]
+  perguntas   FechamentoPerguntaCargo[]
+  submissoes  FechamentoSubmissao[]
+  ocorrencias FechamentoOcorrencia[]
 
   @@unique([empresaId, key])
   @@index([empresaId])
@@ -4320,9 +4328,10 @@ model FechamentoPergunta {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  cargos    FechamentoPerguntaCargo[]
-  opcoes    FechamentoPerguntaOpcao[]
-  respostas FechamentoResposta[]
+  cargos      FechamentoPerguntaCargo[]
+  opcoes      FechamentoPerguntaOpcao[]
+  respostas   FechamentoResposta[]
+  ocorrencias FechamentoOcorrencia[]
 
   // Sem `@@unique([empresaId, texto])` de propósito: uma primeira versão deste schema tinha
   // esse índice (pra permitir upsert idempotente por texto no seed), mas o texto literal do
@@ -4370,6 +4379,7 @@ model FechamentoCategoria {
   ativa     Boolean @default(true)
 
   perguntasQueSugerem FechamentoPergunta[]
+  ocorrencias         FechamentoOcorrencia[]
 
   @@unique([empresaId, nome])
 }
@@ -4403,6 +4413,7 @@ model FechamentoSubmissao {
 
   respostas      FechamentoResposta[]
   escalationLogs FechamentoEscalationLog[]
+  ocorrencias    FechamentoOcorrencia[]
 
   @@unique([cargoId, data])
   @@index([empresaId, data])
@@ -4449,5 +4460,110 @@ model FechamentoResposta {
 
   createdAt DateTime @default(now())
 
+  /// Uma resposta gera no máximo uma Ocorrência (fase "transformar em ação")
+  /// — a FK fica em `FechamentoOcorrencia.respostaId` (com `@unique` lá),
+  /// esta é só a ponta inversa da mesma relação 1:1.
+  ocorrencia FechamentoOcorrencia?
+
   @@unique([submissaoId, perguntaId])
+}
+
+// ---------------------------------------------------------------------------
+// FECHAMENTO DO DIA — Fase 3: Ocorrência (geração automática a partir de uma
+// resposta "afirmativa" a uma pergunta com `abreOcorrencia = true`) + lista
+// consolidada + "transformar em ação" + notificação de gravidade Crítica.
+//
+// Reconstrução a partir da mesma linha de raciocínio da investigação
+// original (o arquivo PROPOSTA-FECHAMENTO-DIA.md que documentava os
+// detalhes finos foi perdido do disco antes desta fase começar — ver
+// ressalva completa no relatório final): o comentário desta seção, escrito
+// ainda na Fase 1, já registrava que a fase de Ocorrência traria "as FKs de
+// transformação em Task/Chamado/Occurrence-RH/Purchase/CustomerNote" — os 5
+// módulos candidatos considerados. Desta vez, confirmando cada um contra o
+// schema real: só Task e Chamado têm campos 100% compatíveis com o dado que
+// o Fechamento realmente capta hoje (Occurrence-RH pede `employeeId`,
+// ligado a `Employee`, não a `User` — o Fechamento só sabe o `User` do
+// colaborador, os dois não têm FK entre si; Purchase exige `supplierId`
+// obrigatório e itens de pedido, que o Fechamento não capta; CustomerNote
+// exige `clienteId` de um Cliente específico, que nenhuma pergunta do
+// catálogo pede). Por isso esta fase só implementa "transformar em" para
+// Task e Chamado — os outros 3 ficam de fora até existir uma decisão de
+// produto sobre como preencher essa lacuna de dado (não são um "nunca",
+// só não dá pra fazer sem inventar dado).
+//
+// FKs de transformação (`transformadoEmTaskId`/`transformadoEmChamadoId`)
+// nascem opcionais e mutuamente exclusivas na prática (a rota de
+// transformação só preenche uma das duas, nunca as duas ao mesmo tempo).
+// ---------------------------------------------------------------------------
+
+enum FechamentoOcorrenciaStatus {
+  ABERTA
+  TRANSFORMADA
+  RESOLVIDA
+  DESCARTADA
+}
+
+/// Gerada automaticamente (ver `gerarFechamentoOcorrencias`, em
+/// `src/lib/fechamento-server.ts`) quando uma resposta de uma pergunta com
+/// `abreOcorrencia = true` é respondida de forma afirmativa (hoje, sempre
+/// SIM_NAO — nenhuma pergunta MULTIPLA_ESCOLHA do catálogo real usa
+/// `abreOcorrencia`, confirmado contra `prisma/seed.ts`; se isso mudar no
+/// futuro, a função de geração precisa aprender a decidir qual opção conta
+/// como "afirmativa" antes de suportar o caso). `categoria`/`gravidade` são
+/// só o valor SUGERIDO inicial (da pergunta-gatilho, ou — única exceção,
+/// o Gerente — da resposta da pergunta-filha "Categoria"): o usuário pode
+/// mudar os dois livremente depois, nunca são o valor final garantido.
+model FechamentoOcorrencia {
+  id        String          @id @default(cuid())
+  empresaId String
+  empresa   Empresa         @relation(fields: [empresaId], references: [id])
+  cargoId   String
+  cargo     FechamentoCargo @relation(fields: [cargoId], references: [id])
+  data      DateTime // mesma data (00:00 America/Sao_Paulo) da submissão de origem
+
+  // Referência de volta à origem — submissão/pergunta/resposta que geraram esta ocorrência.
+  submissaoId String
+  submissao   FechamentoSubmissao @relation(fields: [submissaoId], references: [id], onDelete: Cascade)
+  perguntaId  String
+  pergunta    FechamentoPergunta  @relation(fields: [perguntaId], references: [id])
+  /// `@unique`: no máximo uma ocorrência por resposta — é a própria
+  /// idempotência da geração (reenviar a mesma submissão no mesmo dia nunca
+  /// duplica a ocorrência; ver `gerarFechamentoOcorrencias`).
+  respostaId  String              @unique
+  resposta    FechamentoResposta  @relation(fields: [respostaId], references: [id], onDelete: Cascade)
+
+  categoriaId String
+  categoria   FechamentoCategoria @relation(fields: [categoriaId], references: [id])
+  gravidade   FechamentoGravidade @default(ATENCAO)
+
+  /// Extraído da resposta da pergunta-filha "O que aconteceu?" (Gerente) ou
+  /// "Descrição" (Chef de Salão/Cozinha) — nunca fica vazio: sem uma filha
+  /// de descrição identificável, cai no texto da própria pergunta-gatilho.
+  descricao        String
+  /// Só o Gerente tem essas 2 filhas hoje — ficam `null` pros outros cargos.
+  comoFoiResolvido String?
+  pendencia        String?
+
+  status FechamentoOcorrenciaStatus @default(ABERTA)
+
+  transformadoEmTaskId    String?
+  transformadoEmTask      Task?     @relation(fields: [transformadoEmTaskId], references: [id])
+  transformadoEmChamadoId String?
+  transformadoEmChamado   Chamado?  @relation(fields: [transformadoEmChamadoId], references: [id])
+  transformadoPorId       String?
+  transformadoPor         User?     @relation("FechamentoOcorrenciaTransformadoPor", fields: [transformadoPorId], references: [id])
+  transformadoEm          DateTime?
+
+  resolvidoPorId String?
+  resolvidoPor   User?     @relation("FechamentoOcorrenciaResolvidoPor", fields: [resolvidoPorId], references: [id])
+  resolvidoEm    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notifications Notification[]
+
+  @@index([empresaId, data])
+  @@index([empresaId, status])
+  @@index([categoriaId])
 }
