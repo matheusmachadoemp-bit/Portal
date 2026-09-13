@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, ShieldCheck, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
@@ -21,6 +21,15 @@ type UserDTO = {
   canViewGrupoNord: boolean;
   defaultEmpresaId: string | null;
   permissionProfileId: string | null;
+  employeeId: string | null;
+};
+
+type EmployeeOption = {
+  id: string;
+  name: string;
+  cargo: string;
+  status: string;
+  empresa: { name: string };
 };
 
 const ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR", "COLABORADOR"];
@@ -30,6 +39,14 @@ const ROLE_TONE: Record<string, "default" | "success" | "warning" | "danger" | "
   GERENTE: "info",
   SUPERVISOR: "warning",
   COLABORADOR: "default",
+};
+
+// Rótulo dos status de ficha de RH que não sejam "ativo" — ajuda a evitar vincular por engano
+// uma ficha de alguém que já saiu ou está afastado (mesmo vocabulário de colaboradores-client.tsx).
+const EMPLOYEE_STATUS_LABEL: Record<string, string> = {
+  FERIAS: "Férias",
+  AFASTADO: "Afastado",
+  DESLIGADO: "Desligado",
 };
 
 const emptyForm = {
@@ -42,6 +59,7 @@ const emptyForm = {
   canViewGrupoNord: false,
   defaultEmpresaId: "",
   permissionProfileId: "",
+  employeeId: "",
 };
 
 export function UsuariosClient({
@@ -71,6 +89,37 @@ export function UsuariosClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [employeesError, setEmployeesError] = useState<string | null>(null);
+
+  // Carrega a lista de fichas de RH uma vez (reaproveita GET /api/rh/employees, já usada pela
+  // tela de Colaboradores/Ocorrências) para popular o campo "Ficha de funcionário (RH)" do
+  // formulário — tanto no criar quanto no editar.
+  useEffect(() => {
+    fetch("/api/rh/employees")
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? "Não foi possível carregar a lista de fichas de RH.");
+        }
+        return res.json();
+      })
+      .then((data) => setEmployees(data.employees ?? []))
+      .catch((err) =>
+        setEmployeesError(err instanceof Error ? err.message : "Não foi possível carregar a lista de fichas de RH.")
+      );
+  }, []);
+
+  // Fichas já vinculadas a OUTRO usuário (não conta o vínculo atual de quem está sendo editado):
+  // a API já bloqueia a troca com uma mensagem clara, mas indicar aqui evita que o admin escolha
+  // uma opção que vai falhar.
+  const linkedEmployeeIds = new Set(
+    users.filter((u) => u.employeeId && u.id !== editing?.id).map((u) => u.employeeId as string)
+  );
+  // A lista de fichas vem filtrada pela loja ativa no seletor do topo (ou todas, no modo Grupo
+  // Nord — ver GET /api/rh/employees). Só mostra o nome da loja em cada opção quando há mais de
+  // uma entre as fichas carregadas, pra não poluir a lista no caso comum (loja única).
+  const showEmpresaHint = new Set(employees.map((emp) => emp.empresa.name)).size > 1;
 
   function setPermission(key: string, level: string) {
     setPermissions((p) => ({ ...p, [key]: level }));
@@ -118,6 +167,7 @@ export function UsuariosClient({
       canViewGrupoNord: u.canViewGrupoNord,
       defaultEmpresaId: u.defaultEmpresaId ?? "",
       permissionProfileId: u.permissionProfileId ?? "",
+      employeeId: u.employeeId ?? "",
     });
     const perm: Record<string, string> = {};
     u.permissions.forEach((p) => (perm[p.moduleKey] = p.level));
@@ -303,6 +353,40 @@ export function UsuariosClient({
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Ficha de funcionário (RH)">
+            <select
+              value={form.employeeId}
+              onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+              className="input"
+            >
+              <option value="">Nenhuma</option>
+              {form.employeeId && !employees.some((emp) => emp.id === form.employeeId) && (
+                <option value={form.employeeId}>Ficha atual (detalhes indisponíveis no momento)</option>
+              )}
+              {employees.map((emp) => {
+                const linkedToOther = linkedEmployeeIds.has(emp.id);
+                const empresaNote = showEmpresaHint ? ` · ${emp.empresa.name}` : "";
+                const statusNote = emp.status !== "ATIVO" ? ` · ${EMPLOYEE_STATUS_LABEL[emp.status] ?? emp.status}` : "";
+                return (
+                  <option key={emp.id} value={emp.id} disabled={linkedToOther}>
+                    {emp.name} — {emp.cargo}
+                    {empresaNote}
+                    {statusNote}
+                    {linkedToOther ? " · já vinculada a outro usuário" : ""}
+                  </option>
+                );
+              })}
+            </select>
+            {employeesError ? (
+              <p className="text-[11px] text-nord-warning mt-1">{employeesError}</p>
+            ) : (
+              <p className="text-[11px] text-nord-gray mt-1">
+                Necessário só para quem vai preencher o Fechamento do Dia (Gerente, Chef de Salão ou Chef de
+                Cozinha). Deixe em &quot;Nenhuma&quot; se este usuário não precisa preencher esse formulário. A
+                lista mostra as fichas da loja ativa no seletor do topo (ou de todas, no modo Grupo Nord).
+              </p>
+            )}
           </Field>
         </div>
 
