@@ -24,10 +24,11 @@ type RespostaInput = {
 
 /**
  * Submete o fechamento de um cargo num dia: cria/atualiza a
- * `FechamentoSubmissao` e cada `FechamentoResposta`, calculando se foi
- * enviado no prazo ou com atraso. Não gera `FechamentoOcorrencia` nenhuma
- * ainda (fase futura, quando o model existir) — mesmo quando uma pergunta
- * com `abreOcorrencia = true` é respondida de forma afirmativa.
+ * `FechamentoSubmissao` (calculando `notaGeral` — ver comentário mais abaixo
+ * — e se foi enviado no prazo ou com atraso) e cada `FechamentoResposta`,
+ * gerando (de forma idempotente) as `FechamentoOcorrencia` das respostas
+ * "afirmativas" a perguntas com `abreOcorrencia = true` (ver
+ * `gerarFechamentoOcorrencias`, em `@/lib/fechamento-server`).
  */
 export async function POST(req: Request, { params }: { params: Promise<{ cargoId: string }> }) {
   const session = await auth();
@@ -134,6 +135,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
     if (resposta.anexoUrl && !isValidBlobUrl(resposta.anexoUrl)) {
       erros.push(`Anexo inválido em "${pergunta.texto}".`);
     }
+    if (pergunta.tipo === "NOTA_1_5" && resposta.valorNota != null) {
+      if (!Number.isInteger(resposta.valorNota) || resposta.valorNota < 1 || resposta.valorNota > 5) {
+        erros.push(`Nota inválida em "${pergunta.texto}" (precisa ser de 1 a 5).`);
+      }
+    }
   }
 
   if (erros.length > 0) {
@@ -169,10 +175,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
   const now = new Date();
   const atrasado = now.getTime() > dueAt.getTime();
 
+  // "Nota geral" do dia — não é resposta de uma pergunta do catálogo (ver comentário do campo
+  // em FechamentoSubmissao no schema), mas nenhum cliente hoje envia `notaGeral` explicitamente
+  // no corpo da requisição (gap identificado nas fases anteriores). Por isso, quando o corpo não
+  // traz um valor explícito, populamos automaticamente a partir da (única) pergunta RAIZ (sem
+  // perguntaPaiId) do tipo NOTA_1_5 do catálogo deste cargo — hoje sempre exatamente uma por
+  // cargo ("Como você avalia a operação hoje?"/"Como foi o salão hoje?"/"Como foi a cozinha
+  // hoje?", confirmado em prisma/seed.ts). Se o catálogo mudar no futuro e o cargo passar a ter
+  // 0 ou mais de 1 pergunta raiz desse tipo, não adivinhamos qual usar: `notaGeral` fica null
+  // (ver relatório da Fase 4, Parte 2). Um valor explícito enviado pelo cliente sempre tem
+  // prioridade sobre a derivação automática.
+  let notaGeralFinal: number | null = notaGeral ?? null;
+  if (notaGeralFinal == null) {
+    const perguntasRaizNota = [...perguntasPorId.values()].filter((p) => p.tipo === "NOTA_1_5" && !p.perguntaPaiId);
+    if (perguntasRaizNota.length === 1) {
+      const valorNota = respostaPorPerguntaId.get(perguntasRaizNota[0].id)?.valorNota;
+      if (valorNota != null && Number.isInteger(valorNota) && valorNota >= 1 && valorNota <= 5) {
+        notaGeralFinal = valorNota;
+      }
+    }
+  }
+
   const submissao = await prisma.fechamentoSubmissao.upsert({
     where: { cargoId_data: { cargoId: cargo.id, data: day } },
     update: {
-      notaGeral: notaGeral ?? undefined,
+      notaGeral: notaGeralFinal,
       enviadoPorId: session.user.id,
       enviadoEm: now,
       status: "ENVIADO",
@@ -183,7 +210,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
       data: day,
       releaseAt,
       dueAt,
-      notaGeral: notaGeral ?? null,
+      notaGeral: notaGeralFinal,
       enviadoPorId: session.user.id,
       enviadoEm: now,
       status: "ENVIADO",

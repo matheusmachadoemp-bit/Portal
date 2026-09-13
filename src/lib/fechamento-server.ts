@@ -63,6 +63,18 @@ export async function refreshFechamentoStatuses(submissaoIds: string[]) {
  * Gera (se necessário) e devolve as submissões do dia `dateKey` das
  * empresas informadas, com o status já atualizado no banco. Usado pela
  * rota de status do dia.
+ *
+ * O `findMany` abaixo roda ANTES de `refreshFechamentoStatuses` persistir uma eventual
+ * transição de status (ex.: PENDENTE -> ATRASADO, quando o prazo acabou de vencer) — devolver
+ * esses objetos direto da consulta reproduzia um bug real (achado durante a validação da Fase
+ * 4, Parte 3): a primeira leitura do dia depois do prazo vencer devolvia o status ANTIGO (a
+ * gravação no banco acontecia certa, só o retorno desta função ficava um passo atrasado),
+ * corrigindo sozinho só numa segunda leitura. Por isso recalculamos "ao vivo"
+ * (`computeFechamentoStatus`, função pura, sem consulta extra) por cima do resultado antes de
+ * devolver — mesma solução já usada em `getFechamentoResumoData` mais abaixo. A gravação via
+ * `refreshFechamentoStatuses` continua acontecendo normalmente (útil pra quem ler
+ * `FechamentoSubmissao` direto depois); só o valor DEVOLVIDO por esta função deixa de confiar no
+ * `status` lido antes do refresh.
  */
 export async function loadFechamentoSubmissoesDoDia(empresaIds: string[], dateKey: string = spDateKey()) {
   await generateFechamentoSubmissoes(empresaIds, dateKey);
@@ -73,7 +85,11 @@ export async function loadFechamentoSubmissoesDoDia(empresaIds: string[], dateKe
   if (submissoes.length > 0) {
     await refreshFechamentoStatuses(submissoes.map((s) => s.id));
   }
-  return submissoes;
+  const now = new Date();
+  return submissoes.map((s) => ({
+    ...s,
+    status: computeFechamentoStatus({ dueAt: s.dueAt, enviadoEm: s.enviadoEm, now }),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -250,4 +266,136 @@ async function notificarFechamentoOcorrenciaCritica(ocorrencia: FechamentoOcorre
       })
     )
   );
+}
+
+// ---------------------------------------------------------------------------
+// FECHAMENTO DO DIA — Fase 4 (Parte 3): indicadores agregados (nota média,
+// taxa de envio no prazo/atrasado, ocorrências por gravidade/categoria) —
+// base de dados pra uma tela futura de relatório, mesmo papel de
+// `getManutencaoRelatorioData` (@/lib/manutencao-server) e
+// `getIndicadoresData` (@/lib/producao-indicadores-server) pros respectivos
+// módulos. Só agrega dado que já existe hoje (FechamentoSubmissao +
+// FechamentoOcorrencia) — nenhuma tabela nova.
+// ---------------------------------------------------------------------------
+
+type GrupoContagem = { key: string; nome: string; total: number };
+type GrupoMedia = { key: string; nome: string; valor: number; quantidade: number };
+
+function agruparContagem<T>(items: T[], keyFn: (item: T) => string, labelFn: (item: T) => string): GrupoContagem[] {
+  const grupos = new Map<string, GrupoContagem>();
+  for (const item of items) {
+    const key = keyFn(item);
+    const atual = grupos.get(key) ?? { key, nome: labelFn(item), total: 0 };
+    atual.total += 1;
+    grupos.set(key, atual);
+  }
+  return [...grupos.values()];
+}
+
+function agruparMedia<T>(items: T[], keyFn: (item: T) => string, labelFn: (item: T) => string, valorFn: (item: T) => number): GrupoMedia[] {
+  const grupos = new Map<string, { key: string; nome: string; soma: number; quantidade: number }>();
+  for (const item of items) {
+    const key = keyFn(item);
+    const atual = grupos.get(key) ?? { key, nome: labelFn(item), soma: 0, quantidade: 0 };
+    atual.soma += valorFn(item);
+    atual.quantidade += 1;
+    grupos.set(key, atual);
+  }
+  return [...grupos.values()]
+    .map(({ key, nome, soma, quantidade }) => ({ key, nome, valor: Math.round((soma / quantidade) * 100) / 100, quantidade }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+/**
+ * Indicadores do período `[from, to]` (inclusive nos dois extremos — ambos já esperados como
+ * meia-noite de São Paulo, mesma convenção de `FechamentoSubmissao.data`/`FechamentoOcorrencia.
+ * data`) para as lojas em `empresaIds`. Usado por `GET /api/fechamento-dia/indicadores`.
+ *
+ * "Taxa de envio no prazo vs. atrasado": classifica cada `FechamentoSubmissao` do período
+ * recomputando o status "ao vivo" (`computeFechamentoStatus`, @/lib/fechamento) em vez de
+ * confiar direto na coluna `status` gravada — ela só é persistida quando algo relê aquele dia
+ * específico (`refreshFechamentoStatuses`), então uma submissão vencida há muito tempo sem
+ * ninguém ter revisitado aquele dia continuaria com o valor antigo gravado no banco. Uma
+ * ressalva permanece mesmo assim (documentada no relatório da Fase 4): só existe uma linha de
+ * `FechamentoSubmissao` para um cargo/dia depois que ALGUÉM enviou o formulário OU visitou a
+ * tela de status daquele dia (`generateFechamentoSubmissoes`, chamada por
+ * `loadFechamentoSubmissoesDoDia`) — um dia em que ninguém nunca abriu a tela nem enviou nada
+ * simplesmente não tem linha nenhuma, e por isso não entra nesta conta (nem como "no prazo" nem
+ * como "atrasado"). Na prática isso deve ser raro (a tela de Status do Dia é o objetivo central
+ * do módulo, visitada diariamente), mas é uma subestimação real do "não enviado" que vale a pena
+ * ter em mente ao ler o indicador.
+ */
+export async function getFechamentoResumoData(empresaIds: string[], from: Date, to: Date) {
+  const now = new Date();
+
+  const [submissoes, ocorrencias] = await Promise.all([
+    prisma.fechamentoSubmissao.findMany({
+      where: { empresaId: { in: empresaIds }, data: { gte: from, lte: to } },
+      select: {
+        empresaId: true,
+        notaGeral: true,
+        enviadoEm: true,
+        dueAt: true,
+        empresa: { select: { name: true } },
+        cargo: { select: { key: true, nome: true } },
+      },
+    }),
+    prisma.fechamentoOcorrencia.findMany({
+      where: { empresaId: { in: empresaIds }, data: { gte: from, lte: to } },
+      select: {
+        gravidade: true,
+        categoriaId: true,
+        categoria: { select: { nome: true } },
+      },
+    }),
+  ]);
+
+  // 1) Nota média (notaGeral) por loja e por cargo — só entre submissões que de fato têm
+  // notaGeral preenchido (ver Parte 2: só passou a ser populado a partir desta fase; submissões
+  // antigas continuam null e ficam de fora da média, não contam como "nota zero").
+  const comNota = submissoes.filter((s) => s.notaGeral != null);
+  const notaMediaPorLoja = agruparMedia(comNota, (s) => s.empresaId, (s) => s.empresa.name, (s) => s.notaGeral as number);
+  const notaMediaPorCargo = agruparMedia(comNota, (s) => s.cargo.key, (s) => s.cargo.nome, (s) => s.notaGeral as number);
+
+  // 2) Taxa de envio no prazo vs. atrasado (ver ressalva sobre cobertura no comentário da
+  // função). PENDENTE (ainda dentro do prazo, ninguém enviou ainda) fica de fora da conta: não é
+  // justo classificar como "atraso" algo que ainda pode ser enviado a tempo.
+  let enviadosNoPrazo = 0;
+  let enviadosComAtraso = 0;
+  let naoEnviados = 0;
+  for (const s of submissoes) {
+    if (s.enviadoEm) {
+      if (s.enviadoEm.getTime() <= s.dueAt.getTime()) enviadosNoPrazo++;
+      else enviadosComAtraso++;
+    } else if (computeFechamentoStatus({ dueAt: s.dueAt, enviadoEm: null, now }) === "ATRASADO") {
+      naoEnviados++;
+    }
+  }
+  const totalConsiderado = enviadosNoPrazo + enviadosComAtraso + naoEnviados;
+
+  // 3) Contagem de ocorrências por gravidade e por categoria.
+  const ocorrenciasPorGravidade = agruparContagem(ocorrencias, (o) => o.gravidade, (o) => o.gravidade);
+  const ocorrenciasPorCategoria = agruparContagem(ocorrencias, (o) => o.categoriaId, (o) => o.categoria.nome);
+
+  // 4) Top categorias com mais ocorrências — mesma contagem por categoria acima, só ordenada e
+  // limitada às 5 primeiras (mesmo padrão de "top N" de `getManutencaoRelatorioData`,
+  // @/lib/manutencao-server, ex. `gastosPorEquipamento.slice(0, 10)`).
+  const topCategorias = [...ocorrenciasPorCategoria].sort((a, b) => b.total - a.total).slice(0, 5);
+
+  return {
+    notaMediaPorLoja,
+    notaMediaPorCargo,
+    envio: {
+      enviadosNoPrazo,
+      enviadosComAtraso,
+      naoEnviados,
+      totalConsiderado,
+      taxaNoPrazoPercent: totalConsiderado > 0 ? Math.round((enviadosNoPrazo / totalConsiderado) * 1000) / 10 : null,
+    },
+    ocorrenciasPorGravidade,
+    ocorrenciasPorCategoria,
+    topCategorias,
+    totalSubmissoes: submissoes.length,
+    totalOcorrencias: ocorrencias.length,
+  };
 }
