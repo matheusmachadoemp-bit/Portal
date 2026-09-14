@@ -11,7 +11,7 @@ import {
   loadNpsScore,
   countChecklistsConcluidos,
   countTarefasPendentes,
-  countEquipePresenteHoje,
+  loadManutencaoResumo,
 } from "@/lib/inicio";
 
 /**
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     fim: searchParams.get("fim"),
   });
 
-  const [atual, anterior, progressoMeta, npsAtual, npsAnterior, checklistsConcluidos, tarefasPendentes, equipePresente] =
+  const [atual, anterior, progressoMeta, npsAtual, npsAnterior, checklistsConcluidos, tarefasPendentes, manutencao] =
     await Promise.all([
       loadSalesSummary(empresaId, from, to),
       loadSalesSummary(empresaId, prevFrom, prevTo),
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
       loadNpsScore(empresaId, prevFrom, prevTo),
       countChecklistsConcluidos(empresaId, from, to),
       countTarefasPendentes(empresaId),
-      countEquipePresenteHoje(empresaId),
+      loadManutencaoResumo(empresaId),
     ]);
 
   return NextResponse.json({
@@ -82,7 +82,7 @@ export async function GET(req: Request) {
     },
     checklistsConcluidos: { quantidade: checklistsConcluidos },
     tarefasPendentes: { quantidade: tarefasPendentes },
-    equipePresente: { quantidade: equipePresente },
+    manutencao: { chamadosAbertos: manutencao.chamadosAbertos, chamadosUrgentes: manutencao.chamadosUrgentes },
     nps: {
       valor: npsAtual,
       variacaoPercent: growth(npsAtual, npsAnterior),

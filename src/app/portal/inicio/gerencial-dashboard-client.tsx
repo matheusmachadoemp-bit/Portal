@@ -40,7 +40,7 @@ type IndicadoresResponse = {
   ticketMedio: IndicadorComDelta;
   checklistsConcluidos: { quantidade: number };
   tarefasPendentes: { quantidade: number };
-  equipePresente: { quantidade: number };
+  manutencao: { chamadosAbertos: number; chamadosUrgentes: number };
   nps: IndicadorComDelta;
 };
 
@@ -245,12 +245,16 @@ export function GerencialDashboardClient({
                   href: "/portal/tarefas",
                 },
                 {
-                  key: "equipe-presente",
-                  label: "Equipe presente hoje",
-                  value: formatNumber(indicadores.equipePresente.quantidade),
-                  icon: "Users",
-                  hint: "hoje",
-                  href: "/portal/rh/ponto-eletronico",
+                  key: "manutencao",
+                  label: "Manutenções",
+                  value: formatNumber(indicadores.manutencao.chamadosAbertos),
+                  icon: "Wrench",
+                  color: indicadores.manutencao.chamadosUrgentes > 0 ? "#ef4444" : undefined,
+                  hint:
+                    indicadores.manutencao.chamadosUrgentes > 0
+                      ? `${formatNumber(indicadores.manutencao.chamadosUrgentes)} urgente(s)`
+                      : "chamados abertos",
+                  href: "/portal/manutencao",
                 },
                 {
                   key: "nps",

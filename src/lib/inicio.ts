@@ -215,9 +215,7 @@ export async function countTarefasPendentes(empresaId: string): Promise<number> 
 //
 // `loadEquipePresenteHoje` traz a lista completa (nome + foto), usada pelo
 // painel "Equipe de hoje" (Fase 2, GET /api/inicio/equipe-hoje) para montar
-// os avatares; `countEquipePresenteHoje` (usada por /api/inicio/indicadores)
-// reaproveita a mesma consulta e só devolve o tamanho da lista. O
-// `avatarUrl` da resposta vem de `Employee.photoUrl`: `TimeEntry` só se
+// os avatares. O `avatarUrl` da resposta vem de `Employee.photoUrl`: `TimeEntry` só se
 // relaciona com `Employee`, nunca com `User` (que é quem tem o campo
 // `avatarUrl` de fato, mas não tem relação nenhuma com `Employee` no
 // schema) — por isso não é a foto de perfil de login, e sim a foto
@@ -243,10 +241,6 @@ export async function loadEquipePresenteHoje(
   return presentes
     .map((p): EquipeHojePessoa => ({ id: p.employee.id, nome: p.employee.name, avatarUrl: p.employee.photoUrl }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
-}
-
-export async function countEquipePresenteHoje(empresaId: string): Promise<number> {
-  return (await loadEquipePresenteHoje(empresaId)).length;
 }
 
 // ---------------------------------------------------------------------------
