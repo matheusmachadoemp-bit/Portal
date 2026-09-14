@@ -4,7 +4,12 @@ import { PageContainer } from "@/components/page-container";
 import { SalaoClient } from "./salao-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
-import { computeSalaoMetrics, computeMelhorVendedor, computeComentariosDestaque } from "@/lib/reuniao-server";
+import {
+  computeSalaoMetrics,
+  computeMelhorVendedor,
+  computeComentariosDestaque,
+  loadReuniaoCustomIndicators,
+} from "@/lib/reuniao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -32,6 +37,7 @@ export default async function ReuniaoSalaoPage() {
   const comentarios = isSingle ? await computeComentariosDestaque(ctx.empresa.id, periodo) : [];
 
   const current = isSingle ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
+  const customIndicators = isSingle ? await loadReuniaoCustomIndicators(ctx.empresa.id, "SALAO", periodo) : [];
 
   return (
     <PageContainer title="Reunião" subtitle="Reunião Salão">
@@ -41,6 +47,7 @@ export default async function ReuniaoSalaoPage() {
         initialMetrics={metrics}
         initialMelhorVendedor={melhorVendedor}
         initialComentarios={comentarios}
+        initialCustomIndicators={customIndicators}
         periodo={periodo}
         canCreate={isSingle}
         empresaName={isSingle ? ctx.empresa.name : "Grupo Nord"}

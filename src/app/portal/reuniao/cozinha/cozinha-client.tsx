@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trophy, Pencil, FileDown, Trash2 } from "lucide-react";
+import { Pencil, FileDown, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
+import { FechamentoDoMesSection, FechamentoDoMesEditor, useFechamentoDoMes, type FechamentoIndicator } from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
 
@@ -18,14 +19,6 @@ type Meeting = {
   desperdicioValor: number | null;
   tempoPedidoMinutos: number | null;
   organizacaoPercent: number | null;
-  cmvMetaPercent: number;
-  desperdicioMetaValor: number;
-  tempoPedidoMetaMinutos: number;
-  organizacaoMetaPercent: number;
-  premiacaoCmv: number;
-  premiacaoDesperdicio: number;
-  premiacaoTempoPedido: number;
-  premiacaoOrganizacao: number;
   notas: string | null;
   createdAt: string;
   updatedAt: string;
@@ -42,31 +35,15 @@ function buildForm(m?: Meeting | null) {
   return {
     tempoPedidoMinutos: m?.tempoPedidoMinutos != null ? String(m.tempoPedidoMinutos) : "",
     organizacaoPercent: m?.organizacaoPercent != null ? String(m.organizacaoPercent) : "",
-    cmvMetaPercent: String(m?.cmvMetaPercent ?? 30),
-    desperdicioMetaValor: String(m?.desperdicioMetaValor ?? 450),
-    tempoPedidoMetaMinutos: String(m?.tempoPedidoMetaMinutos ?? 15),
-    organizacaoMetaPercent: String(m?.organizacaoMetaPercent ?? 90),
-    premiacaoCmv: String(m?.premiacaoCmv ?? 400),
-    premiacaoDesperdicio: String(m?.premiacaoDesperdicio ?? 300),
-    premiacaoTempoPedido: String(m?.premiacaoTempoPedido ?? 500),
-    premiacaoOrganizacao: String(m?.premiacaoOrganizacao ?? 300),
     notas: m?.notas ?? "",
   };
-}
-
-function meetingPremiacaoTotal(m: Meeting) {
-  return (
-    (m.cmvPercent !== null && m.cmvPercent <= m.cmvMetaPercent ? m.premiacaoCmv : 0) +
-    (m.desperdicioValor !== null && m.desperdicioValor <= m.desperdicioMetaValor ? m.premiacaoDesperdicio : 0) +
-    (m.tempoPedidoMinutos !== null && m.tempoPedidoMinutos <= m.tempoPedidoMetaMinutos ? m.premiacaoTempoPedido : 0) +
-    (m.organizacaoPercent !== null && m.organizacaoPercent >= m.organizacaoMetaPercent ? m.premiacaoOrganizacao : 0)
-  );
 }
 
 export function CozinhaClient({
   initialMeetings,
   initialCurrent,
   initialMetrics,
+  initialCustomIndicators,
   periodo,
   canCreate,
   empresaName,
@@ -74,6 +51,7 @@ export function CozinhaClient({
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
   initialMetrics: Metrics;
+  initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
   empresaName: string;
@@ -85,11 +63,13 @@ export function CozinhaClient({
   const [form, setForm] = useState(buildForm(initialCurrent));
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showMetas, setShowMetas] = useState(false);
+  const [fechamentoModalOpen, setFechamentoModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
+
+  const fdm = useFechamentoDoMes("/api/reuniao/cozinha", initialCustomIndicators);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -106,25 +86,17 @@ export function CozinhaClient({
         setCurrent(data.current);
         setMetrics(data.metrics);
         setForm(buildForm(data.current));
+        fdm.sync(data.customIndicators ?? []);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fdm.sync só chama setState estáveis por baixo (ver useFechamentoDoMes); incluir `fdm` recriaria o efeito a cada render (objeto novo) e causaria um loop de fetch.
   }, [selectedPeriodo]);
-
-  const cmvMeta = Number(form.cmvMetaPercent) || 0;
-  const desperdicioMeta = Number(form.desperdicioMetaValor) || 0;
-  const tempoMeta = Number(form.tempoPedidoMetaMinutos) || 0;
-  const organizacaoMeta = Number(form.organizacaoMetaPercent) || 0;
 
   const tempoValor = form.tempoPedidoMinutos ? Number(form.tempoPedidoMinutos) : null;
   const organizacaoValor = form.organizacaoPercent ? Number(form.organizacaoPercent) : null;
-
-  const bateuCmv = metrics.cmvPercent === null ? null : metrics.cmvPercent <= cmvMeta;
-  const bateuDesperdicio = metrics.desperdicioValor <= desperdicioMeta;
-  const bateuTempo = tempoValor === null ? null : tempoValor <= tempoMeta;
-  const bateuOrganizacao = organizacaoValor === null ? null : organizacaoValor >= organizacaoMeta;
 
   const previousMeeting = useMemo(
     () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
@@ -134,15 +106,6 @@ export function CozinhaClient({
   const compDesperdicio = compareToPrevious(metrics.desperdicioValor, previousMeeting?.desperdicioValor, "min");
   const compTempo = compareToPrevious(tempoValor, previousMeeting?.tempoPedidoMinutos, "min");
   const compOrganizacao = compareToPrevious(organizacaoValor, previousMeeting?.organizacaoPercent, "max");
-
-  const premiacaoTotal = useMemo(() => {
-    let total = 0;
-    if (bateuCmv) total += Number(form.premiacaoCmv) || 0;
-    if (bateuDesperdicio) total += Number(form.premiacaoDesperdicio) || 0;
-    if (bateuTempo) total += Number(form.premiacaoTempoPedido) || 0;
-    if (bateuOrganizacao) total += Number(form.premiacaoOrganizacao) || 0;
-    return total;
-  }, [bateuCmv, bateuDesperdicio, bateuTempo, bateuOrganizacao, form]);
 
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
@@ -159,51 +122,57 @@ export function CozinhaClient({
       });
     }
 
+    // CMV, Desperdício, Tempo de Pedido e Organização deixaram de ter meta/premiação
+    // (viraram indicadores informativos; um valor de referência livre entra na lista
+    // de "Fechamento do mês" quando fizer sentido) — o PDF por enquanto só mostra o
+    // histórico do valor real de cada um, sem linha de meta nem premiação (o
+    // relatório em si ainda precisa de um redesenho, pensado em cima do conceito de
+    // "bateu a meta").
     exportMeetingReportPdf({
       fileSlug: "reuniao-cozinha",
       empresaName,
       periodoLabel: periodoLabel(selectedPeriodo),
-      premiacaoTotal,
+      premiacaoTotal: 0,
       observacoes: form.notas,
       indicators: [
         {
           key: "cmv",
           label: "CMV",
           unit: "percent",
-          meta: cmvMeta,
+          meta: 0,
           metaDirection: "min",
-          status: statusOf(bateuCmv),
-          premio: bateuCmv ? Number(form.premiacaoCmv) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("cmvPercent", metrics.cmvPercent),
         },
         {
           key: "desperdicio",
           label: "Desperdício",
           unit: "currency",
-          meta: desperdicioMeta,
+          meta: 0,
           metaDirection: "min",
-          status: statusOf(bateuDesperdicio),
-          premio: bateuDesperdicio ? Number(form.premiacaoDesperdicio) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("desperdicioValor", metrics.desperdicioValor),
         },
         {
           key: "tempo-pedido",
           label: "Tempo de Pedido",
           unit: "minutes",
-          meta: tempoMeta,
+          meta: 0,
           metaDirection: "min",
-          status: statusOf(bateuTempo),
-          premio: bateuTempo ? Number(form.premiacaoTempoPedido) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("tempoPedidoMinutos", tempoValor),
         },
         {
           key: "organizacao",
           label: "Organização e Limpeza",
           unit: "percent",
-          meta: organizacaoMeta,
+          meta: 0,
           metaDirection: "max",
-          status: statusOf(bateuOrganizacao),
-          premio: bateuOrganizacao ? Number(form.premiacaoOrganizacao) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("organizacaoPercent", organizacaoValor),
         },
       ],
@@ -216,6 +185,7 @@ export function CozinhaClient({
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
+    fdm.sync(data.customIndicators ?? []);
   }
 
   async function submit() {
@@ -225,7 +195,7 @@ export function CozinhaClient({
       await fetch("/api/reuniao/cozinha", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formToPayload(selectedPeriodo, form)),
+        body: JSON.stringify({ ...formToPayload(selectedPeriodo, form), customIndicators: fdm.buildIndicatorsPayload() }),
       });
       await refresh(selectedPeriodo);
     } finally {
@@ -238,7 +208,7 @@ export function CozinhaClient({
     setCurrent(m);
     setForm(buildForm(m));
     setMetrics({ cmvPercent: m.cmvPercent, desperdicioValor: m.desperdicioValor ?? 0, faturamento: 0 });
-    setShowMetas(true);
+    setFechamentoModalOpen(true);
   }
 
   async function doDelete() {
@@ -269,14 +239,14 @@ export function CozinhaClient({
           icon="Percent"
           color="#1464F4"
           label="CMV"
-          status={statusOf(bateuCmv)}
+          status={statusOf(null)}
           valueSlot={
             <span className="text-2xl font-semibold text-white">
               {metrics.cmvPercent === null ? "-" : `${formatNumber(metrics.cmvPercent, 1)}%`}
             </span>
           }
-          metaText={`Meta: até ${formatNumber(cmvMeta, 1)}%`}
-          premio={Number(form.premiacaoCmv) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compCmv}
         />
       ),
@@ -288,10 +258,10 @@ export function CozinhaClient({
           icon="Trash2"
           color="#ef4444"
           label="Desperdício"
-          status={statusOf(bateuDesperdicio)}
+          status={statusOf(null)}
           valueSlot={<span className="text-2xl font-semibold text-white">{formatCurrency(metrics.desperdicioValor)}</span>}
-          metaText={`Meta: até ${formatCurrency(desperdicioMeta)}`}
-          premio={Number(form.premiacaoDesperdicio) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compDesperdicio}
         />
       ),
@@ -303,10 +273,10 @@ export function CozinhaClient({
           icon="Clock"
           color="#a855f7"
           label="Tempo Pedido"
-          status={statusOf(bateuTempo)}
+          status={statusOf(null)}
           valueSlot={<span className="text-2xl font-semibold text-white">{tempoValor ?? "-"} min</span>}
-          metaText={`Meta: até ${formatNumber(tempoMeta, 0)} min`}
-          premio={Number(form.premiacaoTempoPedido) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compTempo}
         />
       ),
@@ -318,10 +288,10 @@ export function CozinhaClient({
           icon="Sparkles"
           color="#14b8a6"
           label="Organização"
-          status={statusOf(bateuOrganizacao)}
+          status={statusOf(null)}
           valueSlot={<span className="text-2xl font-semibold text-white">{organizacaoValor ?? "-"}%</span>}
-          metaText={`Meta: mín. ${formatNumber(organizacaoMeta, 0)}%`}
-          premio={Number(form.premiacaoOrganizacao) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compOrganizacao}
         />
       ),
@@ -350,8 +320,8 @@ export function CozinhaClient({
             <FileDown size={13} /> Exportar PDF
           </button>
           {canCreate && (
-            <button onClick={() => setShowMetas(true)} className="text-xs text-nord-blue-light hover:underline">
-              Editar metas e premiação
+            <button onClick={() => setFechamentoModalOpen(true)} className="text-xs text-nord-blue-light hover:underline">
+              Editar fechamento do mês
             </button>
           )}
         </div>
@@ -363,117 +333,76 @@ export function CozinhaClient({
         items={cards}
       />
 
-      {premiacaoTotal > 0 && (
-        <div className="nord-card p-4 flex items-center gap-3 bg-amber-950/10 border-amber-900/40">
-          <Trophy size={20} className="text-amber-400 shrink-0" />
-          <span className="text-sm text-white">
-            Premiação total do mês: <strong>{formatCurrency(premiacaoTotal)}</strong>
-          </span>
-        </div>
-      )}
+      {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
 
-      <Modal
-        open={showMetas}
-        onClose={() => setShowMetas(false)}
-        title={`Metas e premiação — ${periodoLabel(selectedPeriodo)}`}
-        widthClass="max-w-2xl"
-      >
-        <div className="space-y-5">
-          <div>
-            <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Tempo Pedido (min)</span>
-                <input
-                  type="number"
-                  value={form.tempoPedidoMinutos}
-                  onChange={(e) => setForm({ ...form, tempoPedidoMinutos: e.target.value })}
-                  placeholder="minutos"
-                  className="input"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Organização e Limpeza (%)</span>
-                <input
-                  type="number"
-                  value={form.organizacaoPercent}
-                  onChange={(e) => setForm({ ...form, organizacaoPercent: e.target.value })}
-                  placeholder="%"
-                  className="input"
-                />
-              </label>
+      {canCreate && (
+        <Modal
+          open={fechamentoModalOpen}
+          onClose={() => setFechamentoModalOpen(false)}
+          title={`Fechamento do mês — ${periodoLabel(selectedPeriodo)}`}
+          widthClass="max-w-2xl"
+        >
+          <div className="space-y-5">
+            <div>
+              <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Tempo Pedido (min)</span>
+                  <input
+                    type="number"
+                    value={form.tempoPedidoMinutos}
+                    onChange={(e) => setForm({ ...form, tempoPedidoMinutos: e.target.value })}
+                    placeholder="minutos"
+                    className="input"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Organização e Limpeza (%)</span>
+                  <input
+                    type="number"
+                    value={form.organizacaoPercent}
+                    onChange={(e) => setForm({ ...form, organizacaoPercent: e.target.value })}
+                    placeholder="%"
+                    className="input"
+                  />
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <h4 className="text-white text-sm font-medium mb-3">Metas e premiação</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta CMV (%)</span>
-                <input type="number" value={form.cmvMetaPercent} onChange={(e) => setForm({ ...form, cmvMetaPercent: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Desperdício (R$)</span>
-                <input type="number" value={form.desperdicioMetaValor} onChange={(e) => setForm({ ...form, desperdicioMetaValor: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Tempo Pedido (min)</span>
-                <input type="number" value={form.tempoPedidoMetaMinutos} onChange={(e) => setForm({ ...form, tempoPedidoMetaMinutos: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Organização (%)</span>
-                <input type="number" value={form.organizacaoMetaPercent} onChange={(e) => setForm({ ...form, organizacaoMetaPercent: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação CMV (R$)</span>
-                <input type="number" value={form.premiacaoCmv} onChange={(e) => setForm({ ...form, premiacaoCmv: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Desperdício (R$)</span>
-                <input type="number" value={form.premiacaoDesperdicio} onChange={(e) => setForm({ ...form, premiacaoDesperdicio: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Tempo Pedido (R$)</span>
-                <input type="number" value={form.premiacaoTempoPedido} onChange={(e) => setForm({ ...form, premiacaoTempoPedido: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Organização (R$)</span>
-                <input type="number" value={form.premiacaoOrganizacao} onChange={(e) => setForm({ ...form, premiacaoOrganizacao: e.target.value })} className="input" />
-              </label>
-            </div>
-          </div>
+            <FechamentoDoMesEditor fdm={fdm} />
 
-          <div className="flex items-center justify-between pt-2 border-t border-nord-border">
-            {current ? (
+            <div className="flex items-center justify-between pt-2 border-t border-nord-border">
+              {current ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                >
+                  <Trash2 size={13} /> Excluir esta reunião
+                </button>
+              ) : (
+                <span />
+              )}
               <button
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                onClick={async () => {
+                  await submit();
+                  setFechamentoModalOpen(false);
+                }}
+                disabled={saving}
+                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
               >
-                <Trash2 size={13} /> Excluir esta reunião
+                {saving ? "Salvando..." : current ? "Salvar alterações" : "Salvar fechamento do período"}
               </button>
-            ) : (
-              <span />
-            )}
-            <button
-              onClick={async () => {
-                await submit();
-                setShowMetas(false);
-              }}
-              disabled={saving}
-              className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
-            >
-              {saving ? "Salvando..." : current ? "Salvar alterações" : "Criar metas do período"}
-            </button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
 
       <ConfirmDialog
         open={confirmDelete}
         title="Excluir reunião"
         message={
           deleteError ||
-          `Tem certeza que deseja excluir o fechamento de ${periodoLabel(selectedPeriodo)}? As metas, premiação e resultados desse período serão perdidos.`
+          `Tem certeza que deseja excluir o fechamento de ${periodoLabel(selectedPeriodo)}? Os resultados e observações desse período serão perdidos.`
         }
         onConfirm={doDelete}
         onCancel={() => {
@@ -533,11 +462,6 @@ export function CozinhaClient({
                       <DynamicIcon name="Sparkles" size={13} className="text-nord-blue-light" /> Organização
                     </span>
                   </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="Trophy" size={13} className="text-nord-blue-light" /> Premiação total
-                    </span>
-                  </th>
                   <th className="py-2 px-3"></th>
                 </tr>
               </thead>
@@ -549,7 +473,6 @@ export function CozinhaClient({
                     <td className="py-2 px-3 text-nord-gray">{m.desperdicioValor === null ? "-" : formatCurrency(m.desperdicioValor)}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.tempoPedidoMinutos === null ? "-" : `${m.tempoPedidoMinutos} min`}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.organizacaoPercent === null ? "-" : `${m.organizacaoPercent}%`}</td>
-                    <td className="py-2 px-3 text-amber-400">{formatCurrency(meetingPremiacaoTotal(m))}</td>
                     <td className="py-2 px-3">
                       {canCreate && (
                         <button onClick={() => editHistoryRow(m)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">

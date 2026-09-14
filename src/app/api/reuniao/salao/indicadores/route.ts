@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "reuniao", "canEdit"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite criar indicadores na Reunião Gerente." },
+      { error: "Seu perfil de permissão não permite criar indicadores na Reunião Salão." },
       { status: 403 }
     );
   }
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   const indicator = await createReuniaoCustomIndicator({
     empresaId: empresa.id,
-    meetingKey: "GERENTE",
+    meetingKey: "SALAO",
     nome,
     icon,
     unidade,

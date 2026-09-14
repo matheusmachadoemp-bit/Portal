@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trophy, Pencil, FileDown, Trash2 } from "lucide-react";
+import { Pencil, FileDown, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
-import { formatCurrency, formatNumber } from "@/lib/calc";
+import { FechamentoDoMesSection, FechamentoDoMesEditor, useFechamentoDoMes, type FechamentoIndicator } from "@/components/reuniao/fechamento-do-mes";
+import { formatNumber } from "@/lib/calc";
 import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
 
 type Meeting = {
@@ -18,14 +19,6 @@ type Meeting = {
   avaliacaoNota: number | null;
   tempoEntregaMinutos: number | null;
   chamadosPercent: number | null;
-  cancelamentoMetaPercent: number;
-  avaliacaoMetaNota: number;
-  tempoEntregaMetaMinutos: number;
-  chamadosMetaPercent: number;
-  premiacaoCancelamento: number;
-  premiacaoAvaliacao: number;
-  premiacaoTempoEntrega: number;
-  premiacaoChamados: number;
   notas: string | null;
   createdAt: string;
   updatedAt: string;
@@ -43,31 +36,15 @@ function buildForm(m?: Meeting | null) {
     avaliacaoNota: m?.avaliacaoNota != null ? String(m.avaliacaoNota) : "",
     tempoEntregaMinutos: m?.tempoEntregaMinutos != null ? String(m.tempoEntregaMinutos) : "",
     chamadosPercent: m?.chamadosPercent != null ? String(m.chamadosPercent) : "",
-    cancelamentoMetaPercent: String(m?.cancelamentoMetaPercent ?? 1),
-    avaliacaoMetaNota: String(m?.avaliacaoMetaNota ?? 4.7),
-    tempoEntregaMetaMinutos: String(m?.tempoEntregaMetaMinutos ?? 40),
-    chamadosMetaPercent: String(m?.chamadosMetaPercent ?? 2.5),
-    premiacaoCancelamento: String(m?.premiacaoCancelamento ?? 50),
-    premiacaoAvaliacao: String(m?.premiacaoAvaliacao ?? 50),
-    premiacaoTempoEntrega: String(m?.premiacaoTempoEntrega ?? 50),
-    premiacaoChamados: String(m?.premiacaoChamados ?? 50),
     notas: m?.notas ?? "",
   };
-}
-
-function meetingPremiacaoTotal(m: Meeting) {
-  return (
-    (m.cancelamentoPercent !== null && m.cancelamentoPercent <= m.cancelamentoMetaPercent ? m.premiacaoCancelamento : 0) +
-    (m.avaliacaoNota !== null && m.avaliacaoNota >= m.avaliacaoMetaNota ? m.premiacaoAvaliacao : 0) +
-    (m.tempoEntregaMinutos !== null && m.tempoEntregaMinutos <= m.tempoEntregaMetaMinutos ? m.premiacaoTempoEntrega : 0) +
-    (m.chamadosPercent !== null && m.chamadosPercent <= m.chamadosMetaPercent ? m.premiacaoChamados : 0)
-  );
 }
 
 export function DeliveryClient({
   initialMeetings,
   initialCurrent,
   initialMetrics,
+  initialCustomIndicators,
   periodo,
   canCreate,
   empresaName,
@@ -75,6 +52,7 @@ export function DeliveryClient({
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
   initialMetrics: Metrics;
+  initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
   empresaName: string;
@@ -86,11 +64,13 @@ export function DeliveryClient({
   const [form, setForm] = useState(buildForm(initialCurrent));
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showMetas, setShowMetas] = useState(false);
+  const [fechamentoModalOpen, setFechamentoModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
+
+  const fdm = useFechamentoDoMes("/api/reuniao/delivery", initialCustomIndicators);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -107,26 +87,18 @@ export function DeliveryClient({
         setCurrent(data.current);
         setMetrics(data.metrics);
         setForm(buildForm(data.current));
+        fdm.sync(data.customIndicators ?? []);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fdm.sync só chama setState estáveis por baixo (ver useFechamentoDoMes); incluir `fdm` recriaria o efeito a cada render (objeto novo) e causaria um loop de fetch.
   }, [selectedPeriodo]);
-
-  const cancelamentoMeta = Number(form.cancelamentoMetaPercent) || 0;
-  const avaliacaoMeta = Number(form.avaliacaoMetaNota) || 0;
-  const tempoEntregaMeta = Number(form.tempoEntregaMetaMinutos) || 0;
-  const chamadosMeta = Number(form.chamadosMetaPercent) || 0;
 
   const avaliacaoValor = form.avaliacaoNota ? Number(form.avaliacaoNota) : null;
   const tempoEntregaValor = form.tempoEntregaMinutos ? Number(form.tempoEntregaMinutos) : null;
   const chamadosValor = form.chamadosPercent ? Number(form.chamadosPercent) : null;
-
-  const bateuCancelamento = metrics.cancelamentoPercent === null ? null : metrics.cancelamentoPercent <= cancelamentoMeta;
-  const bateuAvaliacao = avaliacaoValor === null ? null : avaliacaoValor >= avaliacaoMeta;
-  const bateuTempoEntrega = tempoEntregaValor === null ? null : tempoEntregaValor <= tempoEntregaMeta;
-  const bateuChamados = chamadosValor === null ? null : chamadosValor <= chamadosMeta;
 
   const previousMeeting = useMemo(
     () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
@@ -136,15 +108,6 @@ export function DeliveryClient({
   const compAvaliacao = compareToPrevious(avaliacaoValor, previousMeeting?.avaliacaoNota, "max");
   const compTempoEntrega = compareToPrevious(tempoEntregaValor, previousMeeting?.tempoEntregaMinutos, "min");
   const compChamados = compareToPrevious(chamadosValor, previousMeeting?.chamadosPercent, "min");
-
-  const premiacaoTotal = useMemo(() => {
-    let total = 0;
-    if (bateuCancelamento) total += Number(form.premiacaoCancelamento) || 0;
-    if (bateuAvaliacao) total += Number(form.premiacaoAvaliacao) || 0;
-    if (bateuTempoEntrega) total += Number(form.premiacaoTempoEntrega) || 0;
-    if (bateuChamados) total += Number(form.premiacaoChamados) || 0;
-    return total;
-  }, [bateuCancelamento, bateuAvaliacao, bateuTempoEntrega, bateuChamados, form]);
 
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
@@ -161,51 +124,57 @@ export function DeliveryClient({
       });
     }
 
+    // Cancelamento, Avaliações, Tempo de Entrega e Chamados deixaram de ter
+    // meta/premiação (viraram indicadores informativos; um valor de referência
+    // livre entra na lista de "Fechamento do mês" quando fizer sentido) — o PDF
+    // por enquanto só mostra o histórico do valor real de cada um, sem linha de
+    // meta nem premiação (o relatório em si ainda precisa de um redesenho,
+    // pensado em cima do conceito de "bateu a meta").
     exportMeetingReportPdf({
       fileSlug: "reuniao-delivery",
       empresaName,
       periodoLabel: periodoLabel(selectedPeriodo),
-      premiacaoTotal,
+      premiacaoTotal: 0,
       observacoes: form.notas,
       indicators: [
         {
           key: "cancelamento",
           label: "Cancelamento",
           unit: "percent",
-          meta: cancelamentoMeta,
+          meta: 0,
           metaDirection: "min",
-          status: statusOf(bateuCancelamento),
-          premio: bateuCancelamento ? Number(form.premiacaoCancelamento) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("cancelamentoPercent", metrics.cancelamentoPercent),
         },
         {
           key: "avaliacao",
           label: "Avaliações (iFood)",
           unit: "rating",
-          meta: avaliacaoMeta,
+          meta: 0,
           metaDirection: "max",
-          status: statusOf(bateuAvaliacao),
-          premio: bateuAvaliacao ? Number(form.premiacaoAvaliacao) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("avaliacaoNota", avaliacaoValor),
         },
         {
           key: "tempo-entrega",
           label: "Tempo de Entrega",
           unit: "minutes",
-          meta: tempoEntregaMeta,
+          meta: 0,
           metaDirection: "min",
-          status: statusOf(bateuTempoEntrega),
-          premio: bateuTempoEntrega ? Number(form.premiacaoTempoEntrega) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("tempoEntregaMinutos", tempoEntregaValor),
         },
         {
           key: "chamados",
           label: "Chamados",
           unit: "percent",
-          meta: chamadosMeta,
+          meta: 0,
           metaDirection: "min",
-          status: statusOf(bateuChamados),
-          premio: bateuChamados ? Number(form.premiacaoChamados) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("chamadosPercent", chamadosValor),
         },
       ],
@@ -218,6 +187,7 @@ export function DeliveryClient({
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
+    fdm.sync(data.customIndicators ?? []);
   }
 
   async function submit() {
@@ -227,7 +197,7 @@ export function DeliveryClient({
       await fetch("/api/reuniao/delivery", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formToPayload(selectedPeriodo, form)),
+        body: JSON.stringify({ ...formToPayload(selectedPeriodo, form), customIndicators: fdm.buildIndicatorsPayload() }),
       });
       await refresh(selectedPeriodo);
     } finally {
@@ -240,7 +210,7 @@ export function DeliveryClient({
     setCurrent(m);
     setForm(buildForm(m));
     setMetrics({ cancelamentoPercent: m.cancelamentoPercent });
-    setShowMetas(true);
+    setFechamentoModalOpen(true);
   }
 
   async function doDelete() {
@@ -271,14 +241,14 @@ export function DeliveryClient({
           icon="XCircle"
           color="#ef4444"
           label="Cancelamento"
-          status={statusOf(bateuCancelamento)}
+          status={statusOf(null)}
           valueSlot={
             <span className="text-2xl font-semibold text-white">
               {metrics.cancelamentoPercent === null ? "-" : `${formatNumber(metrics.cancelamentoPercent, 1)}%`}
             </span>
           }
-          metaText={`Meta: até ${formatNumber(cancelamentoMeta, 1)}%`}
-          premio={Number(form.premiacaoCancelamento) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compCancelamento}
         />
       ),
@@ -290,10 +260,10 @@ export function DeliveryClient({
           icon="Star"
           color="#f59e0b"
           label="Avaliações (iFood)"
-          status={statusOf(bateuAvaliacao)}
+          status={statusOf(null)}
           valueSlot={<span className="text-2xl font-semibold text-white">{avaliacaoValor ?? "-"}</span>}
-          metaText={`Meta: mín. ${formatNumber(avaliacaoMeta, 1)}`}
-          premio={Number(form.premiacaoAvaliacao) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compAvaliacao}
         />
       ),
@@ -305,10 +275,10 @@ export function DeliveryClient({
           icon="Truck"
           color="#1464F4"
           label="Tempo de Entrega"
-          status={statusOf(bateuTempoEntrega)}
+          status={statusOf(null)}
           valueSlot={<span className="text-2xl font-semibold text-white">{tempoEntregaValor ?? "-"} min</span>}
-          metaText={`Meta: até ${formatNumber(tempoEntregaMeta, 0)} min`}
-          premio={Number(form.premiacaoTempoEntrega) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compTempoEntrega}
         />
       ),
@@ -320,10 +290,10 @@ export function DeliveryClient({
           icon="PhoneCall"
           color="#a855f7"
           label="Chamados"
-          status={statusOf(bateuChamados)}
+          status={statusOf(null)}
           valueSlot={<span className="text-2xl font-semibold text-white">{chamadosValor === null ? "-" : `${chamadosValor}%`}</span>}
-          metaText={`Meta: até ${formatNumber(chamadosMeta, 1)}%`}
-          premio={Number(form.premiacaoChamados) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compChamados}
         />
       ),
@@ -352,8 +322,8 @@ export function DeliveryClient({
             <FileDown size={13} /> Exportar PDF
           </button>
           {canCreate && (
-            <button onClick={() => setShowMetas(true)} className="text-xs text-nord-blue-light hover:underline">
-              Editar metas e premiação
+            <button onClick={() => setFechamentoModalOpen(true)} className="text-xs text-nord-blue-light hover:underline">
+              Editar fechamento do mês
             </button>
           )}
         </div>
@@ -365,128 +335,87 @@ export function DeliveryClient({
         items={cards}
       />
 
-      {premiacaoTotal > 0 && (
-        <div className="nord-card p-4 flex items-center gap-3 bg-amber-950/10 border-amber-900/40">
-          <Trophy size={20} className="text-amber-400 shrink-0" />
-          <span className="text-sm text-white">
-            Premiação total do mês: <strong>{formatCurrency(premiacaoTotal)}</strong>
-          </span>
-        </div>
-      )}
+      {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
 
-      <Modal
-        open={showMetas}
-        onClose={() => setShowMetas(false)}
-        title={`Metas e premiação — ${periodoLabel(selectedPeriodo)}`}
-        widthClass="max-w-2xl"
-      >
-        <div className="space-y-5">
-          <div>
-            <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Avaliações (iFood)</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.avaliacaoNota}
-                  onChange={(e) => setForm({ ...form, avaliacaoNota: e.target.value })}
-                  placeholder="nota"
-                  className="input"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Tempo de Entrega (min)</span>
-                <input
-                  type="number"
-                  value={form.tempoEntregaMinutos}
-                  onChange={(e) => setForm({ ...form, tempoEntregaMinutos: e.target.value })}
-                  placeholder="minutos"
-                  className="input"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Chamados (%)</span>
-                <input
-                  type="number"
-                  value={form.chamadosPercent}
-                  onChange={(e) => setForm({ ...form, chamadosPercent: e.target.value })}
-                  placeholder="%"
-                  className="input"
-                />
-              </label>
+      {canCreate && (
+        <Modal
+          open={fechamentoModalOpen}
+          onClose={() => setFechamentoModalOpen(false)}
+          title={`Fechamento do mês — ${periodoLabel(selectedPeriodo)}`}
+          widthClass="max-w-2xl"
+        >
+          <div className="space-y-5">
+            <div>
+              <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Avaliações (iFood)</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={form.avaliacaoNota}
+                    onChange={(e) => setForm({ ...form, avaliacaoNota: e.target.value })}
+                    placeholder="nota"
+                    className="input"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Tempo de Entrega (min)</span>
+                  <input
+                    type="number"
+                    value={form.tempoEntregaMinutos}
+                    onChange={(e) => setForm({ ...form, tempoEntregaMinutos: e.target.value })}
+                    placeholder="minutos"
+                    className="input"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Chamados (%)</span>
+                  <input
+                    type="number"
+                    value={form.chamadosPercent}
+                    onChange={(e) => setForm({ ...form, chamadosPercent: e.target.value })}
+                    placeholder="%"
+                    className="input"
+                  />
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <h4 className="text-white text-sm font-medium mb-3">Metas e premiação</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Cancelamento (%)</span>
-                <input type="number" value={form.cancelamentoMetaPercent} onChange={(e) => setForm({ ...form, cancelamentoMetaPercent: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Avaliações</span>
-                <input type="number" step="0.1" value={form.avaliacaoMetaNota} onChange={(e) => setForm({ ...form, avaliacaoMetaNota: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Tempo de Entrega (min)</span>
-                <input type="number" value={form.tempoEntregaMetaMinutos} onChange={(e) => setForm({ ...form, tempoEntregaMetaMinutos: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Chamados (%)</span>
-                <input type="number" value={form.chamadosMetaPercent} onChange={(e) => setForm({ ...form, chamadosMetaPercent: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Cancelamento (R$)</span>
-                <input type="number" value={form.premiacaoCancelamento} onChange={(e) => setForm({ ...form, premiacaoCancelamento: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Avaliações (R$)</span>
-                <input type="number" value={form.premiacaoAvaliacao} onChange={(e) => setForm({ ...form, premiacaoAvaliacao: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Tempo de Entrega (R$)</span>
-                <input type="number" value={form.premiacaoTempoEntrega} onChange={(e) => setForm({ ...form, premiacaoTempoEntrega: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Chamados (R$)</span>
-                <input type="number" value={form.premiacaoChamados} onChange={(e) => setForm({ ...form, premiacaoChamados: e.target.value })} className="input" />
-              </label>
-            </div>
-          </div>
+            <FechamentoDoMesEditor fdm={fdm} />
 
-          <div className="flex items-center justify-between pt-2 border-t border-nord-border">
-            {current ? (
+            <div className="flex items-center justify-between pt-2 border-t border-nord-border">
+              {current ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                >
+                  <Trash2 size={13} /> Excluir esta reunião
+                </button>
+              ) : (
+                <span />
+              )}
               <button
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                onClick={async () => {
+                  await submit();
+                  setFechamentoModalOpen(false);
+                }}
+                disabled={saving}
+                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
               >
-                <Trash2 size={13} /> Excluir esta reunião
+                {saving ? "Salvando..." : current ? "Salvar alterações" : "Salvar fechamento do período"}
               </button>
-            ) : (
-              <span />
-            )}
-            <button
-              onClick={async () => {
-                await submit();
-                setShowMetas(false);
-              }}
-              disabled={saving}
-              className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
-            >
-              {saving ? "Salvando..." : current ? "Salvar alterações" : "Criar metas do período"}
-            </button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
 
       <ConfirmDialog
         open={confirmDelete}
         title="Excluir reunião"
         message={
           deleteError ||
-          `Tem certeza que deseja excluir o fechamento de ${periodoLabel(selectedPeriodo)}? As metas, premiação e resultados desse período serão perdidos.`
+          `Tem certeza que deseja excluir o fechamento de ${periodoLabel(selectedPeriodo)}? Os resultados e observações desse período serão perdidos.`
         }
         onConfirm={doDelete}
         onCancel={() => {
@@ -546,11 +475,6 @@ export function DeliveryClient({
                       <DynamicIcon name="PhoneCall" size={13} className="text-nord-blue-light" /> Chamados
                     </span>
                   </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="Trophy" size={13} className="text-nord-blue-light" /> Premiação total
-                    </span>
-                  </th>
                   <th className="py-2 px-3"></th>
                 </tr>
               </thead>
@@ -562,7 +486,6 @@ export function DeliveryClient({
                     <td className="py-2 px-3 text-nord-gray">{m.avaliacaoNota === null ? "-" : m.avaliacaoNota}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.tempoEntregaMinutos === null ? "-" : `${m.tempoEntregaMinutos} min`}</td>
                     <td className="py-2 px-3 text-nord-gray">{m.chamadosPercent === null ? "-" : `${m.chamadosPercent}%`}</td>
-                    <td className="py-2 px-3 text-amber-400">{formatCurrency(meetingPremiacaoTotal(m))}</td>
                     <td className="py-2 px-3">
                       {canCreate && (
                         <button onClick={() => editHistoryRow(m)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeDeliveryMetrics } from "@/lib/reuniao-server";
+import { computeDeliveryMetrics, loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -29,8 +29,9 @@ export async function GET(req: Request) {
   const current = ctx.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
 
   const metrics = ctx.mode === "single" ? await computeDeliveryMetrics(ctx.empresa.id, periodo) : { cancelamentoPercent: null };
+  const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "DELIVERY", periodo) : [];
 
-  return NextResponse.json({ meetings, current, metrics, periodo });
+  return NextResponse.json({ meetings, current, metrics, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {
@@ -65,14 +66,6 @@ export async function POST(req: Request) {
     avaliacaoNota: body.avaliacaoNota !== undefined && body.avaliacaoNota !== "" ? Number(body.avaliacaoNota) : null,
     tempoEntregaMinutos: body.tempoEntregaMinutos !== undefined && body.tempoEntregaMinutos !== "" ? Number(body.tempoEntregaMinutos) : null,
     chamadosPercent: body.chamadosPercent !== undefined && body.chamadosPercent !== "" ? Number(body.chamadosPercent) : null,
-    cancelamentoMetaPercent: Number(body.cancelamentoMetaPercent) || 1,
-    avaliacaoMetaNota: Number(body.avaliacaoMetaNota) || 4.7,
-    tempoEntregaMetaMinutos: Number(body.tempoEntregaMetaMinutos) || 40,
-    chamadosMetaPercent: Number(body.chamadosMetaPercent) || 2.5,
-    premiacaoCancelamento: Number(body.premiacaoCancelamento) || 0,
-    premiacaoAvaliacao: Number(body.premiacaoAvaliacao) || 0,
-    premiacaoTempoEntrega: Number(body.premiacaoTempoEntrega) || 0,
-    premiacaoChamados: Number(body.premiacaoChamados) || 0,
     notas: body.notas || null,
   };
 
@@ -82,6 +75,14 @@ export async function POST(req: Request) {
     create: { ...data, empresaId: empresa.id, periodo, createdById: session.user.id },
   });
 
+  // Lista de indicadores da seção "Fechamento do mês" (Cancelamento,
+  // Avaliação, Tempo de Entrega, Chamados migrados + qualquer um criado
+  // livremente) — nenhuma distinção de código entre eles a partir daqui.
+  const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
+    ? body.customIndicators
+    : [];
+  await upsertReuniaoCustomIndicatorValues(empresa.id, "DELIVERY", periodo, customIndicators);
+
   return NextResponse.json({ meeting });
 }
 
@@ -89,8 +90,8 @@ export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Excluir um fechamento de mês já lançado é mais destrutivo que criar/editar (perde o
-  // histórico de metas/premiação daquele período) — por isso exige canDelete, não canEdit,
-  // mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
+  // histórico de resultados/observações daquele período) — por isso exige canDelete, não
+  // canEdit, mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
   if (!(await hasModulePermission(session.user.id, "reuniao", "canDelete"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite excluir o fechamento da reunião de delivery." },

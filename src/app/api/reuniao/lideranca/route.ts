@@ -2,9 +2,21 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import { computeLiderancaResumo, loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
-import { computeCozinhaMetrics, loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
 import { hasModulePermission } from "@/lib/authz";
+
+/** Resumo "zerado" usado no modo Grupo Nord (várias lojas ao mesmo tempo) — mesmo
+ * padrão das outras 4 rotas de reunião: o resumo consolidado só faz sentido loja a loja. */
+const EMPTY_RESUMO = {
+  faturamentoTotalValor: null,
+  cmvPercent: null,
+  npsPercent: null,
+  cancelamentoDeliveryPercent: null,
+  turnoverPercent: null,
+  checklistOperacionalPercent: null,
+  fontes: { gerente: false, salao: false, cozinha: false, delivery: false },
+} as const;
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -20,20 +32,22 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const periodo = searchParams.get("periodo") ?? currentPeriodo();
 
-  const meetings = await prisma.kitchenMeeting.findMany({
+  const meetings = await prisma.liderancaMeeting.findMany({
     where: { empresaId: { in: empresaIds } },
     orderBy: { periodo: "desc" },
     include: { createdBy: { select: { name: true } } },
   });
 
   const current = ctx.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
-  const latest = meetings[0] ?? null;
 
-  const metrics =
-    ctx.mode === "single" ? await computeCozinhaMetrics(ctx.empresa.id, periodo) : { cmvPercent: 0, desperdicioValor: 0, faturamento: 0 };
-  const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "COZINHA", periodo) : [];
+  // "Resultado do período" é 100% um resumo consolidado das outras 4 reuniões
+  // (ver computeLiderancaResumo) — nunca digitado à mão nem guardado em
+  // coluna própria de LiderancaMeeting.
+  const resumo = ctx.mode === "single" ? await computeLiderancaResumo(ctx.empresa.id, periodo) : EMPTY_RESUMO;
 
-  return NextResponse.json({ meetings, current: current ?? null, latest, metrics, periodo, customIndicators });
+  const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "LIDERANCA", periodo) : [];
+
+  return NextResponse.json({ meetings, current, resumo, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {
@@ -45,7 +59,7 @@ export async function POST(req: Request) {
   // canEdit.
   if (!(await hasModulePermission(session.user.id, "reuniao", "canEdit"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite lançar o fechamento da reunião de cozinha." },
+      { error: "Seu perfil de permissão não permite lançar o fechamento da reunião de liderança." },
       { status: 403 }
     );
   }
@@ -61,36 +75,23 @@ export async function POST(req: Request) {
   const body = await req.json();
   const periodo = String(body.periodo ?? currentPeriodo());
 
-  const metrics = await computeCozinhaMetrics(empresa.id, periodo);
+  // Só "notas" é próprio de LiderancaMeeting — o resumo consolidado (GET
+  // acima) nunca é gravado aqui, é sempre recalculado ao vivo.
+  const data = { notas: body.notas || null };
 
-  const meeting = await prisma.kitchenMeeting.upsert({
+  const meeting = await prisma.liderancaMeeting.upsert({
     where: { empresaId_periodo: { empresaId: empresa.id, periodo } },
-    update: {
-      cmvPercent: metrics.cmvPercent,
-      desperdicioValor: metrics.desperdicioValor,
-      tempoPedidoMinutos: body.tempoPedidoMinutos !== undefined ? Number(body.tempoPedidoMinutos) || null : undefined,
-      organizacaoPercent: body.organizacaoPercent !== undefined ? Number(body.organizacaoPercent) || null : undefined,
-      notas: body.notas || null,
-    },
-    create: {
-      empresaId: empresa.id,
-      periodo,
-      cmvPercent: metrics.cmvPercent,
-      desperdicioValor: metrics.desperdicioValor,
-      tempoPedidoMinutos: body.tempoPedidoMinutos !== undefined ? Number(body.tempoPedidoMinutos) || null : null,
-      organizacaoPercent: body.organizacaoPercent !== undefined ? Number(body.organizacaoPercent) || null : null,
-      notas: body.notas || null,
-      createdById: session.user.id,
-    },
+    update: data,
+    create: { ...data, empresaId: empresa.id, periodo, createdById: session.user.id },
   });
 
-  // Lista de indicadores da seção "Fechamento do mês" (CMV, Desperdício,
-  // Tempo Pedido, Organização migrados + qualquer um criado livremente) —
-  // nenhuma distinção de código entre eles a partir daqui.
+  // Lista de indicadores da seção "Fechamento do mês" — indicadores de nível
+  // de liderança que não pertencem a nenhuma área específica (Cozinha/Salão/
+  // Delivery/Gerente já têm a própria lista).
   const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
     ? body.customIndicators
     : [];
-  await upsertReuniaoCustomIndicatorValues(empresa.id, "COZINHA", periodo, customIndicators);
+  await upsertReuniaoCustomIndicatorValues(empresa.id, "LIDERANCA", periodo, customIndicators);
 
   return NextResponse.json({ meeting });
 }
@@ -99,11 +100,11 @@ export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Excluir um fechamento de mês já lançado é mais destrutivo que criar/editar (perde o
-  // histórico de resultados/observações daquele período) — por isso exige canDelete, não
-  // canEdit, mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
+  // histórico de observações daquele período) — por isso exige canDelete, não canEdit,
+  // mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
   if (!(await hasModulePermission(session.user.id, "reuniao", "canDelete"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite excluir o fechamento da reunião de cozinha." },
+      { error: "Seu perfil de permissão não permite excluir o fechamento da reunião de liderança." },
       { status: 403 }
     );
   }
@@ -120,7 +121,7 @@ export async function DELETE(req: Request) {
   const periodo = searchParams.get("periodo");
   if (!periodo) return NextResponse.json({ error: "Período não informado." }, { status: 400 });
 
-  await prisma.kitchenMeeting.deleteMany({ where: { empresaId: empresa.id, periodo } });
+  await prisma.liderancaMeeting.deleteMany({ where: { empresaId: empresa.id, periodo } });
 
   return NextResponse.json({ ok: true });
 }
