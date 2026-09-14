@@ -47,6 +47,18 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* `color-scheme: dark` no :root (acima) não é suficiente sozinho: o menu
+   suspenso nativo de <select> em vários navegadores/SOs é desenhado fora do
+   controle da engine de renderização da página (widget do próprio sistema),
+   então ele ignora color-scheme e usa o tema claro do SO mesmo com o resto do
+   app no escuro — texto claro sobre fundo claro. <option> aceita
+   background-color/color explícitos e a maioria dos navegadores respeita
+   isso no próprio menu suspenso, então força aqui pra todo <select> do app. */
+select option {
+  background-color: var(--nord-panel);
+  color: var(--nord-white);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
