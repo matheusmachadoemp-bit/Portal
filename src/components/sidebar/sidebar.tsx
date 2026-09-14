@@ -452,7 +452,11 @@ function CategoryRow({
         )}
         <button
           onClick={() => {
-            if (cat.linked) router.push(`/portal/${cat.key}`);
+            // `!== false` (não `=== true`): trata ausência do campo (cache
+            // desatualizado após uma migração que alterou a coluna direto no
+            // banco, sem passar por revalidateTag) como "tem link" — o
+            // padrão do schema — em vez de travar a categoria inteira.
+            if (cat.linked !== false) router.push(`/portal/${cat.key}`);
             if (hasSubs) onToggleExpand();
           }}
           className={`flex-1 flex items-center gap-2.5 text-sm py-1 min-w-0 ${
