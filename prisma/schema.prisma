@@ -71,6 +71,7 @@ model User {
   salaoMeetings                    SalaoMeeting[]
   deliveryMeetings                 DeliveryMeeting[]
   gerenteMeetings                  GerenteMeeting[]
+  gerenteCustomIndicators          GerenteCustomIndicator[]
   goals                            Goal[]
   waiterSalesCreated               WaiterSaleEntry[]          @relation("WaiterSaleCreatedBy")
   stockMovementsCreated            StockMovement[]            @relation("StockMovementCreatedBy")
@@ -181,15 +182,15 @@ model PermissionProfile {
 }
 
 model ModulePermission {
-  id        String            @id @default(cuid())
-  profileId String
-  profile   PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  moduleKey String
-  canView   Boolean           @default(false)
-  canExecute Boolean          @default(false)
-  canCreate Boolean           @default(false)
-  canEdit   Boolean           @default(false)
-  canDelete Boolean           @default(false)
+  id         String            @id @default(cuid())
+  profileId  String
+  profile    PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  moduleKey  String
+  canView    Boolean           @default(false)
+  canExecute Boolean           @default(false)
+  canCreate  Boolean           @default(false)
+  canEdit    Boolean           @default(false)
+  canDelete  Boolean           @default(false)
 
   @@unique([profileId, moduleKey])
 }
@@ -246,6 +247,7 @@ model Empresa {
   salaoMeetings             SalaoMeeting[]
   deliveryMeetings          DeliveryMeeting[]
   gerenteMeetings           GerenteMeeting[]
+  gerenteCustomIndicators   GerenteCustomIndicator[]
   goals                     Goal[]
   employees                 Employee[]
   waiterSales               WaiterSaleEntry[]
@@ -2530,6 +2532,52 @@ model GerenteMeeting {
   updatedAt   DateTime @updatedAt
 
   @@unique([empresaId, periodo])
+}
+
+enum GerenteIndicatorUnit {
+  PERCENT
+  CURRENCY
+  NUMBER
+}
+
+// MIN: bate a meta quando o valor é <= meta (ex.: "até X%"). MAX: bate quando valor >= meta (ex.: "mín. X%").
+enum GerenteIndicatorDirection {
+  MIN
+  MAX
+}
+
+// Indicador extra criado pelo próprio gerente/admin, além dos 4 fixos do GerenteMeeting
+// (Faturamento, CMV, Turnover, Checklist) — sempre digitado manualmente todo mês.
+model GerenteCustomIndicator {
+  id              String                    @id @default(cuid())
+  empresaId       String
+  empresa         Empresa                   @relation(fields: [empresaId], references: [id])
+  nome            String
+  icon            String                    @default("Target")
+  unidade         GerenteIndicatorUnit      @default(PERCENT)
+  direcao         GerenteIndicatorDirection @default(MIN)
+  metaPadrao      Float                     @default(0)
+  premiacaoPadrao Float                     @default(0)
+  order           Int                       @default(0)
+  createdById     String
+  createdBy       User                      @relation(fields: [createdById], references: [id])
+  createdAt       DateTime                  @default(now())
+
+  values GerenteCustomIndicatorValue[]
+
+  @@index([empresaId])
+}
+
+model GerenteCustomIndicatorValue {
+  id             String                 @id @default(cuid())
+  indicatorId    String
+  indicator      GerenteCustomIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  periodo        String // "2026-08" (YYYY-MM)
+  valor          Float?
+  metaValue      Float
+  premiacaoValor Float
+
+  @@unique([indicatorId, periodo])
 }
 
 enum CountType {

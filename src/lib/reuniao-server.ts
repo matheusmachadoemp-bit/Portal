@@ -144,6 +144,54 @@ export async function computeGerenteMetrics(empresaId: string, periodo: string) 
   };
 }
 
+export type GerenteCustomIndicatorDTO = {
+  id: string;
+  nome: string;
+  icon: string;
+  unidade: "PERCENT" | "CURRENCY" | "NUMBER";
+  direcao: "MIN" | "MAX";
+  metaPadrao: number;
+  premiacaoPadrao: number;
+  valor: number | null;
+  metaValue: number;
+  premiacaoValor: number;
+};
+
+/**
+ * Indicadores extras criados pelo gerente/admin (além dos 4 fixos do
+ * GerenteMeeting), com o valor/meta/premiação já resolvidos para o período —
+ * caindo no padrão do indicador (metaPadrao/premiacaoPadrao) enquanto o
+ * período ainda não tem um valor salvo.
+ */
+export async function loadGerenteCustomIndicators(empresaId: string, periodo: string): Promise<GerenteCustomIndicatorDTO[]> {
+  const indicators = await prisma.gerenteCustomIndicator.findMany({
+    where: { empresaId },
+    orderBy: { order: "asc" },
+  });
+  if (indicators.length === 0) return [];
+
+  const values = await prisma.gerenteCustomIndicatorValue.findMany({
+    where: { indicatorId: { in: indicators.map((i) => i.id) }, periodo },
+  });
+  const valueByIndicator = new Map(values.map((v) => [v.indicatorId, v]));
+
+  return indicators.map((ind) => {
+    const v = valueByIndicator.get(ind.id);
+    return {
+      id: ind.id,
+      nome: ind.nome,
+      icon: ind.icon,
+      unidade: ind.unidade,
+      direcao: ind.direcao,
+      metaPadrao: ind.metaPadrao,
+      premiacaoPadrao: ind.premiacaoPadrao,
+      valor: v?.valor ?? null,
+      metaValue: v?.metaValue ?? ind.metaPadrao,
+      premiacaoValor: v?.premiacaoValor ?? ind.premiacaoPadrao,
+    };
+  });
+}
+
 /**
  * Regra do portal: toda subcategoria de Reunião que tenha metas/premiação
  * mensais (uma linha por empresa/período, só criada quando alguém salva o

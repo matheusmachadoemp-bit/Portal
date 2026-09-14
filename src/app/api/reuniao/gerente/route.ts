@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeGerenteMetrics } from "@/lib/reuniao-server";
+import { computeGerenteMetrics, loadGerenteCustomIndicators } from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -33,7 +33,9 @@ export async function GET(req: Request) {
       ? await computeGerenteMetrics(ctx.empresa.id, periodo)
       : { faturamentoTotalValor: null, cmvPercent: null, npsPercent: null, cancelamentoDeliveryPercent: null };
 
-  return NextResponse.json({ meetings, current, metrics, periodo });
+  const customIndicators = ctx.mode === "single" ? await loadGerenteCustomIndicators(ctx.empresa.id, periodo) : [];
+
+  return NextResponse.json({ meetings, current, metrics, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {
@@ -91,6 +93,31 @@ export async function POST(req: Request) {
     update: data,
     create: { ...data, empresaId: empresa.id, periodo, createdById: session.user.id },
   });
+
+  const customIndicators: { id: string; valor?: string; metaValue?: string; premiacaoValor?: string }[] =
+    Array.isArray(body.customIndicators) ? body.customIndicators : [];
+  if (customIndicators.length > 0) {
+    const indicators = await prisma.gerenteCustomIndicator.findMany({
+      where: { id: { in: customIndicators.map((c) => c.id) }, empresaId: empresa.id },
+    });
+    const indicatorById = new Map(indicators.map((i) => [i.id, i]));
+    await Promise.all(
+      customIndicators
+        .filter((c) => indicatorById.has(c.id))
+        .map((c) => {
+          const indicator = indicatorById.get(c.id)!;
+          const valor = c.valor !== undefined && c.valor !== "" ? Number(c.valor) : null;
+          const metaValue = c.metaValue !== undefined && c.metaValue !== "" ? Number(c.metaValue) : indicator.metaPadrao;
+          const premiacaoValor =
+            c.premiacaoValor !== undefined && c.premiacaoValor !== "" ? Number(c.premiacaoValor) : indicator.premiacaoPadrao;
+          return prisma.gerenteCustomIndicatorValue.upsert({
+            where: { indicatorId_periodo: { indicatorId: c.id, periodo } },
+            update: { valor, metaValue, premiacaoValor },
+            create: { indicatorId: c.id, periodo, valor, metaValue, premiacaoValor },
+          });
+        })
+    );
+  }
 
   return NextResponse.json({ meeting });
 }
