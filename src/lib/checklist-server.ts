@@ -196,39 +196,47 @@ function escalationMessage(
 }
 
 /**
- * Notifica donos/gerentes assim que um checklist é concluído fora do prazo.
+ * Notifica donos/gerentes toda vez que um funcionário conclui um checklist
+ * — no prazo ou atrasado. A conclusão atrasada é a parte que mais importa:
  * `processChecklistEscalations` roda 1x por dia à noite (ver vercel.json) e
  * já ignora qualquer ocorrência com `completedAt` preenchido (não recalcula
- * níveis de cobrança pra quem já concluiu) — então um checklist concluído
- * poucos minutos atrasado, antes de cruzar os limiares de cobrança
- * (avisoAtrasoResponsavelMinutos/alertaCriticoMinutos), nunca gerava
- * nenhum aviso. Esta função fecha essa lacuna: dispara na hora, direto do
- * endpoint de conclusão, sempre que o status final for CONCLUIDO_COM_ATRASO.
+ * níveis de cobrança pra quem já concluiu), então um checklist concluído
+ * poucos minutos atrasado — antes de cruzar os limiares de cobrança
+ * (avisoAtrasoResponsavelMinutos/alertaCriticoMinutos) — nunca gerava
+ * nenhum aviso por conta própria. Esta função fecha essa lacuna e também
+ * avisa nas conclusões no prazo, disparando na hora, direto do endpoint de
+ * conclusão.
  */
-export async function notifyChecklistLateCompletion(occurrenceId: string) {
+export async function notifyChecklistCompletion(occurrenceId: string) {
   const o = await prisma.checklistOccurrence.findUnique({
     where: { id: occurrenceId },
     include: { template: true, empresa: { select: { name: true } }, responsavel: { select: { name: true } } },
   });
-  if (!o || !o.completedAt || !o.template.cobrancaAtiva) return;
+  if (!o || !o.completedAt) return;
 
   const managers = await loadEscalationManagers(o.empresaId);
   if (managers.length === 0) return;
 
-  const minutesLate = (o.completedAt.getTime() - o.dueAt.getTime()) / 60000;
   const setorLabel = GOAL_CATEGORY_LABEL[o.template.setor] ?? o.template.setor;
   const responsavel = o.responsavel?.name ? ` Responsável: ${o.responsavel.name}.` : "";
-  const title = "Checklist concluído com atraso";
-  const body = `"${o.template.name}" foi concluído ${Math.max(0, Math.round(minutesLate))} min atrasado — ${o.empresa.name}, ${setorLabel}.${responsavel}`;
+  const isLate = o.status === "CONCLUIDO_COM_ATRASO";
+
+  const title = isLate ? "Checklist concluído com atraso" : "Checklist concluído";
+  const body = isLate
+    ? `"${o.template.name}" foi concluído ${Math.max(
+        0,
+        Math.round((o.completedAt.getTime() - o.dueAt.getTime()) / 60000)
+      )} min atrasado — ${o.empresa.name}, ${setorLabel}.${responsavel}`
+    : `"${o.template.name}" foi concluído no prazo — ${o.empresa.name}, ${setorLabel}.${responsavel}`;
 
   await Promise.all(
     managers.map((m) =>
       createNotification({
         userId: m.id,
-        type: "CHECKLIST_CONCLUIDO_COM_ATRASO",
+        type: isLate ? "CHECKLIST_CONCLUIDO_COM_ATRASO" : "CHECKLIST_CONCLUIDO",
         title,
         body,
-        priority: "ATENCAO",
+        priority: isLate ? "ATENCAO" : "INFORMACAO",
         checklistOccurrenceId: o.id,
         url: `/portal/tarefas/checklist/executar/${o.id}`,
       })
