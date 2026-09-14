@@ -56,6 +56,7 @@ export function IndicatorCard({
   metaText,
   premio,
   comparison,
+  warning,
 }: {
   icon: string;
   color: string;
@@ -65,6 +66,11 @@ export function IndicatorCard({
   metaText: string;
   premio: number;
   comparison?: Comparison | null;
+  /** Aviso discreto opcional (ex.: "Cozinha ainda não fechou este mês") — usado
+   * pelo resumo consolidado da Reunião Liderança para deixar claro quando um
+   * número já calculado ainda não corresponde a uma área que "fechou o mês"
+   * de fato (ver LiderancaResumoDTO.fontes em src/lib/reuniao-server.ts). */
+  warning?: string | null;
 }) {
   return (
     <div className="nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2" style={{ borderTopColor: color }}>
@@ -89,6 +95,11 @@ export function IndicatorCard({
         )}
       </div>
       <ComparisonLine comparison={comparison} />
+      {warning && (
+        <span className="text-xs flex items-center gap-1 text-nord-warning">
+          <AlertTriangle size={11} /> {warning}
+        </span>
+      )}
     </div>
   );
 }

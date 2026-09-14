@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeGerenteMetrics, loadGerenteCustomIndicators } from "@/lib/reuniao-server";
+import { computeGerenteMetrics, loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
       ? await computeGerenteMetrics(ctx.empresa.id, periodo)
       : { faturamentoTotalValor: null, cmvPercent: null, npsPercent: null, cancelamentoDeliveryPercent: null };
 
-  const customIndicators = ctx.mode === "single" ? await loadGerenteCustomIndicators(ctx.empresa.id, periodo) : [];
+  const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "GERENTE", periodo) : [];
 
   return NextResponse.json({ meetings, current, metrics, periodo, customIndicators });
 }
@@ -77,14 +77,6 @@ export async function POST(req: Request) {
       body.checklistOperacionalPercent !== undefined && body.checklistOperacionalPercent !== ""
         ? Number(body.checklistOperacionalPercent)
         : null,
-    faturamentoMetaValor: Number(body.faturamentoMetaValor) || 0,
-    cmvMetaPercent: Number(body.cmvMetaPercent) || 30,
-    turnoverMetaPercent: Number(body.turnoverMetaPercent) || 5,
-    checklistOperacionalMetaPercent: Number(body.checklistOperacionalMetaPercent) || 90,
-    premiacaoFaturamento: Number(body.premiacaoFaturamento) || 0,
-    premiacaoCmv: Number(body.premiacaoCmv) || 0,
-    premiacaoTurnover: Number(body.premiacaoTurnover) || 0,
-    premiacaoChecklist: Number(body.premiacaoChecklist) || 0,
     notas: body.notas || null,
   };
 
@@ -94,30 +86,14 @@ export async function POST(req: Request) {
     create: { ...data, empresaId: empresa.id, periodo, createdById: session.user.id },
   });
 
-  const customIndicators: { id: string; valor?: string; metaValue?: string; premiacaoValor?: string }[] =
-    Array.isArray(body.customIndicators) ? body.customIndicators : [];
-  if (customIndicators.length > 0) {
-    const indicators = await prisma.gerenteCustomIndicator.findMany({
-      where: { id: { in: customIndicators.map((c) => c.id) }, empresaId: empresa.id },
-    });
-    const indicatorById = new Map(indicators.map((i) => [i.id, i]));
-    await Promise.all(
-      customIndicators
-        .filter((c) => indicatorById.has(c.id))
-        .map((c) => {
-          const indicator = indicatorById.get(c.id)!;
-          const valor = c.valor !== undefined && c.valor !== "" ? Number(c.valor) : null;
-          const metaValue = c.metaValue !== undefined && c.metaValue !== "" ? Number(c.metaValue) : indicator.metaPadrao;
-          const premiacaoValor =
-            c.premiacaoValor !== undefined && c.premiacaoValor !== "" ? Number(c.premiacaoValor) : indicator.premiacaoPadrao;
-          return prisma.gerenteCustomIndicatorValue.upsert({
-            where: { indicatorId_periodo: { indicatorId: c.id, periodo } },
-            update: { valor, metaValue, premiacaoValor },
-            create: { indicatorId: c.id, periodo, valor, metaValue, premiacaoValor },
-          });
-        })
-    );
-  }
+  // Lista de indicadores da seção "Fechamento do mês" — inclui tanto os 4
+  // migrados de GerenteMeeting (Faturamento Total, CMV, Turnover, Checklist
+  // Operacional) quanto os criados livremente (ex.: Ticket Médio Salão/
+  // Delivery); nenhuma distinção de código entre eles a partir daqui.
+  const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
+    ? body.customIndicators
+    : [];
+  await upsertReuniaoCustomIndicatorValues(empresa.id, "GERENTE", periodo, customIndicators);
 
   return NextResponse.json({ meeting });
 }
@@ -126,8 +102,8 @@ export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Excluir um fechamento de mês já lançado é mais destrutivo que criar/editar (perde o
-  // histórico de metas/premiação daquele período) — por isso exige canDelete, não canEdit,
-  // mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
+  // histórico de resultados/observações daquele período) — por isso exige canDelete, não
+  // canEdit, mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
   if (!(await hasModulePermission(session.user.id, "reuniao", "canDelete"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite excluir o fechamento da reunião de gerente." },

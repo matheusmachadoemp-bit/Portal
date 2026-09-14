@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeSalaoMetrics, computeMelhorVendedor, computeComentariosDestaque } from "@/lib/reuniao-server";
+import {
+  computeSalaoMetrics,
+  computeMelhorVendedor,
+  computeComentariosDestaque,
+  loadReuniaoCustomIndicators,
+  upsertReuniaoCustomIndicatorValues,
+} from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -35,8 +41,9 @@ export async function GET(req: Request) {
   const melhorVendedor =
     ctx.mode === "single" ? await computeMelhorVendedor(ctx.empresa.id, periodo) : { nome: null, valor: null };
   const comentarios = ctx.mode === "single" ? await computeComentariosDestaque(ctx.empresa.id, periodo) : [];
+  const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "SALAO", periodo) : [];
 
-  return NextResponse.json({ meetings, current, metrics, melhorVendedor, comentarios, periodo });
+  return NextResponse.json({ meetings, current, metrics, melhorVendedor, comentarios, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {
@@ -77,12 +84,6 @@ export async function POST(req: Request) {
     ticketMedioValor: metrics.ticketMedioValor,
     melhorVendedorNome: melhorVendedor.nome,
     melhorVendedorValor: melhorVendedor.valor,
-    npsMetaPercent: Number(body.npsMetaPercent) || 80,
-    faturamentoMetaValor: Number(body.faturamentoMetaValor) || 0,
-    ticketMedioMetaValor: Number(body.ticketMedioMetaValor) || 0,
-    premiacaoNps: Number(body.premiacaoNps) || 0,
-    premiacaoFaturamento: Number(body.premiacaoFaturamento) || 0,
-    premiacaoTicketMedio: Number(body.premiacaoTicketMedio) || 0,
     npsQualidadeProduto: body.npsQualidadeProduto !== undefined && body.npsQualidadeProduto !== "" ? Number(body.npsQualidadeProduto) : null,
     npsAtendimento: body.npsAtendimento !== undefined && body.npsAtendimento !== "" ? Number(body.npsAtendimento) : null,
     npsAmbiente: body.npsAmbiente !== undefined && body.npsAmbiente !== "" ? Number(body.npsAmbiente) : null,
@@ -108,6 +109,14 @@ export async function POST(req: Request) {
     });
   }
 
+  // Lista de indicadores da seção "Fechamento do mês" (NPS Geral, Faturamento
+  // do Salão, Ticket Médio migrados + qualquer um criado livremente) —
+  // nenhuma distinção de código entre eles a partir daqui.
+  const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
+    ? body.customIndicators
+    : [];
+  await upsertReuniaoCustomIndicatorValues(empresa.id, "SALAO", periodo, customIndicators);
+
   const full = await prisma.salaoMeeting.findUnique({ where: { id: meeting.id }, include: { produtoMetas: true } });
   return NextResponse.json({ meeting: full });
 }
@@ -116,8 +125,8 @@ export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Excluir um fechamento de mês já lançado é mais destrutivo que criar/editar (perde o
-  // histórico de metas/premiação daquele período) — por isso exige canDelete, não canEdit,
-  // mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
+  // histórico de resultados/observações daquele período) — por isso exige canDelete, não
+  // canEdit, mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
   if (!(await hasModulePermission(session.user.id, "reuniao", "canDelete"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite excluir o fechamento da reunião de salão." },

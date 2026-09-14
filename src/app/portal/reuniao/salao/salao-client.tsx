@@ -8,6 +8,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
+import { FechamentoDoMesSection, FechamentoDoMesEditor, useFechamentoDoMes, type FechamentoIndicator } from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import {
   compareToPrevious,
@@ -26,12 +27,6 @@ type Meeting = {
   npsPercent: number | null;
   faturamentoValor: number | null;
   ticketMedioValor: number | null;
-  npsMetaPercent: number;
-  faturamentoMetaValor: number;
-  ticketMedioMetaValor: number;
-  premiacaoNps: number;
-  premiacaoFaturamento: number;
-  premiacaoTicketMedio: number;
   melhorVendedorNome: string | null;
   melhorVendedorValor: number | null;
   npsQualidadeProduto: number | null;
@@ -60,12 +55,6 @@ const NPS_DETALHADO_FIELDS = [
 
 function buildForm(m?: Meeting | null) {
   return {
-    npsMetaPercent: String(m?.npsMetaPercent ?? 80),
-    faturamentoMetaValor: String(m?.faturamentoMetaValor ?? 0),
-    ticketMedioMetaValor: String(m?.ticketMedioMetaValor ?? 0),
-    premiacaoNps: String(m?.premiacaoNps ?? 0),
-    premiacaoFaturamento: String(m?.premiacaoFaturamento ?? 0),
-    premiacaoTicketMedio: String(m?.premiacaoTicketMedio ?? 0),
     npsQualidadeProduto: m?.npsQualidadeProduto != null ? String(m.npsQualidadeProduto) : "",
     npsAtendimento: m?.npsAtendimento != null ? String(m.npsAtendimento) : "",
     npsAmbiente: m?.npsAmbiente != null ? String(m.npsAmbiente) : "",
@@ -88,16 +77,16 @@ function buildProdutoForm(m?: Meeting | null) {
   });
 }
 
+/** Premiação total do mês — hoje só depende das metas de venda por produto
+ * (SalaoProductGoal, meta+premiação por produto), mecanismo à parte que não
+ * mudou. NPS Geral, Faturamento do Salão e Ticket Médio deixaram de ter
+ * meta/premiação própria (viraram indicadores informativos, ver cards
+ * abaixo), então não entram mais nessa soma. */
 function meetingPremiacaoTotal(m: Meeting) {
-  const principais =
-    (m.npsPercent !== null && m.npsPercent >= m.npsMetaPercent ? m.premiacaoNps : 0) +
-    (m.faturamentoValor !== null && m.faturamentoValor >= m.faturamentoMetaValor ? m.premiacaoFaturamento : 0) +
-    (m.ticketMedioValor !== null && m.ticketMedioValor >= m.ticketMedioMetaValor ? m.premiacaoTicketMedio : 0);
-  const produtos = m.produtoMetas.reduce(
+  return m.produtoMetas.reduce(
     (sum, p) => sum + (p.quantidade !== null && p.meta > 0 && p.quantidade >= p.meta ? p.premiacao : 0),
     0
   );
-  return principais + produtos;
 }
 
 export function SalaoClient({
@@ -106,6 +95,7 @@ export function SalaoClient({
   initialMetrics,
   initialMelhorVendedor,
   initialComentarios,
+  initialCustomIndicators,
   periodo,
   canCreate,
   empresaName,
@@ -115,6 +105,7 @@ export function SalaoClient({
   initialMetrics: Metrics;
   initialMelhorVendedor: MelhorVendedor;
   initialComentarios: Comentario[];
+  initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
   empresaName: string;
@@ -129,11 +120,13 @@ export function SalaoClient({
   const [produtoForm, setProdutoForm] = useState(buildProdutoForm(initialCurrent));
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showMetas, setShowMetas] = useState(false);
+  const [fechamentoModalOpen, setFechamentoModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
+
+  const fdm = useFechamentoDoMes("/api/reuniao/salao", initialCustomIndicators);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -153,33 +146,24 @@ export function SalaoClient({
         setComentarios(data.comentarios);
         setForm(buildForm(data.current));
         setProdutoForm(buildProdutoForm(data.current));
+        fdm.sync(data.customIndicators ?? []);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fdm.sync só chama setState estáveis por baixo (ver useFechamentoDoMes); incluir `fdm` recriaria o efeito a cada render (objeto novo) e causaria um loop de fetch.
   }, [selectedPeriodo]);
-
-  const npsMeta = Number(form.npsMetaPercent) || 0;
-  const faturamentoMeta = Number(form.faturamentoMetaValor) || 0;
-  const ticketMedioMeta = Number(form.ticketMedioMetaValor) || 0;
-
-  const bateuNps = metrics.npsPercent === null ? null : metrics.npsPercent >= npsMeta;
-  const bateuFaturamento = metrics.faturamentoValor >= faturamentoMeta;
-  const bateuTicketMedio = metrics.ticketMedioValor === null ? null : metrics.ticketMedioValor >= ticketMedioMeta;
 
   const premiacaoTotal = useMemo(() => {
     let total = 0;
-    if (bateuNps) total += Number(form.premiacaoNps) || 0;
-    if (bateuFaturamento) total += Number(form.premiacaoFaturamento) || 0;
-    if (bateuTicketMedio) total += Number(form.premiacaoTicketMedio) || 0;
     for (const p of produtoForm) {
       const qtd = p.quantidade === "" ? null : Number(p.quantidade);
       const metaValor = Number(p.meta) || 0;
       if (qtd !== null && metaValor > 0 && qtd >= metaValor) total += Number(p.premiacao) || 0;
     }
     return total;
-  }, [bateuNps, bateuFaturamento, bateuTicketMedio, form, produtoForm]);
+  }, [produtoForm]);
 
   function anteriorMeeting() {
     return meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null;
@@ -209,34 +193,40 @@ export function SalaoClient({
       premiacaoTotal,
       observacoes: form.notas,
       indicators: [
+        // NPS Geral, Faturamento do Salão e Ticket Médio deixaram de ter meta/premiação
+        // (viraram indicadores informativos; um valor de referência livre entra na
+        // lista de "Fechamento do mês" quando fizer sentido) — por enquanto o PDF só
+        // mostra o histórico do valor real de cada um, sem linha de meta nem
+        // premiação. As metas por produto abaixo continuam com meta+premiação
+        // normalmente (mecanismo à parte, que não mudou).
         {
           key: "nps",
           label: "NPS Geral",
           unit: "percent",
-          meta: npsMeta,
+          meta: 0,
           metaDirection: "max",
-          status: statusOf(bateuNps),
-          premio: bateuNps ? Number(form.premiacaoNps) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("npsPercent", metrics.npsPercent),
         },
         {
           key: "faturamento",
           label: "Faturamento do Salão",
           unit: "currency",
-          meta: faturamentoMeta,
+          meta: 0,
           metaDirection: "max",
-          status: statusOf(bateuFaturamento),
-          premio: bateuFaturamento ? Number(form.premiacaoFaturamento) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("faturamentoValor", metrics.faturamentoValor),
         },
         {
           key: "ticket-medio",
           label: "Ticket Médio",
           unit: "currency",
-          meta: ticketMedioMeta,
+          meta: 0,
           metaDirection: "max",
-          status: statusOf(bateuTicketMedio),
-          premio: bateuTicketMedio ? Number(form.premiacaoTicketMedio) || 0 : 0,
+          status: statusOf(null),
+          premio: 0,
           historico: historico("ticketMedioValor", metrics.ticketMedioValor),
         },
         ...produtoForm.map((p) => {
@@ -271,6 +261,7 @@ export function SalaoClient({
     setMetrics(data.metrics);
     setMelhorVendedor(data.melhorVendedor);
     setComentarios(data.comentarios);
+    fdm.sync(data.customIndicators ?? []);
   }
 
   async function submit() {
@@ -280,7 +271,12 @@ export function SalaoClient({
       await fetch("/api/reuniao/salao", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ periodo: selectedPeriodo, ...form, produtoMetas: produtoForm }),
+        body: JSON.stringify({
+          periodo: selectedPeriodo,
+          ...form,
+          produtoMetas: produtoForm,
+          customIndicators: fdm.buildIndicatorsPayload(),
+        }),
       });
       await refresh(selectedPeriodo);
     } finally {
@@ -295,7 +291,7 @@ export function SalaoClient({
     setProdutoForm(buildProdutoForm(m));
     setMetrics({ npsPercent: m.npsPercent, faturamentoValor: m.faturamentoValor ?? 0, ticketMedioValor: m.ticketMedioValor });
     setMelhorVendedor({ nome: m.melhorVendedorNome, valor: m.melhorVendedorValor });
-    setShowMetas(true);
+    setFechamentoModalOpen(true);
   }
 
   async function doDelete() {
@@ -327,14 +323,14 @@ export function SalaoClient({
           icon="Smile"
           color="#1464F4"
           label="NPS Geral"
-          status={statusOf(bateuNps)}
+          status={statusOf(null)}
           valueSlot={
             <span className="text-2xl font-semibold text-white">
               {metrics.npsPercent === null ? "-" : `${formatNumber(metrics.npsPercent, 1)}%`}
             </span>
           }
-          metaText={`Meta: mín. ${formatNumber(npsMeta, 0)}%`}
-          premio={Number(form.premiacaoNps) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compNps}
         />
       ),
@@ -346,10 +342,10 @@ export function SalaoClient({
           icon="TrendingUp"
           color="#22c55e"
           label="Faturamento do Salão"
-          status={statusOf(bateuFaturamento)}
+          status={statusOf(null)}
           valueSlot={<span className="text-2xl font-semibold text-white">{formatCurrency(metrics.faturamentoValor)}</span>}
-          metaText={`Meta: mín. ${formatCurrency(faturamentoMeta)}`}
-          premio={Number(form.premiacaoFaturamento) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compFaturamento}
         />
       ),
@@ -361,14 +357,14 @@ export function SalaoClient({
           icon="Receipt"
           color="#f59e0b"
           label="Ticket Médio"
-          status={statusOf(bateuTicketMedio)}
+          status={statusOf(null)}
           valueSlot={
             <span className="text-2xl font-semibold text-white">
               {metrics.ticketMedioValor === null ? "-" : formatCurrency(metrics.ticketMedioValor)}
             </span>
           }
-          metaText={`Meta: mín. ${formatCurrency(ticketMedioMeta)}`}
-          premio={Number(form.premiacaoTicketMedio) || 0}
+          metaText="Indicador informativo"
+          premio={0}
           comparison={compTicketMedio}
         />
       ),
@@ -394,8 +390,8 @@ export function SalaoClient({
             <FileDown size={13} /> Exportar PDF
           </button>
           {canCreate && (
-            <button onClick={() => setShowMetas(true)} className="text-xs text-nord-blue-light hover:underline">
-              Editar metas e premiação
+            <button onClick={() => setFechamentoModalOpen(true)} className="text-xs text-nord-blue-light hover:underline">
+              Editar fechamento do mês
             </button>
           )}
         </div>
@@ -411,6 +407,8 @@ export function SalaoClient({
           </span>
         </div>
       )}
+
+      {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
 
       <Section title="Melhor vendedor do mês">
         {melhorVendedor.nome ? (
@@ -502,173 +500,127 @@ export function SalaoClient({
         </Section>
       )}
 
-      <Modal
-        open={showMetas}
-        onClose={() => setShowMetas(false)}
-        title={`Metas e premiação — ${periodoLabel(selectedPeriodo)}`}
-        widthClass="max-w-3xl"
-      >
-        <div className="space-y-5">
-          <div>
-            <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-              {NPS_DETALHADO_FIELDS.map((f) => (
-                <label key={f.key} className="block">
-                  <span className="block text-xs text-nord-gray mb-1">{f.label}</span>
-                  <input
-                    type="number"
-                    value={form[f.key]}
-                    onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                    className="input"
-                    placeholder="nota"
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="overflow-x-auto nord-scrollbar">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-white border-b border-nord-border">
-                    <th className="py-2 px-3">Produto</th>
-                    <th className="py-2 px-3">Quantidade vendida</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {produtoForm.map((p, i) => (
-                    <tr key={p.produto} className="border-b border-nord-border/50">
-                      <td className="py-2 px-3 text-white">{p.produto}</td>
-                      <td className="py-2 px-3">
-                        <input
-                          type="number"
-                          value={p.quantidade}
-                          onChange={(e) =>
-                            setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, quantidade: e.target.value } : x)))
-                          }
-                          className="input"
-                          placeholder="un."
-                        />
-                      </td>
+      {canCreate && (
+        <Modal
+          open={fechamentoModalOpen}
+          onClose={() => setFechamentoModalOpen(false)}
+          title={`Fechamento do mês — ${periodoLabel(selectedPeriodo)}`}
+          widthClass="max-w-3xl"
+        >
+          <div className="space-y-5">
+            <div>
+              <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {NPS_DETALHADO_FIELDS.map((f) => (
+                  <label key={f.key} className="block">
+                    <span className="block text-xs text-nord-gray mb-1">{f.label}</span>
+                    <input
+                      type="number"
+                      value={form[f.key]}
+                      onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                      className="input"
+                      placeholder="nota"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="overflow-x-auto nord-scrollbar">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-white border-b border-nord-border">
+                      <th className="py-2 px-3">Produto</th>
+                      <th className="py-2 px-3">Quantidade vendida</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {produtoForm.map((p, i) => (
+                      <tr key={p.produto} className="border-b border-nord-border/50">
+                        <td className="py-2 px-3 text-white">{p.produto}</td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            value={p.quantidade}
+                            onChange={(e) =>
+                              setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, quantidade: e.target.value } : x)))
+                            }
+                            className="input"
+                            placeholder="un."
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <h4 className="text-white text-sm font-medium mb-3">Metas e premiação — NPS, Faturamento e Ticket Médio</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta NPS (%)</span>
-                <input type="number" value={form.npsMetaPercent} onChange={(e) => setForm({ ...form, npsMetaPercent: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Faturamento (R$)</span>
-                <input
-                  type="number"
-                  value={form.faturamentoMetaValor}
-                  onChange={(e) => setForm({ ...form, faturamentoMetaValor: e.target.value })}
-                  className="input"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Meta Ticket Médio (R$)</span>
-                <input
-                  type="number"
-                  value={form.ticketMedioMetaValor}
-                  onChange={(e) => setForm({ ...form, ticketMedioMetaValor: e.target.value })}
-                  className="input"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação NPS (R$)</span>
-                <input type="number" value={form.premiacaoNps} onChange={(e) => setForm({ ...form, premiacaoNps: e.target.value })} className="input" />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Faturamento (R$)</span>
-                <input
-                  type="number"
-                  value={form.premiacaoFaturamento}
-                  onChange={(e) => setForm({ ...form, premiacaoFaturamento: e.target.value })}
-                  className="input"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Premiação Ticket Médio (R$)</span>
-                <input
-                  type="number"
-                  value={form.premiacaoTicketMedio}
-                  onChange={(e) => setForm({ ...form, premiacaoTicketMedio: e.target.value })}
-                  className="input"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-white text-sm font-medium mb-3">Metas e premiação por produto</h4>
-            <div className="overflow-x-auto nord-scrollbar">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-white border-b border-nord-border">
-                    <th className="py-2 px-3">Produto</th>
-                    <th className="py-2 px-3">Meta (un.)</th>
-                    <th className="py-2 px-3">Premiação (R$)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {produtoForm.map((p, i) => (
-                    <tr key={p.produto} className="border-b border-nord-border/50">
-                      <td className="py-2 px-3 text-white">{p.produto}</td>
-                      <td className="py-2 px-3">
-                        <input
-                          type="number"
-                          value={p.meta}
-                          onChange={(e) => setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, meta: e.target.value } : x)))}
-                          className="input"
-                        />
-                      </td>
-                      <td className="py-2 px-3">
-                        <input
-                          type="number"
-                          value={p.premiacao}
-                          onChange={(e) =>
-                            setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, premiacao: e.target.value } : x)))
-                          }
-                          className="input"
-                        />
-                      </td>
+            <div>
+              <h4 className="text-white text-sm font-medium mb-3">Metas e premiação por produto</h4>
+              <div className="overflow-x-auto nord-scrollbar">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-white border-b border-nord-border">
+                      <th className="py-2 px-3">Produto</th>
+                      <th className="py-2 px-3">Meta (un.)</th>
+                      <th className="py-2 px-3">Premiação (R$)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {produtoForm.map((p, i) => (
+                      <tr key={p.produto} className="border-b border-nord-border/50">
+                        <td className="py-2 px-3 text-white">{p.produto}</td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            value={p.meta}
+                            onChange={(e) => setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, meta: e.target.value } : x)))}
+                            className="input"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            value={p.premiacao}
+                            onChange={(e) =>
+                              setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, premiacao: e.target.value } : x)))
+                            }
+                            className="input"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-nord-border">
-            {current ? (
+            <FechamentoDoMesEditor fdm={fdm} />
+
+            <div className="flex items-center justify-between pt-2 border-t border-nord-border">
+              {current ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                >
+                  <Trash2 size={13} /> Excluir esta reunião
+                </button>
+              ) : (
+                <span />
+              )}
               <button
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                onClick={async () => {
+                  await submit();
+                  setFechamentoModalOpen(false);
+                }}
+                disabled={saving}
+                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
               >
-                <Trash2 size={13} /> Excluir esta reunião
+                {saving ? "Salvando..." : current ? "Salvar alterações" : "Salvar fechamento do período"}
               </button>
-            ) : (
-              <span />
-            )}
-            <button
-              onClick={async () => {
-                await submit();
-                setShowMetas(false);
-              }}
-              disabled={saving}
-              className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
-            >
-              {saving ? "Salvando..." : current ? "Salvar alterações" : "Criar metas do período"}
-            </button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
 
       <ConfirmDialog
         open={confirmDelete}

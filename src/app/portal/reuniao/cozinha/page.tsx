@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/page-container";
 import { CozinhaClient } from "./cozinha-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
-import { computeCozinhaMetrics } from "@/lib/reuniao-server";
+import { computeCozinhaMetrics, loadReuniaoCustomIndicators } from "@/lib/reuniao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -28,6 +28,7 @@ export default async function ReuniaoCozinhaPage() {
     ctx?.mode === "single" ? await computeCozinhaMetrics(ctx.empresa.id, periodo) : { cmvPercent: 0, desperdicioValor: 0, faturamento: 0 };
 
   const current = ctx?.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
+  const customIndicators = ctx?.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "COZINHA", periodo) : [];
 
   return (
     <PageContainer title="Reunião" subtitle="Reunião Cozinha">
@@ -35,6 +36,7 @@ export default async function ReuniaoCozinhaPage() {
         initialMeetings={meetings.map((m) => ({ ...m, createdAt: m.createdAt.toISOString(), updatedAt: m.updatedAt.toISOString() }))}
         initialCurrent={current ? { ...current, createdAt: current.createdAt.toISOString(), updatedAt: current.updatedAt.toISOString() } : null}
         initialMetrics={metrics}
+        initialCustomIndicators={customIndicators}
         periodo={periodo}
         canCreate={ctx?.mode === "single"}
         empresaName={ctx?.mode === "single" ? ctx.empresa.name : "Grupo Nord"}
