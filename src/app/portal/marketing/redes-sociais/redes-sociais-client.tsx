@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Section, Badge, StatCard } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatNumber, formatPercent, growth, pct } from "@/lib/calc";
-import { SOCIAL_NETWORK_OPTIONS } from "@/lib/marketing";
+import type { RollingPeriodKey } from "@/lib/periods";
 
 const NETWORK_ICON: Record<string, string> = {
   Instagram: "Instagram",
@@ -37,9 +38,9 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 export function RedesSociaisClient({
-  current,
-  previous,
-  countsByNetwork,
+  current: initialCurrent,
+  previous: initialPrevious,
+  countsByNetwork: initialCountsByNetwork,
   instagramUsername,
 }: {
   current: EntrySummary | undefined;
@@ -48,6 +49,35 @@ export function RedesSociaisClient({
   instagramUsername: string | null;
 }) {
   const [tab, setTab] = useState<TabKey>("geral");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [current, setCurrent] = useState(initialCurrent);
+  const [previous, setPrevious] = useState(initialPrevious);
+  const [countsByNetwork, setCountsByNetwork] = useState(initialCountsByNetwork);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ key });
+      if (key === "personalizado" && from && to) {
+        params.set("from", from);
+        params.set("to", to);
+      }
+      const res = await fetch(`/api/marketing/redes-sociais?${params.toString()}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setCurrent(data.current ?? undefined);
+      setPrevious(data.previous ?? undefined);
+      setCountsByNetwork(data.countsByNetwork);
+    } catch {
+      setError("Não foi possível carregar os dados desse período.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const totalInteracoes = current ? current.curtidas + current.comentarios + current.compartilhamentos + current.salvamentos : 0;
   const engajamento = current ? pct(totalInteracoes, current.alcance || current.seguidoresFim) : 0;
@@ -56,6 +86,11 @@ export function RedesSociaisClient({
 
   return (
     <div className="space-y-6">
+      <div>
+        <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loading} />
+        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+      </div>
+
       <nav className="flex flex-wrap gap-2" aria-label="Seções de Redes Sociais">
         {TABS.map((t) => (
           <button
