@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pencil, FileDown, Trash2 } from "lucide-react";
+import { Pencil, FileDown, Plus, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
+import type { GerenteCustomIndicatorDTO } from "@/lib/reuniao-server";
 
 type Meeting = {
   id: string;
@@ -63,6 +64,33 @@ function buildForm(m?: Meeting | null) {
   };
 }
 
+type CustomForm = Record<string, { valor: string; metaValue: string; premiacaoValor: string }>;
+
+function buildCustomForm(indicators: GerenteCustomIndicatorDTO[]): CustomForm {
+  return Object.fromEntries(
+    indicators.map((ind) => [
+      ind.id,
+      {
+        valor: ind.valor != null ? String(ind.valor) : "",
+        metaValue: String(ind.metaValue),
+        premiacaoValor: String(ind.premiacaoValor),
+      },
+    ])
+  );
+}
+
+const UNIDADE_LABEL: Record<GerenteCustomIndicatorDTO["unidade"], string> = {
+  PERCENT: "Percentual (%)",
+  CURRENCY: "Reais (R$)",
+  NUMBER: "Número",
+};
+
+function formatCustomValue(unidade: GerenteCustomIndicatorDTO["unidade"], value: number) {
+  if (unidade === "CURRENCY") return formatCurrency(value);
+  if (unidade === "PERCENT") return `${formatNumber(value, 1)}%`;
+  return formatNumber(value, value % 1 === 0 ? 0 : 1);
+}
+
 function meetingPremiacaoTotal(m: Meeting) {
   return (
     (m.faturamentoTotalValor !== null && m.faturamentoMetaValor > 0 && m.faturamentoTotalValor >= m.faturamentoMetaValor
@@ -80,6 +108,7 @@ export function GerenteClient({
   initialMeetings,
   initialCurrent,
   initialMetrics,
+  initialCustomIndicators,
   periodo,
   canCreate,
   empresaName,
@@ -87,6 +116,7 @@ export function GerenteClient({
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
   initialMetrics: Metrics;
+  initialCustomIndicators: GerenteCustomIndicatorDTO[];
   periodo: string;
   canCreate: boolean;
   empresaName: string;
@@ -104,6 +134,21 @@ export function GerenteClient({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
+  const [customIndicators, setCustomIndicators] = useState(initialCustomIndicators);
+  const [customForm, setCustomForm] = useState(buildCustomForm(initialCustomIndicators));
+  const [newMetaOpen, setNewMetaOpen] = useState(false);
+  const [newMetaForm, setNewMetaForm] = useState({
+    nome: "",
+    unidade: "PERCENT" as GerenteCustomIndicatorDTO["unidade"],
+    direcao: "MIN" as GerenteCustomIndicatorDTO["direcao"],
+    metaPadrao: "",
+    premiacaoPadrao: "",
+  });
+  const [creatingMeta, setCreatingMeta] = useState(false);
+  const [newMetaError, setNewMetaError] = useState<string | null>(null);
+  const [deleteMetaTarget, setDeleteMetaTarget] = useState<GerenteCustomIndicatorDTO | null>(null);
+  const [deletingMeta, setDeletingMeta] = useState(false);
+
   const mounted = useRef(false);
   useEffect(() => {
     if (!mounted.current) {
@@ -119,6 +164,8 @@ export function GerenteClient({
         setCurrent(data.current);
         setMetrics(data.metrics);
         setForm(buildForm(data.current));
+        setCustomIndicators(data.customIndicators ?? []);
+        setCustomForm(buildCustomForm(data.customIndicators ?? []));
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -165,6 +212,19 @@ export function GerenteClient({
     if (bateuChecklist) total += Number(form.premiacaoChecklist) || 0;
     return total;
   }, [bateuFaturamento, bateuCmv, bateuTurnover, bateuChecklist, form]);
+
+  function customIndicatorState(ind: GerenteCustomIndicatorDTO) {
+    const entry = customForm[ind.id] ?? { valor: "", metaValue: String(ind.metaPadrao), premiacaoValor: String(ind.premiacaoPadrao) };
+    const valor = entry.valor !== "" ? Number(entry.valor) : null;
+    const meta = Number(entry.metaValue) || 0;
+    const premio = Number(entry.premiacaoValor) || 0;
+    const bateu = valor === null ? null : ind.direcao === "MIN" ? valor <= meta : valor >= meta;
+    return { entry, valor, meta, premio, bateu };
+  }
+
+  function updateCustomForm(id: string, patch: Partial<CustomForm[string]>) {
+    setCustomForm((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
 
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
@@ -238,6 +298,8 @@ export function GerenteClient({
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
+    setCustomIndicators(data.customIndicators ?? []);
+    setCustomForm(buildCustomForm(data.customIndicators ?? []));
   }
 
   async function submit() {
@@ -247,11 +309,53 @@ export function GerenteClient({
       await fetch("/api/reuniao/gerente", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formToPayload(selectedPeriodo, form)),
+        body: JSON.stringify({
+          ...formToPayload(selectedPeriodo, form),
+          customIndicators: customIndicators.map((ind) => ({ id: ind.id, ...customForm[ind.id] })),
+        }),
       });
       await refresh(selectedPeriodo);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function createMeta() {
+    if (creatingMeta) return;
+    setNewMetaError(null);
+    if (!newMetaForm.nome.trim()) {
+      setNewMetaError("Informe um nome para a meta.");
+      return;
+    }
+    setCreatingMeta(true);
+    try {
+      const res = await fetch("/api/reuniao/gerente/indicadores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newMetaForm),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setNewMetaError(data?.error ?? "Não foi possível criar a meta.");
+        return;
+      }
+      setNewMetaOpen(false);
+      setNewMetaForm({ nome: "", unidade: "PERCENT", direcao: "MIN", metaPadrao: "", premiacaoPadrao: "" });
+      await refresh(selectedPeriodo);
+    } finally {
+      setCreatingMeta(false);
+    }
+  }
+
+  async function confirmDeleteMeta() {
+    if (!deleteMetaTarget || deletingMeta) return;
+    setDeletingMeta(true);
+    try {
+      await fetch(`/api/reuniao/gerente/indicadores/${deleteMetaTarget.id}`, { method: "DELETE" });
+      setDeleteMetaTarget(null);
+      await refresh(selectedPeriodo);
+    } finally {
+      setDeletingMeta(false);
     }
   }
 
@@ -412,6 +516,28 @@ export function GerenteClient({
         />
       ),
     },
+    ...customIndicators.map((ind) => {
+      const { valor, meta, premio, bateu } = customIndicatorState(ind);
+      const metaText = ind.direcao === "MIN" ? `Meta: até ${formatCustomValue(ind.unidade, meta)}` : `Meta: mín. ${formatCustomValue(ind.unidade, meta)}`;
+      return {
+        key: `custom-${ind.id}`,
+        content: (
+          <IndicatorCard
+            icon={ind.icon}
+            color="#64748b"
+            label={ind.nome}
+            status={statusOf(bateu)}
+            valueSlot={
+              <span className="text-2xl font-semibold text-white">
+                {valor === null ? "-" : formatCustomValue(ind.unidade, valor)}
+              </span>
+            }
+            metaText={metaText}
+            premio={premio}
+          />
+        ),
+      };
+    }),
   ];
 
   return (
@@ -492,6 +618,19 @@ export function GerenteClient({
                     className="input"
                   />
                 </label>
+                {customIndicators.map((ind) => (
+                  <label key={ind.id} className="block">
+                    <span className="block text-xs text-nord-gray mb-1">{ind.nome}</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={customForm[ind.id]?.valor ?? ""}
+                      onChange={(e) => updateCustomForm(ind.id, { valor: e.target.value })}
+                      placeholder={ind.unidade === "PERCENT" ? "%" : ind.unidade === "CURRENCY" ? "R$" : "valor"}
+                      className="input"
+                    />
+                  </label>
+                ))}
               </div>
             </div>
 
@@ -531,6 +670,57 @@ export function GerenteClient({
                   <input type="number" value={form.premiacaoChecklist} onChange={(e) => setForm({ ...form, premiacaoChecklist: e.target.value })} className="input" />
                 </label>
               </div>
+
+              {customIndicators.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  {customIndicators.map((ind) => {
+                    const entry = customForm[ind.id] ?? { valor: "", metaValue: "", premiacaoValor: "" };
+                    return (
+                      <div key={ind.id} className="rounded-lg border border-nord-border/60 p-3">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-sm text-white font-medium">{ind.nome}</span>
+                          <button
+                            onClick={() => setDeleteMetaTarget(ind)}
+                            className="text-nord-gray hover:text-red-400 flex items-center gap-1 text-xs shrink-0"
+                          >
+                            <Trash2 size={12} /> Excluir meta
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="block">
+                            <span className="block text-xs text-nord-gray mb-1">
+                              Meta ({ind.direcao === "MIN" ? "até" : "mín."}) {ind.unidade === "PERCENT" ? "%" : ind.unidade === "CURRENCY" ? "R$" : ""}
+                            </span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={entry.metaValue}
+                              onChange={(e) => updateCustomForm(ind.id, { metaValue: e.target.value })}
+                              className="input"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="block text-xs text-nord-gray mb-1">Premiação (R$)</span>
+                            <input
+                              type="number"
+                              value={entry.premiacaoValor}
+                              onChange={(e) => updateCustomForm(ind.id, { premiacaoValor: e.target.value })}
+                              className="input"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                onClick={() => setNewMetaOpen(true)}
+                className="mt-3 flex items-center gap-1.5 text-xs text-nord-blue-light hover:underline"
+              >
+                <Plus size={13} /> Nova meta
+              </button>
             </div>
 
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-nord-border">
@@ -573,6 +763,87 @@ export function GerenteClient({
         }}
         confirmLabel={deleting ? "Excluindo..." : "Excluir"}
         danger
+      />
+
+      <Modal open={newMetaOpen} onClose={() => setNewMetaOpen(false)} title="Nova meta">
+        <FormError message={newMetaError} />
+        <div className="space-y-3">
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Nome</span>
+            <input
+              type="text"
+              value={newMetaForm.nome}
+              onChange={(e) => setNewMetaForm({ ...newMetaForm, nome: e.target.value })}
+              placeholder="Ex.: NPS Delivery, Refeições servidas..."
+              className="input"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Unidade</span>
+              <select
+                value={newMetaForm.unidade}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, unidade: e.target.value as GerenteCustomIndicatorDTO["unidade"] })}
+                className="input"
+              >
+                {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Meta é batida quando o valor for</span>
+              <select
+                value={newMetaForm.direcao}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, direcao: e.target.value as GerenteCustomIndicatorDTO["direcao"] })}
+                className="input"
+              >
+                <option value="MIN">Menor ou igual à meta (ex.: até 5%)</option>
+                <option value="MAX">Maior ou igual à meta (ex.: mín. 90%)</option>
+              </select>
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Meta padrão</span>
+              <input
+                type="number"
+                step="0.1"
+                value={newMetaForm.metaPadrao}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, metaPadrao: e.target.value })}
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Premiação padrão (R$)</span>
+              <input
+                type="number"
+                value={newMetaForm.premiacaoPadrao}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, premiacaoPadrao: e.target.value })}
+                className="input"
+              />
+            </label>
+          </div>
+          <button
+            onClick={createMeta}
+            disabled={creatingMeta}
+            className="mt-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
+          >
+            {creatingMeta ? "Criando..." : "Criar meta"}
+          </button>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={deleteMetaTarget !== null}
+        title="Excluir meta"
+        message={`Tem certeza que quer excluir a meta "${deleteMetaTarget?.nome}"? Isso remove essa meta e o histórico de valores dela em todos os meses — o restante da reunião não é afetado.`}
+        confirmLabel={deletingMeta ? "Excluindo..." : "Excluir"}
+        danger
+        onConfirm={confirmDeleteMeta}
+        onCancel={() => setDeleteMetaTarget(null)}
       />
 
       {canCreate && (
