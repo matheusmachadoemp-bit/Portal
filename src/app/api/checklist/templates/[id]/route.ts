@@ -139,15 +139,38 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
 
-  const occurrenceCount = await prisma.checklistOccurrence.count({ where: { templateId: id } });
-  if (occurrenceCount > 0) {
+  const occurrences = await prisma.checklistOccurrence.findMany({
+    where: { templateId: id },
+    select: {
+      id: true,
+      startedAt: true,
+      completedAt: true,
+      justificativa: true,
+      _count: { select: { respostas: true, fotos: true } },
+      pontos: { select: { id: true } },
+    },
+  });
+
+  // Ocorrências puramente agendadas (ninguém abriu, respondeu, tirou foto ou
+  // justificou) não carregam histórico real — só a geração automática do
+  // cron. Só bloqueia a exclusão quando existe alguma ocorrência com dado de
+  // verdade; nesse caso, orienta a desativar em vez de excluir.
+  const temHistoricoReal = occurrences.some(
+    (o) => o.startedAt || o.completedAt || o.justificativa || o.pontos || o._count.respostas > 0 || o._count.fotos > 0
+  );
+  if (temHistoricoReal) {
     return NextResponse.json(
       { error: "Esse checklist já tem execuções registradas — desative em vez de excluir, para preservar o histórico." },
       { status: 400 }
     );
   }
 
-  await prisma.checklistTemplate.delete({ where: { id, empresaId: empresa.id } });
+  await prisma.$transaction([
+    ...(occurrences.length
+      ? [prisma.checklistOccurrence.deleteMany({ where: { id: { in: occurrences.map((o) => o.id) } } })]
+      : []),
+    prisma.checklistTemplate.delete({ where: { id, empresaId: empresa.id } }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }
