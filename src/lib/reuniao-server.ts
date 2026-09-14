@@ -149,19 +149,22 @@ export type GerenteCustomIndicatorDTO = {
   nome: string;
   icon: string;
   unidade: "PERCENT" | "CURRENCY" | "NUMBER";
-  direcao: "MIN" | "MAX";
-  metaPadrao: number;
-  premiacaoPadrao: number;
+  valorPadrao: number;
   valor: number | null;
-  metaValue: number;
-  premiacaoValor: number;
+  valorReferencia: number;
 };
 
 /**
- * Indicadores extras criados pelo gerente/admin (além dos 4 fixos do
- * GerenteMeeting), com o valor/meta/premiação já resolvidos para o período —
- * caindo no padrão do indicador (metaPadrao/premiacaoPadrao) enquanto o
- * período ainda não tem um valor salvo.
+ * Lista de indicadores da seção "Fechamento do mês" da Reunião Gerente —
+ * cada um com o `valor` (Resultado do período, digitado à parte) e o
+ * `valorReferencia` (o único número que essa seção grava, sem meta-alvo nem
+ * premiação) já resolvidos para o período — caindo no padrão do indicador
+ * (valorPadrao) enquanto o período ainda não tem um valor salvo. Inclui,
+ * pra empresas já migradas, os 4 indicadores que antes eram campos fixos de
+ * GerenteMeeting (Faturamento Total, CMV, Turnover, Checklist Operacional —
+ * ver 20260914140000_gerente_fechamento_do_mes), sem nenhuma distinção de
+ * código em relação aos indicadores criados livremente (ex.: Ticket Médio
+ * Salão/Delivery).
  */
 export async function loadGerenteCustomIndicators(empresaId: string, periodo: string): Promise<GerenteCustomIndicatorDTO[]> {
   const indicators = await prisma.gerenteCustomIndicator.findMany({
@@ -182,12 +185,9 @@ export async function loadGerenteCustomIndicators(empresaId: string, periodo: st
       nome: ind.nome,
       icon: ind.icon,
       unidade: ind.unidade,
-      direcao: ind.direcao,
-      metaPadrao: ind.metaPadrao,
-      premiacaoPadrao: ind.premiacaoPadrao,
+      valorPadrao: ind.valorPadrao,
       valor: v?.valor ?? null,
-      metaValue: v?.metaValue ?? ind.metaPadrao,
-      premiacaoValor: v?.premiacaoValor ?? ind.premiacaoPadrao,
+      valorReferencia: v?.valorReferencia ?? ind.valorPadrao,
     };
   });
 }

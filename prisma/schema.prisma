@@ -2548,18 +2548,6 @@ model GerenteMeeting {
   faltasAtrasosAtestados      Int?
   checklistOperacionalPercent Float?
 
-  // Metas vigentes nesse período (editáveis, herdam do período anterior)
-  faturamentoMetaValor            Float @default(0)
-  cmvMetaPercent                  Float @default(30)
-  turnoverMetaPercent             Float @default(5)
-  checklistOperacionalMetaPercent Float @default(90)
-
-  // Premiação paga por meta batida nesse período
-  premiacaoFaturamento Float @default(0)
-  premiacaoCmv         Float @default(0)
-  premiacaoTurnover    Float @default(0)
-  premiacaoChecklist   Float @default(0)
-
   notas       String?
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id])
@@ -2575,28 +2563,24 @@ enum GerenteIndicatorUnit {
   NUMBER
 }
 
-// MIN: bate a meta quando o valor é <= meta (ex.: "até X%"). MAX: bate quando valor >= meta (ex.: "mín. X%").
-enum GerenteIndicatorDirection {
-  MIN
-  MAX
-}
-
-// Indicador extra criado pelo próprio gerente/admin, além dos 4 fixos do GerenteMeeting
-// (Faturamento, CMV, Turnover, Checklist) — sempre digitado manualmente todo mês.
+// Lista de indicadores de referência da seção "Fechamento do mês" da Reunião
+// Gerente — nome + 1 valor por período, sem meta-alvo nem premiação (removidos
+// em 20260914140000_gerente_fechamento_do_mes, junto com os 4 campos antes
+// fixos em GerenteMeeting: Faturamento, CMV, Turnover, Checklist Operacional,
+// migrados pra cá como as 4 primeiras entradas de cada empresa). Continua
+// sendo o mesmo mecanismo que Ticket Médio Salão/Delivery já usavam.
 model GerenteCustomIndicator {
-  id              String                    @id @default(cuid())
-  empresaId       String
-  empresa         Empresa                   @relation(fields: [empresaId], references: [id])
-  nome            String
-  icon            String                    @default("Target")
-  unidade         GerenteIndicatorUnit      @default(PERCENT)
-  direcao         GerenteIndicatorDirection @default(MIN)
-  metaPadrao      Float                     @default(0)
-  premiacaoPadrao Float                     @default(0)
-  order           Int                       @default(0)
-  createdById     String
-  createdBy       User                      @relation(fields: [createdById], references: [id])
-  createdAt       DateTime                  @default(now())
+  id          String               @id @default(cuid())
+  empresaId   String
+  empresa     Empresa              @relation(fields: [empresaId], references: [id])
+  nome        String
+  icon        String               @default("Target")
+  unidade     GerenteIndicatorUnit @default(PERCENT)
+  valorPadrao Float                @default(0)
+  order       Int                  @default(0)
+  createdById String
+  createdBy   User                 @relation(fields: [createdById], references: [id])
+  createdAt   DateTime             @default(now())
 
   values GerenteCustomIndicatorValue[]
 
@@ -2604,13 +2588,16 @@ model GerenteCustomIndicator {
 }
 
 model GerenteCustomIndicatorValue {
-  id             String                 @id @default(cuid())
-  indicatorId    String
-  indicator      GerenteCustomIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
-  periodo        String // "2026-08" (YYYY-MM)
-  valor          Float?
-  metaValue      Float
-  premiacaoValor Float
+  id              String                 @id @default(cuid())
+  indicatorId     String
+  indicator       GerenteCustomIndicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  periodo         String // "2026-08" (YYYY-MM)
+  /// "Resultado do período" (seção separada, não mexida por essa migration) —
+  /// valor real do indicador naquele mês, quando é digitado manualmente ali.
+  valor           Float?
+  /// "Fechamento do mês" — valor de referência único do indicador naquele mês
+  /// (antigo par meta+premiação, unificado num só campo).
+  valorReferencia Float
 
   @@unique([indicatorId, periodo])
 }
