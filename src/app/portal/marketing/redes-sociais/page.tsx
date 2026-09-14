@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { SOCIAL_NETWORK_OPTIONS } from "@/lib/marketing";
+import { resolveRollingPeriod } from "@/lib/periods";
 import { RedesSociaisClient } from "./redes-sociais-client";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -16,9 +17,15 @@ export default async function RedesSociaisPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
+  // Carga inicial já filtrada pelo período default do filtro de página
+  // ("mes-atual"), pra bater com o que o cliente mostra assim que abre a
+  // tela — o mesmo período que a rota GET /api/marketing/redes-sociais usa
+  // quando nenhum filtro foi aplicado ainda.
+  const { from, to } = resolveRollingPeriod("mes-atual");
+
   const [entries, publishedByNetwork] = await Promise.all([
     prisma.marketingEntry.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, date: { gte: from, lte: to } },
       orderBy: { date: "desc" },
       take: 2,
     }),
@@ -27,9 +34,9 @@ export default async function RedesSociaisPage() {
         empresaId: { in: empresaIds },
         status: { in: ["PUBLICADO", "RESULTADOS"] },
         socialNetwork: { not: null },
+        date: { gte: from, lte: to },
       },
       orderBy: { date: "desc" },
-      take: 40,
     }),
   ]);
 
