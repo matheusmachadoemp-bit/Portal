@@ -7,6 +7,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { PAYMENT_METHOD_LABEL, SALE_CHANNEL_LABEL, SALE_PAYMENT_METHODS, SALE_PLATFORM_LABEL } from "@/lib/vendas-analytics";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type ProductOption = { id: string; name: string; category: string; precoVenda: number };
 type EmployeeOption = { id: string; name: string };
@@ -65,9 +66,18 @@ export function LancamentosClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [loadingPeriodo, setLoadingPeriodo] = useState(false);
 
-  async function refresh() {
-    const res = await fetch("/api/vendas/lancamentos");
+  async function refresh(range?: { from: Date; to: Date }) {
+    const params = new URLSearchParams();
+    if (range) {
+      params.set("from", range.from.toISOString());
+      params.set("to", range.to.toISOString());
+    }
+    const res = await fetch(`/api/vendas/lancamentos?${params.toString()}`);
     const data = await res.json();
     setSales(
       data.sales.map((s: { id: string; dateTime: string; channel: string; platform: string; formaPagamento: string; garcomId: string | null; garcom: { name: string } | null; mesaNumero: string | null; bairro: string | null; regiao: string | null; valorTotal: number; cancelado: boolean; items: SaleItemDTO[] }) => ({
@@ -88,13 +98,28 @@ export function LancamentosClient({
     );
   }
 
+  function currentRange() {
+    if (periodo === "personalizado" && (!customFrom || !customTo)) return undefined;
+    return resolveRollingPeriod(periodo, { from: customFrom, to: customTo });
+  }
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    setLoadingPeriodo(true);
+    try {
+      await refresh(resolveRollingPeriod(key, { from, to }));
+    } finally {
+      setLoadingPeriodo(false);
+    }
+  }
+
   async function toggleCancelado(sale: SaleDTO) {
     await fetch(`/api/vendas/lancamentos/${sale.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cancelado: !sale.cancelado }),
     });
-    refresh();
+    refresh(currentRange());
   }
 
   function openNew() {
@@ -143,7 +168,7 @@ export function LancamentosClient({
         return;
       }
       setShowForm(false);
-      refresh();
+      refresh(currentRange());
     } finally {
       setSubmitting(false);
     }
@@ -153,7 +178,7 @@ export function LancamentosClient({
     if (!confirmDeleteId) return;
     await fetch(`/api/vendas/lancamentos/${confirmDeleteId}`, { method: "DELETE" });
     setConfirmDeleteId(null);
-    refresh();
+    refresh(currentRange());
   }
 
   return (
@@ -175,6 +200,39 @@ export function LancamentosClient({
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas.
         </p>
       )}
+
+      <div className="mb-4">
+        <div className="flex flex-wrap gap-1.5">
+          {STANDARD_PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                if (opt.key !== "personalizado") applyPeriodo(opt.key);
+                else setPeriodo(opt.key);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {periodo === "personalizado" && (
+          <div className="flex items-center gap-2 mt-2">
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
+            <span className="text-xs text-nord-gray">até</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
+            <button
+              onClick={() => applyPeriodo("personalizado", customFrom, customTo)}
+              disabled={!customFrom || !customTo || loadingPeriodo}
+              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              Aplicar
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
@@ -230,7 +288,7 @@ export function LancamentosClient({
             {sales.length === 0 && (
               <tr>
                 <td colSpan={8} className="py-6 text-center text-nord-gray">
-                  Nenhuma venda lançada ainda.
+                  Nenhuma venda lançada no período selecionado.
                 </td>
               </tr>
             )}

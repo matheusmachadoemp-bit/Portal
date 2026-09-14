@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { resolvePeriod, resolveSameWeekdayComparison, type PeriodKey } from "@/lib/periods";
 import { SALE_CHANNEL_LABEL } from "@/lib/vendas-analytics";
+import { productTotalCost } from "@/lib/ficha";
 import type { SaleChannel, SalePlatform } from "@prisma/client";
 
 export type FaturamentoParams = {
@@ -123,4 +124,44 @@ export async function computeFaturamentoSummary(empresaIds: string[], params: Fa
     prevFrom: prevFrom.toISOString(),
     prevTo: prevTo.toISOString(),
   };
+}
+
+export type ItensVendidosRow = { nome: string; quantidade: number; faturamento: number; margem: number };
+
+/** Itens vendidos (venda direta + importados) no período — mesma agregação usada pela Curva ABC. */
+export async function computeItensVendidosRows(empresaIds: string[], from: Date, to: Date): Promise<ItensVendidosRow[]> {
+  const [items, importedItems, products] = await Promise.all([
+    prisma.saleItem.findMany({
+      where: { sale: { empresaId: { in: empresaIds }, dateTime: { gte: from, lte: to } } },
+      select: { productId: true, nome: true, quantidade: true, faturamento: true },
+    }),
+    prisma.importedSaleItem.findMany({
+      where: { empresaId: { in: empresaIds }, periodTo: { gte: from, lte: to } },
+      select: { productId: true, nome: true, quantidade: true, faturamento: true },
+    }),
+    prisma.product.findMany({
+      where: { empresaId: { in: empresaIds } },
+      include: { ingredients: { include: { ingredient: true } } },
+    }),
+  ]);
+
+  const costByProduct = new Map(products.map((p) => [p.id, productTotalCost(p.ingredients)]));
+
+  const byKey = new Map<string, { nome: string; quantidade: number; faturamento: number; custo: number }>();
+  for (const item of [...items, ...importedItems]) {
+    const key = item.productId ?? item.nome;
+    const custoUnitario = item.productId ? (costByProduct.get(item.productId) ?? 0) : 0;
+    const cur = byKey.get(key) ?? { nome: item.nome, quantidade: 0, faturamento: 0, custo: 0 };
+    cur.quantidade += item.quantidade;
+    cur.faturamento += item.faturamento;
+    cur.custo += custoUnitario * item.quantidade;
+    byKey.set(key, cur);
+  }
+
+  return [...byKey.values()].map((r) => ({
+    nome: r.nome,
+    quantidade: r.quantidade,
+    faturamento: r.faturamento,
+    margem: r.faturamento - r.custo,
+  }));
 }

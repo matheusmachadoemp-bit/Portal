@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { LancamentosClient } from "./lancamentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { resolveRollingPeriod } from "@/lib/periods";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
@@ -15,12 +16,13 @@ export default async function LancamentosPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canCreate = ctx?.mode === "single";
+  const range = resolveRollingPeriod("mes-atual");
 
   const [sales, products, employees] = await Promise.all([
     prisma.sale.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, dateTime: { gte: range.from, lte: range.to } },
       orderBy: { dateTime: "desc" },
-      take: 100,
+      take: 200,
       include: { items: true, garcom: { select: { id: true, name: true } } },
     }),
     prisma.product.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
