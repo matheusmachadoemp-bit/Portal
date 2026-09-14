@@ -7,6 +7,7 @@ import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/api-client";
+import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
 
 type PayableDTO = {
   id: string;
@@ -101,6 +102,9 @@ export function ContasPagarClient({
   const [savingRecurring, setSavingRecurring] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [filterVencimento, setFilterVencimento] = useState<DueDateFilterKey>("");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [showRecurring, setShowRecurring] = useState(false);
   const [recurringForm, setRecurringForm] = useState({
     descricao: "",
@@ -120,13 +124,14 @@ export function ContasPagarClient({
     () =>
       payables
         .filter((p) => !filterStatus || p.status === filterStatus)
+        .filter((p) => matchesDueDateFilter(new Date(p.dataVencimento), p.status, filterVencimento, { from: customFrom, to: customTo }, ["PAGO", "CANCELADO"]))
         .filter(
           (p) =>
             !search ||
             p.fornecedor.toLowerCase().includes(search.toLowerCase()) ||
             p.descricao.toLowerCase().includes(search.toLowerCase())
         ),
-    [payables, filterStatus, search]
+    [payables, filterStatus, filterVencimento, customFrom, customTo, search]
   );
 
   const totalFiltrado = filtered.reduce((a, p) => a + p.valor, 0);
@@ -297,6 +302,13 @@ export function ContasPagarClient({
               </option>
             ))}
           </select>
+          <select value={filterVencimento} onChange={(e) => setFilterVencimento(e.target.value as DueDateFilterKey)} className="input-sm">
+            {DUE_DATE_FILTER_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <button onClick={exportCsv} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white">
             <Download size={13} /> Excel
           </button>
@@ -320,6 +332,13 @@ export function ContasPagarClient({
         </p>
       )}
       <FormError message={rowError} />
+      {filterVencimento === "personalizado" && (
+        <div className="flex items-center gap-2 mb-3">
+          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input-sm" />
+          <span className="text-xs text-nord-gray">até</span>
+          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input-sm" />
+        </div>
+      )}
       <p className="text-xs text-nord-gray mb-3">
         Total filtrado: <span className="text-white font-medium">{formatCurrency(totalFiltrado)}</span> ({filtered.length} lançamentos)
       </p>
