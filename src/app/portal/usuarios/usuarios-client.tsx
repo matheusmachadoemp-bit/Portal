@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Plus, Pencil, Trash2, ShieldCheck, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { format } from "date-fns";
@@ -231,12 +230,6 @@ export function UsuariosClient({
       title="Usuários do portal"
       action={
         <div className="flex items-center gap-2">
-          <Link
-            href="/portal/usuarios/permissoes"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white"
-          >
-            <ShieldCheck size={13} /> Perfis de permissão
-          </Link>
           <button
             onClick={openNew}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"

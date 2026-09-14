@@ -98,9 +98,6 @@ export function ConfiguracoesEstoqueClient({
           <Link href="/portal/estoque/fornecedores" className="nord-card p-3 hover:border-nord-blue text-white">
             Gerenciar fornecedores
           </Link>
-          <Link href="/portal/usuarios/permissoes" className="nord-card p-3 hover:border-nord-blue text-white">
-            Permissões de acesso ao módulo Estoque
-          </Link>
           <Link href="/portal/configuracoes" className="nord-card p-3 hover:border-nord-blue text-white">
             Integrações e webhooks (Saipos, iFood, 99Food, notas fiscais)
           </Link>
