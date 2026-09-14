@@ -111,6 +111,8 @@ export function PerguntasClient({ canEdit, canDelete }: { canEdit: boolean; canD
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [filtroCargoId, setFiltroCargoId] = useState<string | null>(null);
+
   async function load() {
     setLoading(true);
     setLoadError(null);
@@ -172,6 +174,8 @@ export function PerguntasClient({ canEdit, canDelete }: { canEdit: boolean; canD
   }
 
   const perguntaPai = perguntas.find((p) => p.id === form.perguntaPaiId);
+
+  const perguntasFiltradas = filtroCargoId ? perguntas.filter((p) => p.cargoIds.includes(filtroCargoId)) : perguntas;
 
   async function submit() {
     if (saving) return;
@@ -247,15 +251,44 @@ export function PerguntasClient({ canEdit, canDelete }: { canEdit: boolean; canD
           )
         }
       >
+        {!loading && !loadError && perguntas.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            <button
+              onClick={() => setFiltroCargoId(null)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                filtroCargoId === null ? "bg-nord-blue border-nord-blue text-white" : "bg-nord-panel border-nord-border text-nord-gray hover:text-white"
+              }`}
+            >
+              Todos ({perguntas.length})
+            </button>
+            {cargos.map((c) => {
+              const count = perguntas.filter((p) => p.cargoIds.includes(c.id)).length;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setFiltroCargoId(c.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                    filtroCargoId === c.id ? "bg-nord-blue border-nord-blue text-white" : "bg-nord-panel border-nord-border text-nord-gray hover:text-white"
+                  }`}
+                >
+                  {c.nome} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {loading ? (
           <p className="text-sm text-nord-gray text-center py-8">Carregando...</p>
         ) : loadError ? (
           <p className="text-sm text-red-400 text-center py-8">{loadError}</p>
         ) : perguntas.length === 0 ? (
           <p className="text-sm text-nord-gray text-center py-8">Nenhuma pergunta cadastrada ainda.</p>
+        ) : perguntasFiltradas.length === 0 ? (
+          <p className="text-sm text-nord-gray text-center py-8">Nenhuma pergunta para esse cargo.</p>
         ) : (
           <div className="space-y-2">
-            {perguntas.map((p) => (
+            {perguntasFiltradas.map((p) => (
               <div
                 key={p.id}
                 className={`rounded-lg border p-3 ${p.ativa ? "border-nord-border/60" : "border-nord-border/30 opacity-60"}`}
