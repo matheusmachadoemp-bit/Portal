@@ -13,15 +13,20 @@ import { RotinaPanel } from "./rotina-panel";
 import { AlertasPanel } from "./alertas-panel";
 import { MetasPanel } from "./metas-panel";
 import { LojaNordPanel } from "./loja-nord-panel";
+import type { PeriodoInicio } from "@/lib/inicio";
 
 type EmpresaDTO = { id: string; key: string; name: string; color: string; logo: string | null };
 
-type PeriodoChave = "hoje" | "7dias" | "mes" | "custom";
+type PeriodoChave = PeriodoInicio;
 
+// Padrão de filtro de período do portal (ver CLAUDE.md) — "custom" aqui é só
+// o apelido que a API de Início já usa para "personalizado".
 const PERIODO_OPTIONS: { key: PeriodoChave; label: string }[] = [
   { key: "hoje", label: "Hoje" },
+  { key: "ontem", label: "Ontem" },
   { key: "7dias", label: "Últimos 7 dias" },
   { key: "mes", label: "Este mês" },
+  { key: "mes-passado", label: "Mês passado" },
   { key: "custom", label: "Personalizado" },
 ];
 
@@ -35,7 +40,7 @@ type IndicadoresResponse = {
   ticketMedio: IndicadorComDelta;
   checklistsConcluidos: { quantidade: number };
   tarefasPendentes: { quantidade: number };
-  equipePresente: { quantidade: number };
+  manutencao: { chamadosAbertos: number; chamadosUrgentes: number };
   nps: IndicadorComDelta;
 };
 
@@ -240,12 +245,16 @@ export function GerencialDashboardClient({
                   href: "/portal/tarefas",
                 },
                 {
-                  key: "equipe-presente",
-                  label: "Equipe presente hoje",
-                  value: formatNumber(indicadores.equipePresente.quantidade),
-                  icon: "Users",
-                  hint: "hoje",
-                  href: "/portal/rh/ponto-eletronico",
+                  key: "manutencao",
+                  label: "Manutenções",
+                  value: formatNumber(indicadores.manutencao.chamadosAbertos),
+                  icon: "Wrench",
+                  color: indicadores.manutencao.chamadosUrgentes > 0 ? "#ef4444" : undefined,
+                  hint:
+                    indicadores.manutencao.chamadosUrgentes > 0
+                      ? `${formatNumber(indicadores.manutencao.chamadosUrgentes)} urgente(s)`
+                      : "chamados abertos",
+                  href: "/portal/manutencao",
                 },
                 {
                   key: "nps",

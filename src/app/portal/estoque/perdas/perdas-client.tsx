@@ -10,6 +10,7 @@ import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { LOSS_REASONS, LOSS_REASON_LABEL, SECTORS } from "@/lib/estoque";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type Loss = {
   id: string;
@@ -32,6 +33,7 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
   const [losses, setLosses] = useState(initialLosses);
   const [motivoFilter, setMotivoFilter] = useState("");
   const [setorFilter, setSetorFilter] = useState("");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -39,17 +41,23 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const range = useMemo(() => {
+    if (periodo === "personalizado" && (!from || !to)) return null;
+    return resolveRollingPeriod(periodo, { from, to });
+  }, [periodo, from, to]);
+
   const filtered = useMemo(
     () =>
       losses.filter((l) => {
         if (motivoFilter && l.motivo !== motivoFilter) return false;
         if (setorFilter && l.setor !== setorFilter) return false;
-        const data = new Date(l.data);
-        if (from && data < new Date(from)) return false;
-        if (to && data > new Date(`${to}T23:59:59`)) return false;
+        if (range) {
+          const data = new Date(l.data);
+          if (data < range.from || data > range.to) return false;
+        }
         return true;
       }),
-    [losses, motivoFilter, setorFilter, from, to]
+    [losses, motivoFilter, setorFilter, range]
   );
 
   const valorTotal = filtered.reduce((s, l) => s + l.valorEstimado, 0);
@@ -161,8 +169,17 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
           <Toolbar
             filters={
               <>
-                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
-                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
+                <select className="input w-40" value={periodo} onChange={(e) => setPeriodo(e.target.value as RollingPeriodKey)}>
+                  {STANDARD_PERIOD_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+                {periodo === "personalizado" && (
+                  <>
+                    <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
+                    <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
+                  </>
+                )}
                 <select className="input w-48" value={motivoFilter} onChange={(e) => setMotivoFilter(e.target.value)}>
                   <option value="">Todos os motivos</option>
                   {LOSS_REASONS.map((m) => (

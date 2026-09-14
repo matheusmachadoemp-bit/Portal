@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Trophy } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { GARCOM_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
+import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
 import { GarconsImportButton } from "./garcons-import-button";
 import type { GarcomRanking } from "@/lib/garcons";
 
@@ -54,7 +54,7 @@ export function GarconsClient({
       >
         <div className="mb-4">
           <div className="flex flex-wrap gap-1.5">
-            {GARCOM_PERIOD_OPTIONS.map((opt) => (
+            {STANDARD_PERIOD_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
                 onClick={() => {

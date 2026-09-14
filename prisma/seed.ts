@@ -333,7 +333,10 @@ const CATEGORIES = [
     icon: "Sunset",
     order: 19,
     contentType: "fechamento-dia",
-    subs: [{ key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" }],
+    subs: [
+      { key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" },
+      { key: "perguntas", name: "Perguntas", icon: "ListChecks" },
+    ],
   },
 ];
 
@@ -583,6 +586,24 @@ async function main() {
       create: {
         profileId: record.id,
         moduleKey: "fechamento-dia:ocorrencias",
+        canView: flags.canEdit,
+        canExecute: flags.canEdit,
+        canCreate: flags.canEdit,
+        canEdit: flags.canEdit,
+        canDelete: flags.canDelete,
+      },
+    });
+
+    // Mesmo critério de visibilidade de "fechamento-dia:ocorrencias" logo acima: a subcategoria
+    // "Perguntas" (catálogo de perguntas dos formulários — criar/editar/excluir) só faz sentido
+    // pra quem já tem canEdit no módulo (o "gestor" da pesquisa), nunca pra quem só preenche o
+    // formulário do próprio cargo (líder/funcionário, só canExecute).
+    await prisma.modulePermission.upsert({
+      where: { profileId_moduleKey: { profileId: record.id, moduleKey: "fechamento-dia:perguntas" } },
+      update: {},
+      create: {
+        profileId: record.id,
+        moduleKey: "fechamento-dia:perguntas",
         canView: flags.canEdit,
         canExecute: flags.canEdit,
         canCreate: flags.canEdit,

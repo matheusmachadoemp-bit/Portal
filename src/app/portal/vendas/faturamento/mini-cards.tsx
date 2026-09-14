@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Calendar } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { formatCurrency, formatPercent } from "@/lib/calc";
-import { ROLLING_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
+import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
 import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 import { PorHoraChart } from "../por-hora/chart";
 import type { SaleChannel, SalePlatform } from "@prisma/client";
@@ -44,7 +44,7 @@ function MiniPeriodFilter({
       {open && (
         <div className="absolute right-0 z-20 mt-2 w-64 nord-card bg-nord-card p-3 space-y-2">
           <div className="flex flex-wrap gap-1.5">
-            {ROLLING_PERIOD_OPTIONS.map((opt) => (
+            {STANDARD_PERIOD_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
                 onClick={() => {
@@ -93,7 +93,7 @@ function MiniPeriodFilter({
 }
 
 function usePeriodFilter(endpoint: string, channel?: SaleChannel, platform?: SalePlatform, extraParams?: Record<string, string>) {
-  const [periodKey, setPeriodKey] = useState<RollingPeriodKey>("30dias");
+  const [periodKey, setPeriodKey] = useState<RollingPeriodKey>("mes-atual");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [appliedCustom, setAppliedCustom] = useState<{ from: string; to: string } | null>(null);
@@ -149,7 +149,7 @@ export function HoraCard({
           customTo={f.customTo}
           setCustomTo={f.setCustomTo}
           onApplyCustom={f.applyCustom}
-          label={ROLLING_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
+          label={STANDARD_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
         />
       }
     >
@@ -185,7 +185,7 @@ export function PagamentoCard({
           customTo={f.customTo}
           setCustomTo={f.setCustomTo}
           onApplyCustom={f.applyCustom}
-          label={ROLLING_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
+          label={STANDARD_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
         />
       }
     >
@@ -227,7 +227,7 @@ export function EntregaCard({ initialData, platform }: { initialData: { rows: Ba
           customTo={f.customTo}
           setCustomTo={f.setCustomTo}
           onApplyCustom={f.applyCustom}
-          label={ROLLING_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
+          label={STANDARD_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
         />
       }
     >

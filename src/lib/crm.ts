@@ -1,12 +1,27 @@
 import { differenceInCalendarDays, differenceInCalendarYears, startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, subMonths } from "date-fns";
 
-export type CrmPeriodKey = "hoje" | "7dias" | "30dias" | "mes" | "90dias" | "12meses" | "personalizado";
+export type CrmPeriodKey =
+  | "hoje"
+  | "ontem"
+  | "7dias"
+  | "30dias"
+  | "mes"
+  | "mes-passado"
+  | "90dias"
+  | "12meses"
+  | "personalizado";
 
+// Ordem/rótulos seguem o padrão de filtro de período do portal (Hoje, Ontem,
+// Últimos 7 dias, Este mês, Mês passado, Personalizado) — "30 dias", "90 dias"
+// e "12 meses" são extras específicos do CRM (tendências de longo prazo), não
+// fazem parte do padrão mínimo, mas continuam disponíveis aqui.
 export const CRM_PERIOD_OPTIONS: { key: CrmPeriodKey; label: string }[] = [
   { key: "hoje", label: "Hoje" },
-  { key: "7dias", label: "7 dias" },
-  { key: "30dias", label: "30 dias" },
+  { key: "ontem", label: "Ontem" },
+  { key: "7dias", label: "Últimos 7 dias" },
   { key: "mes", label: "Este mês" },
+  { key: "mes-passado", label: "Mês passado" },
+  { key: "30dias", label: "30 dias" },
   { key: "90dias", label: "90 dias" },
   { key: "12meses", label: "12 meses" },
   { key: "personalizado", label: "Personalizado" },
@@ -20,6 +35,20 @@ export function resolveCrmPeriod(
   switch (key) {
     case "hoje":
       return { from: startOfDay(now), to: endOfDay(now), prevFrom: startOfDay(subDays(now, 1)), prevTo: endOfDay(subDays(now, 1)) };
+    case "ontem":
+      return {
+        from: startOfDay(subDays(now, 1)),
+        to: endOfDay(subDays(now, 1)),
+        prevFrom: startOfDay(subDays(now, 2)),
+        prevTo: endOfDay(subDays(now, 2)),
+      };
+    case "mes-passado":
+      return {
+        from: startOfMonth(subMonths(now, 1)),
+        to: endOfMonth(subMonths(now, 1)),
+        prevFrom: startOfMonth(subMonths(now, 2)),
+        prevTo: endOfMonth(subMonths(now, 2)),
+      };
     case "7dias":
       return {
         from: startOfDay(subDays(now, 6)),

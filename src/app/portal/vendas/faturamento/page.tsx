@@ -17,7 +17,7 @@ export default async function FaturamentoPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const rolling = resolveRollingPeriod("30dias");
+  const rolling = resolveRollingPeriod("mes-atual");
 
   const [summary, sales] = await Promise.all([
     computeFaturamentoSummary(empresaIds, { key: "hoje", compareMode: "corrido" }),

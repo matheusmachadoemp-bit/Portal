@@ -5,19 +5,11 @@ import { Download, Pencil } from "lucide-react";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { formatCurrency, formatPercent, growth } from "@/lib/calc";
 import { format } from "date-fns";
-import type { PeriodKey } from "@/lib/periods";
+import { PERIOD_OPTIONS, type PeriodKey } from "@/lib/periods";
 import { SALE_CHANNEL_LABEL, SALE_PLATFORM_LABEL } from "@/lib/vendas-analytics";
 import { FaturamentoComparisonChart } from "./chart";
 import { HoraCard, PagamentoCard, EntregaCard } from "./mini-cards";
 import type { SaleChannel, SalePlatform } from "@prisma/client";
-
-const PERIOD_CHIPS: { key: PeriodKey; label: string }[] = [
-  { key: "hoje", label: "Hoje" },
-  { key: "ontem", label: "Ontem" },
-  { key: "mes", label: "Mês atual" },
-  { key: "mes-anterior", label: "Mês passado" },
-  { key: "personalizado", label: "Personalizado" },
-];
 
 const CHANNEL_CHIPS: { key: SaleChannel | ""; label: string }[] = [
   { key: "", label: "Todos" },
@@ -156,7 +148,7 @@ export function FaturamentoClient({
           <div>
             <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Período</p>
             <div className="flex flex-wrap gap-1.5">
-              {PERIOD_CHIPS.map((c) => (
+              {PERIOD_OPTIONS.map((c) => (
                 <button
                   key={c.key}
                   onClick={() => setPeriodKey(c.key)}

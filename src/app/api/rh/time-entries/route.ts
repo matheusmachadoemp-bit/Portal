@@ -20,11 +20,14 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
 
   const entries = await prisma.timeEntry.findMany({
     where: {
       empresaId: { in: empresaIdsForContext(ctx) },
       ...(employeeId ? { employeeId } : {}),
+      ...(from || to ? { date: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
     },
     orderBy: { date: "desc" },
     take: 500,

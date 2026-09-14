@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { buildCurvaAbc, type AbcClass } from "@/lib/vendas-analytics";
+import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
 
 type Row = { nome: string; quantidade: number; faturamento: number; margem: number };
 type Criterio = "quantidade" | "faturamento" | "margem";
@@ -14,9 +15,14 @@ type Criterio = "quantidade" | "faturamento" | "margem";
 const CRITERIO_LABEL: Record<Criterio, string> = { quantidade: "Quantidade", faturamento: "Faturamento", margem: "Margem" };
 const CLASS_TONE: Record<AbcClass, "success" | "info" | "default"> = { A: "success", B: "info", C: "default" };
 
-export function ItensVendidosClient({ rows, canCreate = true }: { rows: Row[]; canCreate?: boolean }) {
+export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { rows: Row[]; canCreate?: boolean }) {
   const router = useRouter();
+  const [rows, setRows] = useState(initialRows);
   const [criterio, setCriterio] = useState<Criterio>("faturamento");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [loading, setLoading] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -24,9 +30,34 @@ export function ItensVendidosClient({ rows, canCreate = true }: { rows: Row[]; c
   const [importResult, setImportResult] = useState<{ itens: number; faturamentoTotal: number; comProduto: number } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  // Depois de importar um novo arquivo, o Modal chama router.refresh() — como o
+  // período selecionado aqui não muda, sincroniza com o dado recém-buscado.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza com o dado recém-buscado após router.refresh() (ex.: importação de arquivo)
+    setRows(initialRows);
+  }, [initialRows]);
+
   const curva = useMemo(() => buildCurvaAbc(rows.map((r) => ({ ...r, value: r[criterio] }))), [rows, criterio]);
 
   const counts = { A: curva.filter((r) => r.classe === "A").length, B: curva.filter((r) => r.classe === "B").length, C: curva.filter((r) => r.classe === "C").length };
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ periodo: key });
+      if (key === "personalizado" && from && to) {
+        params.set("from", from);
+        params.set("to", to);
+      }
+      const res = await fetch(`/api/vendas/itens-vendidos?${params.toString()}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setRows(data.rows);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function openImport() {
     setImportFile(null);
@@ -65,7 +96,7 @@ export function ItensVendidosClient({ rows, canCreate = true }: { rows: Row[]; c
 
   return (
     <Section
-      title="Curva ABC (últimos 30 dias)"
+      title="Curva ABC"
       action={
         <div className="flex items-center gap-2">
           {canCreate && (
@@ -90,6 +121,39 @@ export function ItensVendidosClient({ rows, canCreate = true }: { rows: Row[]; c
         </div>
       }
     >
+      <div className="mb-4">
+        <div className="flex flex-wrap gap-1.5">
+          {STANDARD_PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                if (opt.key !== "personalizado") applyPeriodo(opt.key);
+                else setPeriodo(opt.key);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {periodo === "personalizado" && (
+          <div className="flex items-center gap-2 mt-2">
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
+            <span className="text-xs text-nord-gray">até</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
+            <button
+              onClick={() => applyPeriodo("personalizado", customFrom, customTo)}
+              disabled={!customFrom || !customTo || loading}
+              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              Aplicar
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center gap-3 mb-4 text-xs text-nord-gray">
         <span className="flex items-center gap-1"><Badge tone="success">A</Badge> {counts.A} produtos</span>
         <span className="flex items-center gap-1"><Badge tone="info">B</Badge> {counts.B} produtos</span>
@@ -125,7 +189,7 @@ export function ItensVendidosClient({ rows, canCreate = true }: { rows: Row[]; c
             {curva.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-6 text-center text-nord-gray">
-                  Nenhum item vendido lançado nos últimos 30 dias. Lance vendas em Vendas → Lançamentos ou importe um arquivo.
+                  Nenhum item vendido lançado no período selecionado. Lance vendas em Vendas → Lançamentos ou importe um arquivo.
                 </td>
               </tr>
             )}

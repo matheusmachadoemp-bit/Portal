@@ -31,8 +31,14 @@ const HEADER_ALIASES: Record<string, string> = {
   dataaniversario: "dataNascimento",
   aniversario: "dataNascimento",
   nascimento: "dataNascimento",
+  datadenascimento: "dataNascimento",
   endereco: "endereco",
   enderecocompleto: "endereco",
+  // Exportação do Cardápio Web separa o endereço em colunas ("Rua", "Número", "Complemento")
+  // em vez de uma coluna única — compostas mais abaixo, depois de montar columnMap.
+  rua: "rua",
+  numero: "numero",
+  complemento: "complemento",
   bairro: "bairro",
   cidade: "cidade",
   // planilha "uma linha por pedido"
@@ -50,6 +56,8 @@ const HEADER_ALIASES: Record<string, string> = {
   valortotal: "valorGastoImportado",
   ticketmedio: "ticketMedioImportado",
   ultimacompra: "ultimaCompraImportada",
+  ultimopedido: "ultimaCompraImportada",
+  datadoultimopedido: "ultimaCompraImportada",
 };
 
 function normalizeHeader(h: string): string {
@@ -217,13 +225,26 @@ export async function POST(req: Request) {
     }
 
     const telefoneRaw = get("telefone");
-    const nascimentoRaw = get("dataNascimento");
+    // Datas: sempre por getRaw(), nunca get() — uma célula de data "de verdade" no Excel (ex.:
+    // exportação do Cardápio Web) chega aqui como número de série (ex.: 36059), e get() já
+    // converteria isso pra string ("36059") ANTES de chegar em parseDateFlexible, que só
+    // reconhece string em formato dd/mm/aaaa ou aaaa-mm-dd — o número de série stringificado não
+    // bate em nenhum dos dois padrões e a data virava silenciosamente nula.
+    const nascimentoRaw = getRaw("dataNascimento");
     const enderecoRaw = get("endereco");
     const valorPedidoRaw = getRaw("valorPedido");
     const pedidosImportadosRaw = getRaw("pedidosImportados");
     const valorGastoImportadoRaw = getRaw("valorGastoImportado");
     const ticketMedioImportadoRaw = getRaw("ticketMedioImportado");
-    const ultimaCompraRaw = get("ultimaCompraImportada");
+    const ultimaCompraRaw = getRaw("ultimaCompraImportada");
+
+    // Exportação do Cardápio Web não tem uma coluna única de endereço — traz Rua/Número/
+    // Complemento separados. Quando não existir uma coluna "Endereço" no arquivo, monta uma a
+    // partir dessas partes (ignora silenciosamente só quando NENHuma delas existe, que já é o
+    // comportamento padrão de endereco null).
+    const endereco = enderecoRaw
+      ? primeiroEndereco(enderecoRaw)
+      : [get("rua"), get("numero")].filter(Boolean).join(", ") || get("complemento") || null;
 
     parsed.push({
       line: i + 1,
@@ -231,8 +252,8 @@ export async function POST(req: Request) {
       telefone: telefoneRaw ? onlyDigits(telefoneRaw) : "",
       whatsapp: get("whatsapp") || null,
       email: get("email") || null,
-      dataNascimento: nascimentoRaw ? parseDateFlexible(nascimentoRaw) : null,
-      endereco: enderecoRaw ? primeiroEndereco(enderecoRaw) : null,
+      dataNascimento: nascimentoRaw !== "" ? parseDateFlexible(nascimentoRaw) : null,
+      endereco,
       bairro: get("bairro") || null,
       cidade: get("cidade") || null,
       numeroPedido: get("numeroPedido") || null,
@@ -241,7 +262,7 @@ export async function POST(req: Request) {
       pedidosImportados: pedidosImportadosRaw !== "" ? parseInteiro(pedidosImportadosRaw) : null,
       valorGastoImportado: valorGastoImportadoRaw !== "" ? parseValor(valorGastoImportadoRaw) : null,
       ticketMedioImportado: ticketMedioImportadoRaw !== "" ? parseValor(ticketMedioImportadoRaw) : null,
-      ultimaCompraImportada: ultimaCompraRaw ? parseDateFlexible(ultimaCompraRaw) : null,
+      ultimaCompraImportada: ultimaCompraRaw !== "" ? parseDateFlexible(ultimaCompraRaw) : null,
     });
   }
 

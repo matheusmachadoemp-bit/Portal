@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   const empresaIds = empresaIdsForContext(ctx);
 
   const { searchParams } = new URL(req.url);
-  const key = (searchParams.get("key") ?? "30dias") as RollingPeriodKey;
+  const key = (searchParams.get("key") ?? "mes-atual") as RollingPeriodKey;
   const from = searchParams.get("from") ?? undefined;
   const to = searchParams.get("to") ?? undefined;
   const platform = (searchParams.get("platform") as SalePlatform | null) ?? undefined;
