@@ -16,7 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "reuniao", "canEdit"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite editar indicadores da Reunião Gerente." },
+      { error: "Seu perfil de permissão não permite editar indicadores da Reunião Liderança." },
       { status: 403 }
     );
   }
@@ -30,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const { id } = await params;
-  const indicator = await findReuniaoCustomIndicatorForMeeting(id, empresa.id, "GERENTE");
+  const indicator = await findReuniaoCustomIndicatorForMeeting(id, empresa.id, "LIDERANCA");
   if (!indicator) {
     return NextResponse.json({ error: "Indicador não encontrado." }, { status: 404 });
   }
@@ -73,7 +73,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "reuniao", "canEdit"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite excluir indicadores da Reunião Gerente." },
+      { error: "Seu perfil de permissão não permite excluir indicadores da Reunião Liderança." },
       { status: 403 }
     );
   }
@@ -87,13 +87,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
 
   const { id } = await params;
-  const indicator = await findReuniaoCustomIndicatorForMeeting(id, empresa.id, "GERENTE");
+  const indicator = await findReuniaoCustomIndicatorForMeeting(id, empresa.id, "LIDERANCA");
   if (!indicator) {
     return NextResponse.json({ error: "Indicador não encontrado." }, { status: 404 });
   }
 
   // Os valores mensais (ReuniaoCustomIndicatorValue) são apagados junto via onDelete: Cascade —
-  // exclui só esse indicador, sem afetar o resto do fechamento do mês (GerenteMeeting).
+  // exclui só esse indicador, sem afetar o resto do fechamento do mês (LiderancaMeeting).
   await prisma.reuniaoCustomIndicator.delete({ where: { id } });
 
   return NextResponse.json({ ok: true });

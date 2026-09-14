@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/page-container";
 import { DeliveryClient } from "./delivery-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
-import { computeDeliveryMetrics } from "@/lib/reuniao-server";
+import { computeDeliveryMetrics, loadReuniaoCustomIndicators } from "@/lib/reuniao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -27,6 +27,7 @@ export default async function ReuniaoDeliveryPage() {
   const isSingle = ctx?.mode === "single";
   const metrics = isSingle ? await computeDeliveryMetrics(ctx.empresa.id, periodo) : { cancelamentoPercent: null };
   const current = isSingle ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
+  const customIndicators = isSingle ? await loadReuniaoCustomIndicators(ctx.empresa.id, "DELIVERY", periodo) : [];
 
   return (
     <PageContainer title="Reunião" subtitle="Reunião Delivery">
@@ -34,6 +35,7 @@ export default async function ReuniaoDeliveryPage() {
         initialMeetings={meetings.map((m) => ({ ...m, createdAt: m.createdAt.toISOString(), updatedAt: m.updatedAt.toISOString() }))}
         initialCurrent={current ? { ...current, createdAt: current.createdAt.toISOString(), updatedAt: current.updatedAt.toISOString() } : null}
         initialMetrics={metrics}
+        initialCustomIndicators={customIndicators}
         periodo={periodo}
         canCreate={isSingle}
         empresaName={isSingle ? ctx.empresa.name : "Grupo Nord"}

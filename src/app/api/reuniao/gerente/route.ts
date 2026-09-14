@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeGerenteMetrics, loadGerenteCustomIndicators } from "@/lib/reuniao-server";
+import { computeGerenteMetrics, loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -33,7 +33,7 @@ export async function GET(req: Request) {
       ? await computeGerenteMetrics(ctx.empresa.id, periodo)
       : { faturamentoTotalValor: null, cmvPercent: null, npsPercent: null, cancelamentoDeliveryPercent: null };
 
-  const customIndicators = ctx.mode === "single" ? await loadGerenteCustomIndicators(ctx.empresa.id, periodo) : [];
+  const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "GERENTE", periodo) : [];
 
   return NextResponse.json({ meetings, current, metrics, periodo, customIndicators });
 }
@@ -93,27 +93,7 @@ export async function POST(req: Request) {
   const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
     ? body.customIndicators
     : [];
-  if (customIndicators.length > 0) {
-    const indicators = await prisma.gerenteCustomIndicator.findMany({
-      where: { id: { in: customIndicators.map((c) => c.id) }, empresaId: empresa.id },
-    });
-    const indicatorById = new Map(indicators.map((i) => [i.id, i]));
-    await Promise.all(
-      customIndicators
-        .filter((c) => indicatorById.has(c.id))
-        .map((c) => {
-          const indicator = indicatorById.get(c.id)!;
-          const valor = c.valor !== undefined && c.valor !== "" ? Number(c.valor) : null;
-          const valorReferencia =
-            c.valorReferencia !== undefined && c.valorReferencia !== "" ? Number(c.valorReferencia) : indicator.valorPadrao;
-          return prisma.gerenteCustomIndicatorValue.upsert({
-            where: { indicatorId_periodo: { indicatorId: c.id, periodo } },
-            update: { valor, valorReferencia },
-            create: { indicatorId: c.id, periodo, valor, valorReferencia },
-          });
-        })
-    );
-  }
+  await upsertReuniaoCustomIndicatorValues(empresa.id, "GERENTE", periodo, customIndicators);
 
   return NextResponse.json({ meeting });
 }
@@ -122,8 +102,8 @@ export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Excluir um fechamento de mês já lançado é mais destrutivo que criar/editar (perde o
-  // histórico de metas/premiação daquele período) — por isso exige canDelete, não canEdit,
-  // mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
+  // histórico de resultados/observações daquele período) — por isso exige canDelete, não
+  // canEdit, mesmo critério de checklist/templates (DELETE) e tarefas (DELETE).
   if (!(await hasModulePermission(session.user.id, "reuniao", "canDelete"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite excluir o fechamento da reunião de gerente." },
