@@ -1,3 +1,4 @@
+import type { Task, TaskPriority } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recurrenceMatchesDate } from "@/lib/tarefas";
 import { createNotification, createNotifications } from "@/lib/notifications";
@@ -95,4 +96,45 @@ export async function logTaskHistory(taskId: string, userId: string | null, acti
  * notification-bell.tsx); sem taskId, abre a Central do portal. */
 export async function notifyUser(userId: string, type: string, title: string, body: string | null, taskId: string | null): Promise<void> {
   await createNotification({ userId, type, title, body, taskId, url: taskId ? "/portal/tarefas" : "/portal" });
+}
+
+/**
+ * Cria uma Task a partir de uma origem externa (fora do formulário rico de Tarefas) —
+ * hoje usada por `POST /api/fechamento-dia/ocorrencias/[id]/transformar`, que "transforma"
+ * uma FechamentoOcorrencia numa Task de acompanhamento. Extraída como função própria (em vez
+ * de reaproveitar o corpo inteiro de `POST /api/tarefas`, que também lida com recorrência,
+ * checklist e anexos vindos de um formulário completo — nada disso existe numa transformação
+ * automática) para nunca reimplementar os efeitos colaterais que já existem
+ * (`sourceType`/`sourceId` para rastrear a origem, `logTaskHistory`, notificar o responsável) —
+ * só o `prisma.task.create` em si é uma chamada nova, com um subconjunto bem menor de campos.
+ */
+export async function createTaskFromExternalSource(params: {
+  empresaId: string;
+  title: string;
+  description?: string | null;
+  sectorKey: string;
+  priority?: TaskPriority;
+  assigneeId?: string | null;
+  sourceType: string;
+  sourceId: string;
+  createdById: string;
+}): Promise<Task> {
+  const task = await prisma.task.create({
+    data: {
+      empresaId: params.empresaId,
+      title: params.title,
+      description: params.description ?? null,
+      sectorKey: params.sectorKey,
+      priority: params.priority ?? "MEDIA",
+      sourceType: params.sourceType,
+      sourceId: params.sourceId,
+      createdById: params.createdById,
+      assignees: params.assigneeId ? { create: [{ userId: params.assigneeId }] } : undefined,
+    },
+  });
+  await logTaskHistory(task.id, params.createdById, "CREATED", `Gerada automaticamente a partir de ${params.sourceType}`);
+  if (params.assigneeId && params.assigneeId !== params.createdById) {
+    await notifyUser(params.assigneeId, "NOVA_TAREFA", "Nova tarefa", `Você recebeu a tarefa "${task.title}".`, task.id);
+  }
+  return task;
 }

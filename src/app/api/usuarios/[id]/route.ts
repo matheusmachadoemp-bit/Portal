@@ -66,6 +66,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // employeeId (vínculo com a ficha de RH): `undefined` = não mexe; `null`/vazio = desvincula;
+  // um id = precisa existir e não estar vinculado a OUTRO usuário (o próprio usuário sendo
+  // editado já vinculado a essa mesma ficha não é erro — reenviar o mesmo valor é um no-op).
+  // Mesma ideia de "erro claro em vez de deixar a constraint @unique do banco estourar como
+  // 500" da rota de criação (POST /api/usuarios).
+  let employeeId: string | null | undefined;
+  if (body.employeeId !== undefined) {
+    if (body.employeeId) {
+      const employee = await prisma.employee.findUnique({
+        where: { id: body.employeeId },
+        select: { id: true, user: { select: { id: true } } },
+      });
+      if (!employee) {
+        return NextResponse.json({ error: "Ficha de funcionário (RH) não encontrada." }, { status: 400 });
+      }
+      if (employee.user && employee.user.id !== id) {
+        return NextResponse.json(
+          { error: "Esta ficha de funcionário já está vinculada a outro usuário." },
+          { status: 409 }
+        );
+      }
+      employeeId = employee.id;
+    } else {
+      employeeId = null;
+    }
+  }
+
   const data: Record<string, unknown> = {
     name: body.name ?? undefined,
     email: body.email ? body.email.toLowerCase().trim() : undefined,
@@ -75,6 +102,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     canViewGrupoNord: body.canViewGrupoNord !== undefined ? !!body.canViewGrupoNord : undefined,
     defaultEmpresaId: body.defaultEmpresaId !== undefined ? body.defaultEmpresaId || null : undefined,
     permissionProfileId,
+    employeeId,
   };
   if (body.password) data.passwordHash = await bcrypt.hash(body.password, 10);
 
