@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
 import { CHECKLIST_PONTOS_POR_CONCLUSAO } from "@/lib/checklist";
+import { notifyChecklistCompletion } from "@/lib/checklist-server";
 import { hasModulePermission } from "@/lib/authz";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -86,6 +87,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         ]
       : []),
   ]);
+
+  await notifyChecklistCompletion(id);
 
   return NextResponse.json({
     occurrence: updated,

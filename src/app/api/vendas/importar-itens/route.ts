@@ -109,16 +109,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Não foi possível ler o arquivo. Confira se é um .xlsx válido." }, { status: 400 });
   }
 
-  const headerIdx = rows.findIndex((r) => normalizeText(String(r[0])) === "itens e opcoes");
+  // O Saipos já exportou esse relatório de duas formas diferentes: uma tabela só ("Itens e
+  // Opções", tudo junto) e, no formato atual (confirmado contra um arquivo real de setembro/2026),
+  // duas tabelas separadas na mesma aba — "Itens" (produtos vendidos, cada linha já com
+  // quantidade/valor reais, sem hierarquia) seguida de "Opções" (frequência de escolha de
+  // modificadores/sabores — ex.: "Gostaria de Borda Recheada?" — cujo percentual soma ~100% POR
+  // GRUPO, não é receita de produto; somar junto contaria a mesma venda várias vezes). Aceita as
+  // duas variações do cabeçalho e, quando existir uma segunda tabela "Opções", para de ler ali.
+  const headerIdx = rows.findIndex((r) => {
+    const t = normalizeText(String(r[0]));
+    return t === "itens e opcoes" || t === "itens";
+  });
   if (headerIdx === -1 || headerIdx < 1) {
     return NextResponse.json(
       {
         error:
-          'Cabeçalho não reconhecido. Envie o relatório "Itens Vendidos" (Itens e Opções) exportado do Saipos.',
+          'Cabeçalho não reconhecido. Envie o relatório "Itens Vendidos" exportado do Saipos.',
       },
       { status: 400 }
     );
   }
+
+  const opcoesHeaderIdx = rows.findIndex(
+    (r, idx) => idx > headerIdx && normalizeText(String(r[0])) === "opcoes"
+  );
+  const dataEndIdx = opcoesHeaderIdx === -1 ? rows.length : opcoesHeaderIdx;
 
   const labelIdx = rows.findIndex((r) => normalizeText(String(r[0])).startsWith("data inicial"));
   const dateRow = labelIdx !== -1 ? rows[labelIdx + 1] : undefined;
@@ -128,7 +143,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Não foi possível identificar o período (Data Inicial/Data Final) do relatório." }, { status: 400 });
   }
 
-  const dataRows = rows.slice(headerIdx + 1).filter((r) => String(r[0] ?? "").trim() !== "");
+  const dataRows = rows.slice(headerIdx + 1, dataEndIdx).filter((r) => String(r[0] ?? "").trim() !== "");
 
   const categories: Category[] = [];
   let current: Category | null = null;

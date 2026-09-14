@@ -80,13 +80,15 @@ export function IndicatorCard({
         </div>
       </div>
       {valueSlot}
-      <span className="text-xs text-nord-gray">{metaText}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-nord-gray">{metaText}</span>
+        {status === "batida" && premio > 0 && (
+          <span className="text-xs text-amber-400 flex items-center gap-1 shrink-0">
+            <Trophy size={11} /> {formatCurrency(premio)} de premiação
+          </span>
+        )}
+      </div>
       <ComparisonLine comparison={comparison} />
-      {status === "batida" && premio > 0 && (
-        <span className="text-xs text-amber-400 flex items-center gap-1">
-          <Trophy size={11} /> {formatCurrency(premio)} de premiação
-        </span>
-      )}
     </div>
   );
 }

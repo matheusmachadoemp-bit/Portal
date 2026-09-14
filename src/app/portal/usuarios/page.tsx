@@ -54,6 +54,7 @@ export default async function UsuariosPage() {
     role: u.role,
     active: u.active,
     phone: u.phone,
+    employeeId: u.employeeId,
     lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
     createdAt: u.createdAt.toISOString(),
     permissions: u.permissions.map((p) => ({ moduleKey: p.moduleKey, level: p.level })),

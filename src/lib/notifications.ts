@@ -29,6 +29,7 @@ export type CreateNotificationInput = {
   chamadoId?: string | null;
   goalId?: string | null;
   purchaseId?: string | null;
+  fechamentoOcorrenciaId?: string | null;
   /** URL relativa (ex.: "/portal/tarefas") pra abrir/focar ao clicar no push. Default: "/portal". */
   url?: string | null;
 };
@@ -193,6 +194,7 @@ function toNotificationData(data: CreateNotificationInput) {
     chamadoId: data.chamadoId ?? null,
     goalId: data.goalId ?? null,
     purchaseId: data.purchaseId ?? null,
+    fechamentoOcorrenciaId: data.fechamentoOcorrenciaId ?? null,
   };
 }
 

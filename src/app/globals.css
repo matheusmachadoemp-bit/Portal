@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 :root {
+  /* Sem isso, o navegador desenha o menu suspenso nativo de <select> (e outros
+     controles nativos, como date picker) no esquema claro por padrão — texto
+     claro sobre fundo claro, quase ilegível — mesmo com o resto da página no
+     escuro. Definir aqui, no documento inteiro, é o que o navegador realmente
+     consulta pra essas UIs nativas (um color-scheme só no <select> específico
+     não é suficiente no Chromium). */
+  color-scheme: dark;
   --background: #05070a;
   --foreground: #f7f9fc;
   --nord-black: #05070a;

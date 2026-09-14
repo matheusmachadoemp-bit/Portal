@@ -23,6 +23,7 @@ export const MODULES = [
   { key: "manutencao", label: "Manutenção" },
   { key: "producao", label: "Produção" },
   { key: "loja-nord", label: "Loja Nord" },
+  { key: "fechamento-dia", label: "Fechamento do Dia" },
   { key: "configuracoes", label: "Configurações" },
   { key: "usuarios", label: "Usuários" },
 ] as const;
@@ -60,9 +61,13 @@ export const PERMISSION_ACTIONS: { key: PermissionAction; label: string }[] = [
  *    mesma regra de `hasModulePermission`, replicada aqui de propósito para as duas
  *    funções nunca divergirem sobre quem tem acesso garantido pelo cargo.
  * 2. `userOverrides` (`UserPermission`, ajuste pontual daquele usuário, editado em
- *    Usuários > Novo usuário) — se existir uma linha para a chave, ela decide.
+ *    Usuários > Novo usuário) — se existir uma linha para a chave, ela decide. A chave
+ *    composta ("categoria:subcategoria") tem prioridade sobre a chave da categoria
+ *    inteira, igual `hasModulePermission`.
  * 3. `modulePermissions` (perfil de permissão atribuído ao usuário) — lista de opt-in:
  *    só os módulos com `canView: true` aparecem; um módulo ausente da lista fica oculto.
+ *    Mesma prioridade de chave composta > categoria inteira do item acima (ver nota
+ *    abaixo sobre quando isso passou a valer).
  * 4. Sem perfil e sem override para a chave: OCULTO. Até 2026-09-09 esse caso liberava
  *    (mostrava o módulo no menu mesmo sem nenhuma configuração) — igual ao fail-open
  *    corrigido em `hasModulePermission`: um usuário sem perfil atribuído via menu
@@ -70,16 +75,21 @@ export const PERMISSION_ACTIONS: { key: PermissionAction; label: string }[] = [
  *    esconder do menu nunca foi proteção real por si só, é só não deixar a UI prometer
  *    algo que a API não entrega mais).
  *
- * Uma subcategoria sem override próprio ("Igual à categoria", a opção em branco na
- * tela de Usuários) precisa herdar a visibilidade da CATEGORIA inteira — não existe
- * (nem pode existir hoje: a tela de Perfis de Permissão só configura módulos inteiros,
- * nunca subcategorias) uma linha de `ModulePermission` do perfil para a chave composta
- * "categoria:subcategoria", então checar `profileSet.has(chaveComposta)` direto sempre
- * dava falso — a subcategoria nunca aparecia pra ninguém que dependesse do perfil,
- * mesmo com "Igual à categoria" selecionado. Por isso, na ausência de um override
- * específico pra subcategoria, o fallback é pra chave da categoria (override pessoal
- * dela, senão o perfil) — o mesmo critério de herança que `hasModulePermission`
- * (@/lib/authz) já aplica pra Ver/Criar/Editar/Excluir.
+ * Uma subcategoria sem override/linha de perfil próprios ("Igual à categoria", a opção
+ * em branco na tela de Usuários — e o caso comum de toda subcategoria que não seja
+ * "fechamento-dia:ocorrencias", já que a tela de Perfis de Permissão só configura
+ * módulos inteiros, nunca subcategorias) precisa herdar a visibilidade da CATEGORIA
+ * inteira: até 2026-09-13 o lookup no perfil (item 3) ignorava a chave composta de
+ * propósito e checava sempre `profileSet.has(chaveDaCategoria)` diretamente — não havia
+ * nenhum módulo com uma linha de perfil por subcategoria ainda. A Fase 4 do Fechamento
+ * do Dia foi a primeira a precisar disso de verdade (a subcategoria "Ocorrências" só
+ * deve aparecer pra quem tem canEdit no módulo, um subconjunto de quem vê "Fechamento
+ * do Dia" como um todo), então o lookup do perfil passou a checar a chave composta
+ * PRIMEIRO (só quando existe uma linha exata pra ela) e cair pra chave da categoria só
+ * na ausência de uma linha específica — aditivo por construção: nenhum módulo existente
+ * tinha linha de perfil pra chave composta antes disso, então o comportamento de todo
+ * o resto do Portal não muda. Mesmo critério de herança que `hasModulePermission`
+ * (@/lib/authz) já aplica pra Ver/Executar/Criar/Editar/Excluir.
  */
 export function buildVisibilityResolver(
   role: Role | string,
@@ -88,7 +98,7 @@ export function buildVisibilityResolver(
 ): ((key: string) => boolean) | null {
   if (role === "ADMINISTRADOR") return null;
 
-  const profileSet = modulePermissions ? new Set(modulePermissions.filter((m) => m.canView).map((m) => m.moduleKey)) : null;
+  const profileMap = new Map((modulePermissions ?? []).map((m) => [m.moduleKey, m.canView]));
   const overrides = new Map((userOverrides ?? []).map((o) => [o.moduleKey, ACCESS_LEVEL_TO_MODULE_FLAGS[o.level].canView]));
 
   return (key: string) => {
@@ -96,7 +106,8 @@ export function buildVisibilityResolver(
     const colonIndex = key.indexOf(":");
     const moduleKey = colonIndex === -1 ? key : key.slice(0, colonIndex);
     if (moduleKey !== key && overrides.has(moduleKey)) return overrides.get(moduleKey)!;
-    if (profileSet) return profileSet.has(moduleKey);
+    if (profileMap.has(key)) return profileMap.get(key)!;
+    if (moduleKey !== key && profileMap.has(moduleKey)) return profileMap.get(moduleKey)!;
     return false;
   };
 }
