@@ -360,6 +360,10 @@ model Category {
   active      Boolean  @default(true)
   isSystem    Boolean  @default(false)
   contentType String   @default("custom")
+  // Se a categoria em si navega para /portal/{key} ao ser clicada no menu lateral (padrão)
+  // ou serve só de agrupador visual pras subcategorias, sem página própria (ex.: "Tarefas",
+  // depois que ganhou uma subcategoria "Tarefas" própria apontando pro quadro principal).
+  linked      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -452,7 +452,7 @@ function CategoryRow({
         )}
         <button
           onClick={() => {
-            router.push(`/portal/${cat.key}`);
+            if (cat.linked) router.push(`/portal/${cat.key}`);
             if (hasSubs) onToggleExpand();
           }}
           className={`flex-1 flex items-center gap-2.5 text-sm py-1 min-w-0 ${

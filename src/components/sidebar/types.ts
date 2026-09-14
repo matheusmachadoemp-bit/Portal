@@ -20,5 +20,7 @@ export type CategoryDTO = {
   active: boolean;
   isSystem: boolean;
   contentType: string;
+  /** Se falso, a categoria não navega pra /portal/{key} ao ser clicada — vira só um agrupador visual das subcategorias. */
+  linked: boolean;
   subcategories: SubcategoryDTO[];
 };

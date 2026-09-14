@@ -238,12 +238,20 @@ const CATEGORIES = [
     ],
   },
   {
+    // A categoria em si não navega mais pra /portal/tarefas ao ser clicada (linked: false) —
+    // vira só um agrupador visual das subcategorias. A subcategoria "Tarefas" (mesma key da
+    // categoria, rota /portal/tarefas/tarefas — ver src/app/portal/tarefas/tarefas/page.tsx,
+    // que reexporta a mesma página) é quem leva pro quadro principal agora.
     key: "tarefas",
     name: "Tarefas",
     icon: "ListChecks",
     order: 15,
     contentType: "tarefas",
-    subs: [{ key: "checklist", name: "Checklist", icon: "ClipboardCheck" }],
+    linked: false,
+    subs: [
+      { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
+      { key: "checklist", name: "Checklist", icon: "ClipboardCheck" },
+    ],
   },
   {
     key: "manutencao",
@@ -458,15 +466,17 @@ async function main() {
   }
 
   for (const cat of CATEGORIES) {
+    const linked = "linked" in cat ? (cat.linked as boolean) : true;
     const category = await prisma.category.upsert({
       where: { key: cat.key },
-      update: { name: cat.name, icon: cat.icon, order: cat.order, contentType: cat.contentType },
+      update: { name: cat.name, icon: cat.icon, order: cat.order, contentType: cat.contentType, linked },
       create: {
         key: cat.key,
         name: cat.name,
         icon: cat.icon,
         order: cat.order,
         contentType: cat.contentType,
+        linked,
         isSystem: true,
       },
     });
