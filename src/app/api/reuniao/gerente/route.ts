@@ -77,14 +77,6 @@ export async function POST(req: Request) {
       body.checklistOperacionalPercent !== undefined && body.checklistOperacionalPercent !== ""
         ? Number(body.checklistOperacionalPercent)
         : null,
-    faturamentoMetaValor: Number(body.faturamentoMetaValor) || 0,
-    cmvMetaPercent: Number(body.cmvMetaPercent) || 30,
-    turnoverMetaPercent: Number(body.turnoverMetaPercent) || 5,
-    checklistOperacionalMetaPercent: Number(body.checklistOperacionalMetaPercent) || 90,
-    premiacaoFaturamento: Number(body.premiacaoFaturamento) || 0,
-    premiacaoCmv: Number(body.premiacaoCmv) || 0,
-    premiacaoTurnover: Number(body.premiacaoTurnover) || 0,
-    premiacaoChecklist: Number(body.premiacaoChecklist) || 0,
     notas: body.notas || null,
   };
 
@@ -94,8 +86,13 @@ export async function POST(req: Request) {
     create: { ...data, empresaId: empresa.id, periodo, createdById: session.user.id },
   });
 
-  const customIndicators: { id: string; valor?: string; metaValue?: string; premiacaoValor?: string }[] =
-    Array.isArray(body.customIndicators) ? body.customIndicators : [];
+  // Lista de indicadores da seção "Fechamento do mês" — inclui tanto os 4
+  // migrados de GerenteMeeting (Faturamento Total, CMV, Turnover, Checklist
+  // Operacional) quanto os criados livremente (ex.: Ticket Médio Salão/
+  // Delivery); nenhuma distinção de código entre eles a partir daqui.
+  const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
+    ? body.customIndicators
+    : [];
   if (customIndicators.length > 0) {
     const indicators = await prisma.gerenteCustomIndicator.findMany({
       where: { id: { in: customIndicators.map((c) => c.id) }, empresaId: empresa.id },
@@ -107,13 +104,12 @@ export async function POST(req: Request) {
         .map((c) => {
           const indicator = indicatorById.get(c.id)!;
           const valor = c.valor !== undefined && c.valor !== "" ? Number(c.valor) : null;
-          const metaValue = c.metaValue !== undefined && c.metaValue !== "" ? Number(c.metaValue) : indicator.metaPadrao;
-          const premiacaoValor =
-            c.premiacaoValor !== undefined && c.premiacaoValor !== "" ? Number(c.premiacaoValor) : indicator.premiacaoPadrao;
+          const valorReferencia =
+            c.valorReferencia !== undefined && c.valorReferencia !== "" ? Number(c.valorReferencia) : indicator.valorPadrao;
           return prisma.gerenteCustomIndicatorValue.upsert({
             where: { indicatorId_periodo: { indicatorId: c.id, periodo } },
-            update: { valor, metaValue, premiacaoValor },
-            create: { indicatorId: c.id, periodo, valor, metaValue, premiacaoValor },
+            update: { valor, valorReferencia },
+            create: { indicatorId: c.id, periodo, valor, valorReferencia },
           });
         })
     );
