@@ -196,6 +196,47 @@ function escalationMessage(
 }
 
 /**
+ * Notifica donos/gerentes assim que um checklist é concluído fora do prazo.
+ * `processChecklistEscalations` roda 1x por dia à noite (ver vercel.json) e
+ * já ignora qualquer ocorrência com `completedAt` preenchido (não recalcula
+ * níveis de cobrança pra quem já concluiu) — então um checklist concluído
+ * poucos minutos atrasado, antes de cruzar os limiares de cobrança
+ * (avisoAtrasoResponsavelMinutos/alertaCriticoMinutos), nunca gerava
+ * nenhum aviso. Esta função fecha essa lacuna: dispara na hora, direto do
+ * endpoint de conclusão, sempre que o status final for CONCLUIDO_COM_ATRASO.
+ */
+export async function notifyChecklistLateCompletion(occurrenceId: string) {
+  const o = await prisma.checklistOccurrence.findUnique({
+    where: { id: occurrenceId },
+    include: { template: true, empresa: { select: { name: true } }, responsavel: { select: { name: true } } },
+  });
+  if (!o || !o.completedAt || !o.template.cobrancaAtiva) return;
+
+  const managers = await loadEscalationManagers(o.empresaId);
+  if (managers.length === 0) return;
+
+  const minutesLate = (o.completedAt.getTime() - o.dueAt.getTime()) / 60000;
+  const setorLabel = GOAL_CATEGORY_LABEL[o.template.setor] ?? o.template.setor;
+  const responsavel = o.responsavel?.name ? ` Responsável: ${o.responsavel.name}.` : "";
+  const title = "Checklist concluído com atraso";
+  const body = `"${o.template.name}" foi concluído ${Math.max(0, Math.round(minutesLate))} min atrasado — ${o.empresa.name}, ${setorLabel}.${responsavel}`;
+
+  await Promise.all(
+    managers.map((m) =>
+      createNotification({
+        userId: m.id,
+        type: "CHECKLIST_CONCLUIDO_COM_ATRASO",
+        title,
+        body,
+        priority: "ATENCAO",
+        checklistOccurrenceId: o.id,
+        url: `/portal/tarefas/checklist/executar/${o.id}`,
+      })
+    )
+  );
+}
+
+/**
  * Processa cobrança automática das ocorrências informadas: para cada nível
  * de escalonamento já vencido (calculado a partir dos horários e das
  * configurações do template), notifica os destinatários certos — uma única
