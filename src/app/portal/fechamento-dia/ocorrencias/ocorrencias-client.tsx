@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { format } from "date-fns";
 import { Pencil, Wand2, RefreshCw, ExternalLink, X, Inbox, History } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Badge } from "@/components/ui/stat-card";
 import { FormError } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 import { TASK_STATUS_LABEL, TASK_STATUS_TONE } from "@/lib/tarefas";
 import { CHAMADO_STATUS_COLOR, CHAMADO_STATUS_LABEL } from "@/lib/manutencao";
 import {
@@ -197,8 +199,23 @@ export function OcorrenciasClient({
   const [categoriaNome, setCategoriaNome] = useState("");
   const [gravidade, setGravidade] = useState<FechamentoGravidade | "">("");
   const [statusHistorico, setStatusHistorico] = useState<FechamentoOcorrenciaStatus | "">("");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey | "">("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+
+  function selectPeriodo(key: RollingPeriodKey | "") {
+    setPeriodo(key);
+    if (!key || key === "personalizado") {
+      if (!key) {
+        setFrom("");
+        setTo("");
+      }
+      return;
+    }
+    const range = resolveRollingPeriod(key);
+    setFrom(format(range.from, "yyyy-MM-dd"));
+    setTo(format(range.to, "yyyy-MM-dd"));
+  }
 
   const [editing, setEditing] = useState<Ocorrencia | null>(null);
   // Incrementado a cada clique em "Editar" (mesmo para a mesma ocorrência já aberta antes) — vira
@@ -278,6 +295,7 @@ export function OcorrenciasClient({
     setCategoriaNome("");
     setGravidade("");
     setStatusHistorico("");
+    setPeriodo("");
     setFrom("");
     setTo("");
   }
@@ -347,12 +365,28 @@ export function OcorrenciasClient({
                 </option>
               ))}
             </select>
-            <span className="flex items-center gap-1.5 text-xs text-nord-gray">
-              De <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input input-compact date-input" />
-            </span>
-            <span className="flex items-center gap-1.5 text-xs text-nord-gray">
-              Até <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input input-compact date-input" />
-            </span>
+            <select
+              value={periodo}
+              onChange={(e) => selectPeriodo(e.target.value as RollingPeriodKey | "")}
+              className="input input-compact"
+            >
+              <option value="">Qualquer período</option>
+              {STANDARD_PERIOD_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {periodo === "personalizado" && (
+              <>
+                <span className="flex items-center gap-1.5 text-xs text-nord-gray">
+                  De <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input input-compact date-input" />
+                </span>
+                <span className="flex items-center gap-1.5 text-xs text-nord-gray">
+                  Até <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input input-compact date-input" />
+                </span>
+              </>
+            )}
             {hasActiveFilters && (
               <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-nord-gray hover:text-white px-1">
                 <X size={13} /> Limpar filtros

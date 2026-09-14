@@ -9,6 +9,7 @@ import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatNumber } from "@/lib/calc";
 import { pontoAlerts, type TimeEntryLike } from "@/lib/rh-helpers";
 import { format } from "date-fns";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 import { RhTabs } from "../rh-tabs";
 import {
   ResponsiveContainer,
@@ -65,19 +66,35 @@ export function PontoEletronicoClient({
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
   const visible = useMemo(() => {
     return fixedEmployeeId ? entries.filter((e) => e.employeeId === fixedEmployeeId) : entries;
   }, [entries, fixedEmployeeId]);
 
-  const alerts = useMemo(() => pontoAlerts(visible), [visible]);
+  // O filtro de período escopa a tabela e os cards de totais, mas não os gráficos "por mês"
+  // abaixo — esses são uma tendência de vários meses de propósito, igual à mini-série de 7 dias
+  // do painel de Início, que também fica fixa independente do período selecionado no resto da tela.
+  const visiblePeriodo = useMemo(() => {
+    if (periodo === "personalizado" && (!customFrom || !customTo)) return visible;
+    const range = resolveRollingPeriod(periodo, { from: customFrom, to: customTo });
+    return visible.filter((e) => {
+      const d = new Date(e.date);
+      return d >= range.from && d <= range.to;
+    });
+  }, [visible, periodo, customFrom, customTo]);
+
+  const alerts = useMemo(() => pontoAlerts(visiblePeriodo), [visiblePeriodo]);
 
   const totals = useMemo(() => {
-    const horas = visible.reduce((s, e) => s + e.horasTrabalhadas, 0);
-    const atrasos = visible.filter((e) => e.atrasoMinutos > 0).length;
-    const faltas = visible.filter((e) => e.falta).length;
-    const bancoMinutos = visible.reduce((s, e) => s + (e.horasTrabalhadas - 8) * 60, 0);
+    const horas = visiblePeriodo.reduce((s, e) => s + e.horasTrabalhadas, 0);
+    const atrasos = visiblePeriodo.filter((e) => e.atrasoMinutos > 0).length;
+    const faltas = visiblePeriodo.filter((e) => e.falta).length;
+    const bancoMinutos = visiblePeriodo.reduce((s, e) => s + (e.horasTrabalhadas - 8) * 60, 0);
     return { horas, atrasos, faltas, bancoMinutos };
-  }, [visible]);
+  }, [visiblePeriodo]);
 
   const monthlyData = useMemo(() => {
     const map = new Map<string, { horas: number; atrasos: number; faltas: number; banco: number }>();
@@ -300,6 +317,29 @@ export function PontoEletronicoClient({
         </div>
       </div>
 
+      <div>
+        <div className="flex flex-wrap gap-1.5">
+          {STANDARD_PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setPeriodo(opt.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {periodo === "personalizado" && (
+          <div className="flex items-center gap-2 mt-2">
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
+            <span className="text-xs text-nord-gray">até</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
+          </div>
+        )}
+      </div>
+
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -316,7 +356,7 @@ export function PontoEletronicoClient({
             </tr>
           </thead>
           <tbody>
-            {visible.map((e) => (
+            {visiblePeriodo.map((e) => (
               <tr key={e.id} className="border-b border-nord-border/50 hover:bg-white/5">
                 <td className="py-2.5 px-4 text-white">{format(new Date(e.date), "dd/MM/yyyy")}</td>
                 {!fixedEmployeeId && <td className="py-2.5 px-4 text-nord-gray">{e.employee.name}</td>}
@@ -342,7 +382,7 @@ export function PontoEletronicoClient({
                 </td>
               </tr>
             ))}
-            {visible.length === 0 && (
+            {visiblePeriodo.length === 0 && (
               <tr>
                 <td colSpan={fixedEmployeeId ? 8 : 9} className="py-8 text-center text-nord-gray text-sm">
                   Nenhum registro de ponto encontrado.
