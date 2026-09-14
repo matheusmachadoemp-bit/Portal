@@ -17,7 +17,11 @@ export default async function FaturamentoPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const rolling = resolveRollingPeriod("mes-atual");
+  // Mesmo período padrão do filtro de cima ("Hoje", ver useState em
+  // faturamento-client.tsx) — assim os 3 mini-cards já nascem com o dado
+  // certo, sem um "piscar" entre o pré-carregamento do servidor e a
+  // primeira busca do cliente logo após a página abrir.
+  const rolling = resolveRollingPeriod("hoje");
 
   const [summary, sales] = await Promise.all([
     computeFaturamentoSummary(empresaIds, { key: "hoje", compareMode: "corrido" }),

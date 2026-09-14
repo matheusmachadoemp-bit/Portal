@@ -298,9 +298,29 @@ export function FaturamentoClient({
       </Section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <HoraCard initialData={initialPorHora} channel={channel || undefined} platform={platform || undefined} />
-        <PagamentoCard initialData={initialPagamento} channel={channel || undefined} platform={platform || undefined} />
-        <EntregaCard initialData={initialEntrega} platform={platform || undefined} />
+        <HoraCard
+          initialData={initialPorHora}
+          periodKey={periodKey}
+          customFrom={customFrom}
+          customTo={customTo}
+          channel={channel || undefined}
+          platform={platform || undefined}
+        />
+        <PagamentoCard
+          initialData={initialPagamento}
+          periodKey={periodKey}
+          customFrom={customFrom}
+          customTo={customTo}
+          channel={channel || undefined}
+          platform={platform || undefined}
+        />
+        <EntregaCard
+          initialData={initialEntrega}
+          periodKey={periodKey}
+          customFrom={customFrom}
+          customTo={customTo}
+          platform={platform || undefined}
+        />
       </div>
 
       <style jsx global>{`

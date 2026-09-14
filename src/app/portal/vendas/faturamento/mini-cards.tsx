@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calendar } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { formatCurrency, formatPercent } from "@/lib/calc";
-import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
+import type { PeriodKey, RollingPeriodKey } from "@/lib/periods";
 import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 import { PorHoraChart } from "../por-hora/chart";
 import type { SaleChannel, SalePlatform } from "@prisma/client";
@@ -13,146 +12,83 @@ type HourBucket = { hour: number; minute: number; label: string; faturamento: nu
 type MethodRow = { method: string; valor: number; percent: number };
 type BairroRow = { bairro: string; faturamento: number };
 
-function MiniPeriodFilter({
-  periodKey,
-  setPeriodKey,
-  customFrom,
-  setCustomFrom,
-  customTo,
-  setCustomTo,
-  onApplyCustom,
-  label,
-}: {
-  periodKey: RollingPeriodKey;
-  setPeriodKey: (k: RollingPeriodKey) => void;
-  customFrom: string;
-  setCustomFrom: (v: string) => void;
-  customTo: string;
-  setCustomTo: (v: string) => void;
-  onApplyCustom: () => void;
-  label: string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border border-nord-border text-nord-gray hover:text-white whitespace-nowrap"
-      >
-        <Calendar size={11} /> {label}
-      </button>
-      {open && (
-        <div className="absolute right-0 z-20 mt-2 w-64 nord-card bg-nord-card p-3 space-y-2">
-          <div className="flex flex-wrap gap-1.5">
-            {STANDARD_PERIOD_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => {
-                  setPeriodKey(opt.key);
-                  if (opt.key !== "personalizado") setOpen(false);
-                }}
-                className={`px-2 py-1 rounded-md text-[11px] font-medium ${
-                  periodKey === opt.key ? "bg-nord-blue text-white" : "bg-nord-panel text-nord-gray hover:text-white"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {periodKey === "personalizado" && (
-            <div className="flex items-center gap-1.5 pt-1">
-              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="mini-input" />
-              <span className="text-[10px] text-nord-gray">até</span>
-              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="mini-input" />
-              <button
-                onClick={() => {
-                  onApplyCustom();
-                  setOpen(false);
-                }}
-                disabled={!customFrom || !customTo}
-                className="px-2 py-1 rounded-md text-[11px] bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
-              >
-                Aplicar
-              </button>
-            </div>
-          )}
-          <style jsx global>{`
-            .mini-input {
-              background: var(--nord-panel);
-              border: 1px solid var(--nord-border);
-              border-radius: 6px;
-              padding: 4px 6px;
-              color: white;
-              font-size: 11px;
-            }
-          `}</style>
-        </div>
-      )}
-    </div>
-  );
-}
+/**
+ * O filtro de período de cima (Faturamento) usa `PeriodKey` ("mes" /
+ * "mes-anterior", com comparação entre 2 períodos). As rotas dos 3
+ * mini-cards (por-hora, pagamento, entrega) usam `RollingPeriodKey`
+ * ("mes-atual" / "mes-passado", sem comparação). Os demais valores
+ * ("hoje", "ontem", "7dias", "personalizado") já têm o mesmo nome nos
+ * dois tipos — só "mes"/"mes-anterior" precisam de tradução. "semana" e
+ * "semana-anterior" não aparecem nas opções do filtro de cima (ver
+ * PERIOD_OPTIONS em lib/periods.ts), mas entram aqui só para o mapa
+ * cobrir todo o tipo `PeriodKey`.
+ */
+const PERIOD_KEY_TO_ROLLING: Record<PeriodKey, RollingPeriodKey> = {
+  hoje: "hoje",
+  ontem: "ontem",
+  "7dias": "7dias",
+  semana: "7dias",
+  "semana-anterior": "7dias",
+  mes: "mes-atual",
+  "mes-anterior": "mes-passado",
+  personalizado: "personalizado",
+};
 
-function usePeriodFilter(endpoint: string, channel?: SaleChannel, platform?: SalePlatform, extraParams?: Record<string, string>) {
-  const [periodKey, setPeriodKey] = useState<RollingPeriodKey>("mes-atual");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
-  const [appliedCustom, setAppliedCustom] = useState<{ from: string; to: string } | null>(null);
+function usePeriodFilter(
+  endpoint: string,
+  periodKey: PeriodKey,
+  customFrom: string,
+  customTo: string,
+  channel?: SaleChannel,
+  platform?: SalePlatform,
+  extraParams?: Record<string, string>
+) {
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (periodKey === "personalizado" && !appliedCustom) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetches the mini card whenever its own period filter changes
+    if (periodKey === "personalizado" && (!customFrom || !customTo)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetches the mini card whenever the shared period filter (or channel/platform) changes
     setLoading(true);
-    const params = new URLSearchParams({ key: periodKey, ...(extraParams ?? {}) });
+    const params = new URLSearchParams({ key: PERIOD_KEY_TO_ROLLING[periodKey], ...(extraParams ?? {}) });
     if (channel) params.set("channel", channel);
     if (platform) params.set("platform", platform);
-    if (periodKey === "personalizado" && appliedCustom) {
-      params.set("from", appliedCustom.from);
-      params.set("to", appliedCustom.to);
+    if (periodKey === "personalizado") {
+      params.set("from", customFrom);
+      params.set("to", customTo);
     }
     fetch(`${endpoint}?${params.toString()}`)
       .then((res) => res.json())
       .then((d) => setData(d))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, periodKey, appliedCustom, channel, platform]);
+  }, [endpoint, periodKey, customFrom, customTo, channel, platform, extraParams]);
 
-  function applyCustom() {
-    setAppliedCustom({ from: customFrom, to: customTo });
-  }
-
-  return { periodKey, setPeriodKey, customFrom, setCustomFrom, customTo, setCustomTo, applyCustom, data, loading };
+  return { data, loading };
 }
+
+type PeriodProps = {
+  periodKey: PeriodKey;
+  customFrom: string;
+  customTo: string;
+};
 
 export function HoraCard({
   initialData,
+  periodKey,
+  customFrom,
+  customTo,
   channel,
   platform,
 }: {
   initialData: { byHour: HourBucket[]; pico: HourBucket | null };
   channel?: SaleChannel;
   platform?: SalePlatform;
-}) {
-  const f = usePeriodFilter("/api/vendas/faturamento/por-hora", channel, platform);
+} & PeriodProps) {
+  const f = usePeriodFilter("/api/vendas/faturamento/por-hora", periodKey, customFrom, customTo, channel, platform);
   const view = (f.data as unknown as typeof initialData | null) ?? initialData;
 
   return (
-    <Section
-      title="Vendas por Hora"
-      action={
-        <MiniPeriodFilter
-          periodKey={f.periodKey}
-          setPeriodKey={f.setPeriodKey}
-          customFrom={f.customFrom}
-          setCustomFrom={f.setCustomFrom}
-          customTo={f.customTo}
-          setCustomTo={f.setCustomTo}
-          onApplyCustom={f.applyCustom}
-          label={STANDARD_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
-        />
-      }
-    >
+    <Section title="Vendas por Hora">
       <p className="text-xs text-nord-gray mb-3">
         18h às 23h30 {view.pico ? `· pico às ${view.pico.label}` : ""}
       </p>
@@ -163,32 +99,21 @@ export function HoraCard({
 
 export function PagamentoCard({
   initialData,
+  periodKey,
+  customFrom,
+  customTo,
   channel,
   platform,
 }: {
   initialData: { byMethod: MethodRow[]; pedidos: number };
   channel?: SaleChannel;
   platform?: SalePlatform;
-}) {
-  const f = usePeriodFilter("/api/vendas/faturamento/pagamento", channel, platform);
+} & PeriodProps) {
+  const f = usePeriodFilter("/api/vendas/faturamento/pagamento", periodKey, customFrom, customTo, channel, platform);
   const view = (f.data as unknown as typeof initialData | null) ?? initialData;
 
   return (
-    <Section
-      title="Forma de Pagamento"
-      action={
-        <MiniPeriodFilter
-          periodKey={f.periodKey}
-          setPeriodKey={f.setPeriodKey}
-          customFrom={f.customFrom}
-          setCustomFrom={f.setCustomFrom}
-          customTo={f.customTo}
-          setCustomTo={f.setCustomTo}
-          onApplyCustom={f.applyCustom}
-          label={STANDARD_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
-        />
-      }
-    >
+    <Section title="Forma de Pagamento">
       <p className="text-xs text-nord-gray mb-3">{view.pedidos} pedidos</p>
       <div className="space-y-2.5">
         {view.byMethod.map((m) => (
@@ -210,27 +135,22 @@ export function PagamentoCard({
   );
 }
 
-export function EntregaCard({ initialData, platform }: { initialData: { rows: BairroRow[] }; platform?: SalePlatform }) {
-  const f = usePeriodFilter("/api/vendas/faturamento/entrega", undefined, platform);
+export function EntregaCard({
+  initialData,
+  periodKey,
+  customFrom,
+  customTo,
+  platform,
+}: {
+  initialData: { rows: BairroRow[] };
+  platform?: SalePlatform;
+} & PeriodProps) {
+  const f = usePeriodFilter("/api/vendas/faturamento/entrega", periodKey, customFrom, customTo, undefined, platform);
   const view = (f.data as unknown as typeof initialData | null) ?? initialData;
   const max = Math.max(1, ...view.rows.map((r) => r.faturamento));
 
   return (
-    <Section
-      title="Área de Entrega"
-      action={
-        <MiniPeriodFilter
-          periodKey={f.periodKey}
-          setPeriodKey={f.setPeriodKey}
-          customFrom={f.customFrom}
-          setCustomFrom={f.setCustomFrom}
-          customTo={f.customTo}
-          setCustomTo={f.setCustomTo}
-          onApplyCustom={f.applyCustom}
-          label={STANDARD_PERIOD_OPTIONS.find((o) => o.key === f.periodKey)?.label ?? "Período"}
-        />
-      }
-    >
+    <Section title="Área de Entrega">
       <p className="text-xs text-nord-gray mb-3">Top bairros por faturamento</p>
       <div className="space-y-2.5">
         {view.rows.map((r) => (
