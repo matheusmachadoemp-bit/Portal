@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ChecklistClient } from "./checklist-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { generateChecklistOccurrences, processChecklistEscalations, refreshOccurrenceStatuses } from "@/lib/checklist-server";
+import { generateChecklistOccurrences, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { CHECKLIST_TERMINAL_STATUSES, spDateKey, spStartOfDay } from "@/lib/checklist";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -58,17 +58,20 @@ export default async function ChecklistPage() {
 
   const day = spStartOfDay(dateKey);
   // Só ocorrências ainda "abertas" (não terminais) precisam ser
-  // reavaliadas/escalonadas — uma vez concluída/justificada/cancelada/não
-  // realizada, o status nunca mais muda (ver computeOccurrenceStatus e
-  // dueEscalationLevels em src/lib/checklist.ts), então reprocessá-la de
-  // novo a cada carregamento desta página seria buscar e recalcular à toa
-  // todo o histórico de checklists já fechados desta loja.
+  // reavaliadas — uma vez concluída/justificada/cancelada/não realizada, o
+  // status nunca mais muda (ver computeOccurrenceStatus e dueEscalationLevels
+  // em src/lib/checklist.ts), então reprocessá-la de novo a cada carregamento
+  // desta página seria buscar e recalcular à toa todo o histórico de
+  // checklists já fechados desta loja.
+  // O escalonamento/notificação de atraso (processChecklistEscalations) NÃO
+  // roda mais aqui: o workflow .github/workflows/checklist-escalations.yml já
+  // cobre isso a cada 15 minutos independente de alguém abrir esta tela, então
+  // repetir a varredura completa em todo carregamento só custava tempo à toa.
   const existing = await prisma.checklistOccurrence.findMany({
     where: { empresaId: { in: empresaIds }, status: { notIn: CHECKLIST_TERMINAL_STATUSES } },
     select: { id: true },
   });
   await refreshOccurrenceStatuses(existing.map((o) => o.id));
-  await processChecklistEscalations(existing.map((o) => o.id));
 
   const [occurrences, templates, users] = await Promise.all([
     prisma.checklistOccurrence.findMany({
