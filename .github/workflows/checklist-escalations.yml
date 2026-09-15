@@ -1,0 +1,25 @@
+name: Cobrança automática de checklist
+
+# A cobrança de checklist (avisos de "perto do prazo", "atrasado", "não
+# realizado" — ver processChecklistEscalations em src/lib/checklist-server.ts)
+# já roda 1x por dia via Vercel Cron (ver vercel.json), mas o plano Hobby do
+# Vercel só permite 1 execução diária por cron. Sem outro gatilho, esses
+# avisos só saíam quando alguém abria a tela de Checklist (que recalcula a
+# cobrança ao carregar) — daí notificações "não chegando" fora dessa tela.
+# Mesmo padrão já usado em keep-alive.yml: GitHub Actions aceita intervalos
+# curtos de graça.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a rota de cobrança de checklist
+        run: |
+          curl -sS -o /dev/null -w "status=%{http_code}\n" \
+            --max-time 30 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.portalnord.com.br/api/checklist/escalations/run"
