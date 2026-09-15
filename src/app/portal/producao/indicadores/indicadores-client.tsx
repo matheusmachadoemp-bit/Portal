@@ -3,25 +3,26 @@
 import { useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 import { Section, StatCard, Badge } from "@/components/ui/stat-card";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency } from "@/lib/calc";
+import { type RollingPeriodKey } from "@/lib/periods";
 import type { ConsumoComparativoRow, IndicadoresData } from "@/lib/producao-indicadores-server";
-
-const PERIODS = [
-  { key: 7, label: "7 dias" },
-  { key: 30, label: "30 dias" },
-  { key: 90, label: "90 dias" },
-];
 
 export function IndicadoresClient({ initialData, consumoHoje }: { initialData: IndicadoresData; consumoHoje: ConsumoComparativoRow[] }) {
   const [data, setData] = useState(initialData);
-  const [periodo, setPeriodo] = useState(30);
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [loading, setLoading] = useState(false);
 
-  async function mudarPeriodo(days: number) {
-    setPeriodo(days);
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
     setLoading(true);
     try {
-      const res = await fetch(`/api/producao/indicadores?days=${days}`);
+      const params = new URLSearchParams({ periodo: key });
+      if (key === "personalizado" && from && to) {
+        params.set("from", from);
+        params.set("to", to);
+      }
+      const res = await fetch(`/api/producao/indicadores?${params.toString()}`);
       const json = await res.json();
       setData(json.data);
     } finally {
@@ -31,19 +32,9 @@ export function IndicadoresClient({ initialData, consumoHoje }: { initialData: I
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-1.5">
-        {PERIODS.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => mudarPeriodo(p.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-              periodo === p.key ? "bg-nord-blue text-white" : "bg-nord-panel text-nord-gray hover:text-white"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-        {loading && <span className="text-xs text-nord-gray self-center">Atualizando...</span>}
+      <div>
+        <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loading} />
+        {loading && <span className="text-xs text-nord-gray mt-2 inline-block">Atualizando...</span>}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -9,19 +9,27 @@ import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
  * aplicado (vindo do componente pai); ao clicar num preset, `onApply` é
  * chamado na hora, já buscando o novo período — "Personalizado" só chama
  * `onApply` quando o usuário clicar em "Aplicar", depois de escolher as datas.
+ * `initialCustomFrom`/`initialCustomTo` pré-preenchem os campos de data
+ * quando a tela já carrega com um período personalizado aplicado (ex.:
+ * um intervalo padrão calculado no servidor que não corresponde a nenhum
+ * preset) — sem eles, os campos nascem em branco mesmo com `periodo="personalizado"`.
  */
 export function PeriodFilterBar({
   periodo,
   onApply,
   loading = false,
+  initialCustomFrom = "",
+  initialCustomTo = "",
 }: {
   periodo: RollingPeriodKey;
   onApply: (key: RollingPeriodKey, from?: string, to?: string) => void;
   loading?: boolean;
+  initialCustomFrom?: string;
+  initialCustomTo?: string;
 }) {
   const [selected, setSelected] = useState<RollingPeriodKey>(periodo);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [customFrom, setCustomFrom] = useState(initialCustomFrom);
+  const [customTo, setCustomTo] = useState(initialCustomTo);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reflete o período efetivamente aplicado pelo pai (ex.: após carregar dados iniciais)

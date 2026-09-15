@@ -5,9 +5,11 @@ import { CalendarDays, ClipboardList, Boxes, User, Package, AlertTriangle, Dolla
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "@/lib/estoque";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type CountItem = { nome: string; unidade: string; esperado: number; contado: number | null; diferencaPercent: number | null; status: string; observacao: string | null; justificativa: string | null };
 type CountRow = {
@@ -36,16 +38,36 @@ const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "O
 export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [detail, setDetail] = useState<CountRow | null>(null);
+
+  function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    if (key === "personalizado") {
+      setCustomFrom(from ?? "");
+      setCustomTo(to ?? "");
+    }
+  }
+
+  const range = useMemo(() => {
+    if (periodo === "personalizado" && (!customFrom || !customTo)) return null;
+    return resolveRollingPeriod(periodo, { from: customFrom, to: customTo });
+  }, [periodo, customFrom, customTo]);
 
   const filtered = useMemo(
     () =>
       counts.filter((c) => {
         if (typeFilter && c.type !== typeFilter) return false;
         if (statusFilter && c.status !== statusFilter) return false;
+        if (range) {
+          const data = new Date(c.dataContagem);
+          if (data < range.from || data > range.to) return false;
+        }
         return true;
       }),
-    [counts, typeFilter, statusFilter]
+    [counts, typeFilter, statusFilter, range]
   );
 
   return (
@@ -85,6 +107,10 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
         />
       }
     >
+      <div className="mb-4">
+        <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} />
+      </div>
+
       <div className="overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>

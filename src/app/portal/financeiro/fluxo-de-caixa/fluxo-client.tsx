@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency } from "@/lib/calc";
 import { format, startOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { type RollingPeriodKey } from "@/lib/periods";
 import {
   ResponsiveContainer,
   BarChart,
@@ -24,12 +26,32 @@ import {
 type Entry = { valor: number; date: string; empresa: { id: string; name: string }; categoria: string };
 
 export function FluxoCaixaClient({
-  data,
+  data: initialData,
 }: {
   data: { payables: Entry[]; receivables: Entry[]; saldoInicial: number };
 }) {
+  const [data, setData] = useState(initialData);
   const [granularidade, setGranularidade] = useState<"diario" | "semanal" | "mensal">("diario");
   const [empresa, setEmpresa] = useState("");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [loading, setLoading] = useState(false);
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ periodo: key });
+      if (key === "personalizado" && from && to) {
+        params.set("from", from);
+        params.set("to", to);
+      }
+      const res = await fetch(`/api/financeiro/fluxo-de-caixa?${params.toString()}`);
+      if (!res.ok) return;
+      setData(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const empresaOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -82,6 +104,8 @@ export function FluxoCaixaClient({
 
   return (
     <div className="space-y-6">
+      <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loading} />
+
       <div className="flex items-center gap-2 flex-wrap">
         {(["diario", "semanal", "mensal"] as const).map((g) => (
           <button
@@ -94,6 +118,7 @@ export function FluxoCaixaClient({
             {g}
           </button>
         ))}
+        {loading && <span className="text-xs text-nord-gray animate-pulse">Atualizando...</span>}
         <select value={empresa} onChange={(e) => setEmpresa(e.target.value)} className="input-sm ml-auto">
           <option value="">Todas as empresas</option>
           {empresaOptions.map(([id, name]) => (

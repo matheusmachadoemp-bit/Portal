@@ -22,12 +22,21 @@ const FECHAMENTO_CARGO_KEYS = ["gerencia", "salao", "cozinha"] as const;
 const CATEGORIES = [
   { key: "inicio", name: "Início", icon: "Home", order: 0, contentType: "dashboard", subs: [] },
   {
+    // A categoria em si não navega mais pra /portal/vendas ao ser clicada (linked: false) —
+    // vira só um agrupador visual das subcategorias, mesmo padrão já estabelecido em
+    // prisma/migrations/20260914130000_tarefas_subcategoria_propria/migration.sql para
+    // "Tarefas" (mesma coluna "linked", já existente desde aquela migração). A subcategoria
+    // "Visão Geral" (rota /portal/vendas/visao-geral — ver
+    // src/app/portal/vendas/visao-geral/page.tsx, que reexporta a mesma página de sempre)
+    // é quem leva pro conteúdo que ficava na rota "nua".
     key: "vendas",
     name: "Vendas",
     icon: "ShoppingCart",
     order: 1,
     contentType: "vendas",
+    linked: false,
     subs: [
+      { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "lancamentos", name: "Lançamentos", icon: "ReceiptText" },
       { key: "faturamento", name: "Faturamento", icon: "DollarSign" },
       { key: "acompanhamento-vendas", name: "Acompanhamento de Vendas", icon: "GitCompare" },
@@ -887,11 +896,16 @@ async function main() {
           icon: cargoSeed.icon,
           ordem: cargoSeed.ordem,
           // Horário padrão (ajustável depois, na tela de Configurações — fase futura, ou
-          // direto no banco): liberação às 21h, prazo até a virada do dia. `responsavelId`
-          // fica em branco de propósito — o seed não tem como saber quem hoje ocupa cada
-          // cargo em cada loja (ver decisão nº 4 do relatório).
-          horarioLiberacao: "21:00",
-          horarioLimite: "23:59",
+          // direto no banco): libera às 23:35, prazo até a virada do dia (00:00 — cruza a
+          // meia-noite, ver `fechamentoReleaseEDueAt` em @/lib/fechamento), 6x por semana, com
+          // folga só às terças (ajuste pedido pelo usuário depois do padrão inicial
+          // 21:00–23:59/todo dia; `terca: false` é o único dia que diverge do
+          // `@default(true)` do schema para os outros 6). `responsavelId` fica em branco de
+          // propósito — o seed não tem como saber quem hoje ocupa cada cargo em cada loja (ver
+          // decisão nº 4 do relatório).
+          horarioLiberacao: "23:35",
+          horarioLimite: "00:00",
+          terca: false,
           createdById: admin.id,
         },
       });

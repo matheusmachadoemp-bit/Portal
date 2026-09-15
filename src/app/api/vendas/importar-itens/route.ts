@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import * as XLSX from "xlsx";
 import { hasModulePermission } from "@/lib/authz";
+import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 
 const INSERT_CHUNK_SIZE = 1000;
 
@@ -204,6 +205,15 @@ export async function POST(req: Request) {
 
   const faturamentoTotal = insertRows.reduce((sum, r) => sum + r.faturamento, 0);
   const comProduto = insertRows.filter((r) => r.productId).length;
+  // Itens cujo nome não bateu com nenhum produto já cadastrado em Ficha Técnica (productId
+  // null) — não entram no cálculo de margem e não aparecem separados por produto de verdade.
+  const semProduto = insertRows.length - comProduto;
+  const semProdutoStats = computeImportFallbackStats(semProduto, insertRows.length);
+  const produtoWarning = buildImportFallbackBucket(
+    "produto",
+    semProdutoStats,
+    `${semProdutoStats.percentLabel} dos itens importados (${semProduto} de ${insertRows.length}) não bateram com nenhum produto já cadastrado em Ficha Técnica e ficaram sem produto vinculado (não entram no cálculo de margem) — confira se o nome do item no arquivo é igual ao nome cadastrado, ou cadastre o produto que falta.`
+  );
 
   return NextResponse.json({
     itens: insertRows.length,
@@ -211,5 +221,6 @@ export async function POST(req: Request) {
     comProduto,
     periodFrom: periodFrom.toISOString(),
     periodTo: periodTo.toISOString(),
+    fallbackWarnings: [produtoWarning],
   });
 }

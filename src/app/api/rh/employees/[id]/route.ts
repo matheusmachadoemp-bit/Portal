@@ -32,6 +32,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       name: body.name ?? undefined,
       cargo: body.cargo ?? undefined,
       setor: body.setor ?? undefined,
+      photoUrl: body.photoUrl !== undefined ? (body.photoUrl ? String(body.photoUrl) : null) : undefined,
       admissionDate: body.admissionDate ? new Date(body.admissionDate) : undefined,
       terminationDate: body.terminationDate ? new Date(body.terminationDate) : body.terminationDate === null ? null : undefined,
       status: body.status ?? undefined,
