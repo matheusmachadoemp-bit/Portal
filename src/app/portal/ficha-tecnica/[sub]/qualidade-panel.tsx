@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Settings2 } from "lucide-react";
 import { Section, StatCard, Badge } from "@/components/ui/stat-card";
+import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { formatPercent } from "@/lib/calc";
 import { cmvPercent, productTotalCost } from "@/lib/ficha";
@@ -79,22 +80,41 @@ export function QualidadePanel({
         ) : undefined
       }
     >
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <button onClick={() => setOpenBucket("incompletas")} className="text-left">
-          <StatCard label="Fichas incompletas" value={`${buckets.incompletas.length} de ${total}`} icon="AlertTriangle" color="#f59e0b" />
-        </button>
-        <button onClick={() => setOpenBucket("cmvAlto")} className="text-left">
-          <StatCard
-            label={`CMV acima do padrão (${formatPercent(config.cmvMaximoPercent, 0)})`}
-            value={`${buckets.cmvAlto.length} de ${total}`}
-            icon="TrendingUp"
-            color="#ef4444"
-          />
-        </button>
-        <button onClick={() => setOpenBucket("ok")} className="text-left">
-          <StatCard label="Fichas OK" value={`${buckets.ok.length} de ${total}`} icon="CheckCircle2" color="#22c55e" />
-        </button>
-      </div>
+      <SortableCardGrid
+        storageKey="ficha-tecnica-qualidade-kpi-order"
+        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        items={[
+          {
+            key: "fichas-incompletas",
+            content: (
+              <button onClick={() => setOpenBucket("incompletas")} className="text-left w-full">
+                <StatCard label="Fichas incompletas" value={`${buckets.incompletas.length} de ${total}`} icon="AlertTriangle" color="#f59e0b" />
+              </button>
+            ),
+          },
+          {
+            key: "cmv-alto",
+            content: (
+              <button onClick={() => setOpenBucket("cmvAlto")} className="text-left w-full">
+                <StatCard
+                  label={`CMV acima do padrão (${formatPercent(config.cmvMaximoPercent, 0)})`}
+                  value={`${buckets.cmvAlto.length} de ${total}`}
+                  icon="TrendingUp"
+                  color="#ef4444"
+                />
+              </button>
+            ),
+          },
+          {
+            key: "fichas-ok",
+            content: (
+              <button onClick={() => setOpenBucket("ok")} className="text-left w-full">
+                <StatCard label="Fichas OK" value={`${buckets.ok.length} de ${total}`} icon="CheckCircle2" color="#22c55e" />
+              </button>
+            ),
+          },
+        ]}
+      />
 
       <Modal
         open={!!openBucket}

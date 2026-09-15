@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { auth } from "@/auth";
-import { StatCard, Section, Badge, ProgressBar } from "@/components/ui/stat-card";
+import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatNumber } from "@/lib/calc";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -63,24 +64,30 @@ export default async function MeusPontosPage() {
   return (
     <PageContainer title="Meus Pontos" subtitle="Sua carteira de pontos na Loja Nord">
       <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard label="Saldo total disponível" value={`${formatNumber(saldo)} pts`} icon="Wallet" color="#1464F4" />
-          <StatCard
-            label="Pontos conquistados no mês"
-            value={`${formatNumber(ganhosMes)} pts`}
-            icon="TrendingUp"
-            color="#22c55e"
-            delta={comparativo}
-          />
-          <StatCard label="Pontos utilizados no mês" value={`${formatNumber(Math.abs(utilizadosMes))} pts`} icon="ShoppingBag" color="#ef4444" />
-          <StatCard
-            label="Pontos pendentes de validação"
-            value={`${formatNumber(pendentes)} pts`}
-            icon="Clock"
-            color="#f59e0b"
-            hint="Em resgates aguardando aprovação"
-          />
-        </div>
+        <SortableStatCards
+          storageKey="loja-nord-meus-pontos-kpi-order"
+          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+          cards={[
+            { key: "saldo-total", label: "Saldo total disponível", value: `${formatNumber(saldo)} pts`, icon: "Wallet", color: "#1464F4" },
+            {
+              key: "conquistados-mes",
+              label: "Pontos conquistados no mês",
+              value: `${formatNumber(ganhosMes)} pts`,
+              icon: "TrendingUp",
+              color: "#22c55e",
+              delta: comparativo,
+            },
+            { key: "utilizados-mes", label: "Pontos utilizados no mês", value: `${formatNumber(Math.abs(utilizadosMes))} pts`, icon: "ShoppingBag", color: "#ef4444" },
+            {
+              key: "pendentes-validacao",
+              label: "Pontos pendentes de validação",
+              value: `${formatNumber(pendentes)} pts`,
+              icon: "Clock",
+              color: "#f59e0b",
+              hint: "Em resgates aguardando aprovação",
+            },
+          ]}
+        />
 
         <Section title="Nível de reconhecimento">
           <div className="flex items-center justify-between mb-3">

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
-import { StatCard } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { GestaoClient } from "./gestao-client";
 
@@ -70,19 +70,24 @@ export default async function GestaoLojaNordPage() {
   return (
     <PageContainer title="Gestão da Loja Nord" subtitle="Aprovação de resgates, catálogo de brindes e indicadores">
       <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          <StatCard label="Resgates pendentes" value={String(resgatesPendentes)} icon="Clock" color="#f59e0b" />
-          <StatCard label="Resgates entregues no mês" value={String(resgatesEntreguesMes)} icon="PackageCheck" color="#22c55e" />
-          <StatCard label="Pontos distribuídos no mês" value={String(pontosDistribuidosMes._sum.pontos ?? 0)} icon="TrendingUp" color="#1464F4" />
-          <StatCard
-            label="Pontos utilizados no mês"
-            value={String(Math.abs(pontosUtilizadosMes._sum.pontos ?? 0))}
-            icon="ShoppingBag"
-            color="#ef4444"
-          />
-          <StatCard label="Brindes com estoque baixo" value={String(estoqueBaixoCount)} icon="AlertTriangle" color="#f59e0b" />
-          <StatCard label="Colaboradores participantes" value={String(colaboradoresParticipantes.length)} icon="Users" color="#a855f7" />
-        </div>
+        <SortableStatCards
+          storageKey="loja-nord-gestao-kpi-order"
+          className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
+          cards={[
+            { key: "resgates-pendentes", label: "Resgates pendentes", value: String(resgatesPendentes), icon: "Clock", color: "#f59e0b" },
+            { key: "resgates-entregues-mes", label: "Resgates entregues no mês", value: String(resgatesEntreguesMes), icon: "PackageCheck", color: "#22c55e" },
+            { key: "pontos-distribuidos-mes", label: "Pontos distribuídos no mês", value: String(pontosDistribuidosMes._sum.pontos ?? 0), icon: "TrendingUp", color: "#1464F4" },
+            {
+              key: "pontos-utilizados-mes",
+              label: "Pontos utilizados no mês",
+              value: String(Math.abs(pontosUtilizadosMes._sum.pontos ?? 0)),
+              icon: "ShoppingBag",
+              color: "#ef4444",
+            },
+            { key: "brindes-estoque-baixo", label: "Brindes com estoque baixo", value: String(estoqueBaixoCount), icon: "AlertTriangle", color: "#f59e0b" },
+            { key: "colaboradores-participantes", label: "Colaboradores participantes", value: String(colaboradoresParticipantes.length), icon: "Users", color: "#a855f7" },
+          ]}
+        />
 
         <GestaoClient
           canManageCatalog={canManageCatalog}
