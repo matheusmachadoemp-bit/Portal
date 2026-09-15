@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { createReuniaoCustomIndicator, REUNIAO_INDICATOR_UNIDADES } from "@/lib/reuniao-server";
+import { createReuniaoCustomIndicator, parseSecondaryIndicatorFields, REUNIAO_INDICATOR_UNIDADES } from "@/lib/reuniao-server";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -30,6 +30,11 @@ export async function POST(req: Request) {
   const icon = typeof body.icon === "string" && body.icon ? body.icon : "Target";
   const valorPadrao = Number(body.valorPadrao) || 0;
 
+  const secondary = parseSecondaryIndicatorFields(body);
+  if (secondary.touched && !secondary.ok) {
+    return NextResponse.json({ error: secondary.error }, { status: 400 });
+  }
+
   const indicator = await createReuniaoCustomIndicator({
     empresaId: empresa.id,
     meetingKey: "LIDERANCA",
@@ -37,6 +42,8 @@ export async function POST(req: Request) {
     icon,
     unidade,
     valorPadrao,
+    nomeSecundario: secondary.touched && secondary.ok ? secondary.nomeSecundario : null,
+    unidadeSecundaria: secondary.touched && secondary.ok ? secondary.unidadeSecundaria : null,
     createdById: session.user.id,
   });
 

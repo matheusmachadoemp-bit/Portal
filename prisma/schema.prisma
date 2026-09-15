@@ -2702,18 +2702,43 @@ enum ReuniaoMeetingKey {
 // ganharam a mesma seção — todas tratadas exatamente igual a partir daqui,
 // só filtrando por `meetingKey`.
 model ReuniaoCustomIndicator {
-  id          String               @id @default(cuid())
-  empresaId   String
-  empresa     Empresa              @relation(fields: [empresaId], references: [id])
-  meetingKey  ReuniaoMeetingKey
-  nome        String
-  icon        String               @default("Target")
-  unidade     ReuniaoIndicatorUnit @default(PERCENT)
-  valorPadrao Float                @default(0)
-  order       Int                  @default(0)
-  createdById String
-  createdBy   User                 @relation(fields: [createdById], references: [id])
-  createdAt   DateTime             @default(now())
+  id                String                @id @default(cuid())
+  empresaId         String
+  empresa           Empresa               @relation(fields: [empresaId], references: [id])
+  meetingKey        ReuniaoMeetingKey
+  nome              String
+  icon              String                @default("Target")
+  unidade           ReuniaoIndicatorUnit  @default(PERCENT)
+  valorPadrao       Float                 @default(0)
+  /// Nome do segundo valor (opcional) de um indicador "composto" — ex.:
+  /// "Cancelamentos" grava um percentual (nome/unidade acima) + uma
+  /// quantidade (nomeSecundario="Qtd. de atrasos/cancelamentos",
+  /// unidadeSecundaria=NUMBER) no mesmo período. null (o padrão — todo
+  /// indicador existente até esta migration, e a esmagadora maioria dos
+  /// futuros) = indicador simples, com 1 valor só por período, exatamente
+  /// como hoje. Sempre preenchido junto com `unidadeSecundaria` (os dois
+  /// null juntos, ou os dois preenchidos juntos — nunca um só); checado na
+  /// camada de aplicação (`parseSecondaryIndicatorFields` em
+  /// reuniao-server.ts, usada por createReuniaoCustomIndicator e pelas 10
+  /// rotas de criar/editar indicador), sem CHECK constraint no banco — este
+  /// schema não usa CHECK constraints em nenhum outro lugar, então mantém o
+  /// mesmo padrão.
+  ///
+  /// Sem `valorPadraoSecundario`: diferente de `valorPadrao` (que alimenta
+  /// um campo real "Valor padrão" no formulário de criar indicador),
+  /// não existe hoje nenhum pedido de um "padrão" pro segundo valor — ele só
+  /// nasce como null por período até alguém digitar um valor de verdade
+  /// (ReuniaoCustomIndicatorValue.valorSecundario), igual a maioria dos
+  /// campos opcionais deste schema. Adicionar um padrão pro segundo valor é
+  /// simples de fazer depois (mais uma coluna) se algum indicador composto
+  /// futuro pedir isso.
+  nomeSecundario    String?
+  /// Unidade do segundo valor — ver `nomeSecundario` acima.
+  unidadeSecundaria ReuniaoIndicatorUnit?
+  order             Int                   @default(0)
+  createdById       String
+  createdBy         User                  @relation(fields: [createdById], references: [id])
+  createdAt         DateTime              @default(now())
 
   values ReuniaoCustomIndicatorValue[]
 
@@ -2731,6 +2756,17 @@ model ReuniaoCustomIndicatorValue {
   /// "Fechamento do mês" — valor de referência único do indicador naquele mês
   /// (antigo par meta+premiação, unificado num só campo).
   valorReferencia Float
+  /// Segundo valor (opcional) de um indicador composto — só significa algo
+  /// quando o indicador (`ReuniaoCustomIndicator.unidadeSecundaria`) tem um
+  /// segundo valor configurado; nesse caso ainda é opcional por período (fica
+  /// null até alguém salvar um valor de verdade pro período, igual
+  /// `valorReferencia` faria se não tivesse @default via `valorPadrao` no
+  /// fallback de leitura — ver `loadReuniaoCustomIndicators`). Para um
+  /// indicador sem segundo valor configurado, `upsertReuniaoCustomIndicatorValues`
+  /// nunca grava nada aqui (mesmo que o payload mande um valor por engano) —
+  /// evita linha "órfã" com um valorSecundario que não corresponde a nenhum
+  /// nomeSecundario/unidadeSecundaria do indicador.
+  valorSecundario Float?
 
   @@unique([indicatorId, periodo])
 }

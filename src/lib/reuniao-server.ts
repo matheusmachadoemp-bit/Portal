@@ -227,6 +227,23 @@ export type ReuniaoCustomIndicatorDTO = {
   valorPadrao: number;
   valor: number | null;
   valorReferencia: number;
+  /**
+   * Segundo valor (opcional) de um indicador "composto" — ex.: "Cancelamentos"
+   * registra um percentual (nome/unidade/valorReferencia acima) + uma
+   * quantidade (nomeSecundario/unidadeSecundaria/valorSecundario). `null` nos
+   * 3 campos abaixo (sempre juntos — nunca só 1 ou 2 deles) = indicador
+   * simples, com 1 valor só, exatamente como todo indicador de hoje.
+   *
+   * Campos opcionais no tipo (`?:`, não só `| null`) só para não quebrar a
+   * construção manual de objeto `FechamentoIndicator` já existente em
+   * `src/components/reuniao/fechamento-do-mes.tsx` (`createIndicator`, que
+   * não conhece esses 3 campos ainda — Fase 2/tela). Em runtime, toda
+   * resposta de `loadReuniaoCustomIndicators`/das rotas de indicadores
+   * sempre inclui as 3 chaves (com `null` quando o indicador é simples).
+   */
+  nomeSecundario?: string | null;
+  unidadeSecundaria?: "PERCENT" | "CURRENCY" | "NUMBER" | null;
+  valorSecundario?: number | null;
 };
 
 /** @deprecated Use `ReuniaoCustomIndicatorDTO` — mantido só para não quebrar o import
@@ -273,6 +290,13 @@ export async function loadReuniaoCustomIndicators(
       valorPadrao: ind.valorPadrao,
       valor: v?.valor ?? null,
       valorReferencia: v?.valorReferencia ?? ind.valorPadrao,
+      nomeSecundario: ind.nomeSecundario,
+      unidadeSecundaria: ind.unidadeSecundaria,
+      // Sem fallback pra valorPadrao (não existe "valorPadraoSecundario" — ver
+      // comentário de ReuniaoCustomIndicatorValue.valorSecundario em
+      // schema.prisma): fica null até alguém salvar um valor de verdade pro
+      // período, mesmo quando o indicador já tem unidadeSecundaria configurada.
+      valorSecundario: v?.valorSecundario ?? null,
     };
   });
 }
@@ -283,7 +307,14 @@ export async function loadGerenteCustomIndicators(empresaId: string, periodo: st
   return loadReuniaoCustomIndicators(empresaId, "GERENTE", periodo);
 }
 
-export type ReuniaoCustomIndicatorInput = { id: string; valor?: string | number; valorReferencia?: string | number };
+export type ReuniaoCustomIndicatorInput = {
+  id: string;
+  valor?: string | number;
+  valorReferencia?: string | number;
+  /** Só é gravado de fato quando o indicador tem `unidadeSecundaria`
+   * configurada — ver `upsertReuniaoCustomIndicatorValues` abaixo. */
+  valorSecundario?: string | number;
+};
 
 /**
  * Salva os valores da seção "Fechamento do mês" enviados junto do POST de
@@ -314,10 +345,18 @@ export async function upsertReuniaoCustomIndicatorValues(
         const valor = c.valor !== undefined && c.valor !== "" ? Number(c.valor) : null;
         const valorReferencia =
           c.valorReferencia !== undefined && c.valorReferencia !== "" ? Number(c.valorReferencia) : indicator.valorPadrao;
+        // Só grava valorSecundario quando o indicador tem unidadeSecundaria
+        // configurada — pra um indicador simples, fica sempre null mesmo que
+        // o payload mande algo por engano (evita linha "órfã" sem
+        // nomeSecundario/unidadeSecundaria correspondente).
+        const valorSecundario =
+          indicator.unidadeSecundaria && c.valorSecundario !== undefined && c.valorSecundario !== ""
+            ? Number(c.valorSecundario)
+            : null;
         return prisma.reuniaoCustomIndicatorValue.upsert({
           where: { indicatorId_periodo: { indicatorId: c.id, periodo } },
-          update: { valor, valorReferencia },
-          create: { indicatorId: c.id, periodo, valor, valorReferencia },
+          update: { valor, valorReferencia, valorSecundario },
+          create: { indicatorId: c.id, periodo, valor, valorReferencia, valorSecundario },
         });
       })
   );
@@ -326,12 +365,81 @@ export async function upsertReuniaoCustomIndicatorValues(
 export const REUNIAO_INDICATOR_UNIDADES = ["PERCENT", "CURRENCY", "NUMBER"] as const;
 
 /**
+ * Resultado de `parseSecondaryIndicatorFields` — ver comentário dela.
+ * `touched: false` = o body não tocou em nenhum dos 2 campos (nem
+ * `nomeSecundario` nem `unidadeSecundaria`); `touched: true, ok: false` = um
+ * estado inválido (só 1 dos 2 preenchido, ou unidade fora da lista
+ * conhecida); `touched: true, ok: true` = par válido, já resolvido (os dois
+ * `null` juntos, se o body pediu pra limpar/não configurar, ou os dois
+ * preenchidos juntos).
+ */
+export type SecondaryIndicatorFieldsResult =
+  | { touched: false }
+  | { touched: true; ok: true; nomeSecundario: string | null; unidadeSecundaria: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null }
+  | { touched: true; ok: false; error: string };
+
+/**
+ * Valida o par `nomeSecundario`/`unidadeSecundaria` vindo do body de criar
+ * (POST .../indicadores) ou editar (PATCH .../indicadores/{id}) um indicador
+ * — usada pelas 10 rotas (5 criar + 5 editar) pra não duplicar essa regra em
+ * cada uma. Um indicador "composto" (2 valores por período, ex.:
+ * Cancelamentos = % + quantidade) precisa dos dois preenchidos juntos; só 1
+ * dos dois (ex.: só a unidade, sem nome, ou vice-versa) é um estado inválido
+ * que deixaria a Fase 2 (tela) sem saber como rotular o campo que faltou ou
+ * qual unidade usar — por isso vira erro 400, não um "ignora e segue".
+ *
+ * `touched: false` (nenhum dos 2 campos veio no body) tem 2 significados
+ * diferentes dependendo de quem chama: na criação, sempre significa
+ * "indicador simples, sem segundo valor" (não há nada prévio pra manter);
+ * na edição, significa "não mexeu no segundo valor" — quem edita decide se
+ * aplica o resultado (só quando `touched && ok`) ou mantém o que já estava
+ * salvo (quando `!touched`), exatamente como já se faz com nome/unidade/
+ * icon/valorPadrao no PATCH hoje.
+ */
+export function parseSecondaryIndicatorFields(body: {
+  nomeSecundario?: unknown;
+  unidadeSecundaria?: unknown;
+}): SecondaryIndicatorFieldsResult {
+  const nomeProvided = body.nomeSecundario !== undefined;
+  const unidadeProvided = body.unidadeSecundaria !== undefined;
+  if (!nomeProvided && !unidadeProvided) return { touched: false };
+
+  const nome = typeof body.nomeSecundario === "string" ? body.nomeSecundario.trim() : "";
+  const unidade = body.unidadeSecundaria;
+  const hasNome = nome !== "";
+  const hasUnidade = unidade !== undefined && unidade !== null && unidade !== "";
+
+  if (!hasNome && !hasUnidade) return { touched: true, ok: true, nomeSecundario: null, unidadeSecundaria: null };
+  if (hasNome !== hasUnidade) {
+    return {
+      touched: true,
+      ok: false,
+      error:
+        "Para um indicador com 2 valores, informe o nome e a unidade do segundo valor juntos (ou deixe os dois em branco para um indicador com 1 valor só).",
+    };
+  }
+  if (!REUNIAO_INDICATOR_UNIDADES.includes(unidade as (typeof REUNIAO_INDICATOR_UNIDADES)[number])) {
+    return { touched: true, ok: false, error: "Unidade do segundo valor inválida." };
+  }
+  return {
+    touched: true,
+    ok: true,
+    nomeSecundario: nome,
+    unidadeSecundaria: unidade as (typeof REUNIAO_INDICATOR_UNIDADES)[number],
+  };
+}
+
+/**
  * Cria um novo indicador na seção "Fechamento do mês" de uma reunião
  * específica (`meetingKey`) — sempre no fim da lista (maior `order` + 1)
  * daquela empresa+reunião. Extraído aqui porque as 5 rotas
  * POST /api/reuniao/{sub}/indicadores repetem exatamente essa lógica; cada
  * rota só cuida da validação/mensagem de erro específica da sua tela antes
  * de chamar isto.
+ *
+ * `nomeSecundario`/`unidadeSecundaria` são opcionais (indicador "composto",
+ * ver `parseSecondaryIndicatorFields`) — passe `null` nos dois (ou omita) pra
+ * um indicador simples, como todo indicador criado até hoje.
  */
 export async function createReuniaoCustomIndicator(params: {
   empresaId: string;
@@ -340,6 +448,8 @@ export async function createReuniaoCustomIndicator(params: {
   icon: string;
   unidade: (typeof REUNIAO_INDICATOR_UNIDADES)[number];
   valorPadrao: number;
+  nomeSecundario?: string | null;
+  unidadeSecundaria?: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null;
   createdById: string;
 }) {
   const maxOrder = await prisma.reuniaoCustomIndicator.aggregate({
@@ -355,6 +465,8 @@ export async function createReuniaoCustomIndicator(params: {
       icon: params.icon,
       unidade: params.unidade,
       valorPadrao: params.valorPadrao,
+      nomeSecundario: params.nomeSecundario ?? null,
+      unidadeSecundaria: params.unidadeSecundaria ?? null,
       order: (maxOrder._max.order ?? 0) + 1,
       createdById: params.createdById,
     },

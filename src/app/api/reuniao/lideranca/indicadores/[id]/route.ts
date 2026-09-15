@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { findReuniaoCustomIndicatorForMeeting, REUNIAO_INDICATOR_UNIDADES } from "@/lib/reuniao-server";
+import { findReuniaoCustomIndicatorForMeeting, parseSecondaryIndicatorFields, REUNIAO_INDICATOR_UNIDADES } from "@/lib/reuniao-server";
 
 /**
  * Edita nome/unidade/ícone/valor padrão de um indicador já criado — só
@@ -41,6 +41,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     unidade?: (typeof REUNIAO_INDICATOR_UNIDADES)[number];
     icon?: string;
     valorPadrao?: number;
+    nomeSecundario?: string | null;
+    unidadeSecundaria?: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null;
   } = {};
 
   if (body.nome !== undefined) {
@@ -60,6 +62,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.valorPadrao !== undefined && body.valorPadrao !== "") {
     const valorPadrao = Number(body.valorPadrao);
     if (!Number.isNaN(valorPadrao)) data.valorPadrao = valorPadrao;
+  }
+
+  // Segundo valor (indicador "composto") — só mexe quando o body toca em
+  // nomeSecundario/unidadeSecundaria (ver parseSecondaryIndicatorFields);
+  // não tocar mantém o que já está salvo, mesmo padrão dos outros campos
+  // acima.
+  const secondary = parseSecondaryIndicatorFields(body);
+  if (secondary.touched && !secondary.ok) {
+    return NextResponse.json({ error: secondary.error }, { status: 400 });
+  }
+  if (secondary.touched && secondary.ok) {
+    data.nomeSecundario = secondary.nomeSecundario;
+    data.unidadeSecundaria = secondary.unidadeSecundaria;
   }
 
   const updated =

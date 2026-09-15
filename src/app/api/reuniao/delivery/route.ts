@@ -78,7 +78,7 @@ export async function POST(req: Request) {
   // Lista de indicadores da seção "Fechamento do mês" (Cancelamento,
   // Avaliação, Tempo de Entrega, Chamados migrados + qualquer um criado
   // livremente) — nenhuma distinção de código entre eles a partir daqui.
-  const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
+  const customIndicators: { id: string; valor?: string; valorReferencia?: string; valorSecundario?: string }[] = Array.isArray(body.customIndicators)
     ? body.customIndicators
     : [];
   await upsertReuniaoCustomIndicatorValues(empresa.id, "DELIVERY", periodo, customIndicators);
