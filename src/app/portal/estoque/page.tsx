@@ -147,7 +147,7 @@ export default async function EstoquePage() {
   if (Math.abs(diferencaPP) > 3) alertas.push({ label: `Diferença entre estoque físico e sistema acima de 3 p.p.`, tone: "danger" });
 
   return (
-    <PageContainer title="Estoque" subtitle="Visão Geral">
+    <PageContainer title="Estoque" subtitle="Visão geral">
       <div className="space-y-6">
         <EstoqueDashboardClient
           valorTotalEstoque={valorTotalEstoque}

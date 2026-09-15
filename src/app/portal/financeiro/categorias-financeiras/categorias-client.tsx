@@ -175,6 +175,13 @@ export function CategoriasClient({
                 </td>
               </tr>
             ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-6 text-center text-nord-gray">
+                  {search ? "Nenhuma categoria encontrada." : "Nenhuma categoria financeira cadastrada."}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

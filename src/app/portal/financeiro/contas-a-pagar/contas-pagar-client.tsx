@@ -582,15 +582,6 @@ export function ContasPagarClient({
         .input:focus {
           border-color: var(--nord-blue);
         }
-        .input-sm {
-          background: var(--nord-panel);
-          border: 1px solid var(--nord-border);
-          border-radius: 8px;
-          padding: 6px 8px;
-          color: white;
-          font-size: 12px;
-          outline: none;
-        }
       `}</style>
     </Section>
   );

@@ -230,6 +230,13 @@ export function InsumosClient({
         </Link>
       </div>
 
+      {ingredients.length === 0 ? (
+        <div className="nord-card p-8 text-center">
+          <Tag size={28} className="text-nord-gray mx-auto mb-3" />
+          <p className="text-white text-sm font-medium mb-1">Nenhum insumo cadastrado</p>
+          <p className="text-xs text-nord-gray">Cadastre o primeiro insumo para começar a montar as fichas técnicas.</p>
+        </div>
+      ) : (
       <div className="space-y-6">
         {visibleGroups.map((g) => (
           <div key={g.category?.id ?? SEM_CATEGORIA}>
@@ -292,6 +299,7 @@ export function InsumosClient({
           </div>
         ))}
       </div>
+      )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar insumo" : "Novo insumo"}>
         <div className="grid grid-cols-2 gap-3">

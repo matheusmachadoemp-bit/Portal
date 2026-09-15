@@ -110,6 +110,19 @@ select option {
   width: auto;
 }
 
+/* Variante compacta de .input, usada em filtros de tabela (selects/inputs
+   de data em barras de filtro). Antes duplicada localmente em 4 telas do
+   Financeiro (contas a pagar/receber, DRE, fluxo de caixa). */
+.input-sm {
+  background: var(--nord-panel);
+  border: 1px solid var(--nord-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: white;
+  font-size: 12px;
+  outline: none;
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;

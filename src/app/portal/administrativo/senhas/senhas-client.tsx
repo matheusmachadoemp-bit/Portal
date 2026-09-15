@@ -186,6 +186,13 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
                 </td>
               </tr>
             ))}
+            {entries.length === 0 && (
+              <tr>
+                <td colSpan={7} className="py-6 text-center text-nord-gray">
+                  Nenhuma senha cadastrada.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
