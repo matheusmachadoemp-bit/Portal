@@ -8,7 +8,13 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
-import { FechamentoDoMesSection, FechamentoDoMesEditor, useFechamentoDoMes, type FechamentoIndicator } from "@/components/reuniao/fechamento-do-mes";
+import {
+  FechamentoDoMesSection,
+  FechamentoDoMesEditor,
+  useFechamentoDoMes,
+  customIndicatorCards,
+  type FechamentoIndicator,
+} from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import {
   compareToPrevious,
@@ -126,7 +132,7 @@ export function SalaoClient({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
-  const fdm = useFechamentoDoMes("/api/reuniao/salao", initialCustomIndicators);
+  const fdm = useFechamentoDoMes("/api/reuniao/salao", selectedPeriodo, initialCustomIndicators);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -135,6 +141,7 @@ export function SalaoClient({
       return;
     }
     let cancelled = false;
+    const fdmToken = fdm.beginFetch();
     setLoading(true);
     fetch(`/api/reuniao/salao?periodo=${selectedPeriodo}`)
       .then((res) => res.json())
@@ -146,7 +153,7 @@ export function SalaoClient({
         setComentarios(data.comentarios);
         setForm(buildForm(data.current));
         setProdutoForm(buildProdutoForm(data.current));
-        fdm.sync(data.customIndicators ?? []);
+        fdm.sync(fdmToken, data.customIndicators ?? []);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -254,6 +261,7 @@ export function SalaoClient({
   }
 
   async function refresh(targetPeriodo: string) {
+    const fdmToken = fdm.beginFetch();
     const res = await fetch(`/api/reuniao/salao?periodo=${targetPeriodo}`);
     const data = await res.json();
     setMeetings(data.meetings);
@@ -261,7 +269,7 @@ export function SalaoClient({
     setMetrics(data.metrics);
     setMelhorVendedor(data.melhorVendedor);
     setComentarios(data.comentarios);
-    fdm.sync(data.customIndicators ?? []);
+    fdm.sync(fdmToken, data.customIndicators ?? []);
   }
 
   async function submit() {
@@ -397,7 +405,11 @@ export function SalaoClient({
         </div>
       </div>
 
-      <SortableCardGrid storageKey="reuniao-salao-kpi-order" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" items={cards} />
+      <SortableCardGrid
+        storageKey="reuniao-salao-kpi-order"
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+        items={[...cards, ...customIndicatorCards(fdm.customIndicators)]}
+      />
 
       {premiacaoTotal > 0 && (
         <div className="nord-card p-4 flex items-center gap-3 bg-amber-950/10 border-amber-900/40">

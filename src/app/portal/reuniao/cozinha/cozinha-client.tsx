@@ -8,7 +8,13 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
-import { FechamentoDoMesSection, FechamentoDoMesEditor, useFechamentoDoMes, type FechamentoIndicator } from "@/components/reuniao/fechamento-do-mes";
+import {
+  FechamentoDoMesSection,
+  FechamentoDoMesEditor,
+  useFechamentoDoMes,
+  customIndicatorCards,
+  type FechamentoIndicator,
+} from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
 
@@ -69,7 +75,7 @@ export function CozinhaClient({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
-  const fdm = useFechamentoDoMes("/api/reuniao/cozinha", initialCustomIndicators);
+  const fdm = useFechamentoDoMes("/api/reuniao/cozinha", selectedPeriodo, initialCustomIndicators);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -78,6 +84,7 @@ export function CozinhaClient({
       return;
     }
     let cancelled = false;
+    const fdmToken = fdm.beginFetch();
     setLoading(true);
     fetch(`/api/reuniao/cozinha?periodo=${selectedPeriodo}`)
       .then((res) => res.json())
@@ -86,7 +93,7 @@ export function CozinhaClient({
         setCurrent(data.current);
         setMetrics(data.metrics);
         setForm(buildForm(data.current));
-        fdm.sync(data.customIndicators ?? []);
+        fdm.sync(fdmToken, data.customIndicators ?? []);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -180,12 +187,13 @@ export function CozinhaClient({
   }
 
   async function refresh(targetPeriodo: string) {
+    const fdmToken = fdm.beginFetch();
     const res = await fetch(`/api/reuniao/cozinha?periodo=${targetPeriodo}`);
     const data = await res.json();
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
-    fdm.sync(data.customIndicators ?? []);
+    fdm.sync(fdmToken, data.customIndicators ?? []);
   }
 
   async function submit() {
@@ -330,7 +338,7 @@ export function CozinhaClient({
       <SortableCardGrid
         storageKey="reuniao-cozinha-kpi-order"
         className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
-        items={cards}
+        items={[...cards, ...customIndicatorCards(fdm.customIndicators)]}
       />
 
       {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
