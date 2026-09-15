@@ -17,6 +17,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/fechamento-dia/alertas/run",
+      "schedule": "5 3 * * *"
+    },
+    {
       "path": "/api/producao/cron?mode=plan",
       "schedule": "0 4 * * *"
     },

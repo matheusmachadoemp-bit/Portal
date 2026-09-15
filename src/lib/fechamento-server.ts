@@ -1,7 +1,7 @@
 import type { FechamentoOcorrencia } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { spDateKey, spDateTime, spStartOfDay, weekdayFieldFor } from "@/lib/checklist";
-import { computeFechamentoStatus } from "@/lib/fechamento";
+import { spDateKey, spStartOfDay, weekdayFieldFor } from "@/lib/checklist";
+import { computeFechamentoStatus, fechamentoReleaseEDueAt } from "@/lib/fechamento";
 import { createNotification } from "@/lib/notifications";
 import { getStoreManagers } from "@/lib/manutencao-server";
 import { hasModulePermission } from "@/lib/authz";
@@ -86,8 +86,7 @@ export async function generateFechamentoSubmissoes(empresaIds: string[], dateKey
 
   await Promise.all(
     cargos.map((c) => {
-      const releaseAt = spDateTime(dateKey, c.horarioLiberacao);
-      const dueAt = spDateTime(dateKey, c.horarioLimite);
+      const { releaseAt, dueAt } = fechamentoReleaseEDueAt(dateKey, c.horarioLiberacao, c.horarioLimite);
       return prisma.fechamentoSubmissao.upsert({
         where: { cargoId_data: { cargoId: c.id, data: day } },
         update: {},
@@ -459,4 +458,111 @@ export async function getFechamentoResumoData(empresaIds: string[], from: Date, 
     totalSubmissoes: submissoes.length,
     totalOcorrencias: ocorrencias.length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Cron de cobrança — "não enviou até o prazo, avisa o dono" (pedido literal do usuário: "caso
+// não seja feito até 00h, mandar notificação pro dono"). Ver src/app/api/fechamento-dia/alertas/
+// run/route.ts (chamado 1x por dia pelo Vercel Cron, ver vercel.json) e o comentário de
+// `FechamentoEscalationLog` no schema.prisma — a tabela nasceu na Fase 1 exatamente para este
+// motor, implementado só agora.
+// ---------------------------------------------------------------------------
+
+/**
+ * Processa a cobrança diária do Fechamento do Dia: para cada `FechamentoCargo` ativo cujo
+ * fechamento mais recente já deveria ter vencido a esta altura e não foi enviado, notifica
+ * "o dono" (usuários com `role: "ADMINISTRADOR"` — mesma equivalência já usada em outra parte do
+ * Portal) com um link direto pro formulário daquele cargo.
+ *
+ * Diferente do Checklist (`processChecklistEscalations`), que tem uma escada de 5 níveis
+ * (AVISO_ANTES/NO_LIMITE/ATRASO_RESPONSAVEL/ALERTA_CRITICO/NAO_REALIZADO) com destinatários
+ * diferentes por nível, o pedido aqui é só UM aviso — "não fez a tempo, avisa o dono" — então só
+ * um nível é implementado. Reaproveitamos `FechamentoEscalationLog`/`FechamentoEscalationType`
+ * (que já existiam desde a Fase 1, esperando por este motor) com o tipo `ALERTA_CRITICO` — o
+ * nível mais alto do enum, coerente com "chegou direto no dono" — só para dar a este aviso a
+ * MESMA garantia de idempotência que o Checklist já tem (nunca notifica o mesmo destinatário
+ * duas vezes pela mesma submissão, mesmo se este cron for disparado mais de uma vez, ex. num
+ * reteste manual ou retry do Vercel).
+ *
+ * Qual dia checar: todo cargo libera à noite e vence pouco depois da virada do dia (ver
+ * `fechamentoReleaseEDueAt`, em @/lib/fechamento) — ou seja, quando este cron roda (pouco depois
+ * da meia-noite de São Paulo, ver vercel.json), o fechamento cujo prazo acabou de vencer é
+ * sempre o de ONTEM (`dateKey` de hoje MENOS 1 dia), nunca o de hoje (o de hoje só libera à
+ * noite, ainda não venceu). Isso cobre a configuração atual de todos os cargos; se um cargo for
+ * configurado no futuro com um prazo que NÃO cruza a meia-noite (prazo mais cedo no mesmo dia),
+ * ele só seria pego pela execução do dia seguinte — atraso de no máximo 1 execução (1 dia),
+ * aceitável para o pedido atual e documentado aqui para quem mexer nisso depois.
+ *
+ * Não repete o aviso dia após dia enquanto a submissão continuar sem envio: como cada execução
+ * só olha para "ontem" (nunca reavalia um dia mais antigo), o dono é notificado uma única vez
+ * por cargo/dia — a leitura mais direta do pedido original ("avisa quando não foi feito até o
+ * prazo"), não um lembrete recorrente. Se o usuário quiser cobrança repetida enquanto o
+ * fechamento continuar pendente, é um ajuste futuro (ampliar a janela de dias verificados).
+ */
+export async function processFechamentoAlertas(): Promise<{ notified: number; cargosAtrasados: number }> {
+  const now = new Date();
+  const dateKey = spDateKey(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+
+  const empresas = await prisma.empresa.findMany({ where: { active: true }, select: { id: true } });
+  const empresaIds = empresas.map((e) => e.id);
+  if (empresaIds.length === 0) return { notified: 0, cargosAtrasados: 0 };
+
+  // Mesma função usada pela tela de Status do Dia — gera (se faltar) as submissões do dia e
+  // devolve o status já recalculado "ao vivo" (nunca confia só na coluna persistida, que só é
+  // atualizada quando algo relê aquele dia — ver comentário da função).
+  const submissoes = await loadFechamentoSubmissoesDoDia(empresaIds, dateKey);
+  const atrasadas = submissoes.filter((s) => s.status === "ATRASADO");
+  if (atrasadas.length === 0) return { notified: 0, cargosAtrasados: 0 };
+
+  // Nome do cargo/loja para a mensagem — só dos cargos ainda ATIVOS agora (um cargo desativado
+  // depois de gerar a submissão de ontem não deveria gerar cobrança hoje).
+  const cargos = await prisma.fechamentoCargo.findMany({
+    where: { id: { in: atrasadas.map((s) => s.cargoId) }, ativo: true },
+    select: { id: true, nome: true, empresa: { select: { name: true } } },
+  });
+  const cargoPorId = new Map(cargos.map((c) => [c.id, c]));
+
+  const donos = await prisma.user.findMany({ where: { role: "ADMINISTRADOR", active: true }, select: { id: true } });
+  if (donos.length === 0) return { notified: 0, cargosAtrasados: atrasadas.length };
+  const donoIds = donos.map((d) => d.id);
+
+  const [ano, mes, dia] = dateKey.split("-");
+  const dataFormatada = `${dia}/${mes}/${ano}`;
+
+  let notified = 0;
+  for (const submissao of atrasadas) {
+    const cargo = cargoPorId.get(submissao.cargoId);
+    if (!cargo) continue;
+
+    const existentes = await prisma.fechamentoEscalationLog.findMany({
+      where: { submissaoId: submissao.id, tipo: "ALERTA_CRITICO", destinatarioId: { in: donoIds } },
+      select: { destinatarioId: true },
+    });
+    const jaNotificados = new Set(existentes.map((e) => e.destinatarioId));
+    const pendentes = donoIds.filter((id) => !jaNotificados.has(id));
+    if (pendentes.length === 0) continue;
+
+    const url = `/portal/fechamento-dia/${submissao.cargoId}`;
+    const title = "Fechamento do Dia não enviado no prazo";
+    const body = `${cargo.nome} (${cargo.empresa.name}) não enviou o Fechamento do Dia de ${dataFormatada} até o prazo (00h).`;
+
+    await Promise.all(
+      pendentes.map(async (destinatarioId) => {
+        const notification = await createNotification({
+          userId: destinatarioId,
+          type: "FECHAMENTO_NAO_ENVIADO",
+          title,
+          body,
+          priority: "CRITICA",
+          url,
+        });
+        await prisma.fechamentoEscalationLog.create({
+          data: { submissaoId: submissao.id, tipo: "ALERTA_CRITICO", destinatarioId, notificationId: notification.id },
+        });
+      })
+    );
+    notified += pendentes.length;
+  }
+
+  return { notified, cargosAtrasados: atrasadas.length };
 }

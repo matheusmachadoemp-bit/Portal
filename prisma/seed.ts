@@ -888,11 +888,16 @@ async function main() {
           icon: cargoSeed.icon,
           ordem: cargoSeed.ordem,
           // Horário padrão (ajustável depois, na tela de Configurações — fase futura, ou
-          // direto no banco): liberação às 21h, prazo até a virada do dia. `responsavelId`
-          // fica em branco de propósito — o seed não tem como saber quem hoje ocupa cada
-          // cargo em cada loja (ver decisão nº 4 do relatório).
-          horarioLiberacao: "21:00",
-          horarioLimite: "23:59",
+          // direto no banco): libera às 23:35, prazo até a virada do dia (00:00 — cruza a
+          // meia-noite, ver `fechamentoReleaseEDueAt` em @/lib/fechamento), 6x por semana, com
+          // folga só às terças (ajuste pedido pelo usuário depois do padrão inicial
+          // 21:00–23:59/todo dia; `terca: false` é o único dia que diverge do
+          // `@default(true)` do schema para os outros 6). `responsavelId` fica em branco de
+          // propósito — o seed não tem como saber quem hoje ocupa cada cargo em cada loja (ver
+          // decisão nº 4 do relatório).
+          horarioLiberacao: "23:35",
+          horarioLimite: "00:00",
+          terca: false,
           createdById: admin.id,
         },
       });
