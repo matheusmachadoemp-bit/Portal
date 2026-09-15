@@ -116,8 +116,8 @@ function OcorrenciaCard({
         </p>
       )}
       {o.pendencia && (
-        <p className="text-xs text-amber-300">
-          <span className="text-amber-300/70">Pendência: </span>
+        <p className="text-xs text-nord-warning">
+          <span className="text-nord-warning/70">Pendência: </span>
           {o.pendencia}
         </p>
       )}
@@ -308,7 +308,7 @@ export function OcorrenciasClient({
 
       <div
         className={`nord-card p-4 flex items-center gap-2 text-sm ${
-          criticasAbertas > 0 ? "text-nord-danger" : abertas.length > 0 ? "text-amber-400" : "text-nord-gray"
+          criticasAbertas > 0 ? "text-nord-danger" : abertas.length > 0 ? "text-nord-warning" : "text-nord-gray"
         }`}
       >
         {loading && ocorrencias.length === 0 ? (

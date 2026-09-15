@@ -198,7 +198,7 @@ export function PerguntaItem({
                 onChange={(e) => handleUpload(e.target.files?.[0], "fotoUrl")}
               />
             </label>
-            {uploadError && <p className="text-xs text-red-400">{uploadError}</p>}
+            {uploadError && <p className="text-xs text-nord-danger">{uploadError}</p>}
             {valor?.fotoUrl && (
               <a href={valor.fotoUrl} target="_blank" rel="noreferrer" className="block w-fit">
                 <Image
@@ -219,7 +219,7 @@ export function PerguntaItem({
               <Paperclip size={13} /> {uploading ? "Enviando..." : valor?.anexoUrl ? "Trocar anexo" : "Anexar arquivo"}
               <input type="file" className="hidden" disabled={uploading} onChange={(e) => handleUpload(e.target.files?.[0], "anexoUrl")} />
             </label>
-            {uploadError && <p className="text-xs text-red-400">{uploadError}</p>}
+            {uploadError && <p className="text-xs text-nord-danger">{uploadError}</p>}
             {valor?.anexoUrl && (
               <a
                 href={valor.anexoUrl}
@@ -297,20 +297,20 @@ export function PerguntaItem({
   return (
     <div
       className={`nord-card p-4 space-y-3 transition-colors ${indent ? "ml-4 sm:ml-6 border-l-2 border-l-nord-blue/40" : ""} ${
-        destacarErro ? "border-red-500/70" : ""
+        destacarErro ? "border-nord-danger/70" : ""
       }`}
     >
       <div>
         <p className="text-white text-sm font-medium">
           {pergunta.texto}
-          {obrigatoriaAgora && <span className="text-amber-400"> *</span>}
+          {obrigatoriaAgora && <span className="text-nord-warning"> *</span>}
         </p>
         {pergunta.orientacao && <p className="text-xs text-nord-gray mt-0.5">{pergunta.orientacao}</p>}
       </div>
 
       {readOnly ? respondida ? renderLeitura() : <p className="text-sm text-nord-gray italic">Não respondida.</p> : renderEdicao()}
 
-      {destacarErro && <p className="text-xs text-red-400">Essa pergunta precisa de uma resposta.</p>}
+      {destacarErro && <p className="text-xs text-nord-danger">Essa pergunta precisa de uma resposta.</p>}
     </div>
   );
 }

@@ -119,9 +119,9 @@ export function GarconsImportButton({ canCreate = true }: { canCreate?: boolean 
               className="input"
             />
           </label>
-          {importError && <p className="text-xs text-red-400">{importError}</p>}
+          {importError && <p className="text-xs text-nord-danger">{importError}</p>}
           {importResult && (
-            <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
+            <div className="text-xs bg-nord-success/10 border border-nord-success/30 rounded-lg px-3 py-2 text-nord-success space-y-1">
               <p>
                 Importação concluída: {importResult.itens} linha(s), {importResult.garcons} garçom(s), somando{" "}
                 {formatCurrency(importResult.faturamentoTotal)}.
