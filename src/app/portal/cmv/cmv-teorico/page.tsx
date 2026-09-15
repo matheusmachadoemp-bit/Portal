@@ -1,15 +1,11 @@
-import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { CmvTeoricoClient } from "./cmv-teorico-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { productTotalCost, cmvPercent, PRODUCT_CATEGORY_LABEL } from "@/lib/ficha";
-import { cmvTeoricoPercentCatalogo } from "@/lib/cmv";
-import { subDays } from "date-fns";
+import { computeCmvTeorico } from "@/lib/cmv-server";
+import { listClosedMonths } from "@/lib/closed-period-filter";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
-
-const PERIOD_DAYS = 30;
 
 export default async function CmvTeoricoPage() {
   const session = await auth();
@@ -19,47 +15,25 @@ export default async function CmvTeoricoPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const now = new Date();
-  const since = subDays(now, PERIOD_DAYS);
   const metaCmvPercent = ctx?.mode === "single" ? ctx.empresa.metaCmvPercent : 30;
 
-  const [products, salesEntries] = await Promise.all([
-    prisma.product.findMany({ where: { empresaId: { in: empresaIds } }, include: { ingredients: { include: { ingredient: true } } } }),
-    prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: since } } }),
-  ]);
-
-  const productsWithCost = products.map((p) => ({ ...p, totalCost: productTotalCost(p.ingredients) }));
-  const cmvTeoricoPercent = cmvTeoricoPercentCatalogo(productsWithCost);
-  const faturamentoPeriodo = salesEntries.reduce((s, e) => s + e.faturamentoDelivery + e.faturamentoSalao, 0);
-  const custoTeoricoTotal = (cmvTeoricoPercent / 100) * faturamentoPeriodo;
-
-  const categoriaChart = Object.entries(PRODUCT_CATEGORY_LABEL)
-    .map(([key, label]) => {
-      const items = productsWithCost.filter((p) => p.category === key && p.precoVenda > 0);
-      return { name: label, value: Math.round(cmvTeoricoPercentCatalogo(items) * 10) / 10, produtos: items.length };
-    })
-    .filter((c) => c.produtos > 0);
-
-  const produtosMaiorImpacto = productsWithCost
-    .filter((p) => p.precoVenda > 0)
-    .map((p) => ({ id: p.id, name: p.name, cmv: cmvPercent(p.totalCost, p.precoVenda), custo: p.totalCost, precoVenda: p.precoVenda }))
-    .filter((p) => p.cmv > metaCmvPercent)
-    .sort((a, b) => b.cmv - a.cmv);
-
-  const produtosSemFicha = products.filter((p) => p.ingredients.length === 0).map((p) => ({ id: p.id, name: p.name }));
+  const mesFechado = listClosedMonths(1)[0];
+  const result = await computeCmvTeorico(empresaIds, mesFechado.from, mesFechado.to, metaCmvPercent);
 
   return (
     <PageContainer title="CMV" subtitle="CMV Teórico" backHref="/portal/cmv" backLabel="CMV">
       <div className="space-y-6">
         <CmvTeoricoClient
-          faturamentoPeriodo={faturamentoPeriodo}
-          custoTeoricoTotal={custoTeoricoTotal}
-          cmvTeoricoPercent={cmvTeoricoPercent}
+          faturamentoPeriodo={result.faturamentoPeriodo}
+          custoTeoricoTotal={result.custoTeoricoTotal}
+          cmvTeoricoPercent={result.cmvTeoricoPercent}
           metaCmvPercent={metaCmvPercent}
-          categoriaChart={categoriaChart}
-          produtosMaiorImpacto={produtosMaiorImpacto}
-          produtosSemFicha={produtosSemFicha}
-          periodDays={PERIOD_DAYS}
+          categoriaChart={result.categoriaChart}
+          produtosMaiorImpacto={result.produtosMaiorImpacto}
+          produtosSemFicha={result.produtosSemFicha}
+          initialMode="mes"
+          initialKey={mesFechado.key}
+          initialLabel={mesFechado.label}
         />
       </div>
     </PageContainer>
