@@ -102,7 +102,7 @@ export function VendaAcumuladaClient({
       />
 
       {!canCreate && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas.
         </p>
       )}
@@ -123,7 +123,7 @@ export function VendaAcumuladaClient({
             <div key={t.threshold} className="rounded-lg border border-nord-border p-3 text-center">
               <p className="text-white text-sm font-medium">{formatCurrency(t.threshold)}</p>
               <p className="text-[11px] text-nord-gray">vendidos</p>
-              <p className="text-emerald-400 text-xs font-medium mt-1">bônus de {formatCurrency(t.bonus)}</p>
+              <p className="text-nord-success text-xs font-medium mt-1">bônus de {formatCurrency(t.bonus)}</p>
             </div>
           ))}
         </div>
@@ -198,9 +198,9 @@ export function VendaAcumuladaClient({
               <div key={e.id} className="flex items-center justify-between gap-3 text-xs border-b border-nord-border/60 py-2 last:border-0">
                 <span className="text-white flex-1 truncate">{e.employeeName}</span>
                 <span className="text-nord-gray">{format(new Date(e.date), "dd/MM/yyyy")}</span>
-                <span className="text-emerald-400 font-medium w-28 text-right">{formatCurrency(e.amount)}</span>
+                <span className="text-nord-success font-medium w-28 text-right">{formatCurrency(e.amount)}</span>
                 {canCreate && (
-                  <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-red-400">
+                  <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-nord-danger">
                     <Trash2 size={13} />
                   </button>
                 )}

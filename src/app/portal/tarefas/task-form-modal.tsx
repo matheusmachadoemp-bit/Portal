@@ -370,7 +370,7 @@ export function TaskFormModal({
               {form.checklist.map((item, idx) => (
                 <li key={idx} className="flex items-center justify-between text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
                   <span className="text-white">{item}</span>
-                  <button type="button" onClick={() => removeChecklistItem(idx)} className="text-nord-gray hover:text-red-400">
+                  <button type="button" onClick={() => removeChecklistItem(idx)} className="text-nord-gray hover:text-nord-danger">
                     <X size={12} />
                   </button>
                 </li>
@@ -390,7 +390,7 @@ export function TaskFormModal({
               {form.attachments.map((a, idx) => (
                 <li key={idx} className="flex items-center justify-between text-xs bg-white/5 rounded-lg px-2.5 py-1.5">
                   <span className="text-white truncate max-w-[80%]">{a.name}</span>
-                  <button type="button" onClick={() => removeAttachment(idx)} className="text-nord-gray hover:text-red-400">
+                  <button type="button" onClick={() => removeAttachment(idx)} className="text-nord-gray hover:text-nord-danger">
                     <X size={12} />
                   </button>
                 </li>

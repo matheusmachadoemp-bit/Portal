@@ -98,7 +98,7 @@ export function DashboardClient({
               {atrasados > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-sm text-white">
-                    <AlertTriangle size={14} className="text-red-400" /> {atrasados} colaborador(es) com cursos obrigatórios atrasados
+                    <AlertTriangle size={14} className="text-nord-danger" /> {atrasados} colaborador(es) com cursos obrigatórios atrasados
                   </span>
                   <Link href="/portal/universidade/gestor" className="text-xs text-nord-blue-light hover:text-white flex items-center gap-1">
                     Ver detalhes <ArrowRight size={11} />
@@ -108,7 +108,7 @@ export function DashboardClient({
               {avaliacoesPendentes > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-sm text-white">
-                    <ClipboardCheck size={14} className="text-amber-400" /> {avaliacoesPendentes} avaliação(ões) reprovada(s) aguardando nova tentativa
+                    <ClipboardCheck size={14} className="text-nord-warning" /> {avaliacoesPendentes} avaliação(ões) reprovada(s) aguardando nova tentativa
                   </span>
                 </div>
               )}

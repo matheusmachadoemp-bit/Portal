@@ -192,7 +192,7 @@ export function PlayerClient({
                         }`}
                       >
                         {prog?.completed ? (
-                          <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                          <CheckCircle2 size={14} className="text-nord-success shrink-0" />
                         ) : (
                           <Circle size={14} className="shrink-0" />
                         )}
@@ -211,7 +211,7 @@ export function PlayerClient({
                     >
                       <Award size={14} className="shrink-0" />
                       <span className="flex-1">Avaliação do módulo</span>
-                      {moduleEnrollment?.certificateCode && <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />}
+                      {moduleEnrollment?.certificateCode && <CheckCircle2 size={12} className="text-nord-success shrink-0" />}
                     </button>
                   )}
                 </div>
@@ -227,7 +227,7 @@ export function PlayerClient({
                 key={c.moduleId}
                 href={`/certificado/${c.certificateCode}`}
                 target="_blank"
-                className="flex items-center justify-center gap-1.5 text-xs bg-emerald-600/20 text-emerald-400 rounded-lg py-2 font-medium hover:bg-emerald-600/30"
+                className="flex items-center justify-center gap-1.5 text-xs bg-nord-success/20 text-nord-success rounded-lg py-2 font-medium hover:bg-nord-success/30"
               >
                 <Award size={13} /> Ver certificado
               </Link>
@@ -313,8 +313,8 @@ export function PlayerClient({
             </p>
 
             {quizResult ? (
-              <div className={`nord-card p-5 text-center ${quizResult.passed ? "border-emerald-500/40" : "border-red-500/40"}`}>
-                <p className={`text-2xl font-semibold mb-1 ${quizResult.passed ? "text-emerald-400" : "text-red-400"}`}>{quizResult.score}%</p>
+              <div className={`nord-card p-5 text-center ${quizResult.passed ? "border-nord-success/40" : "border-nord-danger/40"}`}>
+                <p className={`text-2xl font-semibold mb-1 ${quizResult.passed ? "text-nord-success" : "text-nord-danger"}`}>{quizResult.score}%</p>
                 <p className="text-sm text-white mb-3">{quizResult.passed ? "Aprovado! 🎉" : "Reprovado — reveja o módulo e tente novamente."}</p>
                 {!quizResult.passed &&
                   (moduleEnrollmentByModuleId.get(activeQuizModule.id)?.attemptsUsed ?? 0) < activeQuizModule.quiz.maxAttempts && (
@@ -354,7 +354,7 @@ export function PlayerClient({
                     )}
                   </div>
                 ))}
-                {quizError && <p className="text-xs text-red-400">{quizError}</p>}
+                {quizError && <p className="text-xs text-nord-danger">{quizError}</p>}
                 <button
                   onClick={submitQuiz}
                   disabled={submitting}

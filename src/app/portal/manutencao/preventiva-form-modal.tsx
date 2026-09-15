@@ -198,7 +198,7 @@ export function PreventivaFormModal({
               {checklist.map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between text-xs bg-nord-panel border border-nord-border rounded-lg px-2 py-1.5">
                   <span className="text-white">{item}</span>
-                  <button onClick={() => setChecklist((prev) => prev.filter((_, i) => i !== idx))} className="text-nord-gray hover:text-red-400">
+                  <button onClick={() => setChecklist((prev) => prev.filter((_, i) => i !== idx))} className="text-nord-gray hover:text-nord-danger">
                     <X size={12} />
                   </button>
                 </div>

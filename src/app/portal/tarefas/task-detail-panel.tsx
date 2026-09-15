@@ -245,7 +245,7 @@ export function TaskDetailPanel({
             </span>
             <SectorBadge sectorKey={task.sectorKey} />
             {task.dueDate && (
-              <span className={`text-xs ${task.overdue ? "text-red-400 font-medium" : "text-nord-gray"}`}>
+              <span className={`text-xs ${task.overdue ? "text-nord-danger font-medium" : "text-nord-gray"}`}>
                 Prazo: {new Date(task.dueDate).toLocaleDateString("pt-BR")}
                 {task.dueTime ? ` ${task.dueTime}` : ""}
               </span>
@@ -373,7 +373,7 @@ export function TaskDetailPanel({
                   <button
                     onClick={() => setShowRejectBox(true)}
                     disabled={busy}
-                    className="px-4 py-2 text-sm rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40"
+                    className="px-4 py-2 text-sm rounded-lg border border-nord-danger/30 text-nord-danger hover:bg-nord-danger/10"
                   >
                     Reprovar
                   </button>
@@ -387,7 +387,7 @@ export function TaskDetailPanel({
                     className="input w-full min-h-[60px]"
                   />
                   <div className="flex gap-2">
-                    <button onClick={() => handleValidar(false)} disabled={busy || !rejectReason.trim()} className="btn-primary disabled:opacity-50 bg-red-600 hover:bg-red-500">
+                    <button onClick={() => handleValidar(false)} disabled={busy || !rejectReason.trim()} className="btn-primary disabled:opacity-50 bg-nord-danger/90 hover:bg-nord-danger">
                       Confirmar reprovação
                     </button>
                     <button onClick={() => setShowRejectBox(false)} className="btn-outline">

@@ -402,7 +402,7 @@ export function CourseBuilderModal({
                   <span className="text-[11px] text-nord-gray whitespace-nowrap px-1">
                     {m.lessons.filter((l) => l.title.trim()).length} aula(s){m.hasQuiz ? " · com avaliação" : ""}
                   </span>
-                  <button onClick={() => removeModule(modIdx)} className="text-nord-gray hover:text-red-400 shrink-0">
+                  <button onClick={() => removeModule(modIdx)} className="text-nord-gray hover:text-nord-danger shrink-0">
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -451,7 +451,7 @@ export function CourseBuilderModal({
                                   <option key={t.key} value={t.key}>{t.label}</option>
                                 ))}
                               </select>
-                              <button onClick={() => removeLesson(modIdx, lessonIdx)} className="text-nord-gray hover:text-red-400 shrink-0">
+                              <button onClick={() => removeLesson(modIdx, lessonIdx)} className="text-nord-gray hover:text-nord-danger shrink-0">
                                 <Trash2 size={14} />
                               </button>
                             </div>
@@ -560,7 +560,7 @@ export function CourseBuilderModal({
                                     <option key={t.key} value={t.key}>{t.label}</option>
                                   ))}
                                 </select>
-                                <button onClick={() => removeQuestion(modIdx, qIdx)} className="text-nord-gray hover:text-red-400 shrink-0">
+                                <button onClick={() => removeQuestion(modIdx, qIdx)} className="text-nord-gray hover:text-nord-danger shrink-0">
                                   <Trash2 size={14} />
                                 </button>
                               </div>
@@ -572,7 +572,7 @@ export function CourseBuilderModal({
                                         type="radio"
                                         checked={o.correct}
                                         onChange={() => updateOption(modIdx, qIdx, oIdx, { correct: true })}
-                                        className="accent-emerald-500"
+                                        className="accent-nord-success"
                                       />
                                       <input
                                         value={o.text}
@@ -580,7 +580,7 @@ export function CourseBuilderModal({
                                         placeholder="Alternativa"
                                         className="input flex-1"
                                       />
-                                      <button onClick={() => removeOption(modIdx, qIdx, oIdx)} className="text-nord-gray hover:text-red-400">
+                                      <button onClick={() => removeOption(modIdx, qIdx, oIdx)} className="text-nord-gray hover:text-nord-danger">
                                         <Trash2 size={12} />
                                       </button>
                                     </div>
