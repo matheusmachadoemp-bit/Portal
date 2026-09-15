@@ -9,6 +9,7 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
+import { customIndicatorCards } from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
 import type { GerenteCustomIndicatorDTO } from "@/lib/reuniao-server";
@@ -548,7 +549,7 @@ export function GerenteClient({
       <SortableCardGrid
         storageKey="reuniao-gerente-kpi-order"
         className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
-        items={cards}
+        items={[...cards, ...customIndicatorCards(customIndicators)]}
       />
 
       {/* "Fechamento do mês" (antiga "Metas e premiação"): lista única de indicadores —
