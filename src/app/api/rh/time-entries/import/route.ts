@@ -205,22 +205,42 @@ export async function POST(req: Request) {
       });
     }
     if (toUpdate.length > 0) {
-      await prisma.$transaction(
-        toUpdate.map((e) =>
-          prisma.timeEntry.update({
-            where: { employeeId_date: { employeeId: e.employeeId, date: e.date } },
-            data: {
-              entrada: e.entrada,
-              saidaAlmoco: e.saidaAlmoco,
-              retornoAlmoco: e.retornoAlmoco,
-              saida: e.saida,
-              horasTrabalhadas: e.horasTrabalhadas,
-              atrasoMinutos: e.atrasoMinutos,
-              falta: e.falta,
-            },
-          })
-        )
-      );
+      // Uma única query SQL (`UPDATE ... FROM UNNEST(...)`) em vez de
+      // `prisma.$transaction(toUpdate.map((e) => prisma.timeEntry.update(...)))`
+      // — a API de "sequential operations" do Prisma, que roda cada update
+      // um atrás do outro dentro de uma transação interativa com timeout
+      // padrão de 5s. Reimportar uma planilha de ponto de um período já
+      // importado facilmente gera centenas de linhas de update (mesmo bug
+      // encontrado e corrigido em `syncEmpresaSaiposSales`, ver
+      // `src/lib/saipos-sync.ts`), e isso derrubaria a importação inteira
+      // sem atualizar nada.
+      const employeeIds = toUpdate.map((e) => e.employeeId);
+      const dates = toUpdate.map((e) => e.date);
+      const entradas = toUpdate.map((e) => e.entrada);
+      const saidasAlmoco = toUpdate.map((e) => e.saidaAlmoco);
+      const retornosAlmoco = toUpdate.map((e) => e.retornoAlmoco);
+      const saidas = toUpdate.map((e) => e.saida);
+      const horasTrabalhadas = toUpdate.map((e) => e.horasTrabalhadas);
+      const atrasosMinutos = toUpdate.map((e) => e.atrasoMinutos);
+      const faltas = toUpdate.map((e) => e.falta);
+
+      await prisma.$executeRaw`
+        UPDATE "TimeEntry" AS t
+        SET
+          "entrada" = v.entrada,
+          "saidaAlmoco" = v.saida_almoco,
+          "retornoAlmoco" = v.retorno_almoco,
+          "saida" = v.saida,
+          "horasTrabalhadas" = v.horas_trabalhadas,
+          "atrasoMinutos" = v.atraso_minutos,
+          "falta" = v.falta
+        FROM UNNEST(
+          ${employeeIds}::text[], ${dates}::timestamp[], ${entradas}::text[],
+          ${saidasAlmoco}::text[], ${retornosAlmoco}::text[], ${saidas}::text[],
+          ${horasTrabalhadas}::float8[], ${atrasosMinutos}::int[], ${faltas}::boolean[]
+        ) AS v(employee_id, date, entrada, saida_almoco, retorno_almoco, saida, horas_trabalhadas, atraso_minutos, falta)
+        WHERE t."employeeId" = v.employee_id AND t."date" = v.date
+      `;
     }
     imported = validEntries.length;
   }

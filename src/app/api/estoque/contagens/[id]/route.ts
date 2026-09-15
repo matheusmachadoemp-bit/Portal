@@ -110,12 +110,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data.aprovadoEm = new Date();
 
     const fresh = await prisma.stockCountItem.findMany({ where: { countId: id }, include: { ingredient: true } });
-    const ops = fresh
-      .filter((i) => i.quantidadeContada !== null && i.quantidadeContada !== undefined)
-      .flatMap((i) => [
-        prisma.ingredient.update({ where: { id: i.ingredientId }, data: { estoqueAtual: i.quantidadeContada! } }),
-        prisma.stockMovement.create({
-          data: {
+    const approvedItems = fresh.filter((i) => i.quantidadeContada !== null && i.quantidadeContada !== undefined);
+
+    if (approvedItems.length > 0) {
+      // Antes disso, cada item contado virava 3 operações (update do estoque
+      // do ingrediente, create do movimento, update do status do item) dentro
+      // de um único array passado pra `prisma.$transaction(ops)` — a API de
+      // "sequential operations" do Prisma, que roda cada operação uma atrás
+      // da outra dentro de uma transação interativa com timeout padrão de 5s.
+      // Uma contagem mensal cobre todo o estoque da loja (facilmente
+      // centenas de ingredientes), e isso derrubaria a aprovação inteira sem
+      // nada aplicado (mesmo bug encontrado e corrigido em
+      // `syncEmpresaSaiposSales`, ver `src/lib/saipos-sync.ts`). Agora são só
+      // 3 operações no total — 1 create em lote, 1 update em lote via SQL
+      // cru e 1 updateMany — continuando atômicas entre si porque ainda
+      // rodam dentro de `$transaction`, só que sem o custo de N idas ao
+      // banco.
+      const ingredientIds = approvedItems.map((i) => i.ingredientId);
+      const quantidades = approvedItems.map((i) => i.quantidadeContada!);
+      const itemIds = approvedItems.map((i) => i.id);
+      const autorizadoPor = data.aprovadoPor as string;
+
+      await prisma.$transaction([
+        prisma.stockMovement.createMany({
+          data: approvedItems.map((i) => ({
             ingredientId: i.ingredientId,
             empresaId: existing.empresaId,
             type: "INVENTARIO",
@@ -123,13 +141,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             estoqueApos: i.quantidadeContada!,
             motivo: `Contagem ${existing.type === "MENSAL" ? "mensal" : "semanal"} aprovada`,
             origin: "CONTAGEM",
-            autorizadoPor: data.aprovadoPor as string,
+            autorizadoPor,
             createdById: session.user.id,
-          },
+          })),
         }),
-        prisma.stockCountItem.update({ where: { id: i.id }, data: { status: "APROVADO" } }),
+        prisma.$executeRaw`
+          UPDATE "Ingredient" AS ing
+          SET "estoqueAtual" = v.estoque_atual
+          FROM UNNEST(${ingredientIds}::text[], ${quantidades}::float8[]) AS v(ingredient_id, estoque_atual)
+          WHERE ing."id" = v.ingredient_id
+        `,
+        prisma.stockCountItem.updateMany({
+          where: { id: { in: itemIds } },
+          data: { status: "APROVADO" },
+        }),
       ]);
-    if (ops.length) await prisma.$transaction(ops);
+    }
   }
 
   if (novoStatus === "REABERTA") {

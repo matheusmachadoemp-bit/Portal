@@ -8,6 +8,56 @@ import type { Empresa } from "@prisma/client";
 export type SaiposSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
 
 /**
+ * Atualiza em lote as vendas da Saipos já existentes com uma única query SQL
+ * (`UPDATE ... FROM UNNEST(...)`), no mesmo espírito de
+ * `upsertMetaAdsInsightRows` em `meta-ads-sync.ts`. A versão anterior usava
+ * `prisma.$transaction(toUpdate.map((data) => prisma.saiposSale.update(...)))`
+ * — a API de "sequential operations" do Prisma, que roda cada update um
+ * atrás do outro dentro de uma única transação interativa com timeout padrão
+ * de 5s. Com a janela de sync padrão de 2 dias, uma loja com bom volume de
+ * vendas facilmente tem centenas de vendas repetidas nesse intervalo — cada
+ * uma virando 1 UPDATE sequencial contra o Neon (latência de rede maior que
+ * um Postgres local) — e o tempo total passava dos 5s, derrubando a
+ * transação inteira (e a sincronização inteira, sem nenhum dado atualizado).
+ * Este bulk update roda como uma única query normal (nunca uma transação
+ * interativa, então nunca tem esse timeout) e usa apenas 9 parâmetros
+ * (um array por coluna) não importa quantas linhas existam — não depende do
+ * volume de vendas para não estourar.
+ */
+async function bulkUpdateSaiposSales(empresaId: string, rows: ReturnType<typeof toSaiposSaleData>[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  const saiposIds = rows.map((r) => r.saiposId);
+  const shiftDates = rows.map((r) => r.shiftDate);
+  const dateTimes = rows.map((r) => r.dateTime);
+  const channels = rows.map((r) => r.channel);
+  const platforms = rows.map((r) => r.platform);
+  const formasPagamento = rows.map((r) => r.formaPagamento);
+  const valoresTotal = rows.map((r) => r.valorTotal);
+  const cancelados = rows.map((r) => r.cancelado);
+  const raws = rows.map((r) => JSON.stringify(r.raw ?? null));
+
+  await prisma.$executeRaw`
+    UPDATE "SaiposSale" AS s
+    SET
+      "shiftDate" = v.shift_date,
+      "dateTime" = v.date_time,
+      "channel" = v.channel::"SaleChannel",
+      "platform" = v.platform::"SalePlatform",
+      "formaPagamento" = v.forma_pagamento::"PaymentMethod",
+      "valorTotal" = v.valor_total,
+      "cancelado" = v.cancelado,
+      "raw" = v.raw_txt::jsonb
+    FROM UNNEST(
+      ${saiposIds}::text[], ${shiftDates}::timestamp[], ${dateTimes}::timestamp[],
+      ${channels}::text[], ${platforms}::text[], ${formasPagamento}::text[],
+      ${valoresTotal}::float8[], ${cancelados}::boolean[], ${raws}::text[]
+    ) AS v(saipos_id, shift_date, date_time, channel, platform, forma_pagamento, valor_total, cancelado, raw_txt)
+    WHERE s."empresaId" = ${empresaId} AND s."saiposId" = v.saipos_id
+  `;
+}
+
+/**
  * Sincroniza as vendas da Saipos de uma empresa para um intervalo de datas
  * (máx. 15 dias, conforme limite da API). Faz upsert por `saiposId` para
  * ser seguro re-executar sobre o mesmo período.
@@ -78,14 +128,7 @@ export async function syncEmpresaSaiposSales(
         await prisma.saiposSale.createMany({ data: toCreate, skipDuplicates: true });
       }
       if (toUpdate.length > 0) {
-        await prisma.$transaction(
-          toUpdate.map((data) =>
-            prisma.saiposSale.update({
-              where: { empresaId_saiposId: { empresaId: empresa.id, saiposId: data.saiposId } },
-              data,
-            })
-          )
-        );
+        await bulkUpdateSaiposSales(empresa.id, toUpdate);
       }
     }
 

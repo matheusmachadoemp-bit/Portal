@@ -41,37 +41,58 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Apenas a loja de destino pode confirmar o recebimento desta transferência." }, { status: 403 });
   }
 
+  // Antes disso, cada item da transferência virava 2-3 operações (create do
+  // movimento, update do estoque do ingrediente, update da quantidade
+  // recebida) empilhadas num único array passado pra `prisma.$transaction(ops)`
+  // — a API de "sequential operations" do Prisma, que roda cada operação uma
+  // atrás da outra dentro de uma transação interativa com timeout padrão de
+  // 5s. Uma transferência pode incluir um número grande de ingredientes (até
+  // o catálogo inteiro da loja), e isso derrubaria a operação inteira sem
+  // nada aplicado (mesmo bug encontrado e corrigido em
+  // `syncEmpresaSaiposSales`, ver `src/lib/saipos-sync.ts`). Agora o número
+  // de operações dentro da transação é constante (no máximo 3), não importa
+  // quantos itens a transferência tenha.
   const ops = [];
 
-  if (disparaSaida) {
-    for (const item of existing.items) {
-      ops.push(
-        prisma.stockMovement.create({
-          data: {
-            ingredientId: item.ingredientId,
-            empresaId: existing.origemEmpresaId,
-            type: "TRANSFERENCIA",
-            quantidade: item.quantidadeEnviada,
-            estoqueApos: Math.max(0, item.ingredient.estoqueAtual - item.quantidadeEnviada),
-            motivo: `Transferência enviada para ${existing.destinoEmpresa.name}`,
-            origin: "TRANSFERENCIA_ENVIADA",
-            destino: existing.destinoEmpresa.name,
-            autorizadoPor: body.responsavelEnvio || session.user.name || null,
-            createdById: session.user.id,
-          },
-        }),
-        prisma.ingredient.update({
-          where: { id: item.ingredientId },
-          data: { estoqueAtual: Math.max(0, item.ingredient.estoqueAtual - item.quantidadeEnviada) },
-        })
-      );
-    }
+  if (disparaSaida && existing.items.length > 0) {
+    const ingredientIds = existing.items.map((item) => item.ingredientId);
+    const novosEstoques = existing.items.map((item) => Math.max(0, item.ingredient.estoqueAtual - item.quantidadeEnviada));
+
+    ops.push(
+      prisma.stockMovement.createMany({
+        data: existing.items.map((item, idx) => ({
+          ingredientId: item.ingredientId,
+          empresaId: existing.origemEmpresaId,
+          type: "TRANSFERENCIA",
+          quantidade: item.quantidadeEnviada,
+          estoqueApos: novosEstoques[idx],
+          motivo: `Transferência enviada para ${existing.destinoEmpresa.name}`,
+          origin: "TRANSFERENCIA_ENVIADA",
+          destino: existing.destinoEmpresa.name,
+          autorizadoPor: body.responsavelEnvio || session.user.name || null,
+          createdById: session.user.id,
+        })),
+      }),
+      prisma.$executeRaw`
+        UPDATE "Ingredient" AS ing
+        SET "estoqueAtual" = v.estoque_atual
+        FROM UNNEST(${ingredientIds}::text[], ${novosEstoques}::float8[]) AS v(ingredient_id, estoque_atual)
+        WHERE ing."id" = v.ingredient_id
+      `
+    );
   }
 
-  if (novoStatus === "RECEBIDA" && Array.isArray(body.quantidadesRecebidas)) {
-    for (const q of body.quantidadesRecebidas as { itemId: string; quantidade: number }[]) {
-      ops.push(prisma.transferItem.update({ where: { id: q.itemId }, data: { quantidadeRecebida: Number(q.quantidade) } }));
-    }
+  if (novoStatus === "RECEBIDA" && Array.isArray(body.quantidadesRecebidas) && body.quantidadesRecebidas.length > 0) {
+    const recebidas = body.quantidadesRecebidas as { itemId: string; quantidade: number }[];
+    const itemIds = recebidas.map((q) => q.itemId);
+    const quantidades = recebidas.map((q) => Number(q.quantidade) || 0);
+
+    ops.push(prisma.$executeRaw`
+      UPDATE "TransferItem" AS ti
+      SET "quantidadeRecebida" = v.quantidade
+      FROM UNNEST(${itemIds}::text[], ${quantidades}::float8[]) AS v(item_id, quantidade)
+      WHERE ti."id" = v.item_id
+    `);
   }
 
   ops.push(
