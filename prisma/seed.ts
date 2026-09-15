@@ -247,6 +247,24 @@ const CATEGORIES = [
     // vira só um agrupador visual das subcategorias. A subcategoria "Tarefas" (mesma key da
     // categoria, rota /portal/tarefas/tarefas — ver src/app/portal/tarefas/tarefas/page.tsx,
     // que reexporta a mesma página) é quem leva pro quadro principal agora.
+    //
+    // "Ocorrências" e "Perguntas" foram incorporadas aqui vindas da categoria "Fechamento do
+    // Dia" (que deixou de existir como categoria própria do menu — ver migration de dado
+    // prisma/migrations/20260915190000_unifica_fechamento_dia_em_tarefas). Isso é só a Fase 1
+    // (dado/menu) da unificação: a pasta de rota física (src/app/portal/fechamento-dia/**) e o
+    // conteúdo das telas continuam exatamente onde estavam — mover isso é a Fase 2, do Caio.
+    // As rotas de API (src/app/api/fechamento-dia/**) e o módulo de permissões
+    // ("fechamento-dia", "fechamento-dia:ocorrencias"/"perguntas" em src/lib/permissions.ts)
+    // também não mudam de nome — o GATE REAL de tela/API é totalmente independente do menu
+    // lateral (buildVisibilityResolver/hasModulePermission usam a chave literal
+    // "fechamento-dia", nunca derivada de Category.key). Só a VISIBILIDADE DO LINK no menu é
+    // derivada de Category.key/Subcategory.key (chave composta `${categoria.key}:
+    // ${subcategoria.key}`, ver src/app/portal/layout.tsx) — por isso as linhas de
+    // ModulePermission "tarefas:ocorrencias"/"tarefas:perguntas" logo abaixo, no loop de
+    // PERMISSION_PROFILES, replicam os mesmos flags de "fechamento-dia:ocorrencias"/
+    // "fechamento-dia:perguntas" para preservar exatamente a mesma visibilidade de antes
+    // (só administrador/gestor/gerente/supervisor veem o link; líder/funcionário/marketing/
+    // financeiro não).
     key: "tarefas",
     name: "Tarefas",
     icon: "ListChecks",
@@ -256,6 +274,8 @@ const CATEGORIES = [
     subs: [
       { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
       { key: "checklist", name: "Checklist", icon: "ClipboardCheck" },
+      { key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" },
+      { key: "perguntas", name: "Perguntas", icon: "ListChecks" },
     ],
   },
   {
@@ -302,44 +322,6 @@ const CATEGORIES = [
       { key: "meus-resgates", name: "Meus Resgates", icon: "PackageCheck" },
       { key: "gestao", name: "Gestão", icon: "Settings" },
       { key: "regras", name: "Regras de Pontuação", icon: "BookOpen" },
-    ],
-  },
-  {
-    // Fase 4 (Parte 1): item de menu do módulo já existente desde a Fase 1 (schema/seed/rotas
-    // criados então; a chave "fechamento-dia" já era usada por MODULES, em
-    // src/lib/permissions.ts, e pelas rotas /api/fechamento-dia/**, então precisa ser
-    // exatamente esta aqui, sem variação). Só UMA subcategoria própria ("Ocorrências") — de
-    // propósito, sem uma segunda subcategoria "Status do Dia":
-    //
-    // - Clicar na CATEGORIA em si (não numa subcategoria) sempre navega para
-    //   `/portal/${cat.key}` (ver `CategoryRow` em src/components/sidebar/sidebar.tsx, linha
-    //   ~455: `router.push(`/portal/${cat.key}`)`, incondicional, com ou sem subcategorias) —
-    //   ou seja, "Fechamento do Dia" já leva direto para `/portal/fechamento-dia` (a tela
-    //   "Status do Dia" que o Caio construiu na Fase 2) sem precisar de nenhuma subcategoria
-    //   para isso.
-    // - Toda SUBCATEGORIA, por outro lado, sempre navega para `/portal/${cat.key}/${sub.key}`
-    //   (`SubRow`, mesma linha ~564) — não existe jeito de uma subcategoria apontar para a
-    //   rota "nua" da categoria (Subcategory não tem nenhum campo de URL própria no schema).
-    //   Uma suposta subcategoria "Status do Dia" (key ex.: "status-do-dia") cairia em
-    //   `/portal/fechamento-dia/status-do-dia`, uma rota que não existe (404) — o pedido
-    //   original citava essa subcategoria apontando pra `/portal/fechamento-dia`, que já é a
-    //   rota da categoria.
-    // - Isso é exatamente o padrão já usado por "Tarefas" (bare `/portal/tarefas` = quadro
-    //   principal de tarefas, com UMA subcategoria "Checklist" apontando para
-    //   `/portal/tarefas/checklist`) alguns itens acima nesta mesma lista — replicado aqui de
-    //   propósito em vez de inventar uma subcategoria redundante/quebrada.
-    //
-    // Ver bloco de permissão logo abaixo (`fechamento-dia:ocorrencias`) para a visibilidade
-    // restrita desta subcategoria a quem tem canEdit no módulo — decisão registrada no
-    // relatório da Fase 4.
-    key: "fechamento-dia",
-    name: "Fechamento do Dia",
-    icon: "Sunset",
-    order: 19,
-    contentType: "fechamento-dia",
-    subs: [
-      { key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" },
-      { key: "perguntas", name: "Perguntas", icon: "ListChecks" },
     ],
   },
 ];
@@ -608,6 +590,48 @@ async function main() {
       create: {
         profileId: record.id,
         moduleKey: "fechamento-dia:perguntas",
+        canView: flags.canEdit,
+        canExecute: flags.canEdit,
+        canCreate: flags.canEdit,
+        canEdit: flags.canEdit,
+        canDelete: flags.canDelete,
+      },
+    });
+
+    // Unificação "Fechamento do Dia" > "Tarefas" (menu lateral): "Ocorrências" e "Perguntas"
+    // agora vivem como subcategoria de "tarefas" (ver CATEGORIES acima e migration de dado
+    // prisma/migrations/20260915190000_unifica_fechamento_dia_em_tarefas), então a chave
+    // composta que `buildVisibilityResolver` usa pra filtrar o menu (`${categoria.key}:
+    // ${subcategoria.key}`, montada em src/app/portal/layout.tsx) passou de
+    // "fechamento-dia:ocorrencias"/"perguntas" para "tarefas:ocorrencias"/"perguntas". Sem uma
+    // linha própria pra essa chave nova, o resolver cairia pra permissão da categoria "tarefas"
+    // inteira (visível pra todo mundo, líder/funcionário incluídos) — perdendo a restrição
+    // atual (só quem tem canEdit no módulo "fechamento-dia" como um todo, isto é,
+    // administrador/gestor/gerente/supervisor). As linhas abaixo replicam exatamente os mesmos
+    // flags das linhas "fechamento-dia:ocorrencias"/"fechamento-dia:perguntas" logo acima, só
+    // com o "tarefas:" na chave — mantidas as duas linhas antigas também (não afetam mais nada,
+    // já que a categoria "fechamento-dia" não existe mais no menu, mas não custa manter por
+    // simetria com o restante do módulo "fechamento-dia", que continua existindo do jeito que
+    // está).
+    await prisma.modulePermission.upsert({
+      where: { profileId_moduleKey: { profileId: record.id, moduleKey: "tarefas:ocorrencias" } },
+      update: {},
+      create: {
+        profileId: record.id,
+        moduleKey: "tarefas:ocorrencias",
+        canView: flags.canEdit,
+        canExecute: flags.canEdit,
+        canCreate: flags.canEdit,
+        canEdit: flags.canEdit,
+        canDelete: flags.canDelete,
+      },
+    });
+    await prisma.modulePermission.upsert({
+      where: { profileId_moduleKey: { profileId: record.id, moduleKey: "tarefas:perguntas" } },
+      update: {},
+      create: {
+        profileId: record.id,
+        moduleKey: "tarefas:perguntas",
         canView: flags.canEdit,
         canExecute: flags.canEdit,
         canCreate: flags.canEdit,
