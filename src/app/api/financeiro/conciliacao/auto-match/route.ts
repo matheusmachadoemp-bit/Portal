@@ -65,14 +65,29 @@ export async function POST(req: Request) {
   );
 
   if (matches.size > 0) {
-    await prisma.$transaction(
-      [...matches.entries()].map(([transactionId, match]) =>
-        prisma.bankTransaction.update({
-          where: { id: transactionId },
-          data: { status: "CONCILIADO", matchedType: match.type, matchedId: match.id },
-        })
-      )
-    );
+    // Uma única query SQL (`UPDATE ... FROM UNNEST(...)`) em vez de
+    // `prisma.$transaction(entries.map((e) => prisma.bankTransaction.update(...)))`
+    // — a API de "sequential operations" do Prisma, que roda cada update um
+    // atrás do outro dentro de uma transação interativa com timeout padrão
+    // de 5s. Um extrato bancário importado pode facilmente ter centenas de
+    // transações batendo de uma vez (mesmo bug encontrado e corrigido em
+    // `syncEmpresaSaiposSales`, ver `src/lib/saipos-sync.ts`), e isso
+    // derrubaria a conciliação inteira sem atualizar nada.
+    const transactionIds = [...matches.keys()];
+    const types = [...matches.values()].map((m) => m.type);
+    const ids = [...matches.values()].map((m) => m.id);
+
+    await prisma.$executeRaw`
+      UPDATE "BankTransaction" AS bt
+      SET
+        "status" = 'CONCILIADO'::"BankTransactionStatus",
+        "matchedType" = v.matched_type,
+        "matchedId" = v.matched_id,
+        "updatedAt" = now()
+      FROM UNNEST(${transactionIds}::text[], ${types}::text[], ${ids}::text[])
+        AS v(transaction_id, matched_type, matched_id)
+      WHERE bt."id" = v.transaction_id
+    `;
   }
 
   return NextResponse.json({ matched: matches.size, pending: pendingTransactions.length });
