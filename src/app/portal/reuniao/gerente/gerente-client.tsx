@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, FileDown, Plus, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
-import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IconPicker } from "@/components/ui/icon-picker";
-import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
+import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
-import { customIndicatorCards } from "@/components/reuniao/fechamento-do-mes";
+import { indicatorAccentColor } from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
+import { periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
 import type { GerenteCustomIndicatorDTO } from "@/lib/reuniao-server";
 
 type Meeting = {
@@ -75,10 +74,6 @@ function formatCustomValue(unidade: GerenteCustomIndicatorDTO["unidade"], value:
   if (unidade === "PERCENT") return `${formatNumber(value, 1)}%`;
   return formatNumber(value, value % 1 === 0 ? 0 : 1);
 }
-
-/** Cor neutra usada por todos os cards da lista "Fechamento do mês" — não há mais
- * distinção visual entre os 4 indicadores que antes eram fixos e os criados livremente. */
-const INDICATOR_ACCENT = "#64748b";
 
 export function GerenteClient({
   initialMeetings,
@@ -158,24 +153,7 @@ export function GerenteClient({
   }, [selectedPeriodo]);
 
   const turnoverValor = form.turnoverPercent ? Number(form.turnoverPercent) : null;
-  const faltasValor = form.faltasAtrasosAtestados ? Number(form.faltasAtrasosAtestados) : null;
   const checklistValor = form.checklistOperacionalPercent ? Number(form.checklistOperacionalPercent) : null;
-
-  const previousMeeting = useMemo(
-    () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
-    [meetings, selectedPeriodo]
-  );
-  const compFaturamento = compareToPrevious(metrics.faturamentoTotalValor, previousMeeting?.faturamentoTotalValor, "max");
-  const compCmv = compareToPrevious(metrics.cmvPercent, previousMeeting?.cmvPercent, "min");
-  const compNps = compareToPrevious(metrics.npsPercent, previousMeeting?.npsPercent, "max");
-  const compCancelamentoDelivery = compareToPrevious(
-    metrics.cancelamentoDeliveryPercent,
-    previousMeeting?.cancelamentoDeliveryPercent,
-    "min"
-  );
-  const compTurnover = compareToPrevious(turnoverValor, previousMeeting?.turnoverPercent, "min");
-  const compFaltas = compareToPrevious(faltasValor, previousMeeting?.faltasAtrasosAtestados, "min");
-  const compChecklist = compareToPrevious(checklistValor, previousMeeting?.checklistOperacionalPercent, "max");
 
   function customIndicatorState(ind: GerenteCustomIndicatorDTO) {
     const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao) };
@@ -391,132 +369,6 @@ export function GerenteClient({
     setFechamentoModalOpen(true);
   }
 
-  const cards = [
-    {
-      key: "faturamento",
-      content: (
-        <IndicatorCard
-          icon="DollarSign"
-          color="#22c55e"
-          label="Faturamento Total"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.faturamentoTotalValor === null ? "-" : formatCurrency(metrics.faturamentoTotalValor)}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compFaturamento}
-        />
-      ),
-    },
-    {
-      key: "cmv",
-      content: (
-        <IndicatorCard
-          icon="Percent"
-          color="#1464F4"
-          label="CMV"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.cmvPercent === null ? "-" : `${formatNumber(metrics.cmvPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compCmv}
-        />
-      ),
-    },
-    {
-      key: "nps",
-      content: (
-        <IndicatorCard
-          icon="Smile"
-          color="#f59e0b"
-          label="NPS Geral"
-          status="sem-dado"
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.npsPercent === null ? "-" : `${formatNumber(metrics.npsPercent, 1)}%`}
-            </span>
-          }
-          metaText="Detalhado na Reunião Salão"
-          premio={0}
-          comparison={compNps}
-        />
-      ),
-    },
-    {
-      key: "cancelamento-delivery",
-      content: (
-        <IndicatorCard
-          icon="XCircle"
-          color="#ef4444"
-          label="Cancelamento Delivery"
-          status="sem-dado"
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.cancelamentoDeliveryPercent === null ? "-" : `${formatNumber(metrics.cancelamentoDeliveryPercent, 1)}%`}
-            </span>
-          }
-          metaText="Detalhado na Reunião Delivery"
-          premio={0}
-          comparison={compCancelamentoDelivery}
-        />
-      ),
-    },
-    {
-      key: "turnover",
-      content: (
-        <IndicatorCard
-          icon="UserMinus"
-          color="#a855f7"
-          label="Turnover"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{turnoverValor === null ? "-" : `${turnoverValor}%`}</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compTurnover}
-        />
-      ),
-    },
-    {
-      key: "faltas",
-      content: (
-        <IndicatorCard
-          icon="CalendarX"
-          color="#f97316"
-          label="Faltas/Atrasos/Atestados"
-          status="sem-dado"
-          valueSlot={<span className="text-2xl font-semibold text-white">{faltasValor ?? "-"}</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compFaltas}
-        />
-      ),
-    },
-    {
-      key: "checklist",
-      content: (
-        <IndicatorCard
-          icon="ClipboardCheck"
-          color="#14b8a6"
-          label="Checklist Operacional"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">{checklistValor === null ? "-" : `${checklistValor}%`}</span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compChecklist}
-        />
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -546,11 +398,21 @@ export function GerenteClient({
         </div>
       </div>
 
-      <SortableCardGrid
-        storageKey="reuniao-gerente-kpi-order"
-        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
-        items={[...cards, ...customIndicatorCards(customIndicators)]}
-      />
+      {/* Sem loja específica selecionada (visão consolidada "Grupo Nord"), a reunião não
+          tem o que mostrar aqui: "Fechamento do mês"/"Observações" são por loja (`canCreate`
+          reflete isso — vem de `isSingle` em page.tsx) e o grid de indicadores fixos que
+          ficava nesse espaço foi removido (deixou de existir desde que "Fechamento do mês"
+          passou a ser a única fonte desses números, sem duplicar o que já aparece nela). Mesmo
+          padrão de aviso já usado em outras telas com essa mesma limitação — ver
+          src/app/portal/tarefas/checklist/checklist-client.tsx e
+          src/app/portal/marketing/trafego-pago/trafego-pago-client.tsx — reaproveitado aqui
+          em vez de inventar um texto novo. */}
+      {!canCreate && (
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e
+          editar o fechamento do mês desta reunião.
+        </p>
+      )}
 
       {/* "Fechamento do mês" (antiga "Metas e premiação"): lista única de indicadores —
           nome + 1 valor de referência por mês, sem meta-alvo nem premiação. Inclui tanto
@@ -573,8 +435,9 @@ export function GerenteClient({
         >
           {customIndicators.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {customIndicators.map((ind) => {
+              {customIndicators.map((ind, index) => {
                 const { valorReferencia } = customIndicatorState(ind);
+                const color = indicatorAccentColor(index);
                 return (
                   <div
                     key={ind.id}
@@ -582,9 +445,9 @@ export function GerenteClient({
                   >
                     <div
                       className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${INDICATOR_ACCENT}22` }}
+                      style={{ backgroundColor: `${color}22` }}
                     >
-                      <DynamicIcon name={ind.icon} size={15} style={{ color: INDICATOR_ACCENT }} />
+                      <DynamicIcon name={ind.icon} size={15} style={{ color }} />
                     </div>
                     <p className="text-sm min-w-0 truncate">
                       <span className="text-nord-gray">{ind.nome}:</span>{" "}
@@ -670,17 +533,18 @@ export function GerenteClient({
               <p className="text-xs text-nord-gray mb-2 font-medium">Fechamento do mês</p>
               {customIndicators.length > 0 ? (
                 <div className="space-y-3">
-                  {customIndicators.map((ind) => {
+                  {customIndicators.map((ind, index) => {
                     const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao) };
+                    const color = indicatorAccentColor(index);
                     return (
                       <div key={ind.id} className="rounded-lg border border-nord-border/60 p-3">
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2 min-w-0">
                             <div
                               className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${INDICATOR_ACCENT}22` }}
+                              style={{ backgroundColor: `${color}22` }}
                             >
-                              <DynamicIcon name={ind.icon} size={14} style={{ color: INDICATOR_ACCENT }} />
+                              <DynamicIcon name={ind.icon} size={14} style={{ color }} />
                             </div>
                             <span className="text-sm text-white font-medium truncate">{ind.nome}</span>
                           </div>
