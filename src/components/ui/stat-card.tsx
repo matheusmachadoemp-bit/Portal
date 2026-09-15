@@ -85,15 +85,20 @@ export function Section({
   title,
   action,
   children,
+  titleClassName = "",
 }: {
   title: string;
   action?: ReactNode;
   children: ReactNode;
+  /** Classes extras pro título (ex.: "capitalize" quando o título embute um nome de mês em
+   * minúsculo vindo de `periodoLabel()`) — soma ao padrão `text-white font-medium text-sm`,
+   * nunca substitui. */
+  titleClassName?: string;
 }) {
   return (
     <div className="nord-card p-4">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-white font-medium text-sm">{title}</h3>
+        <h3 className={`text-white font-medium text-sm${titleClassName ? ` ${titleClassName}` : ""}`}>{title}</h3>
         {action}
       </div>
       {children}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pencil, FileDown, Plus, Trash2 } from "lucide-react";
+import { Pencil, FileDown, Plus, Trash2, Trophy } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
@@ -10,7 +10,7 @@ import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import { indicatorAccentColor } from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
+import { periodoLabel, periodoShortLabel, proximoMesPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
 import type { GerenteCustomIndicatorDTO } from "@/lib/reuniao-server";
 
 type Meeting = {
@@ -35,6 +35,30 @@ type Metrics = {
   npsPercent: number | null;
   cancelamentoDeliveryPercent: number | null;
 };
+
+/** Uma meta do card "Metas de [próximo mês]" — ver model `MetaProximoMes` e as rotas
+ * /api/reuniao/gerente/metas-proximo-mes(/[id]). */
+type MetaProximoMes = {
+  id: string;
+  periodo: string;
+  metrica: string;
+  valorAlvo: string;
+  valorPremio: number;
+  destinatario: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { name: string };
+};
+
+function buildMetaForm(m?: MetaProximoMes | null) {
+  return {
+    metrica: m?.metrica ?? "",
+    valorAlvo: m?.valorAlvo ?? "",
+    valorPremio: m?.valorPremio != null ? String(m.valorPremio) : "",
+    destinatario: m?.destinatario ?? "Equipe",
+  };
+}
 
 function formToPayload(periodo: string, form: ReturnType<typeof buildForm>) {
   return { periodo, ...form };
@@ -82,6 +106,7 @@ export function GerenteClient({
   initialCustomIndicators,
   periodo,
   canCreate,
+  canDeleteMetas,
   empresaName,
 }: {
   initialMeetings: Meeting[];
@@ -90,6 +115,9 @@ export function GerenteClient({
   initialCustomIndicators: GerenteCustomIndicatorDTO[];
   periodo: string;
   canCreate: boolean;
+  /** Perfil "gerente" tem canCreate/canEdit mas não canDelete no módulo "reuniao" — controla
+   * só o botão de excluir meta (criar/editar segue o mesmo `canCreate` do resto da tela). */
+  canDeleteMetas: boolean;
   empresaName: string;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
@@ -128,6 +156,21 @@ export function GerenteClient({
   const [savingEditIndicator, setSavingEditIndicator] = useState(false);
   const [editIndicatorError, setEditIndicatorError] = useState<string | null>(null);
 
+  const [metas, setMetas] = useState<MetaProximoMes[]>([]);
+  // Só começa "carregando" quando o card vai mesmo aparecer (canCreate) — evita precisar
+  // setState síncrono dentro do efeito abaixo só pra desligar o loading no modo Grupo Nord.
+  const [metasLoading, setMetasLoading] = useState(canCreate);
+  const [newMetaOpen, setNewMetaOpen] = useState(false);
+  const [newMetaForm, setNewMetaForm] = useState(buildMetaForm(null));
+  const [creatingMeta, setCreatingMeta] = useState(false);
+  const [newMetaError, setNewMetaError] = useState<string | null>(null);
+  const [editMetaTarget, setEditMetaTarget] = useState<MetaProximoMes | null>(null);
+  const [editMetaForm, setEditMetaForm] = useState(buildMetaForm(null));
+  const [savingEditMeta, setSavingEditMeta] = useState(false);
+  const [editMetaError, setEditMetaError] = useState<string | null>(null);
+  const [deleteMetaTarget, setDeleteMetaTarget] = useState<MetaProximoMes | null>(null);
+  const [deletingMeta, setDeletingMeta] = useState(false);
+
   const mounted = useRef(false);
   useEffect(() => {
     if (!mounted.current) {
@@ -152,6 +195,107 @@ export function GerenteClient({
     };
   }, [selectedPeriodo]);
 
+  // Metas de "próximo mês" (proximoMesPeriodo(), sempre o mês seguinte a hoje) — carregadas
+  // uma única vez ao montar, sem depender de `selectedPeriodo` (que é sobre o histórico de
+  // fechamentos, um assunto diferente do mês-alvo das metas). Em modo Grupo Nord a própria
+  // API já devolve lista vazia (ver comentário da rota GET).
+  useEffect(() => {
+    if (!canCreate) return;
+    let cancelled = false;
+    fetch("/api/reuniao/gerente/metas-proximo-mes")
+      .then((res) => res.json())
+      .then((data) => !cancelled && setMetas(data.metas ?? []))
+      .finally(() => !cancelled && setMetasLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [canCreate]);
+
+  async function refreshMetas() {
+    const res = await fetch("/api/reuniao/gerente/metas-proximo-mes");
+    const data = await res.json();
+    setMetas(data.metas ?? []);
+  }
+
+  async function createMeta() {
+    if (creatingMeta) return;
+    setNewMetaError(null);
+    if (!newMetaForm.metrica.trim()) {
+      setNewMetaError("Informe a métrica da meta (ex.: CMV, Tempo Pedido).");
+      return;
+    }
+    if (!newMetaForm.valorAlvo.trim()) {
+      setNewMetaError("Informe o valor-alvo da meta (ex.: 35%, 15min).");
+      return;
+    }
+    setCreatingMeta(true);
+    try {
+      const res = await fetch("/api/reuniao/gerente/metas-proximo-mes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newMetaForm),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setNewMetaError(data?.error ?? "Não foi possível criar a meta.");
+        return;
+      }
+      setNewMetaOpen(false);
+      setNewMetaForm(buildMetaForm(null));
+      await refreshMetas();
+    } finally {
+      setCreatingMeta(false);
+    }
+  }
+
+  function openEditMeta(meta: MetaProximoMes) {
+    setEditMetaTarget(meta);
+    setEditMetaForm(buildMetaForm(meta));
+    setEditMetaError(null);
+  }
+
+  async function saveEditMeta() {
+    if (!editMetaTarget || savingEditMeta) return;
+    setEditMetaError(null);
+    if (!editMetaForm.metrica.trim()) {
+      setEditMetaError("Informe a métrica da meta.");
+      return;
+    }
+    if (!editMetaForm.valorAlvo.trim()) {
+      setEditMetaError("Informe o valor-alvo da meta.");
+      return;
+    }
+    setSavingEditMeta(true);
+    try {
+      const res = await fetch(`/api/reuniao/gerente/metas-proximo-mes/${editMetaTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editMetaForm),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setEditMetaError(data?.error ?? "Não foi possível salvar as alterações da meta.");
+        return;
+      }
+      setEditMetaTarget(null);
+      await refreshMetas();
+    } finally {
+      setSavingEditMeta(false);
+    }
+  }
+
+  async function confirmDeleteMeta() {
+    if (!deleteMetaTarget || deletingMeta) return;
+    setDeletingMeta(true);
+    try {
+      await fetch(`/api/reuniao/gerente/metas-proximo-mes/${deleteMetaTarget.id}`, { method: "DELETE" });
+      setDeleteMetaTarget(null);
+      await refreshMetas();
+    } finally {
+      setDeletingMeta(false);
+    }
+  }
+
   const turnoverValor = form.turnoverPercent ? Number(form.turnoverPercent) : null;
   const checklistValor = form.checklistOperacionalPercent ? Number(form.checklistOperacionalPercent) : null;
 
@@ -169,6 +313,15 @@ export function GerenteClient({
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
     const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
+
+    // Busca as metas do próximo mês na hora de exportar (não reaproveita o estado `metas`
+    // já carregado na tela) pra garantir que o PDF sai com o que está salvo agora — inclusive
+    // em modo Grupo Nord, onde a API já devolve lista vazia e o PDF mostra a mensagem de
+    // "nenhuma meta cadastrada" em vez de pular a página.
+    const metasRes = await fetch("/api/reuniao/gerente/metas-proximo-mes");
+    const metasData = metasRes.ok
+      ? await metasRes.json()
+      : { metas: [], periodoLabel: periodoLabel(proximoMesPeriodo()) };
 
     function historico<K extends "faturamentoTotalValor" | "cmvPercent" | "turnoverPercent" | "checklistOperacionalPercent">(
       key: K,
@@ -234,6 +387,15 @@ export function GerenteClient({
           historico: historico("checklistOperacionalPercent", checklistValor),
         },
       ],
+      metasProximoMes: {
+        periodoLabel: metasData.periodoLabel ?? periodoLabel(proximoMesPeriodo()),
+        metas: (metasData.metas ?? []).map((m: MetaProximoMes) => ({
+          metrica: m.metrica,
+          valorAlvo: m.valorAlvo,
+          valorPremio: m.valorPremio,
+          destinatario: m.destinatario,
+        })),
+      },
     });
   }
 
@@ -766,6 +928,207 @@ export function GerenteClient({
           </button>
         </Section>
       )}
+
+      {/* "Metas de [próximo mês]": metas cadastradas pra equipe bater no mês seguinte (sempre
+          calculado a partir de hoje via proximoMesPeriodo(), nunca digitado) — cada uma com o
+          que precisa ser feito (métrica + valor-alvo) e o prêmio ao bater (valor + destinatário,
+          "Equipe" por padrão). Mesmo `canCreate` (isSingle) das outras seções desta tela;
+          excluir uma meta pede além disso `canDeleteMetas` (perfil "gerente" tem
+          canCreate/canEdit mas não canDelete no módulo "reuniao" — ver page.tsx). */}
+      {canCreate && (
+        <Section
+          title={`Metas de ${periodoLabel(proximoMesPeriodo())}`}
+          titleClassName="capitalize"
+          action={
+            <button
+              onClick={() => setNewMetaOpen(true)}
+              className="flex items-center gap-1 text-xs text-nord-blue-light hover:underline"
+            >
+              <Plus size={12} /> Nova meta
+            </button>
+          }
+        >
+          {metasLoading ? (
+            <p className="text-xs text-nord-gray">Carregando metas...</p>
+          ) : metas.length > 0 ? (
+            <div className="space-y-2">
+              {metas.map((meta, index) => {
+                const color = indicatorAccentColor(index);
+                return (
+                  <div
+                    key={meta.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-nord-border/60 px-3 py-2.5"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: `${color}22` }}
+                      >
+                        <Trophy size={15} style={{ color }} />
+                      </div>
+                      <p className="text-sm min-w-0 truncate">
+                        <span className="text-white font-semibold">
+                          {meta.metrica}: {meta.valorAlvo}
+                        </span>{" "}
+                        <span className="text-nord-gray">→ Ganha</span>{" "}
+                        <span className="text-nord-success font-semibold">{formatCurrency(meta.valorPremio)}</span>{" "}
+                        <span className="text-nord-gray">{meta.destinatario}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        onClick={() => openEditMeta(meta)}
+                        className="text-nord-gray hover:text-white flex items-center gap-1 text-xs"
+                      >
+                        <Pencil size={12} /> Editar
+                      </button>
+                      {canDeleteMetas && (
+                        <button
+                          onClick={() => setDeleteMetaTarget(meta)}
+                          className="text-nord-gray hover:text-nord-danger flex items-center gap-1 text-xs"
+                        >
+                          <Trash2 size={12} /> Excluir
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-nord-gray">
+              Nenhuma meta cadastrada ainda para {periodoLabel(proximoMesPeriodo())}. Clique em &quot;Nova meta&quot; para
+              adicionar a primeira (ex.: CMV: 35% → Ganha R$500 Equipe).
+            </p>
+          )}
+        </Section>
+      )}
+
+      <Modal open={newMetaOpen} onClose={() => setNewMetaOpen(false)} title="Nova meta">
+        <FormError message={newMetaError} />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Métrica</span>
+              <input
+                type="text"
+                value={newMetaForm.metrica}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, metrica: e.target.value })}
+                placeholder="Ex.: CMV, Tempo Pedido..."
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Valor-alvo</span>
+              <input
+                type="text"
+                value={newMetaForm.valorAlvo}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, valorAlvo: e.target.value })}
+                placeholder="Ex.: 35%, 15min..."
+                className="input"
+              />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Prêmio ao bater a meta (R$)</span>
+              <input
+                type="number"
+                step="0.01"
+                value={newMetaForm.valorPremio}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, valorPremio: e.target.value })}
+                placeholder="R$"
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Destinatário</span>
+              <input
+                type="text"
+                value={newMetaForm.destinatario}
+                onChange={(e) => setNewMetaForm({ ...newMetaForm, destinatario: e.target.value })}
+                placeholder="Equipe"
+                className="input"
+              />
+            </label>
+          </div>
+          <button
+            onClick={createMeta}
+            disabled={creatingMeta}
+            className="mt-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
+          >
+            {creatingMeta ? "Criando..." : "Criar meta"}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal open={editMetaTarget !== null} onClose={() => setEditMetaTarget(null)} title="Editar meta">
+        <FormError message={editMetaError} />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Métrica</span>
+              <input
+                type="text"
+                value={editMetaForm.metrica}
+                onChange={(e) => setEditMetaForm({ ...editMetaForm, metrica: e.target.value })}
+                placeholder="Ex.: CMV, Tempo Pedido..."
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Valor-alvo</span>
+              <input
+                type="text"
+                value={editMetaForm.valorAlvo}
+                onChange={(e) => setEditMetaForm({ ...editMetaForm, valorAlvo: e.target.value })}
+                placeholder="Ex.: 35%, 15min..."
+                className="input"
+              />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Prêmio ao bater a meta (R$)</span>
+              <input
+                type="number"
+                step="0.01"
+                value={editMetaForm.valorPremio}
+                onChange={(e) => setEditMetaForm({ ...editMetaForm, valorPremio: e.target.value })}
+                placeholder="R$"
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Destinatário</span>
+              <input
+                type="text"
+                value={editMetaForm.destinatario}
+                onChange={(e) => setEditMetaForm({ ...editMetaForm, destinatario: e.target.value })}
+                placeholder="Equipe"
+                className="input"
+              />
+            </label>
+          </div>
+          <button
+            onClick={saveEditMeta}
+            disabled={savingEditMeta}
+            className="mt-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
+          >
+            {savingEditMeta ? "Salvando..." : "Salvar alterações"}
+          </button>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={deleteMetaTarget !== null}
+        title="Excluir meta"
+        message={`Tem certeza que quer excluir a meta "${deleteMetaTarget?.metrica}: ${deleteMetaTarget?.valorAlvo}"? Essa ação não pode ser desfeita.`}
+        confirmLabel={deletingMeta ? "Excluindo..." : "Excluir"}
+        danger
+        onConfirm={confirmDeleteMeta}
+        onCancel={() => setDeleteMetaTarget(null)}
+      />
 
       {meetings.length > 0 && (
         <Section title="Histórico de reuniões">
