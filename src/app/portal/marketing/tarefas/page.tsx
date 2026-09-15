@@ -15,7 +15,7 @@ export default async function TarefasPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const [tasks, teamMembers, campaigns, history] = await Promise.all([
+  const [tasks, teamMembers, history] = await Promise.all([
     prisma.marketingTask.findMany({
       where: { empresaId: { in: empresaIds } },
       orderBy: [{ date: "asc" }, { order: "asc" }],
@@ -26,11 +26,6 @@ export default async function TarefasPage() {
       },
     }),
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.marketingCampaign.findMany({
-      where: { empresaId: { in: empresaIds } },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
     prisma.auditLog.findMany({
       where: { empresaId: { in: empresaIds }, entityType: "MarketingTask", action: { in: ["CREATE", "STATUS_CHANGE"] } },
       orderBy: { createdAt: "desc" },
@@ -54,7 +49,6 @@ export default async function TarefasPage() {
       <TasksClient
         initialTasks={serialized as never}
         teamMembers={teamMembers}
-        campaigns={campaigns}
         canCreate={ctx?.mode === "single"}
         history={serializedHistory}
       />

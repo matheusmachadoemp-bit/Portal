@@ -16,15 +16,12 @@ import {
 } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "./marketing-types";
 
-type Campaign = { id: string; name: string };
-
 export function TaskModal({
   open,
   onClose,
   onSaved,
   task,
   teamMembers,
-  campaigns,
   defaultDate,
 }: {
   open: boolean;
@@ -32,7 +29,6 @@ export function TaskModal({
   onSaved: () => void;
   task?: TaskDTO | null;
   teamMembers: TeamMember[];
-  campaigns: Campaign[];
   defaultDate?: string;
 }) {
   const [title, setTitle] = useState(task?.title ?? "");
@@ -46,7 +42,6 @@ export function TaskModal({
   const [date, setDate] = useState(task?.date ? task.date.slice(0, 10) : defaultDate ?? "");
   const [time, setTime] = useState(task?.time ?? "");
   const [responsavelId, setResponsavelId] = useState(task?.responsavelId ?? "");
-  const [campaignId, setCampaignId] = useState(task?.campaignId ?? "");
   const [tags, setTags] = useState(task?.tags ?? "");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(
     task ? parseChecklist(task.checklist) : DEFAULT_CHECKLIST.map((t) => ({ text: t, done: false }))
@@ -69,7 +64,6 @@ export function TaskModal({
     setDate(task?.date ? task.date.slice(0, 10) : defaultDate ?? "");
     setTime(task?.time ?? "");
     setResponsavelId(task?.responsavelId ?? "");
-    setCampaignId(task?.campaignId ?? "");
     setTags(task?.tags ?? "");
     setChecklist(task ? parseChecklist(task.checklist) : DEFAULT_CHECKLIST.map((t) => ({ text: t, done: false })));
     setComment("");
@@ -111,7 +105,6 @@ export function TaskModal({
         date: date || null,
         time: time || null,
         responsavelId: responsavelId || null,
-        campaignId: campaignId || null,
         tags,
         checklist: JSON.stringify(checklist),
       };
@@ -230,21 +223,10 @@ export function TaskModal({
           </label>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Campanha vinculada</span>
-            <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className="input">
-              <option value="">—</option>
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Etiquetas (separadas por vírgula)</span>
-            <input value={tags} onChange={(e) => setTags(e.target.value)} className="input" placeholder="promoção, verão" />
-          </label>
-        </div>
+        <label className="block">
+          <span className="block text-xs text-nord-gray mb-1">Etiquetas (separadas por vírgula)</span>
+          <input value={tags} onChange={(e) => setTags(e.target.value)} className="input" placeholder="promoção, verão" />
+        </label>
 
         <div>
           <div className="flex items-center justify-between mb-1.5">

@@ -52,13 +52,11 @@ type HistoryEntry = {
 export function TasksClient({
   initialTasks,
   teamMembers,
-  campaigns,
   canCreate,
   history,
 }: {
   initialTasks: TaskDTO[];
   teamMembers: TeamMember[];
-  campaigns: { id: string; name: string }[];
   canCreate: boolean;
   history: HistoryEntry[];
 }) {
@@ -287,7 +285,6 @@ export function TasksClient({
         }}
         task={editingTask}
         teamMembers={teamMembers}
-        campaigns={campaigns}
       />
     </div>
   );

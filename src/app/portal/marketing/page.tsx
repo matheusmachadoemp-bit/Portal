@@ -17,7 +17,7 @@ export default async function MarketingPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();
 
-  const [weekTasks, activeCampaigns, recentFiles, recentLogs, allTasksForPanel, teamMembers] =
+  const [weekTasks, recentFiles, recentLogs, allTasksForPanel, teamMembers] =
     await Promise.all([
       prisma.marketingTask.findMany({
         where: {
@@ -27,9 +27,6 @@ export default async function MarketingPage() {
         orderBy: { date: "asc" },
         include: { responsavel: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
       }),
-      prisma.marketingCampaign.count({
-        where: { empresaId: { in: empresaIds }, status: { in: ["EM_ANDAMENTO", "PLANEJADA"] } },
-      }),
       prisma.marketingFile.findMany({
         where: { empresaId: { in: empresaIds } },
         orderBy: { createdAt: "desc" },
@@ -38,7 +35,7 @@ export default async function MarketingPage() {
       prisma.auditLog.findMany({
         where: {
           empresaId: { in: empresaIds },
-          entityType: { in: ["MarketingTask", "MarketingCampaign", "MarketingFile", "MarketingIdea"] },
+          entityType: { in: ["MarketingTask", "MarketingFile", "MarketingIdea"] },
         },
         orderBy: { createdAt: "desc" },
         take: 8,
@@ -68,7 +65,6 @@ export default async function MarketingPage() {
       <DashboardClient
         weekTasks={weekTasks.map(serializeTask) as never}
         allTasks={allTasksForPanel.map(serializeTask) as never}
-        activeCampaigns={activeCampaigns}
         recentFiles={recentFiles.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() }))}
         recentLogs={recentLogs.map((l) => ({ ...l, createdAt: l.createdAt.toISOString() }))}
         teamMembers={teamMembers}
