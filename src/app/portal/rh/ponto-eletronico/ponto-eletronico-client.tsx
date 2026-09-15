@@ -247,7 +247,7 @@ export function PontoEletronicoClient({
         )}
       </div>
       {!canCreate && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
           registrar ou importar o ponto.
         </p>
@@ -257,8 +257,8 @@ export function PontoEletronicoClient({
         <div
           className={`text-xs rounded-lg px-3 py-2 border ${
             importResult.errors.length > 0
-              ? "bg-amber-950/20 border-amber-900/40 text-amber-400"
-              : "bg-emerald-950/20 border-emerald-900/40 text-emerald-400"
+              ? "bg-nord-warning/10 border-nord-warning/30 text-nord-warning"
+              : "bg-nord-success/10 border-nord-success/30 text-nord-success"
           }`}
         >
           <p>{importResult.imported} registro(s) importado(s).</p>
@@ -272,7 +272,7 @@ export function PontoEletronicoClient({
         <Section title="Alertas automáticos">
           <ul className="space-y-2">
             {alerts.map((a, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-amber-400">
+              <li key={i} className="flex items-start gap-2 text-sm text-nord-warning">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 {a}
               </li>
@@ -362,7 +362,7 @@ export function PontoEletronicoClient({
                       <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
                         <Pencil size={14} />
                       </button>
-                      <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-red-400">
+                      <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-nord-danger">
                         <Trash2 size={14} />
                       </button>
                     </div>

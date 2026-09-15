@@ -327,7 +327,7 @@ export function ColaboradoresClient({
         )}
       </div>
       {!canCreate && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
           cadastrar ou editar colaboradores.
         </p>
@@ -336,8 +336,8 @@ export function ColaboradoresClient({
         <div
           className={`text-xs rounded-lg px-3 py-2 border ${
             importResult.errors.length > 0
-              ? "bg-amber-950/20 border-amber-900/40 text-amber-400"
-              : "bg-emerald-950/20 border-emerald-900/40 text-emerald-400"
+              ? "bg-nord-warning/10 border-nord-warning/30 text-nord-warning"
+              : "bg-nord-success/10 border-nord-success/30 text-nord-success"
           }`}
         >
           <p>{importResult.imported} colaborador(es) importado(s).</p>
@@ -436,7 +436,7 @@ export function ColaboradoresClient({
                         <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
                           <Pencil size={14} />
                         </button>
-                        <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-red-400">
+                        <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-nord-danger">
                           <Trash2 size={14} />
                         </button>
                       </>
@@ -480,7 +480,7 @@ export function ColaboradoresClient({
             </div>
             <div className="text-xs text-nord-gray">
               {photoUploading && <p>Enviando foto...</p>}
-              {!photoUploading && photoError && <p className="text-red-400">{photoError}</p>}
+              {!photoUploading && photoError && <p className="text-nord-danger">{photoError}</p>}
               {!photoUploading && !photoError && <p>Foto do colaborador</p>}
             </div>
           </div>

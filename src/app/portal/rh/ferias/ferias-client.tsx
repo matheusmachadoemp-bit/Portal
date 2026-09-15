@@ -201,7 +201,7 @@ export function FeriasClient({
         )}
       </div>
       {!canCreate && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
           solicitar ou editar férias.
         </p>
@@ -239,7 +239,7 @@ export function FeriasClient({
                       <button onClick={() => openEdit(v)} className="text-nord-gray hover:text-white">
                         <Pencil size={14} />
                       </button>
-                      <button onClick={() => setConfirmDeleteId(v.id)} className="text-nord-gray hover:text-red-400">
+                      <button onClick={() => setConfirmDeleteId(v.id)} className="text-nord-gray hover:text-nord-danger">
                         <Trash2 size={14} />
                       </button>
                     </div>

@@ -171,9 +171,9 @@ export function ResultadosClient({ surveyId, surveyTitle }: { surveyId: string; 
         <Section title="Alertas críticos">
           <div className="space-y-2">
             {data.alerts.map((a) => (
-              <div key={a.setor} className="flex items-start gap-2 p-3 rounded-lg bg-red-950/30 border border-red-900/60">
-                <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
-                <p className="text-xs text-red-300">{a.mensagem}</p>
+              <div key={a.setor} className="flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
+                <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+                <p className="text-xs text-nord-danger">{a.mensagem}</p>
               </div>
             ))}
           </div>
