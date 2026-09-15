@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const isAdminOrGestor = canManageUsers(session.user.role);
 
   // Auto-matrícula (targetUserId === o próprio usuário logado, o caso comum: colaborador se
-  // matriculando no próprio curso/trilha) é autoatendimento essencial do dia a dia e por isso NUNCA
+  // matriculando no próprio curso) é autoatendimento essencial do dia a dia e por isso NUNCA
   // passa por nenhuma checagem de perfil aqui — só matricular OUTRO colaborador é ação de gestão,
   // e já exigia canManageUsers antes desta tarefa; a checagem de perfil (canCreate) foi adicionada
   // logo depois, só dentro deste mesmo bloco.
@@ -38,26 +38,16 @@ export async function POST(req: Request) {
     }
   }
   // Neste ponto, se !isSelfEnroll então isAdminOrGestor é garantidamente true (checado acima).
-  // A checagem de status abaixo (curso/trilha em rascunho) só se aplica à auto-matrícula de quem
+  // A checagem de status abaixo (curso em rascunho) só se aplica à auto-matrícula de quem
   // NÃO é admin/gestor — admin/gestor pode se auto-matricular em rascunho (útil para revisar antes
   // de publicar) e matricular outro colaborador continua liberado por canManageUsers, sem depender
   // do status do curso.
+  //
+  // A matrícula em bloco por trilha (body.trackId) existia aqui antes da Fase 1 desta tarefa —
+  // "Trilhas de Aprendizagem" foi descontinuada (ver
+  // prisma/migrations/20260915130000_universidade_curso_modulo_aula): cursos que pertenciam a
+  // uma trilha viraram módulos de 1 curso só, então matricular no curso já é o equivalente.
   const blockDraftForSelf = isSelfEnroll && !isAdminOrGestor;
-
-  if (body.trackId) {
-    const track = await prisma.trainingTrack.findUnique({
-      where: { id: body.trackId },
-      include: { courses: { include: { course: true } } },
-    });
-    if (!track) return NextResponse.json({ error: "Trilha não encontrada." }, { status: 404 });
-    if (blockDraftForSelf && track.courses.some((tc) => tc.course.status !== "PUBLICADO")) {
-      return NextResponse.json({ error: "Esta trilha ainda não está disponível." }, { status: 403 });
-    }
-    const enrollments = await Promise.all(
-      track.courses.map((tc) => enrollUserInCourse(targetUserId, tc.courseId))
-    );
-    return NextResponse.json({ enrollments });
-  }
 
   if (body.courseId) {
     if (blockDraftForSelf) {
@@ -73,5 +63,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ enrollment });
   }
 
-  return NextResponse.json({ error: "Informe courseId ou trackId." }, { status: 400 });
+  return NextResponse.json({ error: "Informe courseId." }, { status: 400 });
 }

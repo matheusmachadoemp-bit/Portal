@@ -16,8 +16,8 @@ export default async function RankingPage() {
   const [xpByUser, certificatesByUser, hoursByUser] = await Promise.all([
     prisma.trainingXpEvent.groupBy({ by: ["userId"], _sum: { amount: true } }),
     prisma.trainingCertificate.groupBy({ by: ["userId"], _count: { id: true } }),
-    prisma.trainingModuleProgress.findMany({
-      include: { enrollment: { select: { userId: true } } },
+    prisma.trainingLessonProgress.findMany({
+      include: { moduleEnrollment: { select: { enrollment: { select: { userId: true } } } } },
     }),
   ]);
 
@@ -29,7 +29,7 @@ export default async function RankingPage() {
 
   const hoursMap = new Map<string, number>();
   for (const p of hoursByUser) {
-    const uid = p.enrollment.userId;
+    const uid = p.moduleEnrollment.enrollment.userId;
     hoursMap.set(uid, (hoursMap.get(uid) ?? 0) + p.watchedSeconds);
   }
   const certMap = new Map(certificatesByUser.map((c) => [c.userId, c._count.id]));

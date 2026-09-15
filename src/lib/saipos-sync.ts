@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
 import { fetchSaiposSales } from "@/lib/saipos-client";
 import { toSaiposSaleData } from "@/lib/saipos-mapper";
+import { notifySyncFailure } from "@/lib/sync-notifications";
 import type { Empresa } from "@prisma/client";
 
 export type SaiposSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
@@ -55,6 +56,7 @@ export async function syncEmpresaSaiposSales(
         where: { id: log.id },
         data: { status: "ERRO", errorMessage: result.error, finishedAt: new Date() },
       });
+      await notifySyncFailure({ empresaId: empresa.id, integration: "SAIPOS", errorMessage: result.error });
       return { ok: false, error: result.error };
     }
 
@@ -108,6 +110,7 @@ export async function syncEmpresaSaiposSales(
         .update({ where: { id: log.id }, data: { status: "ERRO", errorMessage: message, finishedAt: new Date() } })
         .catch(() => {});
     }
+    await notifySyncFailure({ empresaId: empresa.id, integration: "SAIPOS", errorMessage: message });
     return { ok: false, error: message };
   }
 }

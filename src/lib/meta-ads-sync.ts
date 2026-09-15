@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
 import { fetchMetaAdsInsights, fetchInstagramFollowers } from "@/lib/meta-ads-client";
 import { toMetaAdsInsightData } from "@/lib/meta-ads-mapper";
+import { notifySyncFailure } from "@/lib/sync-notifications";
 import type { Empresa } from "@prisma/client";
 
 export type MetaAdsSyncOutcome = { ok: true; recordsSynced: number } | { ok: false; error: string };
@@ -107,35 +108,50 @@ export async function syncEmpresaMetaAdsInsights(
     data: { empresaId: empresa.id, status: "EM_ANDAMENTO" },
   });
 
-  const token = decryptSecret(empresa.metaAdsAccessToken);
-  const result = await fetchMetaAdsInsights(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion, range);
+  // A partir daqui qualquer etapa pode falhar de formas inesperadas (token
+  // salvo corrompido, Graph API mudando o formato da resposta, banco
+  // indisponível etc.) — mesmo cuidado já tomado em syncEmpresaSaiposSales:
+  // sem o try/catch, uma exceção aqui deixaria o log preso em EM_ANDAMENTO
+  // pra sempre E a falha passaria batido, sem notificar ninguém.
+  try {
+    const token = decryptSecret(empresa.metaAdsAccessToken);
+    const result = await fetchMetaAdsInsights(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion, range);
 
-  if (!result.ok) {
-    await prisma.metaAdsSyncLog.update({
-      where: { id: log.id },
-      data: { status: "ERRO", errorMessage: result.error, finishedAt: new Date() },
-    });
-    return { ok: false, error: result.error };
+    if (!result.ok) {
+      await prisma.metaAdsSyncLog.update({
+        where: { id: log.id },
+        data: { status: "ERRO", errorMessage: result.error, finishedAt: new Date() },
+      });
+      await notifySyncFailure({ empresaId: empresa.id, integration: "META_ADS", errorMessage: result.error });
+      return { ok: false, error: result.error };
+    }
+
+    const insightsData = result.rows.map((row) => toMetaAdsInsightData(empresa.id, row));
+    await upsertMetaAdsInsightRows(empresa.id, insightsData);
+
+    await syncMarketingEntryFromMetaAds(empresa.id, range);
+
+    if (empresa.metaAdsInstagramAccountId) {
+      await syncInstagramFollowers(empresa.id, token, empresa.metaAdsInstagramAccountId, empresa.metaAdsGraphVersion);
+    }
+
+    await prisma.$transaction([
+      prisma.metaAdsSyncLog.update({
+        where: { id: log.id },
+        data: { status: "SUCESSO", recordsSynced: result.rows.length, finishedAt: new Date() },
+      }),
+      prisma.empresa.update({ where: { id: empresa.id }, data: { metaAdsLastSyncAt: new Date() } }),
+    ]);
+
+    return { ok: true, recordsSynced: result.rows.length };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro inesperado ao sincronizar com o Meta Ads.";
+    await prisma.metaAdsSyncLog
+      .update({ where: { id: log.id }, data: { status: "ERRO", errorMessage: message, finishedAt: new Date() } })
+      .catch(() => {});
+    await notifySyncFailure({ empresaId: empresa.id, integration: "META_ADS", errorMessage: message });
+    return { ok: false, error: message };
   }
-
-  const insightsData = result.rows.map((row) => toMetaAdsInsightData(empresa.id, row));
-  await upsertMetaAdsInsightRows(empresa.id, insightsData);
-
-  await syncMarketingEntryFromMetaAds(empresa.id, range);
-
-  if (empresa.metaAdsInstagramAccountId) {
-    await syncInstagramFollowers(empresa.id, token, empresa.metaAdsInstagramAccountId, empresa.metaAdsGraphVersion);
-  }
-
-  await prisma.$transaction([
-    prisma.metaAdsSyncLog.update({
-      where: { id: log.id },
-      data: { status: "SUCESSO", recordsSynced: result.rows.length, finishedAt: new Date() },
-    }),
-    prisma.empresa.update({ where: { id: empresa.id }, data: { metaAdsLastSyncAt: new Date() } }),
-  ]);
-
-  return { ok: true, recordsSynced: result.rows.length };
 }
 
 function startOfMonthUtc(date: Date): Date {

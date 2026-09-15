@@ -4,11 +4,13 @@ import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Eye, Upload } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { upload } from "@vercel/blob/client";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber, formatPercent } from "@/lib/calc";
 import { tempoDeEmpresa } from "@/lib/rh-helpers";
+import { sanitizeFileName } from "@/lib/upload";
 import { format } from "date-fns";
 import { RhTabs } from "../rh-tabs";
 
@@ -72,7 +74,7 @@ const emptyForm = {
   lastTrainingName: "",
 };
 
-function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
+function Avatar({ name, photoUrl, size = 32 }: { name: string; photoUrl: string | null; size?: number }) {
   const initials = name
     .split(" ")
     .slice(0, 2)
@@ -80,10 +82,22 @@ function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
     .join("")
     .toUpperCase();
   if (photoUrl) {
-    return <Image src={photoUrl} alt={name} width={32} height={32} className="w-8 h-8 rounded-full object-cover shrink-0" />;
+    return (
+      <Image
+        src={photoUrl}
+        alt={name}
+        width={size}
+        height={size}
+        className="rounded-full object-cover shrink-0"
+        style={{ width: size, height: size }}
+      />
+    );
   }
   return (
-    <div className="w-8 h-8 rounded-full bg-nord-blue/20 text-nord-blue text-xs font-semibold flex items-center justify-center shrink-0">
+    <div
+      className="rounded-full bg-nord-blue/20 text-nord-blue font-semibold flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, fontSize: size / 2.4 }}
+    >
       {initials}
     </div>
   );
@@ -115,6 +129,14 @@ export function ColaboradoresClient({
   const [submitting, setSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Troca de foto do colaborador sendo editado no modal — mesmo mecanismo
+  // (@vercel/blob/client + PATCH só da URL) do avatar do próprio usuário em
+  // src/components/topbar/user-menu.tsx (handleAvatarChange). Salva na hora
+  // (PATCH imediato ao concluir o upload), sem depender do botão "Salvar"
+  // do resto do formulário.
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [search, setSearch] = useState("");
   const [filterLoja, setFilterLoja] = useState("");
@@ -150,11 +172,13 @@ export function ColaboradoresClient({
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
+    setPhotoError(null);
     setShowForm(true);
   }
 
   function openEdit(e: EmployeeDTO) {
     setEditing(e);
+    setPhotoError(null);
     setForm({
       name: e.name,
       cargo: e.cargo,
@@ -228,6 +252,36 @@ export function ColaboradoresClient({
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handlePhotoChange(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file || !editing) return;
+    setPhotoUploading(true);
+    setPhotoError(null);
+    try {
+      const blob = await upload(sanitizeFileName(file.name), file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+      });
+      const res = await fetch(`/api/rh/employees/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: blob.url }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPhotoError(data?.error ?? "Não foi possível salvar a foto.");
+        return;
+      }
+      setEditing((prev) => (prev ? { ...prev, photoUrl: blob.url } : prev));
+      setEmployees((prev) => prev.map((emp) => (emp.id === editing.id ? { ...emp, photoUrl: blob.url } : emp)));
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Falha ao enviar a foto.");
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
     }
   }
 
@@ -403,6 +457,34 @@ export function ColaboradoresClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar colaborador" : "Novo colaborador"} widthClass="max-w-2xl">
+        {editing && (
+          <div className="flex items-center gap-3 pb-4 mb-1 border-b border-nord-border">
+            <div className="relative shrink-0">
+              <Avatar name={editing.name} photoUrl={editing.photoUrl} size={56} />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoUploading}
+                title="Alterar foto"
+                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-nord-blue hover:bg-nord-blue-light border-2 border-nord-card flex items-center justify-center text-white disabled:opacity-60"
+              >
+                <Pencil size={10} />
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => handlePhotoChange(e.target.files)}
+              />
+            </div>
+            <div className="text-xs text-nord-gray">
+              {photoUploading && <p>Enviando foto...</p>}
+              {!photoUploading && photoError && <p className="text-red-400">{photoError}</p>}
+              {!photoUploading && !photoError && <p>Foto do colaborador</p>}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <Field label="Nome">

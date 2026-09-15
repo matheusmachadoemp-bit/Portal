@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 import { StatCard, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { tempoDeEmpresa } from "@/lib/rh-helpers";
+import { sanitizeFileName } from "@/lib/upload";
 import { format } from "date-fns";
 import { FinanceiroClient } from "../../financeiro/financeiro-client";
 import { PontoEletronicoClient } from "../../ponto-eletronico/ponto-eletronico-client";
@@ -85,6 +87,16 @@ export function EmployeeProfileClient({
   const router = useRouter();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Resumo");
   const [showEdit, setShowEdit] = useState(false);
+  // Troca de foto direto no cabeçalho da ficha — mesmo mecanismo
+  // (@vercel/blob/client + PATCH só da URL) do avatar do próprio usuário em
+  // src/components/topbar/user-menu.tsx (handleAvatarChange). "photoUrl"
+  // local sobrepõe employee.photoUrl assim que o upload termina; router.refresh()
+  // (chamado ao fechar o modal de edição) recarrega os dados do servidor e
+  // volta a alinhar tudo, então não há necessidade de um segundo estado aqui.
+  const [photoUrl, setPhotoUrl] = useState(employee.photoUrl);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: employee.name,
     cargo: employee.cargo,
@@ -132,6 +144,35 @@ export function EmployeeProfileClient({
     return { faltas, atrasos, advertencias, suspensoes, diasDisponiveis, feriasVencidas };
   }, [occurrences, vacations]);
 
+  async function handlePhotoChange(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+    setPhotoUploading(true);
+    setPhotoError(null);
+    try {
+      const blob = await upload(sanitizeFileName(file.name), file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+      });
+      const res = await fetch(`/api/rh/employees/${employee.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: blob.url }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPhotoError(data?.error ?? "Não foi possível salvar a foto.");
+        return;
+      }
+      setPhotoUrl(blob.url);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Falha ao enviar a foto.");
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  }
+
   async function submitEdit() {
     await fetch(`/api/rh/employees/${employee.id}`, {
       method: "PATCH",
@@ -153,13 +194,35 @@ export function EmployeeProfileClient({
     <div className="space-y-6">
       <div className="nord-card p-5 flex flex-col md:flex-row md:items-center gap-5">
         <div className="flex items-center gap-4 flex-1 min-w-0">
-          {employee.photoUrl ? (
-            <Image src={employee.photoUrl} alt={employee.name} width={64} height={64} className="w-16 h-16 rounded-full object-cover shrink-0" />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-nord-blue/20 text-nord-blue text-xl font-semibold flex items-center justify-center shrink-0">
-              {initials}
-            </div>
-          )}
+          <div className="relative shrink-0">
+            {photoUrl ? (
+              <Image src={photoUrl} alt={employee.name} width={64} height={64} className="w-16 h-16 rounded-full object-cover shrink-0" />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-nord-blue/20 text-nord-blue text-xl font-semibold flex items-center justify-center shrink-0">
+                {initials}
+              </div>
+            )}
+            {canCreate && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoUploading}
+                  title="Alterar foto"
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-nord-blue hover:bg-nord-blue-light border-2 border-nord-card flex items-center justify-center text-white disabled:opacity-60"
+                >
+                  <Pencil size={11} />
+                </button>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => handlePhotoChange(e.target.files)}
+                />
+              </>
+            )}
+          </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-white text-lg font-semibold">{employee.name}</h2>
@@ -175,6 +238,8 @@ export function EmployeeProfileClient({
               {employee.phone && <span>Tel: {employee.phone}</span>}
               {employee.pixKey && <span>Pix: {employee.pixKey}</span>}
             </div>
+            {photoUploading && <p className="text-xs text-nord-gray mt-1">Enviando foto...</p>}
+            {!photoUploading && photoError && <p className="text-xs text-red-400 mt-1">{photoError}</p>}
           </div>
         </div>
         {canCreate && (

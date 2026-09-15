@@ -416,22 +416,30 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
               <div className="flex items-center gap-3 pb-3 border-b border-nord-border">
                 <div className="relative shrink-0">
                   <UserAvatar name={user.name} avatarUrl={avatarUrl} size={48} />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingAvatar}
-                    title="Alterar foto"
-                    className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-nord-blue hover:bg-nord-blue-light border-2 border-nord-card flex items-center justify-center text-white disabled:opacity-60"
-                  >
-                    <Pencil size={10} />
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    onChange={(e) => handleAvatarChange(e.target.files)}
-                  />
+                  {/* Só Administrador pode trocar a própria foto — ver PATCH
+                      /api/usuarios/me, que rejeita qualquer outro cargo. O
+                      botão fica escondido pros demais em vez de aparecer e
+                      falhar ao salvar. */}
+                  {user.role === "ADMINISTRADOR" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingAvatar}
+                        title="Alterar foto"
+                        className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-nord-blue hover:bg-nord-blue-light border-2 border-nord-card flex items-center justify-center text-white disabled:opacity-60"
+                      >
+                        <Pencil size={10} />
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => handleAvatarChange(e.target.files)}
+                      />
+                    </>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-white font-medium truncate">{user.name}</p>

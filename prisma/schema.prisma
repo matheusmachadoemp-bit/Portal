@@ -298,7 +298,6 @@ model Empresa {
   bankTransactions                   BankTransaction[]
   reconciliationImports              BankReconciliationImport[]
   auditLogs                          AuditLog[]
-  trainingTracks                     TrainingTrack[]
   trainingCourses                    TrainingCourse[]
   trainingLibrary                    TrainingLibraryItem[]
   qualityConfigs                     CategoryQualityConfig[]
@@ -2996,7 +2995,7 @@ enum CourseStatus {
   ARQUIVADO
 }
 
-enum ModuleType {
+enum LessonType {
   VIDEO
   PDF
   CHECKLIST
@@ -3016,24 +3015,12 @@ enum QuestionType {
   DISSERTATIVA
 }
 
-model TrainingTrack {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  name        String
-  cargo       String?
-  empresaId   String?
-  empresa     Empresa? @relation(fields: [empresaId], references: [id])
-  description String?
-  icon        String   @default("GraduationCap")
-  color       String   @default("#2952E3")
-  order       Int      @default(0)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  courses TrainingTrackCourse[]
-}
-
+// Curso: o que o colaborador escolhe fazer (catálogo, matrícula). Dividido em
+// módulos — "Trilhas de Aprendizagem" (TrainingTrack/TrainingTrackCourse)
+// foram descontinuadas em set/2026: cursos que eram agrupados numa trilha
+// (ex.: os 10 cursos do onboarding) viraram módulos de 1 curso só, e a
+// subcategoria de menu correspondente foi removida — ver migration
+// 20260915130000_universidade_curso_modulo_aula.
 model TrainingCourse {
   id           String       @id @default(cuid())
   name         String
@@ -3055,30 +3042,42 @@ model TrainingCourse {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  modules              TrainingModule[]
-  tracks               TrainingTrackCourse[]
-  enrollments          TrainingEnrollment[]
-  quiz                 TrainingQuiz?
-  trainingCertificates TrainingCertificate[]
+  modules      TrainingModule[]
+  enrollments  TrainingEnrollment[]
+  certificates TrainingCertificate[]
 }
 
-model TrainingTrackCourse {
-  id       String         @id @default(cuid())
-  trackId  String
-  track    TrainingTrack  @relation(fields: [trackId], references: [id], onDelete: Cascade)
-  courseId String
-  course   TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  order    Int            @default(0)
-
-  @@unique([trackId, courseId])
-}
-
+// Módulo: agrupa aulas dentro de um curso (o que aparece como "categoria" na
+// seção de vídeo aula do curso). Cada módulo tem sua própria avaliação
+// (TrainingQuiz, opcional) e seu próprio certificado — não existe mais
+// avaliação/certificado do curso inteiro.
 model TrainingModule {
+  id           String         @id @default(cuid())
+  courseId     String
+  course       TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  cargaHoraria Int            @default(0)
+  order        Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  lessons      TrainingLesson[]
+  quiz         TrainingQuiz?
+  certificates TrainingCertificate[]
+  enrollments  TrainingModuleEnrollment[]
+}
+
+// Aula: vídeo/PDF/checklist/link individual dentro de um módulo. Era chamada
+// (por engano de origem) de "TrainingModule" — renomeada quando o conceito de
+// módulo de verdade (acima) foi introduzido, pra evitar as duas tabelas terem
+// nomes quase idênticos ("TrainingModule" x um hipotético "TrainingModulo").
+model TrainingLesson {
   id              String         @id @default(cuid())
-  courseId        String
-  course          TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  moduleId        String
+  module          TrainingModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   title           String
-  type            ModuleType     @default(VIDEO)
+  type            LessonType     @default(VIDEO)
   videoUrl        String?
   durationSeconds Int            @default(0)
   pdfUrl          String?
@@ -3087,9 +3086,12 @@ model TrainingModule {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  progress TrainingModuleProgress[]
+  progress TrainingLessonProgress[]
 }
 
+// Matrícula do colaborador no CURSO — inalterada desde a versão anterior.
+// status/progressPercent agora são agregados a partir dos módulos (via
+// TrainingModuleEnrollment), não mais direto das aulas.
 model TrainingEnrollment {
   id              String           @id @default(cuid())
   userId          String
@@ -3103,36 +3105,63 @@ model TrainingEnrollment {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  moduleProgress TrainingModuleProgress[]
-  attempts       TrainingAttempt[]
-  certificate    TrainingCertificate?
+  moduleEnrollments TrainingModuleEnrollment[]
 
   @@unique([userId, courseId])
 }
 
-model TrainingModuleProgress {
-  id             String             @id @default(cuid())
-  enrollmentId   String
-  enrollment     TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  moduleId       String
-  module         TrainingModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  watchedSeconds Int                @default(0)
-  percentWatched Int                @default(0)
-  completed      Boolean            @default(false)
-  playCount      Int                @default(0)
-  lastDevice     String?
-  startedAt      DateTime?
-  completedAt    DateTime?
-  lastAccessAt   DateTime           @default(now())
+// Matrícula/progresso do colaborador em um MÓDULO específico — nível novo,
+// irmão de TrainingEnrollment um degrau abaixo. É aqui que mora se o módulo
+// já foi concluído, e é o que a avaliação e o certificado passam a referenciar
+// (em vez da matrícula do curso inteiro, como era antes).
+model TrainingModuleEnrollment {
+  id              String             @id @default(cuid())
+  enrollmentId    String
+  enrollment      TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  moduleId        String
+  module          TrainingModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  status          EnrollmentStatus   @default(NAO_INICIADO)
+  progressPercent Int                @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  lessonProgress TrainingLessonProgress[]
+  attempts       TrainingAttempt[]
+  certificate    TrainingCertificate?
 
   @@unique([enrollmentId, moduleId])
 }
 
+// Progresso de aula assistida — mesmo formato de antes (TrainingModuleProgress),
+// só reapontado do módulo (matrícula no curso) pra matrícula no módulo.
+model TrainingLessonProgress {
+  id                 String                   @id @default(cuid())
+  moduleEnrollmentId String
+  moduleEnrollment   TrainingModuleEnrollment @relation(fields: [moduleEnrollmentId], references: [id], onDelete: Cascade)
+  lessonId           String
+  lesson             TrainingLesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  watchedSeconds     Int                      @default(0)
+  percentWatched     Int                      @default(0)
+  completed          Boolean                  @default(false)
+  playCount          Int                      @default(0)
+  lastDevice         String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  lastAccessAt       DateTime                 @default(now())
+
+  @@unique([moduleEnrollmentId, lessonId])
+}
+
+// Avaliação: agora por MÓDULO (era por curso inteiro). minScore default subiu
+// de 70 pra 90 (regra nova: 90% pra liberar o certificado do módulo),
+// continua editável por módulo, igual já era antes por curso.
 model TrainingQuiz {
   id               String         @id @default(cuid())
-  courseId         String         @unique
-  course           TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  minScore         Int            @default(70)
+  moduleId         String         @unique
+  module           TrainingModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  minScore         Int            @default(90)
   maxAttempts      Int            @default(3)
   timeLimitMinutes Int?
 
@@ -3161,32 +3190,37 @@ model TrainingQuestionOption {
 }
 
 model TrainingAttempt {
-  id            String             @id @default(cuid())
-  quizId        String
-  quiz          TrainingQuiz       @relation(fields: [quizId], references: [id])
-  enrollmentId  String
-  enrollment    TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  userId        String
-  user          User               @relation(fields: [userId], references: [id])
-  score         Int                @default(0)
-  passed        Boolean            @default(false)
-  answers       String?
-  attemptNumber Int                @default(1)
-  startedAt     DateTime           @default(now())
-  submittedAt   DateTime?
+  id                 String                   @id @default(cuid())
+  quizId             String
+  quiz               TrainingQuiz             @relation(fields: [quizId], references: [id])
+  moduleEnrollmentId String
+  moduleEnrollment   TrainingModuleEnrollment @relation(fields: [moduleEnrollmentId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User                     @relation(fields: [userId], references: [id])
+  score              Int                      @default(0)
+  passed             Boolean                  @default(false)
+  answers            String?
+  attemptNumber      Int                      @default(1)
+  startedAt          DateTime                 @default(now())
+  submittedAt        DateTime?
 }
 
+// Certificado: agora por MÓDULO (era por curso inteiro). Mantém courseId
+// (denormalizado) além de moduleId, pra continuar dando pra consultar "todos
+// os certificados deste curso" sem precisar passar por módulo.
 model TrainingCertificate {
-  id           String             @id @default(cuid())
-  code         String             @unique
-  userId       String
-  user         User               @relation(fields: [userId], references: [id])
-  courseId     String
-  course       TrainingCourse     @relation(fields: [courseId], references: [id])
-  enrollmentId String             @unique
-  enrollment   TrainingEnrollment @relation(fields: [enrollmentId], references: [id])
-  cargaHoraria Int                @default(0)
-  issuedAt     DateTime           @default(now())
+  id                 String                   @id @default(cuid())
+  code               String                   @unique
+  userId             String
+  user               User                     @relation(fields: [userId], references: [id])
+  courseId           String
+  course             TrainingCourse           @relation(fields: [courseId], references: [id])
+  moduleId           String
+  module             TrainingModule           @relation(fields: [moduleId], references: [id])
+  moduleEnrollmentId String                   @unique
+  moduleEnrollment   TrainingModuleEnrollment @relation(fields: [moduleEnrollmentId], references: [id])
+  cargaHoraria       Int                      @default(0)
+  issuedAt           DateTime                 @default(now())
 }
 
 model TrainingBadge {

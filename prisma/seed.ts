@@ -22,12 +22,21 @@ const FECHAMENTO_CARGO_KEYS = ["gerencia", "salao", "cozinha"] as const;
 const CATEGORIES = [
   { key: "inicio", name: "Início", icon: "Home", order: 0, contentType: "dashboard", subs: [] },
   {
+    // A categoria em si não navega mais pra /portal/vendas ao ser clicada (linked: false) —
+    // vira só um agrupador visual das subcategorias, mesmo padrão já estabelecido em
+    // prisma/migrations/20260914130000_tarefas_subcategoria_propria/migration.sql para
+    // "Tarefas" (mesma coluna "linked", já existente desde aquela migração). A subcategoria
+    // "Visão Geral" (rota /portal/vendas/visao-geral — ver
+    // src/app/portal/vendas/visao-geral/page.tsx, que reexporta a mesma página de sempre)
+    // é quem leva pro conteúdo que ficava na rota "nua".
     key: "vendas",
     name: "Vendas",
     icon: "ShoppingCart",
     order: 1,
     contentType: "vendas",
+    linked: false,
     subs: [
+      { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "lancamentos", name: "Lançamentos", icon: "ReceiptText" },
       { key: "faturamento", name: "Faturamento", icon: "DollarSign" },
       { key: "acompanhamento-vendas", name: "Acompanhamento de Vendas", icon: "GitCompare" },
@@ -59,7 +68,6 @@ const CATEGORIES = [
     contentType: "universidade",
     subs: [
       { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
-      { key: "trilhas", name: "Trilhas de Aprendizagem", icon: "Route" },
       { key: "cursos", name: "Cursos", icon: "BookOpen" },
       { key: "videoaulas", name: "Videoaulas", icon: "Video" },
       { key: "avaliacoes", name: "Avaliações", icon: "ClipboardCheck" },
