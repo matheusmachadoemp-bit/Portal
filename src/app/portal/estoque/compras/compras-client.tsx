@@ -242,7 +242,7 @@ export function ComprasClient({
                         Detalhes
                       </button>
                       {canCreate && !p.recebido && p.status !== "CANCELADO" && (
-                        <button onClick={() => marcarRecebido(p)} className="text-xs text-emerald-400 hover:underline">
+                        <button onClick={() => marcarRecebido(p)} className="text-xs text-nord-success hover:underline">
                           Marcar recebido
                         </button>
                       )}
@@ -316,7 +316,7 @@ export function ComprasClient({
                 {ing && ing.precoAtual > 0 && it.valorUnitario && Number(it.valorUnitario) > ing.precoAtual * 1.15 && (
                   <Badge tone="warning">Acima da média</Badge>
                 )}
-                <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-red-400">
+                <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-nord-danger">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -327,7 +327,7 @@ export function ComprasClient({
           </button>
         </div>
 
-        {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+        {error && <p className="text-xs text-nord-danger mt-3">{error}</p>}
         <button onClick={submit} disabled={submitting} className="btn-primary w-full mt-4 py-2.5">
           {submitting ? "Registrando..." : "Registrar compra"}
         </button>

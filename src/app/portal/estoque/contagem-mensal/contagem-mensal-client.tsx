@@ -217,7 +217,7 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
             <span className="block text-xs text-nord-gray mb-1">Responsável pelo fechamento</span>
             <input className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} />
           </label>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={iniciarContagem} className="btn-primary w-full py-2.5">
             Iniciar
           </button>
@@ -293,14 +293,14 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
             <div className="nord-card p-4 space-y-1.5 text-sm">
               <div className="flex justify-between"><span className="text-nord-gray">Valor esperado do estoque</span><span className="text-white">{formatCurrency(valorEsperado)}</span></div>
               <div className="flex justify-between"><span className="text-nord-gray">Valor contado</span><span className="text-white">{formatCurrency(valorContado)}</span></div>
-              <div className="flex justify-between font-medium"><span className="text-white">Diferença total</span><span className={valorContado - valorEsperado < 0 ? "text-red-400" : "text-emerald-400"}>{formatCurrency(valorContado - valorEsperado)}</span></div>
+              <div className="flex justify-between font-medium"><span className="text-white">Diferença total</span><span className={valorContado - valorEsperado < 0 ? "text-nord-danger" : "text-nord-success"}>{formatCurrency(valorContado - valorEsperado)}</span></div>
             </div>
 
             {active.status === "APROVADA" ? (
-              <div className="flex items-center justify-between text-sm bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2">
-                <span className="text-emerald-400">Fechamento aprovado por {active.aprovadoPor} — alterações bloqueadas.</span>
+              <div className="flex items-center justify-between text-sm bg-nord-success/10 border border-nord-success/30 rounded-lg px-3 py-2">
+                <span className="text-nord-success">Fechamento aprovado por {active.aprovadoPor} — alterações bloqueadas.</span>
                 {podeReabrir && (
-                  <button onClick={() => setShowReabrir(true)} className="text-xs text-red-400 hover:underline">
+                  <button onClick={() => setShowReabrir(true)} className="text-xs text-nord-danger hover:underline">
                     Reabrir fechamento
                   </button>
                 )}
@@ -323,7 +323,7 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
 
       <Modal open={showReabrir} onClose={() => setShowReabrir(false)} title="Reabrir fechamento" widthClass="max-w-sm">
         <div className="space-y-3">
-          <p className="text-xs text-amber-400">Reabrir um fechamento aprovado é uma ação sensível e será registrada. Informe o motivo.</p>
+          <p className="text-xs text-nord-warning">Reabrir um fechamento aprovado é uma ação sensível e será registrada. Informe o motivo.</p>
           <textarea className="input" rows={3} value={motivoReabertura} onChange={(e) => setMotivoReabertura(e.target.value)} />
           <button onClick={reabrir} disabled={!motivoReabertura.trim()} className="btn-primary w-full py-2.5">
             Confirmar reabertura

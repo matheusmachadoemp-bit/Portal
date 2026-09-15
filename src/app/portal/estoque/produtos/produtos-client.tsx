@@ -416,7 +416,7 @@ export function ProdutosClient({
             <span className="text-sm text-white">Ativo</span>
           </label>
         </div>
-        {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+        {error && <p className="text-xs text-nord-danger mt-3">{error}</p>}
         <button onClick={submit} disabled={!form.name.trim() || submitting} className="btn-primary w-full mt-4 py-2.5">
           {submitting ? "Salvando..." : "Salvar"}
         </button>

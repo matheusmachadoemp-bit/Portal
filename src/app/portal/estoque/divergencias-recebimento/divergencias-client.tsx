@@ -154,7 +154,7 @@ export function DivergenciasClient({ initialItems, canResolve }: { initialItems:
                       ? it.divergenciaTipos.split(",").map((t) => RECEIVING_ITEM_DIVERGENCE_LABEL[t] ?? t).join(", ")
                       : "—"}
                   </td>
-                  <td className={`py-2.5 pr-4 ${valorDiferenca(it) < 0 ? "text-red-400" : "text-nord-gray"}`}>
+                  <td className={`py-2.5 pr-4 ${valorDiferenca(it) < 0 ? "text-nord-danger" : "text-nord-gray"}`}>
                     {formatCurrency(valorDiferenca(it))}
                   </td>
                   <td className="py-2.5 pr-4">
