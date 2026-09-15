@@ -149,21 +149,60 @@ export function AcompanhamentoClient({ initialResult, initialFilters }: { initia
   }
 
   async function handleExport() {
-    const { exportKpiReportToPdf } = await import("@/lib/pdf-export");
-    exportKpiReportToPdf("Acompanhamento de Vendas", `Data A: ${filters.fromA} a ${filters.toA} vs Data B: ${filters.fromB} a ${filters.toB}`, [
-      {
-        title: "KPIs gerais (A vs B)",
-        rows: [
-          ["Faturamento", `${formatCurrency(result.kpis.faturamentoA)} vs ${formatCurrency(result.kpis.faturamentoB)}`],
-          ["Pedidos", `${result.kpis.pedidosA} vs ${result.kpis.pedidosB}`],
-          ["Ticket médio", `${formatCurrency(result.kpis.ticketMedioA)} vs ${formatCurrency(result.kpis.ticketMedioB)}`],
-        ],
-      },
-      {
-        title: "Por tipo de venda (A vs B)",
-        rows: result.byType.map((t) => [SALE_TYPE_LABEL[t.type], `${t.pedidosA} pedidos / ${formatCurrency(t.valorA)} vs ${t.pedidosB} pedidos / ${formatCurrency(t.valorB)}`]),
-      },
-    ]);
+    const { exportComparisonReportToPdf } = await import("@/lib/pdf-export");
+
+    exportComparisonReportToPdf(
+      "Acompanhamento de Vendas",
+      `Data A: ${filters.fromA} a ${filters.toA}  vs  Data B: ${filters.fromB} a ${filters.toB}`,
+      "Data A",
+      "Data B",
+      [
+        {
+          title: "KPIs gerais",
+          chart: {
+            groups: [
+              { label: "Faturamento", valueA: result.kpis.faturamentoA, valueB: result.kpis.faturamentoB, formatValue: formatCurrency },
+              { label: "Pedidos", valueA: result.kpis.pedidosA, valueB: result.kpis.pedidosB, formatValue: formatNumber },
+              { label: "Ticket médio", valueA: result.kpis.ticketMedioA, valueB: result.kpis.ticketMedioB, formatValue: formatCurrency },
+            ],
+          },
+          tableHead: ["Métrica", "Data A", "Data B"],
+          tableRows: [
+            ["Faturamento", formatCurrency(result.kpis.faturamentoA), formatCurrency(result.kpis.faturamentoB)],
+            ["Pedidos", formatNumber(result.kpis.pedidosA), formatNumber(result.kpis.pedidosB)],
+            ["Ticket médio", formatCurrency(result.kpis.ticketMedioA), formatCurrency(result.kpis.ticketMedioB)],
+          ],
+        },
+        {
+          title: "Pedidos por tipo de venda",
+          chart: {
+            groups: result.byType.map((t) => ({ label: SALE_TYPE_LABEL[t.type], valueA: t.pedidosA, valueB: t.pedidosB, formatValue: formatNumber })),
+          },
+          tableHead: ["Tipo de venda", "Pedidos A", "Pedidos B"],
+          tableRows: result.byType.map((t) => [SALE_TYPE_LABEL[t.type], formatNumber(t.pedidosA), formatNumber(t.pedidosB)]),
+        },
+        {
+          title: "Valor de venda por tipo de venda",
+          chart: {
+            // formatCompactCurrency (sem centavos) — com formatCurrency completo os rótulos se sobrepõem
+            // nesse layout de 4 colunas lado a lado, mesmo motivo pelo qual a tela já usa a versão compacta
+            // nos cards de comparação por tipo de venda (ver CompareByTypeCard).
+            groups: result.byType.map((t) => ({ label: SALE_TYPE_LABEL[t.type], valueA: t.valorA, valueB: t.valorB, formatValue: formatCompactCurrency })),
+          },
+          tableHead: ["Tipo de venda", "Valor A", "Valor B"],
+          tableRows: result.byType.map((t) => [SALE_TYPE_LABEL[t.type], formatCurrency(t.valorA), formatCurrency(t.valorB)]),
+        },
+        {
+          title: "Ticket médio por tipo de venda",
+          chart: {
+            // Mesmo motivo acima: formatCompactCurrency evita sobreposição dos rótulos no gráfico de 4 colunas.
+            groups: result.byType.map((t) => ({ label: SALE_TYPE_LABEL[t.type], valueA: t.ticketA, valueB: t.ticketB, formatValue: formatCompactCurrency })),
+          },
+          tableHead: ["Tipo de venda", "Ticket médio A", "Ticket médio B"],
+          tableRows: result.byType.map((t) => [SALE_TYPE_LABEL[t.type], formatCurrency(t.ticketA), formatCurrency(t.ticketB)]),
+        },
+      ]
+    );
   }
 
   const kpiItems = [
