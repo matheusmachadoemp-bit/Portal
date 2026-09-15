@@ -7,7 +7,7 @@ import Image from "next/image";
 import { upload } from "@vercel/blob/client";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatNumber, formatPercent } from "@/lib/calc";
 import { tempoDeEmpresa } from "@/lib/rh-helpers";
 import { sanitizeFileName } from "@/lib/upload";
@@ -127,6 +127,7 @@ export function ColaboradoresClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Troca de foto do colaborador sendo editado no modal — mesmo mecanismo
@@ -173,12 +174,14 @@ export function ColaboradoresClient({
     setEditing(null);
     setForm(emptyForm);
     setPhotoError(null);
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(e: EmployeeDTO) {
     setEditing(e);
     setPhotoError(null);
+    setFormError(null);
     setForm({
       name: e.name,
       cargo: e.cargo,
@@ -204,23 +207,30 @@ export function ColaboradoresClient({
 
   async function submit() {
     if (submitting) return;
+    setFormError(null);
+    if (!form.cargo.trim()) return setFormError("Informe o cargo.");
+    if (!form.setor.trim()) return setFormError("Informe o setor.");
     setSubmitting(true);
     try {
-      if (editing) {
-        await fetch(`/api/rh/employees/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/rh/employees", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const res = editing
+        ? await fetch(`/api/rh/employees/${editing.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(form),
+          })
+        : await fetch("/api/rh/employees", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(form),
+          });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Erro ao salvar colaborador.");
       }
       setShowForm(false);
       await refresh();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Erro ao salvar colaborador.");
     } finally {
       setSubmitting(false);
     }
@@ -485,76 +495,84 @@ export function ColaboradoresClient({
             </div>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Field label="Nome">
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+        <FormError message={formError} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Field label="Nome">
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+              </Field>
+            </div>
+            <Field label="Cargo">
+              <input required value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="input" />
+            </Field>
+            <Field label="Setor">
+              <input required value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })} className="input" />
+            </Field>
+            <Field label="Data de admissão">
+              <input type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} className="input" />
+            </Field>
+            <Field label="Status">
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
+                <option value="ATIVO">Ativo</option>
+                <option value="FERIAS">Férias</option>
+                <option value="AFASTADO">Afastado</option>
+                <option value="DESLIGADO">Desligado</option>
+              </select>
+            </Field>
+            <Field label="Telefone">
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input" />
+            </Field>
+            <Field label="E-mail">
+              <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
+            </Field>
+            <Field label="CPF">
+              <input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="input" />
+            </Field>
+            <Field label="Chave Pix">
+              <input value={form.pixKey} onChange={(e) => setForm({ ...form, pixKey: e.target.value })} className="input" />
+            </Field>
+            <Field label="Data de nascimento">
+              <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className="input" />
+            </Field>
+            <Field label="Escala">
+              <input value={form.escala} onChange={(e) => setForm({ ...form, escala: e.target.value })} className="input" placeholder="6x1, 5x2..." />
+            </Field>
+            <Field label="Salário fixo">
+              <input type="number" value={form.salarioFixo} onChange={(e) => setForm({ ...form, salarioFixo: e.target.value })} className="input" />
+            </Field>
+            <Field label="Gestor responsável">
+              <input value={form.gestorResponsavel} onChange={(e) => setForm({ ...form, gestorResponsavel: e.target.value })} className="input" />
+            </Field>
+            <Field label="Supervisor">
+              <input value={form.supervisorResponsavel} onChange={(e) => setForm({ ...form, supervisorResponsavel: e.target.value })} className="input" />
+            </Field>
+            <Field label="Última avaliação (data)">
+              <input type="date" value={form.lastEvaluationDate} onChange={(e) => setForm({ ...form, lastEvaluationDate: e.target.value })} className="input" />
+            </Field>
+            <Field label="Última avaliação (nota/obs)">
+              <input value={form.lastEvaluationNote} onChange={(e) => setForm({ ...form, lastEvaluationNote: e.target.value })} className="input" />
+            </Field>
+            <Field label="Último treinamento (data)">
+              <input type="date" value={form.lastTrainingDate} onChange={(e) => setForm({ ...form, lastTrainingDate: e.target.value })} className="input" />
+            </Field>
+            <Field label="Último treinamento (nome)">
+              <input value={form.lastTrainingName} onChange={(e) => setForm({ ...form, lastTrainingName: e.target.value })} className="input" />
             </Field>
           </div>
-          <Field label="Cargo">
-            <input value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="input" />
-          </Field>
-          <Field label="Setor">
-            <input value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })} className="input" />
-          </Field>
-          <Field label="Data de admissão">
-            <input type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} className="input" />
-          </Field>
-          <Field label="Status">
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
-              <option value="ATIVO">Ativo</option>
-              <option value="FERIAS">Férias</option>
-              <option value="AFASTADO">Afastado</option>
-              <option value="DESLIGADO">Desligado</option>
-            </select>
-          </Field>
-          <Field label="Telefone">
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input" />
-          </Field>
-          <Field label="E-mail">
-            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
-          </Field>
-          <Field label="CPF">
-            <input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} className="input" />
-          </Field>
-          <Field label="Chave Pix">
-            <input value={form.pixKey} onChange={(e) => setForm({ ...form, pixKey: e.target.value })} className="input" />
-          </Field>
-          <Field label="Data de nascimento">
-            <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className="input" />
-          </Field>
-          <Field label="Escala">
-            <input value={form.escala} onChange={(e) => setForm({ ...form, escala: e.target.value })} className="input" placeholder="6x1, 5x2..." />
-          </Field>
-          <Field label="Salário fixo">
-            <input type="number" value={form.salarioFixo} onChange={(e) => setForm({ ...form, salarioFixo: e.target.value })} className="input" />
-          </Field>
-          <Field label="Gestor responsável">
-            <input value={form.gestorResponsavel} onChange={(e) => setForm({ ...form, gestorResponsavel: e.target.value })} className="input" />
-          </Field>
-          <Field label="Supervisor">
-            <input value={form.supervisorResponsavel} onChange={(e) => setForm({ ...form, supervisorResponsavel: e.target.value })} className="input" />
-          </Field>
-          <Field label="Última avaliação (data)">
-            <input type="date" value={form.lastEvaluationDate} onChange={(e) => setForm({ ...form, lastEvaluationDate: e.target.value })} className="input" />
-          </Field>
-          <Field label="Última avaliação (nota/obs)">
-            <input value={form.lastEvaluationNote} onChange={(e) => setForm({ ...form, lastEvaluationNote: e.target.value })} className="input" />
-          </Field>
-          <Field label="Último treinamento (data)">
-            <input type="date" value={form.lastTrainingDate} onChange={(e) => setForm({ ...form, lastTrainingDate: e.target.value })} className="input" />
-          </Field>
-          <Field label="Último treinamento (nome)">
-            <input value={form.lastTrainingName} onChange={(e) => setForm({ ...form, lastTrainingName: e.target.value })} className="input" />
-          </Field>
-        </div>
-        <button
-          onClick={submit}
-          disabled={submitting}
-          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
-        >
-          {submitting ? "Salvando..." : "Salvar"}
-        </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            {submitting ? "Salvando..." : "Salvar"}
+          </button>
+        </form>
       </Modal>
 
       <ConfirmDialog

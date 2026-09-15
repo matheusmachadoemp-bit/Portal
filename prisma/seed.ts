@@ -2187,6 +2187,48 @@ async function main() {
     });
   }
 
+  // --- RH: catálogo de Cargos e Setores (EmployeeCargo/EmployeeSetor) ---
+  // Populado a partir de TODO `Employee`/`FechamentoCargo` já criado neste seed — precisa rodar
+  // por último, depois de todo o resto. Mesmo backfill que a migration
+  // 20260915160000_employee_cargo_setor_catalogo faz em produção via SQL puro (ver comentário
+  // lá para o racional completo); reescrito aqui em Prisma Client porque o seed não roda SQL
+  // bruto. Sem isso, rodar `npm run db:seed` num banco vazio (setup local do zero) deixaria os
+  // colaboradores criados acima com `cargo`/`setor` preenchidos mas o catálogo vazio — a
+  // migration só faz esse backfill quando JÁ existem `Employee`/`FechamentoCargo` no banco no
+  // momento em que ela roda (o caso de produção; nunca o caso de um banco seedado do zero).
+  // `createMany` com `skipDuplicates` (não upsert): só preenche o que falta, nunca sobrescreve —
+  // seguro rodar o seed de novo num banco que já tem o catálogo populado.
+  {
+    const allEmployees = await prisma.employee.findMany({ select: { empresaId: true, cargo: true, setor: true } });
+    const allFechamentoCargos = await prisma.fechamentoCargo.findMany({ select: { empresaId: true, nome: true } });
+
+    const cargosCatalogo = new Map<string, { empresaId: string; nome: string }>();
+    const setoresCatalogo = new Map<string, { empresaId: string; nome: string }>();
+    const addCargo = (empresaId: string, nomeBruto: string) => {
+      const nome = nomeBruto.trim();
+      if (nome) cargosCatalogo.set(`${empresaId}::${nome}`, { empresaId, nome });
+    };
+    const addSetor = (empresaId: string, nomeBruto: string) => {
+      const nome = nomeBruto.trim();
+      if (nome) setoresCatalogo.set(`${empresaId}::${nome}`, { empresaId, nome });
+    };
+
+    for (const e of allEmployees) {
+      addCargo(e.empresaId, e.cargo);
+      addSetor(e.empresaId, e.setor);
+    }
+    // Garante que os 3 cargos do Fechamento do Dia também existam no catálogo de RH de cada
+    // empresa, mesmo que nenhum Employee use esse texto exato (ex.: Zarki Sushi não tem, hoje,
+    // nenhum colaborador cadastrado como "Gerente"/"Chef de..." no RH, mesmo já tendo esses 3
+    // cargos configurados no Fechamento do Dia).
+    for (const fc of allFechamentoCargos) {
+      addCargo(fc.empresaId, fc.nome);
+    }
+
+    await prisma.employeeCargo.createMany({ data: [...cargosCatalogo.values()], skipDuplicates: true });
+    await prisma.employeeSetor.createMany({ data: [...setoresCatalogo.values()], skipDuplicates: true });
+  }
+
   console.log("Seed concluído.");
   console.log("Login admin: admin@nordpizza.com / Nord@2026 (acesso Nord Pizza + Zarki Sushi + Grupo Nord)");
   console.log(`Login gerente: ${gerente.email} / Gerente@2026 (acesso apenas Nord Pizza)`);

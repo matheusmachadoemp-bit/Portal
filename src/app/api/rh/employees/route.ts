@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -49,12 +50,23 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+
+  // Cargo/Setor passam pelo catálogo de RH (EmployeeCargo/EmployeeSetor) em vez de gravar o texto
+  // solto: reaproveita o item já cadastrado quando o texto bate, ou cadastra um item novo na hora
+  // quando não bate com nenhum — nunca aceita/rejeita sem passar por essa checagem (ver
+  // @/lib/rh-server para o racional completo). Mesmo texto normalizado (trim) é o que acaba
+  // gravado em `Employee.cargo`/`.setor`.
+  const cargoResolvido = await resolveEmployeeCargo(empresa.id, body.cargo);
+  if (!cargoResolvido.ok) return NextResponse.json({ error: cargoResolvido.error }, { status: 400 });
+  const setorResolvido = await resolveEmployeeSetor(empresa.id, body.setor);
+  if (!setorResolvido.ok) return NextResponse.json({ error: setorResolvido.error }, { status: 400 });
+
   const employee = await prisma.employee.create({
     data: {
       empresaId: empresa.id,
       name: body.name,
-      cargo: body.cargo,
-      setor: body.setor,
+      cargo: cargoResolvido.nome,
+      setor: setorResolvido.nome,
       admissionDate: new Date(body.admissionDate),
       terminationDate: body.terminationDate ? new Date(body.terminationDate) : null,
       status: body.status || "ATIVO",

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { computeCurrentAquisitivePeriod } from "@/lib/rh-helpers";
+import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
 import { hasModulePermission } from "@/lib/authz";
 import * as XLSX from "xlsx";
 
@@ -143,6 +144,34 @@ export async function POST(req: Request) {
   const byCpf = new Map(existingEmployees.filter((e) => e.cpf).map((e) => [onlyDigits(e.cpf!), e]));
   const byName = new Map(existingEmployees.map((e) => [e.name.trim().toLowerCase(), e]));
 
+  // Cargo/Setor passam pelo catálogo de RH (EmployeeCargo/EmployeeSetor, ver @/lib/rh-server) —
+  // mesmo mecanismo de "cadastra automaticamente quando o valor não bate com nenhuma opção já
+  // cadastrada" já usado pela criação/edição manual de colaborador (POST/PATCH
+  // /api/rh/employees), pra uma planilha com uma função nova não voltar a criar o mesmo tipo de
+  // problema que originou esta tarefa (ver CLAUDE.md, "Importação de arquivos: não deixar valores
+  // novos caírem em 'Outros'" — aqui o "Outros" seria o fallback "Geral" abaixo, que agora também
+  // vira um item de catálogo normal na primeira vez que aparece, em vez de só texto solto).
+  // Cacheado em memória por planilha (Map por texto já resolvido) — evita uma consulta/gravação
+  // repetida no catálogo a cada linha quando várias linhas compartilham a mesma função.
+  const cargoCache = new Map<string, string>();
+  const setorCache = new Map<string, string>();
+  async function resolveCargoCached(raw: string): Promise<{ ok: true; nome: string } | { ok: false; error: string }> {
+    const cached = cargoCache.get(raw);
+    if (cached) return { ok: true, nome: cached };
+    const resultado = await resolveEmployeeCargo(empresa!.id, raw);
+    if (!resultado.ok) return resultado;
+    cargoCache.set(raw, resultado.nome);
+    return { ok: true, nome: resultado.nome };
+  }
+  async function resolveSetorCached(raw: string): Promise<{ ok: true; nome: string } | { ok: false; error: string }> {
+    const cached = setorCache.get(raw);
+    if (cached) return { ok: true, nome: cached };
+    const resultado = await resolveEmployeeSetor(empresa!.id, raw);
+    if (!resultado.ok) return resultado;
+    setorCache.set(raw, resultado.nome);
+    return { ok: true, nome: resultado.nome };
+  }
+
   const errors: string[] = [];
   let created = 0;
   let updated = 0;
@@ -170,11 +199,18 @@ export async function POST(req: Request) {
     const cpf = cpfRaw ? onlyDigits(cpfRaw) : "";
     const pixKey = get("pixKey") || null;
     const phone = get("phone") || null;
-    const cargo = get("cargo") || "Geral";
+    const cargoRaw = get("cargo") || "Geral";
     const birthRaw = get("birthDate");
     const birthDate = birthRaw ? parseDateFlexible(birthRaw) : null;
     const salarioRaw = get("salarioFixo");
     const salarioFixo = salarioRaw ? parseSalario(salarioRaw) : null;
+
+    const cargoResolvido = await resolveCargoCached(cargoRaw);
+    if (!cargoResolvido.ok) {
+      errors.push(`Linha ${i + 1}: ${cargoResolvido.error}`);
+      continue;
+    }
+    const cargo = cargoResolvido.nome;
 
     const existing = (cpf && byCpf.get(cpf)) || byName.get(name.toLowerCase());
 
@@ -195,8 +231,16 @@ export async function POST(req: Request) {
       await prisma.employee.update({ where: { id: existing.id }, data });
       updated++;
     } else {
-      // Setor não vem na planilha: usa a função como valor inicial (campo obrigatório).
-      const employee = await prisma.employee.create({ data: { ...data, setor: cargo, empresaId: empresa.id } });
+      // Setor não vem na planilha: usa a função como valor inicial (campo obrigatório) — mas
+      // ainda passa pelo catálogo de setores (tabela separada da de cargos: o mesmo texto pode
+      // já existir como cargo e precisar ser cadastrado pela primeira vez como setor, ou
+      // vice-versa).
+      const setorResolvido = await resolveSetorCached(cargo);
+      if (!setorResolvido.ok) {
+        errors.push(`Linha ${i + 1}: ${setorResolvido.error}`);
+        continue;
+      }
+      const employee = await prisma.employee.create({ data: { ...data, setor: setorResolvido.nome, empresaId: empresa.id } });
       const periodo = computeCurrentAquisitivePeriod(admissionDate);
       await prisma.vacation.create({
         data: {
