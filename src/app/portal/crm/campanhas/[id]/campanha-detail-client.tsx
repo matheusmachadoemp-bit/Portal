@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Send } from "lucide-react";
-import { Badge, Section, StatCard } from "@/components/ui/stat-card";
+import { Badge, Section } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/calc";
 import { CAMPAIGN_STATUS_LABEL, CAMPAIGN_STATUS_TONE, CAMPAIGN_CHANNEL_LABEL, CAMPAIGN_OFFER_LABEL } from "@/lib/crm";
 
@@ -73,20 +74,23 @@ export function CampanhaDetailClient({ campanha, resultados }: { campanha: Campa
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Enviados" value={formatNumber(resultados.enviados)} icon="Send" />
-        <StatCard label="Entregues" value="—" icon="CheckCheck" hint="Requer integração com o canal" />
-        <StatCard label="Visualizados" value="—" icon="Eye" hint="Requer integração com o canal" />
-        <StatCard label="Cliques" value="—" icon="MousePointerClick" hint="Requer integração com o canal" />
-        <StatCard label="Pedidos" value={formatNumber(resultados.pedidos)} icon="ShoppingBag" color="#22c55e" />
-        <StatCard label="Conversão" value={formatPercent(resultados.conversao)} icon="Target" color="#f59e0b" />
-        <StatCard label="Receita" value={formatCurrency(resultados.receita)} icon="TrendingUp" color="#22c55e" />
-        <StatCard label="Ticket médio" value={formatCurrency(resultados.ticketMedio)} icon="Receipt" />
-        <StatCard label="Descontos concedidos" value={formatCurrency(resultados.descontos)} icon="Percent" />
-        <StatCard label="Custo da campanha" value={formatCurrency(resultados.custo)} icon="Wallet" />
-        <StatCard label="ROI" value={resultados.roi !== null ? `${formatNumber(resultados.roi, 2)}x` : "—"} icon="Sparkles" color="#a855f7" />
-        <StatCard label="Clientes reativados" value={formatNumber(resultados.reativados)} icon="Rocket" color="#a855f7" />
-      </div>
+      <SortableStatCards
+        storageKey="crm-campanha-detalhe-kpi-order"
+        cards={[
+          { key: "enviados", label: "Enviados", value: formatNumber(resultados.enviados), icon: "Send" },
+          { key: "entregues", label: "Entregues", value: "—", icon: "CheckCheck", hint: "Requer integração com o canal" },
+          { key: "visualizados", label: "Visualizados", value: "—", icon: "Eye", hint: "Requer integração com o canal" },
+          { key: "cliques", label: "Cliques", value: "—", icon: "MousePointerClick", hint: "Requer integração com o canal" },
+          { key: "pedidos", label: "Pedidos", value: formatNumber(resultados.pedidos), icon: "ShoppingBag", color: "#22c55e" },
+          { key: "conversao", label: "Conversão", value: formatPercent(resultados.conversao), icon: "Target", color: "#f59e0b" },
+          { key: "receita", label: "Receita", value: formatCurrency(resultados.receita), icon: "TrendingUp", color: "#22c55e" },
+          { key: "ticket-medio", label: "Ticket médio", value: formatCurrency(resultados.ticketMedio), icon: "Receipt" },
+          { key: "descontos-concedidos", label: "Descontos concedidos", value: formatCurrency(resultados.descontos), icon: "Percent" },
+          { key: "custo-campanha", label: "Custo da campanha", value: formatCurrency(resultados.custo), icon: "Wallet" },
+          { key: "roi", label: "ROI", value: resultados.roi !== null ? `${formatNumber(resultados.roi, 2)}x` : "—", icon: "Sparkles", color: "#a855f7" },
+          { key: "clientes-reativados", label: "Clientes reativados", value: formatNumber(resultados.reativados), icon: "Rocket", color: "#a855f7" },
+        ]}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
