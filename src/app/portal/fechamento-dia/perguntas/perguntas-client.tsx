@@ -281,7 +281,7 @@ export function PerguntasClient({ canEdit, canDelete }: { canEdit: boolean; canD
         {loading ? (
           <p className="text-sm text-nord-gray text-center py-8">Carregando...</p>
         ) : loadError ? (
-          <p className="text-sm text-red-400 text-center py-8">{loadError}</p>
+          <p className="text-sm text-nord-danger text-center py-8">{loadError}</p>
         ) : perguntas.length === 0 ? (
           <p className="text-sm text-nord-gray text-center py-8">Nenhuma pergunta cadastrada ainda.</p>
         ) : perguntasFiltradas.length === 0 ? (
@@ -325,7 +325,7 @@ export function PerguntasClient({ canEdit, canDelete }: { canEdit: boolean; canD
                       {canDelete && (
                         <button
                           onClick={() => setDeleteTarget(p)}
-                          className="text-nord-gray hover:text-red-400 flex items-center gap-1 text-xs"
+                          className="text-nord-gray hover:text-nord-danger flex items-center gap-1 text-xs"
                         >
                           <Trash2 size={12} /> Excluir
                         </button>
@@ -389,7 +389,7 @@ export function PerguntasClient({ canEdit, canDelete }: { canEdit: boolean; canD
                 {form.opcoes.map((o, idx) => (
                   <div key={o.id ?? idx} className="flex items-center gap-2">
                     <input type="text" value={o.texto} onChange={(e) => updateOpcao(idx, e.target.value)} className="input" />
-                    <button onClick={() => removeOpcao(idx)} className="text-nord-gray hover:text-red-400 shrink-0">
+                    <button onClick={() => removeOpcao(idx)} className="text-nord-gray hover:text-nord-danger shrink-0">
                       <X size={16} />
                     </button>
                   </div>

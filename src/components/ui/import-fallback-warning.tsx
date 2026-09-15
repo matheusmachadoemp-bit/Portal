@@ -17,7 +17,7 @@ export function ImportFallbackWarning({ buckets }: { buckets?: ImportFallbackBuc
   if (relevant.length === 0) return null;
 
   return (
-    <div className="text-xs bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2 text-amber-400 space-y-1.5">
+    <div className="text-xs bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2 text-nord-warning space-y-1.5">
       {relevant.map((b) => (
         <p key={b.key}>{b.message}</p>
       ))}

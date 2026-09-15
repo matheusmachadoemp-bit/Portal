@@ -347,7 +347,7 @@ export function VendasClient({
         </div>
       </div>
       {!canCreate && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar
           ou editar dados.
         </p>
@@ -442,7 +442,7 @@ export function VendasClient({
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(e.id)}
-                          className="text-nord-gray hover:text-red-400"
+                          className="text-nord-gray hover:text-nord-danger"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -596,7 +596,7 @@ export function VendasClient({
               Acompanhamento de Vendas também passam a mostrar esses dados. Vendas canceladas são ignoradas.
             </p>
             <p>
-              <span className="text-amber-300">Limitação:</span> o relatório do Saipos não traz os itens de cada
+              <span className="text-nord-warning">Limitação:</span> o relatório do Saipos não traz os itens de cada
               venda (produtos e quantidades), só o valor total — por isso a tela de Itens Vendidos/Curva ABC vai
               mostrar cada venda importada como um item genérico &quot;Venda importada (arquivo)&quot;, sem o
               produto real.
@@ -617,9 +617,9 @@ export function VendasClient({
               className="input"
             />
           </label>
-          {importError && <p className="text-xs text-red-400">{importError}</p>}
+          {importError && <p className="text-xs text-nord-danger">{importError}</p>}
           {importResult && (
-            <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
+            <div className="text-xs bg-nord-success/10 border border-nord-success/30 rounded-lg px-3 py-2 text-nord-success space-y-1">
               <p>
                 Importação concluída: {importResult.created} dia(s) criado(s) e {importResult.updated} dia(s)
                 atualizado(s), com {importResult.vendasImportadas} venda(s) detalhada(s) gravada(s).
@@ -628,7 +628,7 @@ export function VendasClient({
                 <p className="text-nord-gray">{importResult.canceladosIgnorados} venda(s) cancelada(s) no arquivo foram ignoradas.</p>
               )}
               {importResult.errors.length > 0 && (
-                <div className="text-amber-300">
+                <div className="text-nord-warning">
                   <p>{importResult.errors.length} linha(s) ignorada(s):</p>
                   <ul className="list-disc list-inside">
                     {importResult.errors.slice(0, 5).map((err, idx) => (

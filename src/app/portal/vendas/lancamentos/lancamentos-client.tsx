@@ -201,7 +201,7 @@ export function LancamentosClient({
       }
     >
       {!canCreate && (
-        <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas.
         </p>
       )}
@@ -253,7 +253,7 @@ export function LancamentosClient({
                       >
                         {s.cancelado ? <RotateCcw size={14} /> : <Ban size={14} />}
                       </button>
-                      <button onClick={() => setConfirmDeleteId(s.id)} className="text-nord-gray hover:text-red-400">
+                      <button onClick={() => setConfirmDeleteId(s.id)} className="text-nord-gray hover:text-nord-danger">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -388,7 +388,7 @@ export function LancamentosClient({
                   onChange={(e) => updateLine(line.key, { precoUnitario: e.target.value })}
                   className="input col-span-3"
                 />
-                <button onClick={() => removeLine(line.key)} className="col-span-1 text-nord-gray hover:text-red-400">
+                <button onClick={() => removeLine(line.key)} className="col-span-1 text-nord-gray hover:text-nord-danger">
                   <X size={14} />
                 </button>
               </div>
@@ -402,7 +402,7 @@ export function LancamentosClient({
           </div>
         </div>
 
-        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+        {error && <p className="text-xs text-nord-danger mt-2">{error}</p>}
         <button
           onClick={submit}
           disabled={lines.length === 0 || submitting}

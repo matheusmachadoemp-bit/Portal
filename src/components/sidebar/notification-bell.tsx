@@ -24,8 +24,8 @@ type NotificationDTO = {
 
 const PRIORITY_BORDER: Record<string, string> = {
   INFORMACAO: "border-nord-blue",
-  ATENCAO: "border-amber-400",
-  CRITICA: "border-red-500",
+  ATENCAO: "border-nord-warning",
+  CRITICA: "border-nord-danger",
 };
 
 const PANEL_WIDTH = 320;
@@ -106,7 +106,7 @@ export function NotificationBell() {
       >
         <Bell size={17} />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-nord-danger text-white text-[10px] font-semibold flex items-center justify-center">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}

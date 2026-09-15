@@ -50,9 +50,9 @@ type StatusResponse = { date: string; cargos: CargoStatus[] };
 type ResumoTone = "success" | "warning" | "danger" | "default";
 
 const RESUMO_CLASSNAME: Record<ResumoTone, string> = {
-  success: "border-emerald-500/40 bg-emerald-500/5 text-emerald-400",
-  warning: "border-amber-500/40 bg-amber-500/5 text-amber-400",
-  danger: "border-red-500/40 bg-red-500/5 text-red-400",
+  success: "border-nord-success/40 bg-nord-success/5 text-nord-success",
+  warning: "border-nord-warning/40 bg-nord-warning/5 text-nord-warning",
+  danger: "border-nord-danger/40 bg-nord-danger/5 text-nord-danger",
   default: "text-nord-gray",
 };
 

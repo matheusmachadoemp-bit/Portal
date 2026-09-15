@@ -305,7 +305,7 @@ export function Sidebar({
         <form action={logoutAction}>
           <button
             type="submit"
-            className="w-full flex items-center gap-2 text-sm text-nord-gray hover:text-red-400 px-3 py-2 rounded-lg hover:bg-red-950/20 transition"
+            className="w-full flex items-center gap-2 text-sm text-nord-gray hover:text-nord-danger px-3 py-2 rounded-lg hover:bg-nord-danger/10 transition"
           >
             <LogOut size={16} /> {!collapsed && "Sair"}
           </button>
@@ -617,7 +617,7 @@ function RowMenu({
               onClose();
             }}
             className={`w-full text-left px-3 py-2 text-xs hover:bg-white/5 ${
-              item.danger ? "text-red-400" : "text-nord-gray hover:text-white"
+              item.danger ? "text-nord-danger" : "text-nord-gray hover:text-white"
             }`}
           >
             {item.label}
