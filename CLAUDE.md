@@ -188,7 +188,13 @@ Teulis primeiro. Fluxo:
 
 Como o Teulis só lê (nunca escreve), ele pode revisar tranquilo mesmo com
 Caio/Mylon/Otavio ainda trabalhando em outras tarefas ao mesmo tempo — não
-precisa esperar ninguém terminar pra rodar uma revisão.
+precisa esperar ninguém terminar pra rodar uma revisão. Diferente de
+Mylon/Otavio (nunca duas tarefas simultâneas no mesmo agente), o líder pode
+disparar **mais de uma revisão do Teulis ao mesmo tempo**, uma por
+`subagent_type: "Teulis"`, desde que cada revisão seja de um worktree/tarefa
+diferente e totalmente independente — cada revisão é autocontida (não
+depende de contexto de conversa de uma revisão anterior) e só cria banco
+descartável com nome próprio, sem risco de esbarrar numa revisão paralela.
 
 ## Isolar cada tarefa em uma branch/worktree própria
 
