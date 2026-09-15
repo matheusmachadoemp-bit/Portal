@@ -71,7 +71,6 @@ const CATEGORIES = [
       { key: "cursos", name: "Cursos", icon: "BookOpen" },
       { key: "videoaulas", name: "Videoaulas", icon: "Video" },
       { key: "avaliacoes", name: "Avaliações", icon: "ClipboardCheck" },
-      { key: "certificados", name: "Certificados", icon: "Award" },
       { key: "colaboradores", name: "Colaboradores", icon: "Users" },
       { key: "ranking", name: "Ranking", icon: "Trophy" },
       { key: "biblioteca", name: "Biblioteca", icon: "Library" },
