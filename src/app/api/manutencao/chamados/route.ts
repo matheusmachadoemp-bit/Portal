@@ -5,6 +5,7 @@ import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpre
 import {
   MANAGER_ROLES,
   generateChamadoProtocolo,
+  getManutencaoNotificacaoDestinatarios,
   getStoreManagers,
   isValidBlobUrl,
   logChamadoHistorico,
@@ -141,18 +142,30 @@ export async function POST(req: Request) {
   await logChamadoHistorico(chamado.id, session.user.id, "CREATED", `Protocolo ${chamado.protocolo}`);
 
   if (status !== "RASCUNHO") {
-    if (chamado.responsavelId && chamado.responsavelId !== session.user.id) {
-      await notifyManutencaoUser(
-        chamado.responsavelId,
-        "NOVO_CHAMADO",
-        "Novo chamado de manutenção",
-        `Você foi definido como responsável pelo chamado "${chamado.titulo}" (${chamado.protocolo}).`,
-        chamado.id
-      );
+    // Cada usuário recebe no máximo um aviso de "novo chamado" por chamado
+    // aberto: quem abriu nunca é notificado do próprio chamado, e alguém que
+    // já foi notificado como responsável (ou como gestor, no caso de
+    // prioridade urgente) não é notificado de novo por também estar
+    // configurado como destinatário fixo (Manutenção > Configurações >
+    // Notificações).
+    const jaNotificados = new Set<string>([session.user.id]);
+
+    if (chamado.responsavelId) {
+      jaNotificados.add(chamado.responsavelId);
+      if (chamado.responsavelId !== session.user.id) {
+        await notifyManutencaoUser(
+          chamado.responsavelId,
+          "NOVO_CHAMADO",
+          "Novo chamado de manutenção",
+          `Você foi definido como responsável pelo chamado "${chamado.titulo}" (${chamado.protocolo}).`,
+          chamado.id
+        );
+      }
     }
     if (chamado.prioridade === "URGENTE") {
       const managers = await getStoreManagers(empresa.id);
       for (const userId of managers) {
+        jaNotificados.add(userId);
         if (userId === session.user.id) continue;
         await notifyManutencaoUser(
           userId,
@@ -162,6 +175,19 @@ export async function POST(req: Request) {
           chamado.id
         );
       }
+    }
+
+    const destinatariosConfigurados = await getManutencaoNotificacaoDestinatarios(empresa.id);
+    for (const userId of destinatariosConfigurados) {
+      if (jaNotificados.has(userId)) continue;
+      jaNotificados.add(userId);
+      await notifyManutencaoUser(
+        userId,
+        "NOVO_CHAMADO",
+        "Novo chamado de manutenção",
+        `Novo chamado de manutenção aberto: "${chamado.titulo}" (${chamado.protocolo}).`,
+        chamado.id
+      );
     }
   }
 

@@ -1,6 +1,9 @@
 export type UserOption = { id: string; name: string };
 export type EmpresaOption = { id: string; name: string; color: string };
 
+/** Usuário disponível para marcar como destinatário de notificação (Manutenção > Configurações > Notificações). */
+export type NotificacaoUserOption = { id: string; name: string; email: string; role: string };
+
 export type AnexoDTO = {
   id: string;
   name: string;
