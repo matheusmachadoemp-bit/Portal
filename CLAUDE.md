@@ -57,41 +57,48 @@ especificamente ao item do menu lateral.
 
 Este chat principal (o que conversa direto com o Matheus) atua como **líder
 de projeto**: ele traz ideias e pedidos de atualização do Portal Nord aqui,
-em qualquer ordem, e quem executa é um dos três agentes especializados
+em qualquer ordem, e quem executa é um dos quatro agentes especializados
 definidos em `.claude/agents/`, cada um cuidando de uma parte do sistema —
-isso evita que dois agentes mexam no banco de dados ao mesmo tempo (o que
-poderia gerar migration conflitante ou dado corrompido):
+isso evita que dois agentes mexam no banco de dados ao mesmo tempo sem
+controle (o que poderia gerar migration conflitante ou dado corrompido):
 
 - **Caio** (`.claude/agents/caio.md`, `subagent_type: "Caio"`) — só
   cria/altera a parte visual: componentes React/Tailwind, layout, textos de
   tela, ícones, responsividade. Nunca mexe em `prisma/schema.prisma`,
   `prisma/migrations/`, `prisma/seed.ts`, rotas de API (`src/app/api/**`)
   nem em `src/lib/*` que grava no banco.
-- **Mylon** (`.claude/agents/mylon.md`, `subagent_type: "Mylon"`) —
-  desenvolve o projeto de fato: modelo de dados (schema/migrations), rotas
+- **Mylon** (`.claude/agents/mylon.md`, `subagent_type: "Mylon"`) e
+  **Otavio** (`.claude/agents/otavio.md`, `subagent_type: "Otavio"`) —
+  desenvolvem o projeto de fato: modelo de dados (schema/migrations), rotas
   de API, regras de negócio, integrações (Saipos, Meta Ads etc.),
-  autenticação e permissões. É o único agente autorizado a alterar o banco
-  de dados.
+  autenticação e permissões. São os dois únicos agentes autorizados a
+  alterar o banco de dados, com a mesma função e as mesmas
+  responsabilidades — existem dois pra poder tocar duas tarefas de backend
+  independentes ao mesmo tempo. Ver "Conferir schema/migration antes de
+  publicar" abaixo pra regra de coordenação entre os dois.
 - **Nelson** (`.claude/agents/nelson.md`, `subagent_type: "Nelson"`) —
   especialista em segurança: audita autenticação/autorização, isolamento
   entre lojas, segredos/credenciais, dependências e injeção. Só investiga e
   relata (sem `Write`/`Edit`) — nunca corrige nada ele mesmo. Cada achado
-  vira uma tarefa separada, classificada e despachada pro Caio ou Mylon,
-  igual qualquer outro pedido.
+  vira uma tarefa separada, classificada e despachada pro Caio, Mylon ou
+  Otavio, igual qualquer outro pedido.
 
 ## Como agir como líder
 
 1. Quando o usuário trouxer uma ideia/pedido, classifique-a antes de agir:
    é uma mudança **visual** (cor, layout, texto, ícone, responsividade,
    nova tela que só exibe dado que já existe) → **Caio**; é uma mudança de
-   **dado/regra de negócio/integração/rota de API** → **Mylon**; é um
+   **dado/regra de negócio/integração/rota de API** → **Mylon ou Otavio**
+   (o que estiver livre; se os dois estiverem livres ao mesmo tempo e
+   surgirem duas tarefas de backend independentes, pode dividir uma pra
+   cada, desde que não mexam no mesmo model/tabela — ver ponto 4); é um
    pedido de **auditoria/revisão de segurança** (achar vulnerabilidade,
    revisar uma branch antes de publicar) → **Nelson**. Se envolve mais de
    uma frente (ex.: Nelson encontra um achado que precisa de correção de
    dado e outra de tela), quebre em tarefas separadas — uma por agente — e
    explique isso ao usuário antes de disparar.
 2. Dispare a tarefa com a ferramenta `Agent`, usando `subagent_type:
-   "Caio"`, `"Mylon"` ou `"Nelson"`, rodando em background
+   "Caio"`, `"Mylon"`, `"Otavio"` ou `"Nelson"`, rodando em background
    (`run_in_background`, que é o padrão) — assim o usuário pode continuar
    trazendo outras ideias enquanto o agente trabalha.
 3. **Nunca envie uma tarefa nova para um agente enquanto a tarefa anterior
@@ -100,11 +107,18 @@ poderia gerar migration conflitante ou dado corrompido):
    continuidade à mesma tarefa (ex.: pedir um ajuste depois que ele já
    entregou algo), retome o agente já existente com `SendMessage` usando o
    nome/ID dele, em vez de criar um agente novo do zero.
-4. Caio, Mylon e Nelson podem trabalhar **ao mesmo tempo**, em tarefas
-   diferentes, sem problema — Caio nunca toca no banco e Nelson nunca
-   escreve nada (só lê), então nenhum dos dois conflita com o outro nem com
-   o Mylon. O único cuidado é nunca ter duas tarefas simultâneas no
-   **mesmo** agente (especialmente no Mylon, por causa do banco).
+4. Caio, Mylon, Otavio e Nelson podem trabalhar **ao mesmo tempo**, em
+   tarefas diferentes, sem problema — Caio nunca toca no banco e Nelson
+   nunca escreve nada (só lê), então nenhum dos dois conflita com o outro
+   nem com Mylon/Otavio. O cuidado de nunca ter duas tarefas simultâneas no
+   **mesmo** agente vale igual pros quatro. Já Mylon e Otavio, apesar de
+   serem agentes diferentes (então podem sim trabalhar ao mesmo tempo,
+   cada um na sua branch/worktree), os dois mexem no banco — só dispare os
+   dois ao mesmo tempo se as duas tarefas forem claramente de módulos
+   diferentes, sem chance de mexerem no mesmo model/tabela; na dúvida,
+   trate como se fosse "o mesmo agente" e espere um terminar antes de
+   disparar o outro. Ver "Conferir schema/migration antes de publicar" pra
+   como validar na hora de publicar as duas.
 5. Depois que um agente termina, resuma para o usuário — em português,
    simples e direto — o que foi feito e onde, e só então trate a próxima
    ideia dele para aquele agente. Não acumule várias tarefas de uma vez
@@ -120,17 +134,16 @@ aplica sem erro e que o resultado bate com o esperado. Nunca publica só
 porque o Mylon relatou "validei e passou": o relato dele é o ponto de
 partida da checagem do líder, não substituto dela.
 
-Isso fica ainda mais importante quando há mais de um agente tipo Mylon
-rodando em paralelo (cada um numa branch/worktree própria, mas ambos podendo
-mexer no banco): duas migrations concorrentes podem aplicar sem erro cada
-uma isoladamente e ainda assim serem incompatíveis entre si (ex.: as duas
-mexendo no mesmo model). Nesse caso, o líder nunca publica as duas "às
-cegas" — publica uma primeira, traz a outra branch pra cima da produção já
-atualizada (mesma regra de "Antes de publicar uma atualização" acima) e
-revalida a migration da segunda branch já com a primeira aplicada antes de
-publicar. Ao disparar as tarefas, prefira também já separar por módulos
-claramente diferentes entre os dois agentes tipo Mylon, pra reduzir a chance
-de esbarrarem no mesmo model.
+Isso fica ainda mais importante com Mylon e Otavio rodando em paralelo (cada
+um numa branch/worktree própria, mas os dois podendo mexer no banco): duas
+migrations concorrentes podem aplicar sem erro cada uma isoladamente e ainda
+assim serem incompatíveis entre si (ex.: as duas mexendo no mesmo model).
+Nesse caso, o líder nunca publica as duas "às cegas" — publica uma primeira,
+traz a outra branch pra cima da produção já atualizada (mesma regra de
+"Antes de publicar uma atualização" acima) e revalida a migration da segunda
+branch já com a primeira aplicada antes de publicar. Ao disparar as
+tarefas, prefira também já separar por módulos claramente diferentes entre
+Mylon e Otavio, pra reduzir a chance de esbarrarem no mesmo model.
 
 ## Isolar cada tarefa em uma branch/worktree própria
 
@@ -151,10 +164,10 @@ direto na pasta onde o líder está.
   editar e criar arquivos ali — nunca na pasta principal do líder.
 - Só arquivos do próprio fluxo de trabalho (`CLAUDE.md`, `.claude/agents/**`)
   continuam sendo editados direto pelo líder, na pasta principal — não são
-  código do Portal Nord, então não têm risco de conflito com Caio/Mylon.
+  código do Portal Nord, então não têm risco de conflito com Caio/Mylon/Otavio.
 - Depois que o agente termina e o líder confere o resultado, é o **líder**
-  quem commita e publica (`git push`) a branch daquela tarefa — Caio e
-  Mylon não commitam nem publicam nada por conta própria.
+  quem commita e publica (`git push`) a branch daquela tarefa — Caio, Mylon
+  e Otavio não commitam nem publicam nada por conta própria.
 - Cada branch de tarefa vira, quando fizer sentido e o usuário pedir, um
   Pull Request próprio e focado — sem misturar features sem relação num
   PR só.
