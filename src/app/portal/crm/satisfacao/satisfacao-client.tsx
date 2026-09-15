@@ -77,9 +77,9 @@ export function SatisfacaoClient({
                 <span className="text-white text-lg font-semibold">{formatNumber(l.nps, 0)}</span>
               </div>
               <div className="flex gap-1 h-2 rounded-full overflow-hidden">
-                <div className="bg-emerald-500" style={{ width: `${(l.promotores / (l.promotores + l.neutros + l.detratores || 1)) * 100}%` }} />
-                <div className="bg-amber-500" style={{ width: `${(l.neutros / (l.promotores + l.neutros + l.detratores || 1)) * 100}%` }} />
-                <div className="bg-red-500" style={{ width: `${(l.detratores / (l.promotores + l.neutros + l.detratores || 1)) * 100}%` }} />
+                <div className="bg-nord-success" style={{ width: `${(l.promotores / (l.promotores + l.neutros + l.detratores || 1)) * 100}%` }} />
+                <div className="bg-nord-warning" style={{ width: `${(l.neutros / (l.promotores + l.neutros + l.detratores || 1)) * 100}%` }} />
+                <div className="bg-nord-danger" style={{ width: `${(l.detratores / (l.promotores + l.neutros + l.detratores || 1)) * 100}%` }} />
               </div>
             </div>
           ))}

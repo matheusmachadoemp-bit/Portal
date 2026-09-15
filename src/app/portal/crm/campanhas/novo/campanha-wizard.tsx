@@ -118,7 +118,7 @@ export function CampanhaWizard({
             key={s.key}
             onClick={() => idx < step && setStep(idx)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-              idx === step ? "bg-nord-blue text-white" : idx < step ? "text-emerald-400" : "text-nord-gray"
+              idx === step ? "bg-nord-blue text-white" : idx < step ? "text-nord-success" : "text-nord-gray"
             }`}
           >
             {idx < step ? <Check size={13} /> : <s.icon size={13} />}
@@ -192,7 +192,7 @@ export function CampanhaWizard({
             {audienceType === "CLIENTES" && (
               <div className="pt-2">
                 {clientesPreselecionados.length === 0 ? (
-                  <p className="text-xs text-amber-400">
+                  <p className="text-xs text-nord-warning">
                     Nenhum cliente selecionado. Volte para a página de Clientes e selecione os clientes desejados antes
                     de criar a campanha.
                   </p>
@@ -328,7 +328,7 @@ export function CampanhaWizard({
               <p className="text-nord-gray text-xs">Oferta: {CAMPAIGN_OFFER_LABEL[offerType]}</p>
             </div>
 
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && <p className="text-xs text-nord-danger">{error}</p>}
           </div>
         )}
       </div>

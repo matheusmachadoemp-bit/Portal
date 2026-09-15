@@ -472,9 +472,9 @@ async function InicioClassico({ userId }: { userId: string | null }) {
   return (
     <PageContainer title="Início" subtitle={subtitle}>
       {perms.vendas && abaixoDaMeta && (
-        <div className="nord-card p-4 flex items-center gap-3 border-amber-600/40 bg-amber-950/10">
-          <AlertTriangle size={18} className="text-amber-400 shrink-0" />
-          <p className="text-sm text-amber-200">
+        <div className="nord-card p-4 flex items-center gap-3 border-nord-warning/30 bg-nord-warning/10">
+          <AlertTriangle size={18} className="text-nord-warning shrink-0" />
+          <p className="text-sm text-nord-warning">
             O faturamento do mês está em {formatPercent(percentualMeta)} da meta. Atenção aos
             indicadores de vendas para os próximos dias.
           </p>

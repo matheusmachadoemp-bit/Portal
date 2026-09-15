@@ -112,7 +112,7 @@ export function AutomacoesClient({ templates, custom, canCreate }: { templates: 
                   <button
                     onClick={() => toggleAtivo(t.existing!.id, t.existing!.active)}
                     disabled={busyKey === t.existing.id}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${t.existing.active ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-nord-gray"}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${t.existing.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
                   >
                     {t.existing.active ? "Ativa" : "Inativa"} · clique para {t.existing.active ? "desativar" : "ativar"}
                   </button>
@@ -138,7 +138,7 @@ export function AutomacoesClient({ templates, custom, canCreate }: { templates: 
               <div key={c.id} className="rounded-xl border border-nord-border p-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <p className="text-white text-sm font-medium">{c.name}</p>
-                  <button onClick={() => excluir(c.id)} className="text-nord-gray hover:text-red-400">
+                  <button onClick={() => excluir(c.id)} className="text-nord-gray hover:text-nord-danger">
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -151,7 +151,7 @@ export function AutomacoesClient({ templates, custom, canCreate }: { templates: 
                 <button
                   onClick={() => toggleAtivo(c.id, c.active)}
                   disabled={busyKey === c.id}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${c.active ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-nord-gray"}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${c.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
                 >
                   {c.active ? "Ativa" : "Inativa"}
                 </button>

@@ -693,7 +693,7 @@ export function GerenteClient({
                             </button>
                             <button
                               onClick={() => setDeleteIndicatorTarget(ind)}
-                              className="text-nord-gray hover:text-red-400 flex items-center gap-1 text-xs"
+                              className="text-nord-gray hover:text-nord-danger flex items-center gap-1 text-xs"
                             >
                               <Trash2 size={12} /> Excluir indicador
                             </button>
@@ -731,7 +731,7 @@ export function GerenteClient({
               {current ? (
                 <button
                   onClick={() => setConfirmDelete(true)}
-                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                  className="flex items-center gap-1.5 text-xs text-nord-danger hover:text-nord-danger/80"
                 >
                   <Trash2 size={13} /> Excluir esta reunião
                 </button>

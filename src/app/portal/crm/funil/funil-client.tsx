@@ -50,7 +50,7 @@ export function FunilClient({ funil }: { funil: FunilStage[] }) {
                       <ChevronDown size={16} className="text-nord-gray/50" />
                       <span
                         className={`text-xs font-medium ${
-                          idx === worstIdx ? "text-amber-400" : "text-nord-gray"
+                          idx === worstIdx ? "text-nord-warning" : "text-nord-gray"
                         }`}
                       >
                         {formatPercent(conversions[idx])}
@@ -78,9 +78,9 @@ export function FunilClient({ funil }: { funil: FunilStage[] }) {
         </Section>
 
         {worstIdx >= 0 && (
-          <div className="nord-card p-4 border-l-2 border-amber-500">
+          <div className="nord-card p-4 border-l-2 border-nord-warning">
             <div className="flex items-start gap-2">
-              <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
+              <AlertTriangle size={16} className="text-nord-warning mt-0.5 shrink-0" />
               <div>
                 <p className="text-white text-sm font-medium">
                   Maior perda entre {funil[worstIdx].label} e {funil[worstIdx + 1].label}

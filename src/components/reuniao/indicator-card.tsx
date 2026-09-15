@@ -9,7 +9,7 @@ import type { Comparison } from "@/lib/reuniao";
 export function ComparisonLine({ comparison }: { comparison?: Comparison | null }) {
   if (!comparison) return null;
   const { deltaPercent, favorable } = comparison;
-  const color = favorable === true ? "text-emerald-400" : favorable === false ? "text-red-400" : "text-nord-gray";
+  const color = favorable === true ? "text-nord-success" : favorable === false ? "text-nord-danger" : "text-nord-gray";
   const Icon = favorable === true ? TrendingUp : favorable === false ? TrendingDown : Minus;
   const deltaText = deltaPercent === null ? "" : `${deltaPercent > 0 ? "+" : ""}${formatNumber(deltaPercent, 1)}% `;
   return (
