@@ -17,7 +17,7 @@ export default async function CrmPage() {
   const data = await getCrmDashboardData(empresaIds, "mes");
 
   return (
-    <PageContainer title="CRM" subtitle="Visão Geral">
+    <PageContainer title="CRM" subtitle="Visão geral">
       <div className="space-y-6">
         <CrmDashboardClient initialKey="mes" initialData={data} />
       </div>

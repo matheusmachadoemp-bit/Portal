@@ -170,6 +170,9 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
             </div>
           </div>
         ))}
+        {courses.length === 0 && (
+          <p className="col-span-full text-center text-sm text-nord-gray py-8">Nenhum curso cadastrado.</p>
+        )}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar curso" : "Novo curso"}>
