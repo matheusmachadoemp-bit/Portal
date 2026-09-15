@@ -1,12 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { formatNumber } from "@/lib/calc";
-import { feriasAlerts } from "@/lib/rh-helpers";
 import {
   format,
   startOfMonth,
@@ -87,8 +86,6 @@ export function FeriasClient({
   const visible = useMemo(() => {
     return fixedEmployeeId ? vacations.filter((v) => v.employeeId === fixedEmployeeId) : vacations;
   }, [vacations, fixedEmployeeId]);
-
-  const alerts = useMemo(() => feriasAlerts(visible), [visible]);
 
   const totals = useMemo(() => {
     const periodos = visible.length;
@@ -210,63 +207,6 @@ export function FeriasClient({
         </p>
       )}
 
-      {alerts.length > 0 && (
-        <Section title="Alertas">
-          <ul className="space-y-2">
-            {alerts.map((a, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-amber-400">
-                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                {a}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      <Section
-        title="Calendário"
-        action={
-          <div className="flex items-center gap-2">
-            <button onClick={() => setCalendarMonth((m) => subMonths(m, 1))} className="text-nord-gray hover:text-white">
-              <ChevronLeft size={16} />
-            </button>
-            <span className="text-xs text-white w-24 text-center">{format(calendarMonth, "MMMM yyyy")}</span>
-            <button onClick={() => setCalendarMonth((m) => addMonths(m, 1))} className="text-nord-gray hover:text-white">
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-nord-gray mb-2">
-          {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
-            <span key={i}>{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: calendarDays.leadingBlanks }).map((_, i) => (
-            <div key={`blank-${i}`} />
-          ))}
-          {calendarDays.days.map((day) => {
-            const dayVacations = vacationsOnDay(day);
-            return (
-              <div
-                key={day.toISOString()}
-                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs ${
-                  dayVacations.length > 0
-                    ? "bg-nord-blue/20 text-nord-blue-light font-medium"
-                    : isSameMonth(day, calendarMonth)
-                      ? "text-nord-gray"
-                      : "text-nord-gray/30"
-                }`}
-                title={dayVacations.map((v) => v.employee.name).join(", ")}
-              >
-                {format(day, "d")}
-              </div>
-            );
-          })}
-        </div>
-      </Section>
-
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -317,6 +257,50 @@ export function FeriasClient({
           </tbody>
         </table>
       </div>
+
+      <Section
+        title="Calendário"
+        action={
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCalendarMonth((m) => subMonths(m, 1))} className="text-nord-gray hover:text-white">
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-xs text-white w-24 text-center">{format(calendarMonth, "MMMM yyyy")}</span>
+            <button onClick={() => setCalendarMonth((m) => addMonths(m, 1))} className="text-nord-gray hover:text-white">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-nord-gray mb-2">
+          {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
+            <span key={i}>{d}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: calendarDays.leadingBlanks }).map((_, i) => (
+            <div key={`blank-${i}`} />
+          ))}
+          {calendarDays.days.map((day) => {
+            const dayVacations = vacationsOnDay(day);
+            return (
+              <div
+                key={day.toISOString()}
+                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs ${
+                  dayVacations.length > 0
+                    ? "bg-nord-blue/20 text-nord-blue-light font-medium"
+                    : isSameMonth(day, calendarMonth)
+                      ? "text-nord-gray"
+                      : "text-nord-gray/30"
+                }`}
+                title={dayVacations.map((v) => v.employee.name).join(", ")}
+              >
+                {format(day, "d")}
+              </div>
+            );
+          })}
+        </div>
+      </Section>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar período de férias" : "Solicitar férias"}>
         <div className="grid grid-cols-2 gap-3">

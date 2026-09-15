@@ -110,42 +110,6 @@ export function pontoAlerts(entries: TimeEntryLike[]): string[] {
   return alerts;
 }
 
-export type VacationLike = {
-  employeeId: string;
-  employee: { name: string };
-  periodoAquisitivoFim: string;
-  dataInicio: string | null;
-  dataFim: string | null;
-  status: string;
-};
-
-/** Alertas de Férias: vencendo em até 60 dias, quem está de férias agora, solicitações pendentes. */
-export function feriasAlerts(vacations: VacationLike[]): string[] {
-  const alerts: string[] = [];
-  const now = new Date();
-
-  const vencendo = vacations.filter((v) => {
-    if (v.status === "CONCLUIDA" || v.status === "CANCELADA") return false;
-    const dias = differenceInDays(new Date(v.periodoAquisitivoFim), now);
-    return dias >= 0 && dias <= 60;
-  });
-  if (vencendo.length > 0) {
-    alerts.push(`${vencendo.length} colaborador${vencendo.length > 1 ? "es" : ""} com férias vencendo em até 60 dias.`);
-  }
-
-  const emFerias = vacations.filter((v) => v.status === "EM_ANDAMENTO");
-  if (emFerias.length > 0) {
-    alerts.push(`${emFerias.length} colaborador${emFerias.length > 1 ? "es" : ""} de férias agora.`);
-  }
-
-  const pendentes = vacations.filter((v) => v.status === "PLANEJADA");
-  if (pendentes.length > 0) {
-    alerts.push(`${pendentes.length} solicitação${pendentes.length > 1 ? "ões" : ""} de férias pendente${pendentes.length > 1 ? "s" : ""} de aprovação.`);
-  }
-
-  return alerts;
-}
-
 export type DocumentLike = {
   employee: { name: string };
   categoria: string;
