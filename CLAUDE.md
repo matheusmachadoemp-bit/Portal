@@ -110,6 +110,28 @@ poderia gerar migration conflitante ou dado corrompido):
    ideia dele para aquele agente. Não acumule várias tarefas de uma vez
    para o mesmo agente "torcendo" para ele encaixar tudo junto.
 
+## Conferir schema/migration antes de publicar
+
+Antes de publicar (merge pra produção) qualquer branch que tenha mudança em
+`prisma/schema.prisma` ou em `prisma/migrations/`, o líder sempre valida a
+migration com as próprias mãos contra um Postgres descartável local — do
+zero, aplicando todo o histórico de migrations mais a nova — confirmando que
+aplica sem erro e que o resultado bate com o esperado. Nunca publica só
+porque o Mylon relatou "validei e passou": o relato dele é o ponto de
+partida da checagem do líder, não substituto dela.
+
+Isso fica ainda mais importante quando há mais de um agente tipo Mylon
+rodando em paralelo (cada um numa branch/worktree própria, mas ambos podendo
+mexer no banco): duas migrations concorrentes podem aplicar sem erro cada
+uma isoladamente e ainda assim serem incompatíveis entre si (ex.: as duas
+mexendo no mesmo model). Nesse caso, o líder nunca publica as duas "às
+cegas" — publica uma primeira, traz a outra branch pra cima da produção já
+atualizada (mesma regra de "Antes de publicar uma atualização" acima) e
+revalida a migration da segunda branch já com a primeira aplicada antes de
+publicar. Ao disparar as tarefas, prefira também já separar por módulos
+claramente diferentes entre os dois agentes tipo Mylon, pra reduzir a chance
+de esbarrarem no mesmo model.
+
 ## Isolar cada tarefa em uma branch/worktree própria
 
 Depois de um episódio em que Caio e Mylon, rodando ao mesmo tempo, editaram
