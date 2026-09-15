@@ -136,7 +136,7 @@ export function ContasBancariasClient({
       }
     >
       {!canCreate && (
-        <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
           cadastrar ou editar contas bancárias.
         </p>
@@ -168,7 +168,7 @@ export function ContasBancariasClient({
               <button onClick={() => toggleActive(a)} className="flex-1 text-xs text-nord-gray hover:text-white py-1.5">
                 {a.active ? "Desativar" : "Ativar"}
               </button>
-              <button onClick={() => setConfirmDeleteId(a.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-red-400 py-1.5">
+              <button onClick={() => setConfirmDeleteId(a.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-nord-danger py-1.5">
                 <Trash2 size={12} /> Excluir
               </button>
             </div>

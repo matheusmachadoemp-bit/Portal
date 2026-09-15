@@ -326,7 +326,7 @@ export function ContasPagarClient({
       }
     >
       {!canCreate && (
-        <p className="mb-3 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="mb-3 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
           lançar ou editar contas.
         </p>
@@ -371,7 +371,7 @@ export function ContasPagarClient({
                 <td className="py-2 pr-4">
                   <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
                     {p.status !== "PAGO" && (
-                      <button onClick={() => markPaid(p)} title="Marcar como pago" className="text-nord-gray hover:text-emerald-400">
+                      <button onClick={() => markPaid(p)} title="Marcar como pago" className="text-nord-gray hover:text-nord-success">
                         <Check size={14} />
                       </button>
                     )}
@@ -381,7 +381,7 @@ export function ContasPagarClient({
                     <button onClick={() => openEdit(p)} className="text-nord-gray hover:text-white">
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => setConfirmDeleteId(p.id)} className="text-nord-gray hover:text-red-400">
+                    <button onClick={() => setConfirmDeleteId(p.id)} className="text-nord-gray hover:text-nord-danger">
                       <Trash2 size={14} />
                     </button>
                   </div>

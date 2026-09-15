@@ -448,7 +448,7 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
               </div>
 
               {uploadingAvatar && <p className="text-[11px] text-nord-gray pt-2">Enviando foto...</p>}
-              {avatarError && <p className="text-[11px] text-red-400 pt-2">{avatarError}</p>}
+              {avatarError && <p className="text-[11px] text-nord-danger pt-2">{avatarError}</p>}
 
               <Link
                 href="/portal/loja-nord/meus-pontos"
@@ -503,7 +503,7 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
               <form action={logoutAction}>
                 <button
                   type="submit"
-                  className="w-full flex items-center gap-2 text-sm text-nord-gray hover:text-red-400 px-1 py-2.5 rounded-lg hover:bg-red-950/20 transition"
+                  className="w-full flex items-center gap-2 text-sm text-nord-gray hover:text-nord-danger px-1 py-2.5 rounded-lg hover:bg-nord-danger/10 transition"
                 >
                   <LogOut size={15} /> Sair do portal
                 </button>

@@ -7,9 +7,9 @@ import { createPortal } from "react-dom";
 export function FormError({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <div className="flex items-start gap-2 p-3 rounded-lg bg-red-950/40 border border-red-900 mb-3">
-      <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
-      <p className="text-xs text-red-300">{message}</p>
+    <div className="flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30 mb-3">
+      <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+      <p className="text-xs text-nord-danger">{message}</p>
     </div>
   );
 }
@@ -102,7 +102,7 @@ export function ConfirmDialog({
           <button
             onClick={onConfirm}
             className={`px-4 py-2 text-sm rounded-lg text-white font-medium ${
-              danger ? "bg-red-600 hover:bg-red-500" : "bg-nord-blue hover:bg-nord-blue-light"
+              danger ? "bg-nord-danger/90 hover:bg-nord-danger" : "bg-nord-blue hover:bg-nord-blue-light"
             }`}
           >
             {confirmLabel}

@@ -264,8 +264,8 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
   if (loadError && !data) {
     return (
       <div className="max-w-2xl mx-auto nord-card p-6 text-center space-y-3">
-        <AlertTriangle className="mx-auto text-red-400" size={28} />
-        <p className="text-sm text-red-300">{loadError}</p>
+        <AlertTriangle className="mx-auto text-nord-danger" size={28} />
+        <p className="text-sm text-nord-danger">{loadError}</p>
         <div className="flex items-center justify-center gap-4">
           <button type="button" onClick={load} className="btn-outline">
             <RefreshCw size={13} /> Tentar de novo
@@ -298,8 +298,8 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
       </div>
 
       {enviado && (
-        <div className="nord-card p-6 text-center border-emerald-500/40 bg-emerald-500/5 space-y-2">
-          <CheckCircle2 size={28} className="text-emerald-400 mx-auto" />
+        <div className="nord-card p-6 text-center border-nord-success/40 bg-nord-success/5 space-y-2">
+          <CheckCircle2 size={28} className="text-nord-success mx-auto" />
           <p className="text-white font-medium">Fechamento enviado às {formatHora(enviado.enviadoEm)}</p>
           <p className="text-sm text-nord-gray">
             {enviado.atrasado ? "Enviado com atraso, mas já está registrado." : "Enviado dentro do prazo."}

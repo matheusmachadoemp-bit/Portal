@@ -130,7 +130,7 @@ export function DreClient({
                     <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.faturamento)}</td>
                     <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.cmv)}</td>
                     <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(c.margem)}</td>
-                    <td className={`py-2.5 pr-4 ${c.lucroLiquido < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                    <td className={`py-2.5 pr-4 ${c.lucroLiquido < 0 ? "text-nord-danger" : "text-nord-success"}`}>
                       {formatCurrency(c.lucroLiquido)}
                     </td>
                     <td className="py-2.5 pr-4 text-nord-gray">{formatPercent(c.margemPct)}</td>
@@ -176,7 +176,7 @@ export function DreClient({
                     </td>
                     <td
                       className={`py-2 pr-4 text-right ${
-                        r.value < 0 ? "text-red-400" : r.type === "result" && r.highlight ? "text-emerald-400" : "text-nord-gray"
+                        r.value < 0 ? "text-nord-danger" : r.type === "result" && r.highlight ? "text-nord-success" : "text-nord-gray"
                       }`}
                     >
                       {formatCurrency(r.value)}

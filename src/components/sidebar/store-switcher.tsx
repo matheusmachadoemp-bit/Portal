@@ -133,7 +133,7 @@ export function StoreSwitcher({
                   <Building2 size={11} style={{ color: e.color }} />
                 </div>
                 <span className="flex-1 text-left text-white truncate">{e.name}</span>
-                {e.id === activeEmpresaId && <Check size={13} className="text-emerald-400" />}
+                {e.id === activeEmpresaId && <Check size={13} className="text-nord-success" />}
               </button>
             ))}
             {canViewGrupoNord && (
@@ -147,7 +147,7 @@ export function StoreSwitcher({
                     <Layers size={11} className="text-nord-blue-light" />
                   </div>
                   <span className="flex-1 text-left text-white">Grupo Nord (consolidado)</span>
-                  {isGrupo && <Check size={13} className="text-emerald-400" />}
+                  {isGrupo && <Check size={13} className="text-nord-success" />}
                 </button>
               </>
             )}
