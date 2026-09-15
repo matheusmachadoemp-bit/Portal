@@ -7,6 +7,8 @@ import { formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } fro
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { ImportFallbackWarning } from "@/components/ui/import-fallback-warning";
+import type { ImportFallbackBucket } from "@/lib/import-fallback";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -81,6 +83,7 @@ export function VendasClient({
     errors: string[];
     canceladosIgnorados: number;
     vendasImportadas: number;
+    fallbackWarnings: ImportFallbackBucket[];
   } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -235,6 +238,7 @@ export function VendasClient({
         errors: data.errors ?? [],
         canceladosIgnorados: data.canceladosIgnorados ?? 0,
         vendasImportadas: data.vendasImportadas ?? 0,
+        fallbackWarnings: data.fallbackWarnings ?? [],
       });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
@@ -635,6 +639,7 @@ export function VendasClient({
               )}
             </div>
           )}
+          {importResult && <ImportFallbackWarning buckets={importResult.fallbackWarnings} />}
         </div>
         <button
           onClick={submitImport}
