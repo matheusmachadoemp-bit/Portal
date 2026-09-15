@@ -103,6 +103,45 @@ export async function getStoreManagers(empresaId: string): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
+export type StoreUserOption = { id: string; name: string; email: string; role: string };
+
+/**
+ * Todos os usuários ativos com acesso à loja (ADMINISTRADOR/GESTOR têm acesso
+ * a todas as lojas; os demais cargos só se tiverem um `UserEmpresaAccess`
+ * explícito pra essa loja) — mesmo critério de acesso usado em
+ * `getUserEmpresas`/`getStoreManagers`, mas sem restringir a cargos de
+ * gestão: usado pra popular o seletor de "quem recebe notificação de chamado
+ * novo" (Manutenção > Configurações > Notificações), onde o objetivo é
+ * permitir escolher qualquer pessoa da loja (ex.: um técnico COLABORADOR),
+ * não só quem gerencia.
+ */
+export async function getStoreActiveUsers(empresaId: string): Promise<StoreUserOption[]> {
+  return prisma.user.findMany({
+    where: {
+      active: true,
+      OR: [{ role: { in: ["ADMINISTRADOR", "GESTOR"] } }, { empresaAccess: { some: { empresaId } } }],
+    },
+    select: { id: true, name: true, email: true, role: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * Ids dos usuários configurados (Manutenção > Configurações > Notificações,
+ * model `ManutencaoNotificacaoDestinatario`) pra sempre serem notificados
+ * quando um chamado novo é aberto nessa loja, independente de
+ * prioridade/responsável. Filtra `active: true` no próprio join — alguém
+ * desativado depois de configurado para de receber (mas a configuração em
+ * si não é apagada; volta a valer se a conta for reativada).
+ */
+export async function getManutencaoNotificacaoDestinatarios(empresaId: string): Promise<string[]> {
+  const destinatarios = await prisma.manutencaoNotificacaoDestinatario.findMany({
+    where: { empresaId, user: { active: true } },
+    select: { userId: true },
+  });
+  return destinatarios.map((d) => d.userId);
+}
+
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
