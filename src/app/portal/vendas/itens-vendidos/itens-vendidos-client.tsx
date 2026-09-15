@@ -6,9 +6,11 @@ import { Upload } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
+import { ImportFallbackWarning } from "@/components/ui/import-fallback-warning";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { buildCurvaAbc, type AbcClass } from "@/lib/vendas-analytics";
 import { type RollingPeriodKey } from "@/lib/periods";
+import type { ImportFallbackBucket } from "@/lib/import-fallback";
 
 type Row = { nome: string; quantidade: number; faturamento: number; margem: number };
 type Criterio = "quantidade" | "faturamento" | "margem";
@@ -26,7 +28,12 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<{ itens: number; faturamentoTotal: number; comProduto: number } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    itens: number;
+    faturamentoTotal: number;
+    comProduto: number;
+    fallbackWarnings: ImportFallbackBucket[];
+  } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   // Depois de importar um novo arquivo, o Modal chama router.refresh() — como o
@@ -82,7 +89,12 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
         setImportError(data.error ?? "Não foi possível importar o arquivo.");
         return;
       }
-      setImportResult({ itens: data.itens, faturamentoTotal: data.faturamentoTotal, comProduto: data.comProduto });
+      setImportResult({
+        itens: data.itens,
+        faturamentoTotal: data.faturamentoTotal,
+        comProduto: data.comProduto,
+        fallbackWarnings: data.fallbackWarnings ?? [],
+      });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
       router.refresh();
@@ -207,6 +219,7 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
               </p>
             </div>
           )}
+          {importResult && <ImportFallbackWarning buckets={importResult.fallbackWarnings} />}
         </div>
         <button
           onClick={submitImport}

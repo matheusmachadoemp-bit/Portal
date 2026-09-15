@@ -6,6 +6,7 @@ import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import * as XLSX from "xlsx";
 import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
+import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 
 const SALE_INSERT_CHUNK_SIZE = 1000;
 
@@ -257,6 +258,10 @@ export async function POST(req: Request) {
   const byDay = new Map<string, DayAggregate>();
   let canceladosIgnorados = 0;
   let linhasValidas = 0;
+  // Conta quantas vendas tiveram a forma de pagamento do arquivo não reconhecida (caiu no
+  // fallback PaymentMethod.OUTRO) — usado no resumo pós-importação para avisar o usuário
+  // quando essa fatia for significativa (ver src/lib/import-fallback.ts).
+  let semFormaPagamento = 0;
 
   type SaleInsert = {
     id: string;
@@ -330,6 +335,7 @@ export async function POST(req: Request) {
       const dateTime = parseOrderDateTime(rawDate) ?? date;
       const platform = columnMap.canalVenda !== undefined ? mapCanalToPlatform(String(row[columnMap.canalVenda] ?? "")) : "SITE_PROPRIO";
       const formaPagamento = columnMap.pagamento !== undefined ? mapPagamento(String(row[columnMap.pagamento] ?? "")) : "OUTRO";
+      if (formaPagamento === "OUTRO") semFormaPagamento++;
       const bairro = channel === "DELIVERY" && columnMap.bairro !== undefined ? String(row[columnMap.bairro] ?? "").trim() || null : null;
 
       const saleId = randomUUID();
@@ -447,6 +453,16 @@ export async function POST(req: Request) {
     vendasImportadas = saleRows.length;
   }
 
+  // Só faz sentido avaliar a forma de pagamento quando o formato "por pedido" foi usado (é o
+  // único que grava vendas detalhadas com formaPagamento) — no formato de resumo diário o total
+  // é 0 e o aviso naturalmente não dispara.
+  const formaPagamentoStats = computeImportFallbackStats(semFormaPagamento, saleRows.length);
+  const formaPagamentoWarning = buildImportFallbackBucket(
+    "formaPagamento",
+    formaPagamentoStats,
+    `${formaPagamentoStats.percentLabel} das vendas importadas (${semFormaPagamento} de ${saleRows.length}) têm forma de pagamento que não bateu com nenhuma já cadastrada e caíram em "Outro" — se for uma forma de pagamento nova (ex.: um novo meio que o Saipos passou a aceitar), avise o suporte para cadastrarmos certinho.`
+  );
+
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,
@@ -454,7 +470,15 @@ export async function POST(req: Request) {
       action: "IMPORT",
       entityType: "SalesEntry",
       entityId: file.name,
-      after: JSON.stringify({ fileName: file.name, created, updated, vendasImportadas, linhasValidas, errors: errors.length }),
+      after: JSON.stringify({
+        fileName: file.name,
+        created,
+        updated,
+        vendasImportadas,
+        linhasValidas,
+        errors: errors.length,
+        semFormaPagamento,
+      }),
     },
   });
 
@@ -464,5 +488,6 @@ export async function POST(req: Request) {
     updated,
     errors,
     canceladosIgnorados,
+    fallbackWarnings: [formaPagamentoWarning],
   });
 }
