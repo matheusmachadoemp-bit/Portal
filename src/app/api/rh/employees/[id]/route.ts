@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -26,12 +27,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const body = await req.json();
 
+  // Mesmo catálogo de RH (EmployeeCargo/EmployeeSetor) da criação (ver @/lib/rh-server) — só
+  // resolve/cadastra quando o campo foi de fato enviado no PATCH (`undefined` continua
+  // significando "não mexe neste campo", mesmo critério já usado pelos demais campos desta
+  // rota); usa a empresa do colaborador já existente, não a empresa ativa da sessão (o usuário
+  // pode estar editando alguém de uma loja específica com o seletor do Portal em modo "Grupo
+  // Nord" — mesmo raciocínio de `assertEmpresaAccess(..., existing.empresaId)` logo acima).
+  let cargoResolvido: string | undefined;
+  if (body.cargo !== undefined) {
+    const resultado = await resolveEmployeeCargo(existing.empresaId, body.cargo);
+    if (!resultado.ok) return NextResponse.json({ error: resultado.error }, { status: 400 });
+    cargoResolvido = resultado.nome;
+  }
+  let setorResolvido: string | undefined;
+  if (body.setor !== undefined) {
+    const resultado = await resolveEmployeeSetor(existing.empresaId, body.setor);
+    if (!resultado.ok) return NextResponse.json({ error: resultado.error }, { status: 400 });
+    setorResolvido = resultado.nome;
+  }
+
   const employee = await prisma.employee.update({
     where: { id },
     data: {
       name: body.name ?? undefined,
-      cargo: body.cargo ?? undefined,
-      setor: body.setor ?? undefined,
+      cargo: cargoResolvido,
+      setor: setorResolvido,
       photoUrl: body.photoUrl !== undefined ? (body.photoUrl ? String(body.photoUrl) : null) : undefined,
       admissionDate: body.admissionDate ? new Date(body.admissionDate) : undefined,
       terminationDate: body.terminationDate ? new Date(body.terminationDate) : body.terminationDate === null ? null : undefined,

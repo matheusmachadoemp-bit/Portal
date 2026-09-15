@@ -334,6 +334,8 @@ model Empresa {
   fechamentoCategorias               FechamentoCategoria[]
   fechamentoSubmissoes               FechamentoSubmissao[]
   fechamentoOcorrencias              FechamentoOcorrencia[]
+  employeeCargos                     EmployeeCargo[]
+  employeeSetores                    EmployeeSetor[]
 }
 
 model UserEmpresaAccess {
@@ -1476,6 +1478,67 @@ model Employee {
   documents               EmployeeDocument[]
   satisfactionInvitations SatisfactionInvitation[]
 
+  @@index([empresaId])
+}
+
+// ---------------------------------------------------------------------------
+// RH — CATÁLOGO DE CARGOS E SETORES
+//
+// Até aqui, `Employee.cargo`/`Employee.setor` eram texto livre (digitado à mão em RH >
+// Colaboradores) — o que já causou um bug real: um colaborador de "liderança" foi cadastrado com
+// `cargo` digitado de um jeito que não batia, nem por acidente, com nenhum dos 3 nomes fixos do
+// catálogo do Fechamento do Dia (`FechamentoCargo.nome`, comparados por igualdade exata em
+// `podeExecutarFechamentoCargo`, @/lib/fechamento-server) — a pessoa simplesmente não conseguia
+// preencher o formulário, sem nenhum aviso na tela (achado registrado no relatório da
+// investigação "fechamento do dia não chega pra liderança"; confirmado depois que o Matheus
+// corrigiu o cadastro manualmente e o problema sumiu). `EmployeeCargo`/`EmployeeSetor` nascem
+// para que "Cargo"/"Setor" em RH > Colaboradores virem uma lista de opções já cadastradas em vez
+// de digitação livre (pedido direto do usuário) — eliminando esse tipo de erro de digitação na
+// origem, o mesmo racional de "não deixar um valor novo cair silenciosamente em algo genérico"
+// já aplicado a PaymentMethod (ver CLAUDE.md) e ao catálogo do Fechamento do Dia.
+//
+// Por empresa (não global): cargos/setores variam de fato por tipo de operação (ex.: "Sushiman"
+// só faz sentido na Zarki Sushi, "Pizzaiolo" só na Nord Pizza — confirmado no seed) — mesmo
+// escopo já usado por `FechamentoCargo`/`Supplier`.
+//
+// `Employee.cargo`/`Employee.setor` CONTINUAM sendo colunas de texto (não viraram
+// `cargoId`/`setorId`) de propósito: são lidas como string em muitos lugares do app hoje (RH,
+// Metas > Venda acumulada, Usuários, Pesquisa de Satisfação, Loja Nord, `src/lib/inicio.ts`,
+// `src/lib/rh-insights.ts`, `podeExecutarFechamentoCargo`) — trocar por uma FK exigiria alterar
+// todos esses pontos de leitura (a maioria tela/visual, fora do escopo desta tarefa, que pediu
+// só a rota de colaborador). Em vez disso, a rota de criar/editar colaborador (`/api/rh/
+// employees`) passa a EXIGIR que o texto enviado bata com um `nome` já cadastrado aqui — e
+// cadastra automaticamente um novo item quando não bate com nenhum (nunca rejeita nem deixa
+// "solto"), então o valor gravado em `Employee.cargo`/`.setor` sempre corresponde a uma linha
+// deste catálogo, mesmo continuando armazenado como texto. Consequência a ter em mente se um dia
+// alguém construir uma tela de "gerenciar cargos/setores" com renomear/excluir: renomear um item
+// aqui NÃO propaga automaticamente para `Employee.cargo`/`.setor` já gravados (são cópias de
+// texto, não uma referência) — precisaria de um passo de migração de dado próprio nessa hora.
+// ---------------------------------------------------------------------------
+
+model EmployeeCargo {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nome      String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, nome])
+  @@index([empresaId])
+}
+
+model EmployeeSetor {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nome      String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, nome])
   @@index([empresaId])
 }
 
