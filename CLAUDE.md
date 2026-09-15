@@ -9,6 +9,11 @@ clicar, o que colar, o que esperar como resultado, e o porquê de cada passo —
 não assuma conhecimento prévio de termos técnicos sem explicar rapidamente o
 que significam na primeira vez que aparecem.
 
+Sempre que repassar/resumir um relatório de agente pro usuário, deixe claro
+logo no início **quem** é o autor (Caio, Mylon, Otavio, Nelson ou Teulis) e
+**de que tarefa/item** se trata (ex.: "item 11 — horário do Fechamento do
+Dia") — nunca deixe isso implícito só pelo contexto da conversa.
+
 # Antes de publicar uma atualização
 
 Antes de publicar/mesclar qualquer atualização para a branch de produção,
