@@ -167,7 +167,7 @@ export function IndicadoresClient({ initialData, consumoHoje }: { initialData: I
                 <div key={r.id} className="flex items-center justify-between text-sm">
                   <span className="text-white">{r.name}</span>
                   <span className="text-nord-gray">
-                    {r.concluidas} produções · <span className="text-emerald-400">{r.precisaoMedia}% precisão</span>
+                    {r.concluidas} produções · <span className="text-nord-success">{r.precisaoMedia}% precisão</span>
                   </span>
                 </div>
               ))}

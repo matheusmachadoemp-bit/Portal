@@ -164,7 +164,7 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
               <button onClick={() => openEdit(c)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
                 <Pencil size={12} /> Editar
               </button>
-              <button onClick={() => setConfirmDeleteId(c.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-red-400 py-1.5">
+              <button onClick={() => setConfirmDeleteId(c.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-nord-danger py-1.5">
                 <Trash2 size={12} /> Excluir
               </button>
             </div>
@@ -216,7 +216,7 @@ export function CursosClient({ initialCourses }: { initialCourses: CourseDTO[] }
                 >
                   {loadingSenha ? "Carregando..." : "Ver senha atual"}
                 </button>
-                {senhaError && <span className="text-xs text-red-400">{senhaError}</span>}
+                {senhaError && <span className="text-xs text-nord-danger">{senhaError}</span>}
               </div>
             )}
           </Field>

@@ -186,7 +186,7 @@ export function ComparativoClient({
               </button>
             )}
           </div>
-          {metaError && <p className="text-xs text-red-400">{metaError}</p>}
+          {metaError && <p className="text-xs text-nord-danger">{metaError}</p>}
         </div>
       </div>
 
@@ -309,7 +309,7 @@ export function ComparativoClient({
             <span className="block text-xs text-nord-gray mb-1">Prazo</span>
             <input className="input" type="date" value={form.prazo} onChange={(e) => setForm({ ...form, prazo: e.target.value })} />
           </label>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={submit} disabled={submitting} className="btn-primary w-full py-2.5 disabled:opacity-50">
             {submitting ? "Salvando..." : "Salvar plano de ação"}
           </button>

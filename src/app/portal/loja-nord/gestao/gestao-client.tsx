@@ -601,7 +601,7 @@ export function GestaoClient({
           >
             Cancelar
           </button>
-          <button onClick={confirmarRecusa} className="flex-1 px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium">
+          <button onClick={confirmarRecusa} className="flex-1 px-4 py-2 text-sm rounded-lg bg-nord-danger/90 hover:bg-nord-danger text-white font-medium">
             Confirmar recusa
           </button>
         </div>

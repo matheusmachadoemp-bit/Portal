@@ -67,7 +67,7 @@ export function FinalizarModal({
         </label>
 
         {comparison?.alerta && (
-          <div className={`text-xs rounded-lg px-3 py-2 border ${comparison.alerta === "abaixo" ? "bg-amber-950/20 border-amber-900/40 text-amber-300" : "bg-blue-950/20 border-blue-900/40 text-blue-300"}`}>
+          <div className={`text-xs rounded-lg px-3 py-2 border ${comparison.alerta === "abaixo" ? "bg-nord-warning/10 border-nord-warning/30 text-nord-warning" : "bg-blue-950/20 border-blue-900/40 text-blue-300"}`}>
             ATENÇÃO — {comparison.diferenca < 0 ? `${Math.abs(comparison.diferenca).toFixed(2)} ${ordem.productionItem.unidade} abaixo do planejado` : `produção ${Math.abs(comparison.diferencaPercent).toFixed(0)}% acima do planejado`}.
           </div>
         )}
@@ -86,7 +86,7 @@ export function FinalizarModal({
         <button
           onClick={submit}
           disabled={loading}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+          className="w-full bg-nord-success/90 hover:bg-nord-success disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
         >
           {loading ? "Salvando..." : "Finalizar Produção"}
         </button>
