@@ -77,6 +77,7 @@ model User {
   marketingFiles                     MarketingFile[]
   marketingIdeas                     MarketingIdea[]
   marketingPartners                  MarketingPartner[]
+  marketingPartnerEntries            MarketingPartnerEntry[]
   kitchenMeetings                    KitchenMeeting[]
   salaoMeetings                      SalaoMeeting[]
   deliveryMeetings                   DeliveryMeeting[]
@@ -1077,20 +1078,50 @@ model MarketingIdea {
   updatedAt   DateTime            @updatedAt
 }
 
+// Cadastro do parceiro/influencer (nome, cupom, observações gerais). Os
+// números (quantidade utilizada/vendas geradas/gasto) NÃO ficam mais aqui —
+// viraram lançamentos por período em MarketingPartnerEntry (mesmo padrão de
+// SalesEntry/MarketingEntry), pra dar pra filtrar "quanto esse parceiro
+// vendeu/custou EM MARÇO" e não só o total acumulado desde sempre. Ver
+// migration 20260915140000_marketing_partner_entries: os valores
+// cumulativos que existiam aqui até então (vendas/gasto/quantidadeUtilizada)
+// viraram 1 MarketingPartnerEntry por parceiro, datado no createdAt do
+// parceiro, pra não perder o histórico já lançado.
 model MarketingPartner {
-  id                  String   @id @default(cuid())
-  empresaId           String
-  empresa             Empresa  @relation(fields: [empresaId], references: [id])
-  nome                String
-  cupom               String
-  quantidadeUtilizada Int      @default(0)
-  vendas              Float    @default(0)
-  gasto               Float    @default(0)
+  id          String                  @id @default(cuid())
+  empresaId   String
+  empresa     Empresa                 @relation(fields: [empresaId], references: [id])
+  nome        String
+  cupom       String
+  observacoes String?
+  createdById String
+  createdBy   User                    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  entries     MarketingPartnerEntry[]
+}
+
+// Lançamento por período de um parceiro/influencer — ex.: "em março, o cupom
+// dele gerou X vendas, foi usado Y vezes e custou Z". `partner` já carrega
+// `empresaId` (um parceiro nunca troca de loja), então não duplicamos
+// empresaId aqui — mesmo padrão de SaleItem (filtra pela relação, não por
+// uma FK direta repetida). Somar as entries de um parceiro num range de
+// datas é o que alimenta o filtro de período da tela de Parcerias.
+model MarketingPartnerEntry {
+  id                  String           @id @default(cuid())
+  partnerId           String
+  partner             MarketingPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  date                DateTime
+  quantidadeUtilizada Int              @default(0)
+  vendas              Float            @default(0)
+  gasto               Float            @default(0)
   observacoes         String?
-  createdById         String
-  createdBy           User     @relation(fields: [createdById], references: [id])
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdById         String?
+  createdBy           User?            @relation(fields: [createdById], references: [id])
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([partnerId, date])
 }
 
 // ---------------------------------------------------------------------------

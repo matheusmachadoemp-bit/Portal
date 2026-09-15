@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { PartnersClient } from "./partners-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { findPartnersWithTotals } from "@/lib/marketing-partners";
+import { resolveRollingPeriod } from "@/lib/periods";
 
 export default async function ParceriasPage() {
   const session = await auth();
@@ -15,11 +16,10 @@ export default async function ParceriasPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const partners = await prisma.marketingPartner.findMany({
-    where: { empresaId: { in: empresaIds } },
-    orderBy: { vendas: "desc" },
-    include: { createdBy: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
-  });
+  // Carga inicial já filtrada pelo período default do filtro de página
+  // ("mes-atual"), pra bater com o que o cliente mostra assim que abre a
+  // tela — mesmo padrão de src/app/portal/marketing/redes-sociais/page.tsx.
+  const partners = await findPartnersWithTotals(empresaIds, resolveRollingPeriod("mes-atual"));
 
   const serialized = partners.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() }));
 

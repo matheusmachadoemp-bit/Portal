@@ -3,8 +3,23 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
+import { findPartnersWithTotals } from "@/lib/marketing-partners";
 
-export async function GET() {
+/**
+ * Marketing > Parcerias. `quantidadeUtilizada`/`vendas`/`gasto` não são mais
+ * colunas fixas de MarketingPartner — cada parceiro tem 0+ lançamentos
+ * (MarketingPartnerEntry, com data própria) e os números aqui devolvidos são
+ * a SOMA dos lançamentos dentro do período pedido (ver
+ * prisma/migrations/20260915140000_marketing_partner_entries). Criar/editar
+ * um lançamento é em /api/marketing/partners/[id]/entries.
+ *
+ * Filtro de período: mesmo padrão (`key`/`from`/`to`) de
+ * src/app/api/marketing/redes-sociais/route.ts e do <PeriodFilterBar> — sem
+ * `key` cai no default "mes-atual" (mesmo período que
+ * src/app/portal/marketing/parcerias/page.tsx usa na carga inicial).
+ */
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "marketing", "canView"))) {
@@ -14,11 +29,13 @@ export async function GET() {
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
 
-  const partners = await prisma.marketingPartner.findMany({
-    where: { empresaId: { in: empresaIdsForContext(ctx) } },
-    orderBy: { vendas: "desc" },
-    include: { createdBy: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
-  });
+  const { searchParams } = new URL(req.url);
+  const key = (searchParams.get("key") ?? "mes-atual") as RollingPeriodKey;
+  const from = searchParams.get("from") ?? undefined;
+  const to = searchParams.get("to") ?? undefined;
+  const dateFilter = resolveRollingPeriod(key, { from, to });
+
+  const partners = await findPartnersWithTotals(empresaIdsForContext(ctx), dateFilter);
 
   return NextResponse.json({ partners });
 }
@@ -54,9 +71,6 @@ export async function POST(req: Request) {
       empresaId: empresa.id,
       nome: body.nome,
       cupom: body.cupom,
-      quantidadeUtilizada: Number(body.quantidadeUtilizada) || 0,
-      vendas: Number(body.vendas) || 0,
-      gasto: Number(body.gasto) || 0,
       observacoes: body.observacoes || null,
       createdById: session.user.id,
     },
