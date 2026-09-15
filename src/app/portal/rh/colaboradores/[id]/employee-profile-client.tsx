@@ -5,7 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { upload } from "@vercel/blob/client";
-import { StatCard, Badge } from "@/components/ui/stat-card";
+import { Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { tempoDeEmpresa } from "@/lib/rh-helpers";
@@ -252,12 +253,15 @@ export function EmployeeProfileClient({
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Recebido" value={formatCurrency(totals.totalRecebido)} icon="Wallet" color="#22c55e" />
-        <StatCard label="Salário Fixo" value={employee.salarioFixo ? formatCurrency(employee.salarioFixo) : "-"} icon="DollarSign" />
-        <StatCard label="Comissões" value={formatCurrency(totals.comissao)} icon="TrendingUp" />
-        <StatCard label="Bonificações" value={formatCurrency(totals.bonificacao)} icon="Gift" />
-      </div>
+      <SortableStatCards
+        storageKey="rh-colaborador-perfil-kpi-order"
+        cards={[
+          { key: "total-recebido", label: "Total Recebido", value: formatCurrency(totals.totalRecebido), icon: "Wallet", color: "#22c55e" },
+          { key: "salario-fixo", label: "Salário Fixo", value: employee.salarioFixo ? formatCurrency(employee.salarioFixo) : "-", icon: "DollarSign" },
+          { key: "comissoes", label: "Comissões", value: formatCurrency(totals.comissao), icon: "TrendingUp" },
+          { key: "bonificacoes", label: "Bonificações", value: formatCurrency(totals.bonificacao), icon: "Gift" },
+        ]}
+      />
 
       <div className="flex gap-2 flex-wrap">
         {TABS.map((t) => (
@@ -275,14 +279,18 @@ export function EmployeeProfileClient({
 
       {tab === "Resumo" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <StatCard label="Faltas" value={formatNumber(resumo.faltas)} icon="UserX" color="#ef4444" />
-            <StatCard label="Atrasos" value={formatNumber(resumo.atrasos)} icon="Clock" color="#eab308" />
-            <StatCard label="Advertências" value={formatNumber(resumo.advertencias)} icon="AlertTriangle" color="#f97316" />
-            <StatCard label="Suspensões" value={formatNumber(resumo.suspensoes)} icon="Ban" color="#ef4444" />
-            <StatCard label="Dias de férias disponíveis" value={formatNumber(resumo.diasDisponiveis)} icon="Palmtree" color="#22c55e" />
-            <StatCard label="Férias a vencer" value={formatNumber(resumo.feriasVencidas)} icon="AlertCircle" color="#ef4444" />
-          </div>
+          <SortableStatCards
+            storageKey="rh-colaborador-resumo-kpi-order"
+            className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
+            cards={[
+              { key: "faltas", label: "Faltas", value: formatNumber(resumo.faltas), icon: "UserX", color: "#ef4444" },
+              { key: "atrasos", label: "Atrasos", value: formatNumber(resumo.atrasos), icon: "Clock", color: "#eab308" },
+              { key: "advertencias", label: "Advertências", value: formatNumber(resumo.advertencias), icon: "AlertTriangle", color: "#f97316" },
+              { key: "suspensoes", label: "Suspensões", value: formatNumber(resumo.suspensoes), icon: "Ban", color: "#ef4444" },
+              { key: "dias-ferias-disponiveis", label: "Dias de férias disponíveis", value: formatNumber(resumo.diasDisponiveis), icon: "Palmtree", color: "#22c55e" },
+              { key: "ferias-a-vencer", label: "Férias a vencer", value: formatNumber(resumo.feriasVencidas), icon: "AlertCircle", color: "#ef4444" },
+            ]}
+          />
           <div className="nord-card p-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <InfoRow label="Escala" value={employee.escala} />
             <InfoRow label="Supervisor" value={employee.supervisorResponsavel} />

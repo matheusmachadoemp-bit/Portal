@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Pencil } from "lucide-react";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatPercent, growth } from "@/lib/calc";
 import { format } from "date-fns";
 import { PERIOD_OPTIONS, type PeriodKey } from "@/lib/periods";
@@ -205,36 +206,44 @@ export function FaturamentoClient({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard
-          label="Faturamento total"
-          value={formatCurrency(summary.kpis.faturamentoAtual)}
-          icon="DollarSign"
-          color="#3b82f6"
-          delta={growth(summary.kpis.faturamentoAtual, summary.kpis.faturamentoAnterior)}
-        />
-        <StatCard
-          label="Ticket médio"
-          value={formatCurrency(summary.kpis.ticketMedioAtual)}
-          icon="Receipt"
-          color="#22c55e"
-          delta={growth(summary.kpis.ticketMedioAtual, summary.kpis.ticketMedioAnterior)}
-        />
-        <StatCard
-          label="Pedidos"
-          value={String(summary.kpis.pedidosAtual)}
-          icon="Package"
-          color="#f59e0b"
-          delta={growth(summary.kpis.pedidosAtual, summary.kpis.pedidosAnterior)}
-        />
-        <StatCard
-          label="Canal líder"
-          value={summary.kpis.canalLider.label}
-          icon="TrendingUp"
-          color="#ef4444"
-          hint={`${formatPercent(summary.kpis.canalLider.percent)} do faturamento`}
-        />
-      </div>
+      <SortableStatCards
+        storageKey="vendas-faturamento-kpi-order"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+        cards={[
+          {
+            key: "faturamento-total",
+            label: "Faturamento total",
+            value: formatCurrency(summary.kpis.faturamentoAtual),
+            icon: "DollarSign",
+            color: "#3b82f6",
+            delta: growth(summary.kpis.faturamentoAtual, summary.kpis.faturamentoAnterior),
+          },
+          {
+            key: "ticket-medio",
+            label: "Ticket médio",
+            value: formatCurrency(summary.kpis.ticketMedioAtual),
+            icon: "Receipt",
+            color: "#22c55e",
+            delta: growth(summary.kpis.ticketMedioAtual, summary.kpis.ticketMedioAnterior),
+          },
+          {
+            key: "pedidos",
+            label: "Pedidos",
+            value: String(summary.kpis.pedidosAtual),
+            icon: "Package",
+            color: "#f59e0b",
+            delta: growth(summary.kpis.pedidosAtual, summary.kpis.pedidosAnterior),
+          },
+          {
+            key: "canal-lider",
+            label: "Canal líder",
+            value: summary.kpis.canalLider.label,
+            icon: "TrendingUp",
+            color: "#ef4444",
+            hint: `${formatPercent(summary.kpis.canalLider.percent)} do faturamento`,
+          },
+        ]}
+      />
 
       <Section
         title={loading ? "Atualizando..." : "Comparativo entre 2 períodos"}

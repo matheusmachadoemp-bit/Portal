@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Search, Gift, X } from "lucide-react";
 import { Badge, StatCard } from "@/components/ui/stat-card";
+import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatNumber } from "@/lib/calc";
@@ -105,15 +106,32 @@ export function LojaNordClient({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Saldo disponível" value={`${formatNumber(saldo)} pts`} icon="Wallet" color="#1464F4" />
-        <StatCard label="Pontos pendentes" value={`${formatNumber(initialPendentes)} pts`} icon="Clock" color="#f59e0b" hint="Em resgates aguardando aprovação" />
-        <StatCard label="Pontos utilizados no mês" value={`${formatNumber(initialUtilizadosMes)} pts`} icon="ShoppingBag" color="#ef4444" />
-        <Link href="/portal/loja-nord/meus-pontos" className="nord-card p-4 flex flex-col justify-center items-center gap-1.5 hover:border-nord-blue/60 transition-colors">
-          <DynamicIcon name="History" size={20} className="text-nord-blue" />
-          <span className="text-sm text-white font-medium">Ver histórico de pontos</span>
-        </Link>
-      </div>
+      <SortableCardGrid
+        storageKey="loja-nord-loja-kpi-order"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+        items={[
+          { key: "saldo-disponivel", content: <StatCard label="Saldo disponível" value={`${formatNumber(saldo)} pts`} icon="Wallet" color="#1464F4" /> },
+          {
+            key: "pontos-pendentes",
+            content: (
+              <StatCard label="Pontos pendentes" value={`${formatNumber(initialPendentes)} pts`} icon="Clock" color="#f59e0b" hint="Em resgates aguardando aprovação" />
+            ),
+          },
+          {
+            key: "pontos-utilizados-mes",
+            content: <StatCard label="Pontos utilizados no mês" value={`${formatNumber(initialUtilizadosMes)} pts`} icon="ShoppingBag" color="#ef4444" />,
+          },
+          {
+            key: "ver-historico",
+            content: (
+              <Link href="/portal/loja-nord/meus-pontos" className="nord-card p-4 flex flex-col justify-center items-center gap-1.5 hover:border-nord-blue/60 transition-colors">
+                <DynamicIcon name="History" size={20} className="text-nord-blue" />
+                <span className="text-sm text-white font-medium">Ver histórico de pontos</span>
+              </Link>
+            ),
+          },
+        ]}
+      />
 
       <div className="nord-card p-3 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">

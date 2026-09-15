@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
-import { Section, StatCard, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency } from "@/lib/calc";
 import { type RollingPeriodKey } from "@/lib/periods";
@@ -37,14 +38,24 @@ export function IndicadoresClient({ initialData, consumoHoje }: { initialData: I
         {loading && <span className="text-xs text-nord-gray mt-2 inline-block">Atualizando...</span>}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Precisão Média da Produção" value={`${data.precisaoMedia}%`} icon="Target" color="#22c55e" />
-        <StatCard label="% Produções no Prazo" value={`${data.percentNoPrazo}%`} icon="Clock" color="#1464F4" />
-        <StatCard label="Produções Atrasadas" value={String(data.producoesAtrasadas)} icon="AlertTriangle" color="#ef4444" />
-        <StatCard label="Desperdício Estimado" value={formatCurrency(data.desperdicioEstimado)} icon="Trash2" color="#f97316" />
-        <StatCard label="Produção Excedente" value={String(data.producaoExcedente.count)} hint={formatCurrency(data.producaoExcedente.valorEstimado)} icon="TrendingUp" color="#3b82f6" />
-        <StatCard label="Produção Insuficiente" value={String(data.producaoInsuficiente.count)} icon="TrendingDown" color="#eab308" />
-      </div>
+      <SortableStatCards
+        storageKey="producao-indicadores-kpi-order"
+        cards={[
+          { key: "precisao-media", label: "Precisão Média da Produção", value: `${data.precisaoMedia}%`, icon: "Target", color: "#22c55e" },
+          { key: "no-prazo", label: "% Produções no Prazo", value: `${data.percentNoPrazo}%`, icon: "Clock", color: "#1464F4" },
+          { key: "atrasadas", label: "Produções Atrasadas", value: String(data.producoesAtrasadas), icon: "AlertTriangle", color: "#ef4444" },
+          { key: "desperdicio", label: "Desperdício Estimado", value: formatCurrency(data.desperdicioEstimado), icon: "Trash2", color: "#f97316" },
+          {
+            key: "excedente",
+            label: "Produção Excedente",
+            value: String(data.producaoExcedente.count),
+            hint: formatCurrency(data.producaoExcedente.valorEstimado),
+            icon: "TrendingUp",
+            color: "#3b82f6",
+          },
+          { key: "insuficiente", label: "Produção Insuficiente", value: String(data.producaoInsuficiente.count), icon: "TrendingDown", color: "#eab308" },
+        ]}
+      />
 
       <Section title="Precisão da produção ao longo do tempo">
         {data.serieDiaria.length === 0 ? (
