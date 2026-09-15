@@ -21,7 +21,6 @@ export async function GET() {
     include: {
       responsavel: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
-      campaign: { select: { id: true, name: true } },
       empresa: { select: { id: true, name: true, color: true } },
       comments: { include: { author: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
     },
@@ -72,7 +71,6 @@ export async function POST(req: Request) {
       estimatedMinutes: body.estimatedMinutes ? Number(body.estimatedMinutes) : null,
       actualMinutes: body.actualMinutes ? Number(body.actualMinutes) : null,
       recurrenceRule: body.recurrenceRule || null,
-      campaignId: body.campaignId || null,
       createdById: session.user.id,
     },
   });

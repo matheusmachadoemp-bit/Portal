@@ -25,12 +25,10 @@ type View = "mes" | "semana" | "dia";
 export function CalendarClient({
   initialTasks,
   teamMembers,
-  campaigns,
   canCreate,
 }: {
   initialTasks: TaskDTO[];
   teamMembers: TeamMember[];
-  campaigns: { id: string; name: string }[];
   canCreate: boolean;
 }) {
   const router = useRouter();
@@ -238,7 +236,6 @@ export function CalendarClient({
         }}
         task={editingTask}
         teamMembers={teamMembers}
-        campaigns={campaigns}
         defaultDate={defaultDate}
       />
     </div>

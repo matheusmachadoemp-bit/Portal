@@ -48,25 +48,6 @@ export async function GET(req: Request) {
         responsavel: t.responsavel?.name ?? "",
       }))
     );
-  } else if (type === "campanhas") {
-    const campaigns = await prisma.marketingCampaign.findMany({
-      where: { empresaId: { in: empresaIds } },
-      include: { responsavel: { select: { name: true } }, empresa: { select: { name: true } } },
-      orderBy: { startDate: "desc" },
-    });
-    csv = toCsv(
-      campaigns.map((c) => ({
-        nome: c.name,
-        loja: c.empresa.name,
-        status: c.status,
-        inicio: format(c.startDate, "dd/MM/yyyy"),
-        fim: format(c.endDate, "dd/MM/yyyy"),
-        orcamento: c.budget,
-        investido: c.investimento,
-        retorno: c.retorno,
-        responsavel: c.responsavel?.name ?? "",
-      }))
-    );
   } else if (type === "kpis") {
     const entries = await prisma.marketingEntry.findMany({
       where: { empresaId: { in: empresaIds } },

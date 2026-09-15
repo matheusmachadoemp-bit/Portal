@@ -30,7 +30,6 @@ function hourRowIndex(time: string | null | undefined) {
 export function DashboardClient({
   weekTasks,
   allTasks,
-  activeCampaigns,
   recentFiles,
   recentLogs,
   teamMembers,
@@ -38,7 +37,6 @@ export function DashboardClient({
 }: {
   weekTasks: TaskDTO[];
   allTasks: TaskDTO[];
-  activeCampaigns: number;
   recentFiles: FileDTO[];
   recentLogs: LogDTO[];
   teamMembers: TeamMember[];
@@ -57,7 +55,6 @@ export function DashboardClient({
     { key: "done", label: "Tarefas Concluídas", value: String(doneCount), color: "#22c55e", icon: "CheckCircle2" },
     { key: "producing", label: "A Produzir", value: String(producingCount), color: "#eab308", icon: "Clock" },
     { key: "analysis", label: "Em Análise", value: String(analysisCount), color: "#a855f7", icon: "Eye" },
-    { key: "campaigns", label: "Campanhas Ativas", value: String(activeCampaigns), color: "#3b82f6", icon: "Megaphone" },
   ];
 
   const weekStart = addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7);
@@ -346,7 +343,6 @@ export function DashboardClient({
         }}
         task={editingTask}
         teamMembers={teamMembers}
-        campaigns={[]}
       />
     </div>
   );

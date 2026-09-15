@@ -74,8 +74,6 @@ model User {
   marketingTasksResponsavel          MarketingTask[]            @relation("MarketingTaskResponsavel")
   marketingTasksCreated              MarketingTask[]            @relation("MarketingTaskCreatedBy")
   marketingComments                  MarketingComment[]
-  marketingCampaignsResponsavel      MarketingCampaign[]        @relation("MarketingCampaignResponsavel")
-  marketingCampaignsCreated          MarketingCampaign[]        @relation("MarketingCampaignCreatedBy")
   marketingFiles                     MarketingFile[]
   marketingIdeas                     MarketingIdea[]
   marketingPartners                  MarketingPartner[]
@@ -262,7 +260,6 @@ model Empresa {
   salesEntries              SalesEntry[]
   marketingEntries          MarketingEntry[]
   marketingTasks            MarketingTask[]
-  marketingCampaigns        MarketingCampaign[]
   marketingFiles            MarketingFile[]
   marketingIdeas            MarketingIdea[]
   marketingPartners         MarketingPartner[]
@@ -993,13 +990,6 @@ enum MarketingPriority {
   URGENTE
 }
 
-enum MarketingCampaignStatus {
-  PLANEJADA
-  EM_ANDAMENTO
-  PAUSADA
-  CONCLUIDA
-}
-
 enum MarketingIdeaStatus {
   NOVA
   EM_AVALIACAO
@@ -1028,8 +1018,6 @@ model MarketingTask {
   estimatedMinutes Int?
   actualMinutes    Int?
   recurrenceRule   String?
-  campaignId       String?
-  campaign         MarketingCampaign? @relation(fields: [campaignId], references: [id])
   order            Int                @default(0)
   createdById      String
   createdBy        User               @relation("MarketingTaskCreatedBy", fields: [createdById], references: [id])
@@ -1050,29 +1038,6 @@ model MarketingComment {
   author    User          @relation(fields: [authorId], references: [id])
   text      String
   createdAt DateTime      @default(now())
-}
-
-model MarketingCampaign {
-  id            String                  @id @default(cuid())
-  empresaId     String
-  empresa       Empresa                 @relation(fields: [empresaId], references: [id])
-  name          String
-  objective     String?
-  startDate     DateTime
-  endDate       DateTime
-  budget        Float                   @default(0)
-  investimento  Float                   @default(0)
-  retorno       Float                   @default(0)
-  responsavelId String?
-  responsavel   User?                   @relation("MarketingCampaignResponsavel", fields: [responsavelId], references: [id])
-  status        MarketingCampaignStatus @default(PLANEJADA)
-  resultados    String?
-  createdById   String
-  createdBy     User                    @relation("MarketingCampaignCreatedBy", fields: [createdById], references: [id])
-  createdAt     DateTime                @default(now())
-  updatedAt     DateTime                @updatedAt
-
-  tasks MarketingTask[]
 }
 
 model MarketingFile {
