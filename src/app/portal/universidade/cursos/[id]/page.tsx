@@ -16,8 +16,13 @@ export default async function CoursePlayerPage({ params }: { params: Promise<{ i
   const course = await prisma.trainingCourse.findUnique({
     where: { id },
     include: {
-      modules: { orderBy: { order: "asc" } },
-      quiz: { include: { questions: { include: { options: true }, orderBy: { order: "asc" } } } },
+      modules: {
+        orderBy: { order: "asc" },
+        include: {
+          lessons: { orderBy: { order: "asc" } },
+          quiz: { include: { questions: { include: { options: true }, orderBy: { order: "asc" } } } },
+        },
+      },
     },
   });
   if (!course) redirect("/portal/universidade/cursos");
@@ -26,35 +31,44 @@ export default async function CoursePlayerPage({ params }: { params: Promise<{ i
     where: { userId_courseId: { userId: session.user.id, courseId: id } },
     update: {},
     create: { userId: session.user.id, courseId: id },
-    include: { moduleProgress: true, certificate: true, attempts: { orderBy: { attemptNumber: "desc" } } },
+    include: {
+      moduleEnrollments: {
+        include: { lessonProgress: true, certificate: true, attempts: true },
+      },
+    },
   });
 
-  const sanitizedQuiz = course.quiz
-    ? {
-        ...course.quiz,
-        questions: course.quiz.questions.map((q) => ({
-          ...q,
-          options: q.options.map((o) => ({ ...o, correct: false })),
-        })),
-      }
-    : null;
+  const sanitizedModules = course.modules.map((m) => ({
+    ...m,
+    quiz: m.quiz
+      ? {
+          ...m.quiz,
+          questions: m.quiz.questions.map((q) => ({
+            ...q,
+            options: q.options.map((o) => ({ ...o, correct: false })),
+          })),
+        }
+      : null,
+  }));
+
+  const moduleEnrollments = enrollment.moduleEnrollments.map((me) => ({
+    moduleId: me.moduleId,
+    status: me.status,
+    certificateCode: me.certificate?.code ?? null,
+    attemptsUsed: me.attempts.length,
+  }));
+
+  const lessonProgress = enrollment.moduleEnrollments.flatMap((me) =>
+    me.lessonProgress.map((p) => ({ lessonId: p.lessonId, percentWatched: p.percentWatched, completed: p.completed }))
+  );
 
   return (
     <PageContainer title={course.name} subtitle="Videoaula" backHref="/portal/universidade/cursos" backLabel="Voltar para cursos">
       <PlayerClient
-        course={{ ...course, quiz: sanitizedQuiz } as never}
-        enrollment={{
-          id: enrollment.id,
-          status: enrollment.status,
-          progressPercent: enrollment.progressPercent,
-          certificateCode: enrollment.certificate?.code ?? null,
-          attemptsUsed: enrollment.attempts.length,
-        }}
-        moduleProgress={enrollment.moduleProgress.map((p) => ({
-          moduleId: p.moduleId,
-          percentWatched: p.percentWatched,
-          completed: p.completed,
-        }))}
+        course={{ ...course, modules: sanitizedModules } as never}
+        enrollment={{ id: enrollment.id, status: enrollment.status }}
+        moduleEnrollments={moduleEnrollments}
+        lessonProgress={lessonProgress}
       />
     </PageContainer>
   );

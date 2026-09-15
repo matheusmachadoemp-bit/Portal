@@ -10,7 +10,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
 
   const certificate = await prisma.trainingCertificate.findUnique({
     where: { code: code.toUpperCase() },
-    include: { user: { select: { name: true } }, course: { select: { name: true, instructor: true } } },
+    include: {
+      user: { select: { name: true } },
+      course: { select: { name: true, instructor: true } },
+      module: { select: { title: true } },
+    },
   });
 
   if (!certificate) {
@@ -23,6 +27,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
       code: certificate.code,
       userName: certificate.user.name,
       courseName: certificate.course.name,
+      moduleName: certificate.module.title,
       instructor: certificate.course.instructor,
       cargaHoraria: certificate.cargaHoraria,
       issuedAt: certificate.issuedAt.toISOString(),

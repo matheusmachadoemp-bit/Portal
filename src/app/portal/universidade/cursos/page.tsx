@@ -18,8 +18,9 @@ export default async function CursosPage() {
     prisma.trainingCourse.findMany({
       orderBy: [{ order: "asc" }, { name: "asc" }],
       include: {
-        modules: { select: { id: true, durationSeconds: true } },
-        quiz: { select: { id: true } },
+        modules: {
+          select: { id: true, lessons: { select: { durationSeconds: true } }, quiz: { select: { id: true } } },
+        },
         empresa: { select: { name: true } },
         _count: { select: { enrollments: true } },
       },
@@ -32,8 +33,11 @@ export default async function CursosPage() {
 
   const serialized = courses.map((c) => ({
     ...c,
-    totalMinutes: Math.round(c.modules.reduce((a, m) => a + m.durationSeconds, 0) / 60),
-    hasQuiz: !!c.quiz,
+    totalMinutes: Math.round(
+      c.modules.reduce((a, m) => a + m.lessons.reduce((sum, l) => sum + l.durationSeconds, 0), 0) / 60
+    ),
+    totalLessons: c.modules.reduce((a, m) => a + m.lessons.length, 0),
+    hasQuiz: c.modules.some((m) => !!m.quiz),
   }));
 
   return (

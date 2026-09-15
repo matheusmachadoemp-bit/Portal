@@ -14,23 +14,27 @@ export default async function AvaliacoesPage() {
     redirect("/portal/inicio");
   }
 
-  const [attempts, pendingEnrollments] = await Promise.all([
+  const [attempts, pendingModuleEnrollments] = await Promise.all([
     prisma.trainingAttempt.findMany({
       where: { userId: session.user.id },
       orderBy: { startedAt: "desc" },
-      include: { quiz: { include: { course: { select: { name: true, id: true } } } } },
+      include: { quiz: { include: { module: { include: { course: { select: { name: true, id: true } } } } } } },
     }),
-    prisma.trainingEnrollment.findMany({
+    // Módulo com todas as aulas assistidas (progressPercent 100) mas ainda
+    // sem avaliação aprovada — status só fica EM_ANDAMENTO/REPROVADO nesse
+    // ponto quando o módulo tem avaliação (sem avaliação, já teria virado
+    // CONCLUIDO automaticamente ao terminar as aulas).
+    prisma.trainingModuleEnrollment.findMany({
       where: {
-        userId: session.user.id,
+        enrollment: { userId: session.user.id },
         status: { in: ["EM_ANDAMENTO", "REPROVADO"] },
         progressPercent: 100,
       },
-      include: { course: { include: { quiz: true } } },
+      include: { module: { include: { course: { select: { name: true, id: true } }, quiz: true } } },
     }),
   ]);
 
-  const pendingQuizzes = pendingEnrollments.filter((e) => e.course.quiz);
+  const pendingQuizzes = pendingModuleEnrollments.filter((me) => me.module.quiz);
 
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Avaliações">
@@ -38,13 +42,15 @@ export default async function AvaliacoesPage() {
         {pendingQuizzes.length > 0 && (
           <Section title="Avaliações pendentes">
             <div className="space-y-2">
-              {pendingQuizzes.map((e) => (
+              {pendingQuizzes.map((me) => (
                 <Link
-                  key={e.id}
-                  href={`/portal/universidade/cursos/${e.courseId}`}
+                  key={me.id}
+                  href={`/portal/universidade/cursos/${me.module.course.id}`}
                   className="flex items-center justify-between nord-card p-3 hover:border-nord-blue/50"
                 >
-                  <span className="text-sm text-white">{e.course.name}</span>
+                  <span className="text-sm text-white">
+                    {me.module.course.name} <span className="text-nord-gray">— {me.module.title}</span>
+                  </span>
                   <Badge tone="warning">Aguardando avaliação</Badge>
                 </Link>
               ))}
@@ -61,6 +67,7 @@ export default async function AvaliacoesPage() {
                 <thead>
                   <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
                     <th className="py-2 pr-4">Curso</th>
+                    <th className="py-2 pr-4">Módulo</th>
                     <th className="py-2 pr-4">Tentativa</th>
                     <th className="py-2 pr-4">Nota</th>
                     <th className="py-2 pr-4">Resultado</th>
@@ -70,7 +77,8 @@ export default async function AvaliacoesPage() {
                 <tbody>
                   {attempts.map((a) => (
                     <tr key={a.id} className="border-b border-nord-border/50">
-                      <td className="py-2 pr-4 text-white">{a.quiz.course.name}</td>
+                      <td className="py-2 pr-4 text-white">{a.quiz.module.course.name}</td>
+                      <td className="py-2 pr-4 text-nord-gray">{a.quiz.module.title}</td>
                       <td className="py-2 pr-4 text-nord-gray">#{a.attemptNumber}</td>
                       <td className="py-2 pr-4 text-nord-gray">{a.score}%</td>
                       <td className="py-2 pr-4">

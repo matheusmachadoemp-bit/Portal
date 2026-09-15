@@ -65,7 +65,11 @@ export async function GET(req: Request) {
   } else if (type === "certificados") {
     const certificates = await prisma.trainingCertificate.findMany({
       where: { course: courseEmpresaFilter },
-      include: { user: { select: { name: true } }, course: { select: { name: true } } },
+      include: {
+        user: { select: { name: true } },
+        course: { select: { name: true } },
+        module: { select: { title: true } },
+      },
       orderBy: { issuedAt: "desc" },
     });
     csv = toCsv(
@@ -73,6 +77,7 @@ export async function GET(req: Request) {
         codigo: c.code,
         colaborador: c.user.name,
         curso: c.course.name,
+        modulo: c.module.title,
         carga_horaria: c.cargaHoraria,
         emitido_em: format(c.issuedAt, "dd/MM/yyyy"),
       }))

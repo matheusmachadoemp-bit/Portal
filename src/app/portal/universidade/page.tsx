@@ -31,7 +31,7 @@ export default async function UniversidadePage() {
     prisma.user.count({ where: { active: true } }),
     prisma.trainingEnrollment.findMany({ include: { course: { select: { name: true } } } }),
     prisma.trainingCertificate.count(),
-    prisma.trainingModuleProgress.findMany({ select: { watchedSeconds: true } }),
+    prisma.trainingLessonProgress.findMany({ select: { watchedSeconds: true } }),
     prisma.trainingAttempt.findMany({ select: { score: true } }),
     prisma.trainingCourse.findMany({
       select: { id: true, name: true, category: true, _count: { select: { enrollments: true } } },

@@ -25,7 +25,10 @@ export default async function PainelGestorPage() {
       include: { user: { select: { name: true } }, course: { select: { name: true, mandatory: true } } },
     }),
     prisma.trainingQuiz.findMany({
-      include: { course: { select: { name: true } }, attempts: { select: { score: true } } },
+      include: {
+        module: { select: { title: true, course: { select: { name: true } } } },
+        attempts: { select: { score: true } },
+      },
     }),
   ]);
 
@@ -40,7 +43,7 @@ export default async function PainelGestorPage() {
   const cursosDificeis = quizzes
     .filter((q) => q.attempts.length > 0)
     .map((q) => ({
-      name: q.course.name,
+      name: `${q.module.course.name} — ${q.module.title}`,
       media: Math.round((q.attempts.reduce((a, at) => a + at.score, 0) / q.attempts.length) * 10) / 10,
       tentativas: q.attempts.length,
     }))
@@ -99,7 +102,7 @@ export default async function PainelGestorPage() {
           )}
         </Section>
 
-        <Section title="Cursos mais difíceis (menor nota média nas avaliações)">
+        <Section title="Módulos mais difíceis (menor nota média nas avaliações)">
           {cursosDificeis.length === 0 ? (
             <p className="text-sm text-nord-gray text-center py-6">Ainda não há avaliações respondidas.</p>
           ) : (

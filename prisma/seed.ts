@@ -59,7 +59,6 @@ const CATEGORIES = [
     contentType: "universidade",
     subs: [
       { key: "dashboard", name: "Dashboard", icon: "LayoutDashboard" },
-      { key: "trilhas", name: "Trilhas de Aprendizagem", icon: "Route" },
       { key: "cursos", name: "Cursos", icon: "BookOpen" },
       { key: "videoaulas", name: "Videoaulas", icon: "Video" },
       { key: "avaliacoes", name: "Avaliações", icon: "ClipboardCheck" },
