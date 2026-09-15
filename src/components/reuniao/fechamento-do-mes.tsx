@@ -42,17 +42,47 @@ function formatIndicatorValue(unidade: FechamentoIndicator["unidade"], value: nu
   return formatNumber(value, value % 1 === 0 ? 0 : 1);
 }
 
-/** Cor neutra usada por todos os cards da lista "Fechamento do mês" — mesmo
- * critério (sem distinção visual entre indicadores) da Reunião Gerente. */
-const INDICATOR_ACCENT = "#64748b";
+/**
+ * Paleta usada para colorir o ícone de cada indicador da lista "Fechamento do
+ * mês", por posição (a ordem em que o indicador aparece na lista) — nenhum
+ * indicador tem "tipo"/"categoria" próprios para basear a cor neles, então a
+ * meta aqui é só diferenciação visual entre métricas (não status), por isso
+ * não usa os tokens de status (`--nord-success/warning/danger`, reservados
+ * para indicar se uma meta foi batida ou não). Cor por posição, em vez de
+ * calculada a partir do id do indicador, garante que dois indicadores vizinhos
+ * na grade nunca caem na mesma cor (até o tamanho da paleta) — testado com
+ * amostras de indicadores reais: colorir por id (hash do próprio id, mesmo
+ * critério de `colorForUserId` em src/lib/user-color.ts) colidia com
+ * frequência incômoda em listas de 9–13 indicadores (comum nesta tela) numa
+ * paleta de 10 cores, já que o id não tem nenhuma relação com a posição na
+ * lista. A cor de um indicador pode mudar de posição quando a lista muda
+ * (outro é criado/excluído antes dele) — troca aceitável por uma
+ * diferenciação bem melhor entre os indicadores visíveis no momento.
+ */
+const INDICATOR_COLOR_PALETTE = [
+  "#22c55e", // verde
+  "#3b82f6", // azul
+  "#f59e0b", // âmbar
+  "#a855f7", // roxo
+  "#ec4899", // rosa
+  "#14b8a6", // teal
+  "#f97316", // laranja
+  "#06b6d4", // ciano
+  "#eab308", // amarelo
+  "#8b5cf6", // violeta
+];
+
+export function indicatorAccentColor(index: number): string {
+  return INDICATOR_COLOR_PALETTE[index % INDICATOR_COLOR_PALETTE.length];
+}
 
 /**
  * Cards prontos, no mesmo formato de `items` aceito por `SortableCardGrid`,
  * para os indicadores personalizados da seção "Fechamento do mês" — usa o
  * mesmo `IndicatorCard` (mesmo tamanho/estilo) que os cards fixos de cada
- * reunião, só que sempre na cor neutra acima, para não competir visualmente
- * com o conjunto de cores próprio dos indicadores fixos. `indicators` deve
- * ser o próprio estado React (`customIndicators`/`fdm.customIndicators`) que
+ * reunião, cada um com a cor de `indicatorAccentColor` acima (ver comentário
+ * dela). `indicators` deve ser o próprio estado React (`customIndicators`/
+ * `fdm.customIndicators`) que
  * criar, editar e excluir um indicador já atualiza sozinho — então o grid de
  * cards do topo de cada reunião fica em dia automaticamente, sem precisar de
  * nenhuma lógica de sincronização própria. Usado tanto pelas 4 telas que
@@ -66,12 +96,12 @@ const INDICATOR_ACCENT = "#64748b";
  * mostram): o DTO só traz o valor do período atual, sem o do mês anterior.
  */
 export function customIndicatorCards(indicators: FechamentoIndicator[]): { key: string; content: React.ReactNode }[] {
-  return indicators.map((ind) => ({
+  return indicators.map((ind, index) => ({
     key: `custom-${ind.id}`,
     content: (
       <IndicatorCard
         icon={ind.icon}
-        color={INDICATOR_ACCENT}
+        color={indicatorAccentColor(index)}
         label={ind.nome}
         status={statusOf(null)}
         valueSlot={
@@ -389,20 +419,23 @@ export function FechamentoDoMesSection({
     >
       {indicators.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {indicators.map((ind) => (
-            <div key={ind.id} className="flex items-center gap-2.5 rounded-lg border border-nord-border/60 px-3 py-2.5 min-w-0">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                style={{ backgroundColor: `${INDICATOR_ACCENT}22` }}
-              >
-                <DynamicIcon name={ind.icon} size={15} style={{ color: INDICATOR_ACCENT }} />
+          {indicators.map((ind, index) => {
+            const color = indicatorAccentColor(index);
+            return (
+              <div key={ind.id} className="flex items-center gap-2.5 rounded-lg border border-nord-border/60 px-3 py-2.5 min-w-0">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: `${color}22` }}
+                >
+                  <DynamicIcon name={ind.icon} size={15} style={{ color }} />
+                </div>
+                <p className="text-sm min-w-0 truncate">
+                  <span className="text-nord-gray">{ind.nome}:</span>{" "}
+                  <span className="text-white font-semibold">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
+                </p>
               </div>
-              <p className="text-sm min-w-0 truncate">
-                <span className="text-nord-gray">{ind.nome}:</span>{" "}
-                <span className="text-white font-semibold">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="text-xs text-nord-gray">
@@ -425,44 +458,47 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
       <p className="text-xs text-nord-gray mb-2 font-medium">Fechamento do mês</p>
       {fdm.customIndicators.length > 0 ? (
         <div className="space-y-3">
-          {fdm.customIndicators.map((ind) => (
-            <div key={ind.id} className="rounded-lg border border-nord-border/60 p-3">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${INDICATOR_ACCENT}22` }}
-                  >
-                    <DynamicIcon name={ind.icon} size={14} style={{ color: INDICATOR_ACCENT }} />
+          {fdm.customIndicators.map((ind, index) => {
+            const color = indicatorAccentColor(index);
+            return (
+              <div key={ind.id} className="rounded-lg border border-nord-border/60 p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${color}22` }}
+                    >
+                      <DynamicIcon name={ind.icon} size={14} style={{ color }} />
+                    </div>
+                    <span className="text-sm text-white font-medium truncate">{ind.nome}</span>
                   </div>
-                  <span className="text-sm text-white font-medium truncate">{ind.nome}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button onClick={() => fdm.openEdit(ind)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">
+                      <Pencil size={12} /> Editar
+                    </button>
+                    <button
+                      onClick={() => fdm.setDeleteTarget(ind)}
+                      className="text-nord-gray hover:text-nord-danger flex items-center gap-1 text-xs"
+                    >
+                      <Trash2 size={12} /> Excluir indicador
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => fdm.openEdit(ind)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">
-                    <Pencil size={12} /> Editar
-                  </button>
-                  <button
-                    onClick={() => fdm.setDeleteTarget(ind)}
-                    className="text-nord-gray hover:text-nord-danger flex items-center gap-1 text-xs"
-                  >
-                    <Trash2 size={12} /> Excluir indicador
-                  </button>
-                </div>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">
+                    Valor {ind.unidade === "PERCENT" ? "(%)" : ind.unidade === "CURRENCY" ? "(R$)" : ""}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={fdm.customForm[ind.id] ?? String(ind.valorReferencia)}
+                    onChange={(e) => fdm.updateValorReferencia(ind.id, e.target.value)}
+                    className="input"
+                  />
+                </label>
               </div>
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">
-                  Valor {ind.unidade === "PERCENT" ? "(%)" : ind.unidade === "CURRENCY" ? "(R$)" : ""}
-                </span>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={fdm.customForm[ind.id] ?? String(ind.valorReferencia)}
-                  onChange={(e) => fdm.updateValorReferencia(ind.id, e.target.value)}
-                  className="input"
-                />
-              </label>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="text-xs text-nord-gray">Nenhum indicador cadastrado ainda.</p>
