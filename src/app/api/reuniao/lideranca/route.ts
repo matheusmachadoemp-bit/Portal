@@ -88,7 +88,7 @@ export async function POST(req: Request) {
   // Lista de indicadores da seção "Fechamento do mês" — indicadores de nível
   // de liderança que não pertencem a nenhuma área específica (Cozinha/Salão/
   // Delivery/Gerente já têm a própria lista).
-  const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
+  const customIndicators: { id: string; valor?: string; valorReferencia?: string; valorSecundario?: string }[] = Array.isArray(body.customIndicators)
     ? body.customIndicators
     : [];
   await upsertReuniaoCustomIndicatorValues(empresa.id, "LIDERANCA", periodo, customIndicators);

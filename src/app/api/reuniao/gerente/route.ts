@@ -90,7 +90,7 @@ export async function POST(req: Request) {
   // migrados de GerenteMeeting (Faturamento Total, CMV, Turnover, Checklist
   // Operacional) quanto os criados livremente (ex.: Ticket Médio Salão/
   // Delivery); nenhuma distinção de código entre eles a partir daqui.
-  const customIndicators: { id: string; valor?: string; valorReferencia?: string }[] = Array.isArray(body.customIndicators)
+  const customIndicators: { id: string; valor?: string; valorReferencia?: string; valorSecundario?: string }[] = Array.isArray(body.customIndicators)
     ? body.customIndicators
     : [];
   await upsertReuniaoCustomIndicatorValues(empresa.id, "GERENTE", periodo, customIndicators);
