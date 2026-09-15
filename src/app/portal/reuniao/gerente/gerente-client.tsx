@@ -93,7 +93,11 @@ function buildForm(m?: Meeting | null) {
 // tela é sempre `valorReferencia`, usado no card "Fechamento do mês" (dentro e fora do modal).
 // Mantido aqui só porque divide a mesma estrutura de estado que `valorReferencia`; sem input
 // escrevendo nele, fica congelado no valor carregado da API (comportamento aceito pelo usuário).
-type CustomForm = Record<string, { valor: string; valorReferencia: string }>;
+// `valorSecundario`: 2º valor de um indicador "composto" (ex.: Cancelamentos = % + quantidade)
+// — só tem input de verdade quando o indicador tem `unidadeSecundaria` configurada; para os
+// demais fica sempre "" e nunca é enviado de fato (ver upsertReuniaoCustomIndicatorValues em
+// src/lib/reuniao-server.ts, que ignora esse campo quando o indicador não é composto).
+type CustomForm = Record<string, { valor: string; valorReferencia: string; valorSecundario: string }>;
 
 function buildCustomForm(indicators: GerenteCustomIndicatorDTO[]): CustomForm {
   return Object.fromEntries(
@@ -102,6 +106,7 @@ function buildCustomForm(indicators: GerenteCustomIndicatorDTO[]): CustomForm {
       {
         valor: ind.valor != null ? String(ind.valor) : "",
         valorReferencia: String(ind.valorReferencia),
+        valorSecundario: ind.valorSecundario != null ? String(ind.valorSecundario) : "",
       },
     ])
   );
@@ -117,6 +122,41 @@ function formatCustomValue(unidade: GerenteCustomIndicatorDTO["unidade"], value:
   if (unidade === "CURRENCY") return formatCurrency(value);
   if (unidade === "PERCENT") return `${formatNumber(value, 1)}%`;
   return formatNumber(value, value % 1 === 0 ? 0 : 1);
+}
+
+/** "(%)"/"(R$)"/"" — sufixo mostrado ao lado do rótulo "Valor" nos formulários,
+ * conforme a unidade escolhida. */
+function unidadeSuffix(unidade: GerenteCustomIndicatorDTO["unidade"]) {
+  return unidade === "PERCENT" ? "(%)" : unidade === "CURRENCY" ? "(R$)" : "";
+}
+
+/** Estado do formulário de criar/editar indicador — `hasSecondary` marca se este
+ * indicador tem um 2º valor por período (ex.: Cancelamentos = % + quantidade);
+ * `nomeSecundario`/`unidadeSecundaria` só importam quando `hasSecondary` está
+ * marcado (ver `buildSecondaryPayload` abaixo). */
+type IndicatorFormState = {
+  nome: string;
+  unidade: GerenteCustomIndicatorDTO["unidade"];
+  icon: string;
+  valorPadrao: string;
+  hasSecondary: boolean;
+  nomeSecundario: string;
+  unidadeSecundaria: GerenteCustomIndicatorDTO["unidade"];
+};
+
+function emptyIndicatorForm(): IndicatorFormState {
+  return { nome: "", unidade: "PERCENT", icon: "Target", valorPadrao: "", hasSecondary: false, nomeSecundario: "", unidadeSecundaria: "PERCENT" };
+}
+
+/** Monta os campos `nomeSecundario`/`unidadeSecundaria` do body de criar/editar a
+ * partir do formulário — sempre os 2 juntos (ver `parseSecondaryIndicatorFields`
+ * em src/lib/reuniao-server.ts): preenchidos quando `hasSecondary` está marcado, ou
+ * "" nos 2 quando não está (indicador simples, ou removendo um 2º valor existente). */
+function buildSecondaryPayload(form: IndicatorFormState) {
+  return {
+    nomeSecundario: form.hasSecondary ? form.nomeSecundario : "",
+    unidadeSecundaria: form.hasSecondary ? form.unidadeSecundaria : "",
+  };
 }
 
 export function GerenteClient({
@@ -156,23 +196,13 @@ export function GerenteClient({
   const [customIndicators, setCustomIndicators] = useState(initialCustomIndicators);
   const [customForm, setCustomForm] = useState(buildCustomForm(initialCustomIndicators));
   const [newIndicatorOpen, setNewIndicatorOpen] = useState(false);
-  const [newIndicatorForm, setNewIndicatorForm] = useState({
-    nome: "",
-    unidade: "PERCENT" as GerenteCustomIndicatorDTO["unidade"],
-    icon: "Target",
-    valorPadrao: "",
-  });
+  const [newIndicatorForm, setNewIndicatorForm] = useState<IndicatorFormState>(emptyIndicatorForm());
   const [creatingIndicator, setCreatingIndicator] = useState(false);
   const [newIndicatorError, setNewIndicatorError] = useState<string | null>(null);
   const [deleteIndicatorTarget, setDeleteIndicatorTarget] = useState<GerenteCustomIndicatorDTO | null>(null);
   const [deletingIndicator, setDeletingIndicator] = useState(false);
   const [editIndicatorTarget, setEditIndicatorTarget] = useState<GerenteCustomIndicatorDTO | null>(null);
-  const [editIndicatorForm, setEditIndicatorForm] = useState({
-    nome: "",
-    unidade: "PERCENT" as GerenteCustomIndicatorDTO["unidade"],
-    icon: "Target",
-    valorPadrao: "",
-  });
+  const [editIndicatorForm, setEditIndicatorForm] = useState<IndicatorFormState>(emptyIndicatorForm());
   const [savingEditIndicator, setSavingEditIndicator] = useState(false);
   const [editIndicatorError, setEditIndicatorError] = useState<string | null>(null);
 
@@ -323,10 +353,11 @@ export function GerenteClient({
   const checklistValor = form.checklistOperacionalPercent ? Number(form.checklistOperacionalPercent) : null;
 
   function customIndicatorState(ind: GerenteCustomIndicatorDTO) {
-    const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao) };
+    const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao), valorSecundario: "" };
     const valor = entry.valor !== "" ? Number(entry.valor) : null;
     const valorReferencia = Number(entry.valorReferencia) || 0;
-    return { entry, valor, valorReferencia };
+    const valorSecundario = entry.valorSecundario !== "" ? Number(entry.valorSecundario) : null;
+    return { entry, valor, valorReferencia, valorSecundario };
   }
 
   function updateCustomForm(id: string, patch: Partial<CustomForm[string]>) {
@@ -457,12 +488,22 @@ export function GerenteClient({
       setNewIndicatorError("Informe um nome para o indicador.");
       return;
     }
+    if (newIndicatorForm.hasSecondary && !newIndicatorForm.nomeSecundario.trim()) {
+      setNewIndicatorError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
+      return;
+    }
     setCreatingIndicator(true);
     try {
       const res = await fetch("/api/reuniao/gerente/indicadores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newIndicatorForm),
+        body: JSON.stringify({
+          nome: newIndicatorForm.nome,
+          unidade: newIndicatorForm.unidade,
+          icon: newIndicatorForm.icon,
+          valorPadrao: newIndicatorForm.valorPadrao,
+          ...buildSecondaryPayload(newIndicatorForm),
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -470,7 +511,7 @@ export function GerenteClient({
         return;
       }
       setNewIndicatorOpen(false);
-      setNewIndicatorForm({ nome: "", unidade: "PERCENT", icon: "Target", valorPadrao: "" });
+      setNewIndicatorForm(emptyIndicatorForm());
       await refresh(selectedPeriodo);
     } finally {
       setCreatingIndicator(false);
@@ -479,7 +520,15 @@ export function GerenteClient({
 
   function openEditIndicator(ind: GerenteCustomIndicatorDTO) {
     setEditIndicatorTarget(ind);
-    setEditIndicatorForm({ nome: ind.nome, unidade: ind.unidade, icon: ind.icon, valorPadrao: String(ind.valorPadrao) });
+    setEditIndicatorForm({
+      nome: ind.nome,
+      unidade: ind.unidade,
+      icon: ind.icon,
+      valorPadrao: String(ind.valorPadrao),
+      hasSecondary: !!ind.unidadeSecundaria,
+      nomeSecundario: ind.nomeSecundario ?? "",
+      unidadeSecundaria: ind.unidadeSecundaria ?? "PERCENT",
+    });
     setEditIndicatorError(null);
   }
 
@@ -490,12 +539,22 @@ export function GerenteClient({
       setEditIndicatorError("Informe um nome para o indicador.");
       return;
     }
+    if (editIndicatorForm.hasSecondary && !editIndicatorForm.nomeSecundario.trim()) {
+      setEditIndicatorError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
+      return;
+    }
     setSavingEditIndicator(true);
     try {
       const res = await fetch(`/api/reuniao/gerente/indicadores/${editIndicatorTarget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editIndicatorForm),
+        body: JSON.stringify({
+          nome: editIndicatorForm.nome,
+          unidade: editIndicatorForm.unidade,
+          icon: editIndicatorForm.icon,
+          valorPadrao: editIndicatorForm.valorPadrao,
+          ...buildSecondaryPayload(editIndicatorForm),
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -621,7 +680,7 @@ export function GerenteClient({
           {customIndicators.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {customIndicators.map((ind, index) => {
-                const { valorReferencia } = customIndicatorState(ind);
+                const { valorReferencia, valorSecundario } = customIndicatorState(ind);
                 const color = indicatorAccentColor(index);
                 return (
                   <div
@@ -634,10 +693,22 @@ export function GerenteClient({
                     >
                       <DynamicIcon name={ind.icon} size={15} style={{ color }} />
                     </div>
-                    <p className="text-sm min-w-0 truncate">
-                      <span className="text-nord-gray">{ind.nome}:</span>{" "}
-                      <span className="text-white font-semibold">{formatCustomValue(ind.unidade, valorReferencia)}</span>
-                    </p>
+                    <div className="min-w-0">
+                      <p className="text-sm truncate">
+                        <span className="text-nord-gray">{ind.nome}:</span>{" "}
+                        <span className="text-white font-semibold">{formatCustomValue(ind.unidade, valorReferencia)}</span>
+                      </p>
+                      {/* Segundo valor (indicador "composto", ex.: Cancelamentos = % + quantidade) —
+                          só aparece quando o indicador tem unidadeSecundaria configurada. */}
+                      {ind.unidadeSecundaria && (
+                        <p className="text-xs text-nord-gray truncate">
+                          {ind.nomeSecundario}:{" "}
+                          <span className="text-white font-medium">
+                            {formatCustomValue(ind.unidadeSecundaria, valorSecundario ?? 0)}
+                          </span>
+                        </p>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -668,7 +739,7 @@ export function GerenteClient({
               {customIndicators.length > 0 ? (
                 <div className="space-y-3">
                   {customIndicators.map((ind, index) => {
-                    const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao) };
+                    const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao), valorSecundario: "" };
                     const color = indicatorAccentColor(index);
                     return (
                       <div key={ind.id} className="rounded-lg border border-nord-border/60 p-3">
@@ -697,18 +768,34 @@ export function GerenteClient({
                             </button>
                           </div>
                         </div>
-                        <label className="block">
-                          <span className="block text-xs text-nord-gray mb-1">
-                            Valor {ind.unidade === "PERCENT" ? "(%)" : ind.unidade === "CURRENCY" ? "(R$)" : ""}
-                          </span>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={entry.valorReferencia}
-                            onChange={(e) => updateCustomForm(ind.id, { valorReferencia: e.target.value })}
-                            className="input"
-                          />
-                        </label>
+                        <div className={ind.unidadeSecundaria ? "grid grid-cols-2 gap-3" : ""}>
+                          <label className="block">
+                            <span className="block text-xs text-nord-gray mb-1">Valor {unidadeSuffix(ind.unidade)}</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={entry.valorReferencia}
+                              onChange={(e) => updateCustomForm(ind.id, { valorReferencia: e.target.value })}
+                              className="input"
+                            />
+                          </label>
+                          {/* Segundo valor (indicador "composto") — só aparece quando o indicador
+                              tem unidadeSecundaria configurada. */}
+                          {ind.unidadeSecundaria && (
+                            <label className="block">
+                              <span className="block text-xs text-nord-gray mb-1">
+                                {ind.nomeSecundario} {unidadeSuffix(ind.unidadeSecundaria)}
+                              </span>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={entry.valorSecundario}
+                                onChange={(e) => updateCustomForm(ind.id, { valorSecundario: e.target.value })}
+                                className="input"
+                              />
+                            </label>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -810,6 +897,46 @@ export function GerenteClient({
               />
             </label>
           </div>
+          <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={newIndicatorForm.hasSecondary}
+              onChange={(e) => setNewIndicatorForm({ ...newIndicatorForm, hasSecondary: e.target.checked })}
+            />
+            Este indicador tem um segundo valor
+          </label>
+          {/* Ex.: "Cancelamentos" registra um percentual (campos acima) + uma quantidade de
+              atrasos/cancelamentos (campos abaixo) — os dois valores por período. */}
+          {newIndicatorForm.hasSecondary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do segundo valor</span>
+                <input
+                  type="text"
+                  value={newIndicatorForm.nomeSecundario}
+                  onChange={(e) => setNewIndicatorForm({ ...newIndicatorForm, nomeSecundario: e.target.value })}
+                  placeholder="Ex.: Quantidade de atrasos"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do segundo valor</span>
+                <select
+                  value={newIndicatorForm.unidadeSecundaria}
+                  onChange={(e) =>
+                    setNewIndicatorForm({ ...newIndicatorForm, unidadeSecundaria: e.target.value as GerenteCustomIndicatorDTO["unidade"] })
+                  }
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
           <button
             onClick={createIndicator}
             disabled={creatingIndicator}
@@ -863,6 +990,47 @@ export function GerenteClient({
               />
             </label>
           </div>
+          <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={editIndicatorForm.hasSecondary}
+              onChange={(e) => setEditIndicatorForm({ ...editIndicatorForm, hasSecondary: e.target.checked })}
+            />
+            Este indicador tem um segundo valor
+          </label>
+          {/* Desmarcar remove o 2º valor deste indicador (volta a ser simples) — o histórico
+              de valores já salvos em meses anteriores permanece no banco, só deixa de
+              aparecer/ser editável enquanto a opção estiver desmarcada. */}
+          {editIndicatorForm.hasSecondary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do segundo valor</span>
+                <input
+                  type="text"
+                  value={editIndicatorForm.nomeSecundario}
+                  onChange={(e) => setEditIndicatorForm({ ...editIndicatorForm, nomeSecundario: e.target.value })}
+                  placeholder="Ex.: Quantidade de atrasos"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do segundo valor</span>
+                <select
+                  value={editIndicatorForm.unidadeSecundaria}
+                  onChange={(e) =>
+                    setEditIndicatorForm({ ...editIndicatorForm, unidadeSecundaria: e.target.value as GerenteCustomIndicatorDTO["unidade"] })
+                  }
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
           <button
             onClick={saveEditIndicator}
             disabled={savingEditIndicator}

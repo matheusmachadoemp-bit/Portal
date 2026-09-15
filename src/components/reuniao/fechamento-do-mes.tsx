@@ -42,6 +42,13 @@ function formatIndicatorValue(unidade: FechamentoIndicator["unidade"], value: nu
   return formatNumber(value, value % 1 === 0 ? 0 : 1);
 }
 
+/** "(%)"/"(R$)"/"" — sufixo mostrado ao lado do rótulo "Valor" nos formulários,
+ * conforme a unidade escolhida (mesmo texto repetido em vários pontos desta
+ * tela antes de virar helper). */
+function unidadeSuffix(unidade: FechamentoIndicator["unidade"]) {
+  return unidade === "PERCENT" ? "(%)" : unidade === "CURRENCY" ? "(R$)" : "";
+}
+
 /**
  * Paleta usada para colorir o ícone de cada indicador da lista "Fechamento do
  * mês", por posição (a ordem em que o indicador aparece na lista) — nenhum
@@ -105,7 +112,20 @@ export function customIndicatorCards(indicators: FechamentoIndicator[]): { key: 
         label={ind.nome}
         status={statusOf(null)}
         valueSlot={
-          <span className="text-2xl font-semibold text-white">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
+          <div>
+            <span className="text-2xl font-semibold text-white">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
+            {/* Segundo valor (indicador "composto", ex.: Cancelamentos = % + quantidade) — só
+                aparece quando o indicador tem unidadeSecundaria configurada; indicador simples
+                (a maioria) segue mostrando só o valor principal acima, sem regressão. */}
+            {ind.unidadeSecundaria && (
+              <p className="text-xs text-nord-gray mt-1">
+                {ind.nomeSecundario}:{" "}
+                <span className="text-white font-medium">
+                  {formatIndicatorValue(ind.unidadeSecundaria, ind.valorSecundario ?? 0)}
+                </span>
+              </p>
+            )}
+          </div>
         }
         metaText="Indicador informativo"
         premio={0}
@@ -114,14 +134,44 @@ export function customIndicatorCards(indicators: FechamentoIndicator[]): { key: 
   }));
 }
 
-type IndicatorFormState = { nome: string; unidade: FechamentoIndicator["unidade"]; icon: string; valorPadrao: string };
+type IndicatorFormState = {
+  nome: string;
+  unidade: FechamentoIndicator["unidade"];
+  icon: string;
+  valorPadrao: string;
+  /** Marca se este indicador tem um segundo valor por período (ex.: Cancelamentos = %
+   * + quantidade). Quando `false`, `nomeSecundario`/`unidadeSecundaria` abaixo são
+   * ignorados na hora de montar o payload — ver `buildSecondaryPayload` abaixo. */
+  hasSecondary: boolean;
+  nomeSecundario: string;
+  unidadeSecundaria: FechamentoIndicator["unidade"];
+};
 
 function emptyIndicatorForm(): IndicatorFormState {
-  return { nome: "", unidade: "PERCENT", icon: "Target", valorPadrao: "" };
+  return { nome: "", unidade: "PERCENT", icon: "Target", valorPadrao: "", hasSecondary: false, nomeSecundario: "", unidadeSecundaria: "PERCENT" };
+}
+
+/** Monta os campos `nomeSecundario`/`unidadeSecundaria` do body de criar/editar a
+ * partir do formulário — sempre os 2 juntos (preenchidos quando `hasSecondary` está
+ * marcado, ou "" nos 2 quando não está, o que o backend entende como "sem segundo
+ * valor"/"remover o segundo valor já existente" — ver `parseSecondaryIndicatorFields`
+ * em src/lib/reuniao-server.ts). */
+function buildSecondaryPayload(form: IndicatorFormState) {
+  return {
+    nomeSecundario: form.hasSecondary ? form.nomeSecundario : "",
+    unidadeSecundaria: form.hasSecondary ? form.unidadeSecundaria : "",
+  };
 }
 
 function buildCustomForm(indicators: FechamentoIndicator[]): Record<string, string> {
   return Object.fromEntries(indicators.map((ind) => [ind.id, String(ind.valorReferencia)]));
+}
+
+/** Rascunho do 2º valor ("Valor" do `nomeSecundario`) por indicador — só indicadores
+ * "compostos" (`unidadeSecundaria` configurada) de fato usam isso; os demais ficam
+ * com string vazia, sem nenhum campo extra aparecendo no formulário. */
+function buildCustomFormSecundario(indicators: FechamentoIndicator[]): Record<string, string> {
+  return Object.fromEntries(indicators.map((ind) => [ind.id, ind.valorSecundario != null ? String(ind.valorSecundario) : ""]));
 }
 
 /**
@@ -179,6 +229,10 @@ function buildCustomForm(indicators: FechamentoIndicator[]): Record<string, stri
 export function useFechamentoDoMes(apiBase: string, periodo: string, initialCustomIndicators: FechamentoIndicator[]) {
   const [customIndicators, setCustomIndicators] = useState(initialCustomIndicators);
   const [customForm, setCustomForm] = useState(buildCustomForm(initialCustomIndicators));
+  // Rascunho do 2º valor (só usado por indicadores "compostos", ver
+  // `buildCustomFormSecundario`) — mesma ideia de `customForm`, mas separado porque nem
+  // todo indicador tem um 2º valor pra editar.
+  const [customFormSecundario, setCustomFormSecundario] = useState(buildCustomFormSecundario(initialCustomIndicators));
   // Incrementado a cada `beginFetch()` — "geração" da busca mais recente.
   // Ver o comentário de `useFechamentoDoMes` acima sobre resposta fora de
   // ordem.
@@ -233,6 +287,20 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       }
       return next;
     });
+    // Mesma lógica de cima, aplicada ao rascunho do 2º valor — só existe pra indicadores
+    // "compostos" (unidadeSecundaria configurada); os demais entram como string vazia.
+    setCustomFormSecundario((prevForm) => {
+      const next: Record<string, string> = {};
+      for (const ind of indicators) {
+        if (!ind.unidadeSecundaria) continue;
+        const prevInd = customIndicators.find((p) => p.id === ind.id);
+        const prevValue = prevInd?.valorSecundario != null ? String(prevInd.valorSecundario) : "";
+        const prevDraft = prevForm[ind.id];
+        const draftTouched = prevInd !== undefined && prevDraft !== undefined && prevDraft !== prevValue;
+        next[ind.id] = draftTouched ? prevDraft : ind.valorSecundario != null ? String(ind.valorSecundario) : "";
+      }
+      return next;
+    });
     setCustomIndicators(indicators);
   }
 
@@ -264,12 +332,22 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
     setCustomForm((prev) => ({ ...prev, [id]: value }));
   }
 
+  function updateValorSecundario(id: string, value: string) {
+    setCustomFormSecundario((prev) => ({ ...prev, [id]: value }));
+  }
+
   /** Monta o array `customIndicators` esperado pelo POST da reunião (mesmo
-   * formato `{id, valorReferencia}` já usado hoje pela Reunião Gerente). */
+   * formato `{id, valorReferencia}` já usado hoje pela Reunião Gerente) — inclui
+   * `valorSecundario` só para indicadores "compostos" (unidadeSecundaria
+   * configurada); o backend também ignora esse campo pra indicador simples, mas
+   * evitar mandar à toa deixa o payload mais claro. */
   function buildIndicatorsPayload() {
     return customIndicators.map((ind) => ({
       id: ind.id,
       valorReferencia: customForm[ind.id] ?? String(ind.valorReferencia),
+      ...(ind.unidadeSecundaria
+        ? { valorSecundario: customFormSecundario[ind.id] ?? String(ind.valorSecundario ?? "") }
+        : {}),
     }));
   }
 
@@ -280,12 +358,22 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       setNewError("Informe um nome para o indicador.");
       return;
     }
+    if (newForm.hasSecondary && !newForm.nomeSecundario.trim()) {
+      setNewError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
+      return;
+    }
     setCreating(true);
     try {
       const res = await fetch(`${apiBase}/indicadores`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newForm),
+        body: JSON.stringify({
+          nome: newForm.nome,
+          unidade: newForm.unidade,
+          icon: newForm.icon,
+          valorPadrao: newForm.valorPadrao,
+          ...buildSecondaryPayload(newForm),
+        }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -295,7 +383,9 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       // A rota devolve o registro "cru" (sem valor/valorReferencia, que vivem
       // à parte em ReuniaoCustomIndicatorValue) — um indicador recém-criado
       // ainda não tem valor salvo em nenhum período, então cai no valorPadrao
-      // (mesma regra de loadReuniaoCustomIndicators).
+      // (mesma regra de loadReuniaoCustomIndicators). Idem para valorSecundario:
+      // sem período salvo ainda, começa null mesmo que o indicador já nasça
+      // composto.
       const created: FechamentoIndicator = {
         id: data.indicator.id,
         nome: data.indicator.nome,
@@ -304,9 +394,13 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
         valorPadrao: data.indicator.valorPadrao,
         valor: null,
         valorReferencia: data.indicator.valorPadrao,
+        nomeSecundario: data.indicator.nomeSecundario ?? null,
+        unidadeSecundaria: data.indicator.unidadeSecundaria ?? null,
+        valorSecundario: null,
       };
       setCustomIndicators((prev) => [...prev, created]);
       setCustomForm((prev) => ({ ...prev, [created.id]: String(created.valorReferencia) }));
+      setCustomFormSecundario((prev) => ({ ...prev, [created.id]: "" }));
       setNewOpen(false);
       setNewForm(emptyIndicatorForm());
     } finally {
@@ -316,7 +410,15 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
 
   function openEdit(ind: FechamentoIndicator) {
     setEditTarget(ind);
-    setEditForm({ nome: ind.nome, unidade: ind.unidade, icon: ind.icon, valorPadrao: String(ind.valorPadrao) });
+    setEditForm({
+      nome: ind.nome,
+      unidade: ind.unidade,
+      icon: ind.icon,
+      valorPadrao: String(ind.valorPadrao),
+      hasSecondary: !!ind.unidadeSecundaria,
+      nomeSecundario: ind.nomeSecundario ?? "",
+      unidadeSecundaria: ind.unidadeSecundaria ?? "PERCENT",
+    });
     setEditError(null);
   }
 
@@ -327,12 +429,22 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       setEditError("Informe um nome para o indicador.");
       return;
     }
+    if (editForm.hasSecondary && !editForm.nomeSecundario.trim()) {
+      setEditError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
+      return;
+    }
     setSavingEdit(true);
     try {
       const res = await fetch(`${apiBase}/indicadores/${editTarget.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          nome: editForm.nome,
+          unidade: editForm.unidade,
+          icon: editForm.icon,
+          valorPadrao: editForm.valorPadrao,
+          ...buildSecondaryPayload(editForm),
+        }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -362,6 +474,11 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
         delete next[deletedId];
         return next;
       });
+      setCustomFormSecundario((prev) => {
+        const next = { ...prev };
+        delete next[deletedId];
+        return next;
+      });
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
@@ -371,9 +488,11 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
   return {
     customIndicators,
     customForm,
+    customFormSecundario,
     beginFetch,
     sync,
     updateValorReferencia,
+    updateValorSecundario,
     buildIndicatorsPayload,
     newOpen,
     setNewOpen,
@@ -429,10 +548,22 @@ export function FechamentoDoMesSection({
                 >
                   <DynamicIcon name={ind.icon} size={15} style={{ color }} />
                 </div>
-                <p className="text-sm min-w-0 truncate">
-                  <span className="text-nord-gray">{ind.nome}:</span>{" "}
-                  <span className="text-white font-semibold">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
-                </p>
+                <div className="min-w-0">
+                  <p className="text-sm truncate">
+                    <span className="text-nord-gray">{ind.nome}:</span>{" "}
+                    <span className="text-white font-semibold">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
+                  </p>
+                  {/* Segundo valor (indicador "composto", ex.: Cancelamentos = % + quantidade) —
+                      só aparece quando o indicador tem unidadeSecundaria configurada. */}
+                  {ind.unidadeSecundaria && (
+                    <p className="text-xs text-nord-gray truncate">
+                      {ind.nomeSecundario}:{" "}
+                      <span className="text-white font-medium">
+                        {formatIndicatorValue(ind.unidadeSecundaria, ind.valorSecundario ?? 0)}
+                      </span>
+                    </p>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -484,18 +615,34 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
                     </button>
                   </div>
                 </div>
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">
-                    Valor {ind.unidade === "PERCENT" ? "(%)" : ind.unidade === "CURRENCY" ? "(R$)" : ""}
-                  </span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={fdm.customForm[ind.id] ?? String(ind.valorReferencia)}
-                    onChange={(e) => fdm.updateValorReferencia(ind.id, e.target.value)}
-                    className="input"
-                  />
-                </label>
+                <div className={ind.unidadeSecundaria ? "grid grid-cols-2 gap-3" : ""}>
+                  <label className="block">
+                    <span className="block text-xs text-nord-gray mb-1">Valor {unidadeSuffix(ind.unidade)}</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={fdm.customForm[ind.id] ?? String(ind.valorReferencia)}
+                      onChange={(e) => fdm.updateValorReferencia(ind.id, e.target.value)}
+                      className="input"
+                    />
+                  </label>
+                  {/* Segundo valor (indicador "composto") — só aparece quando o indicador tem
+                      unidadeSecundaria configurada; indicador simples segue com 1 campo só. */}
+                  {ind.unidadeSecundaria && (
+                    <label className="block">
+                      <span className="block text-xs text-nord-gray mb-1">
+                        {ind.nomeSecundario} {unidadeSuffix(ind.unidadeSecundaria)}
+                      </span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={fdm.customFormSecundario[ind.id] ?? String(ind.valorSecundario ?? "")}
+                        onChange={(e) => fdm.updateValorSecundario(ind.id, e.target.value)}
+                        className="input"
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -554,6 +701,44 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
               />
             </label>
           </div>
+          <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={fdm.newForm.hasSecondary}
+              onChange={(e) => fdm.setNewForm({ ...fdm.newForm, hasSecondary: e.target.checked })}
+            />
+            Este indicador tem um segundo valor
+          </label>
+          {/* Ex.: "Cancelamentos" registra um percentual (campos acima) + uma quantidade de
+              atrasos/cancelamentos (campos abaixo) — os dois valores por período. */}
+          {fdm.newForm.hasSecondary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do segundo valor</span>
+                <input
+                  type="text"
+                  value={fdm.newForm.nomeSecundario}
+                  onChange={(e) => fdm.setNewForm({ ...fdm.newForm, nomeSecundario: e.target.value })}
+                  placeholder="Ex.: Quantidade de atrasos"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do segundo valor</span>
+                <select
+                  value={fdm.newForm.unidadeSecundaria}
+                  onChange={(e) => fdm.setNewForm({ ...fdm.newForm, unidadeSecundaria: e.target.value as FechamentoIndicator["unidade"] })}
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
           <button
             onClick={fdm.createIndicator}
             disabled={fdm.creating}
@@ -607,6 +792,45 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
               />
             </label>
           </div>
+          <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={fdm.editForm.hasSecondary}
+              onChange={(e) => fdm.setEditForm({ ...fdm.editForm, hasSecondary: e.target.checked })}
+            />
+            Este indicador tem um segundo valor
+          </label>
+          {/* Desmarcar remove o 2º valor deste indicador (volta a ser simples) — o histórico
+              de valores já salvos em meses anteriores permanece no banco, só deixa de
+              aparecer/ser editável enquanto a opção estiver desmarcada. */}
+          {fdm.editForm.hasSecondary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do segundo valor</span>
+                <input
+                  type="text"
+                  value={fdm.editForm.nomeSecundario}
+                  onChange={(e) => fdm.setEditForm({ ...fdm.editForm, nomeSecundario: e.target.value })}
+                  placeholder="Ex.: Quantidade de atrasos"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do segundo valor</span>
+                <select
+                  value={fdm.editForm.unidadeSecundaria}
+                  onChange={(e) => fdm.setEditForm({ ...fdm.editForm, unidadeSecundaria: e.target.value as FechamentoIndicator["unidade"] })}
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
           <button
             onClick={fdm.saveEdit}
             disabled={fdm.savingEdit}
