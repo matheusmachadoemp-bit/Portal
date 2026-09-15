@@ -168,7 +168,7 @@ export function CoursesClient({
                       >
                         <Pencil size={14} />
                       </button>
-                      <button onClick={() => setConfirmDeleteId(c.id)} className="text-nord-gray hover:text-red-400 p-2">
+                      <button onClick={() => setConfirmDeleteId(c.id)} className="text-nord-gray hover:text-nord-danger p-2">
                         <Trash2 size={14} />
                       </button>
                     </>

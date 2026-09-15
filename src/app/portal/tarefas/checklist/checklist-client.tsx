@@ -534,7 +534,7 @@ export function ChecklistClient({
   return (
     <div className="space-y-6">
       {showGrupoModeNotice && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para criar
           ou editar checklists.
         </p>
@@ -655,7 +655,7 @@ export function ChecklistClient({
                     </div>
                   </div>
                   {o.template.fotoChecklist !== "SEM_FOTO" && (
-                    <Camera size={14} className={o.template.fotoChecklist === "OBRIGATORIA" ? "text-amber-400" : "text-nord-gray"} />
+                    <Camera size={14} className={o.template.fotoChecklist === "OBRIGATORIA" ? "text-nord-warning" : "text-nord-gray"} />
                   )}
                   <Badge tone={CHECKLIST_STATUS_TONE[o.status as keyof typeof CHECKLIST_STATUS_TONE]}>
                     {CHECKLIST_STATUS_LABEL[o.status as keyof typeof CHECKLIST_STATUS_LABEL]}
@@ -761,7 +761,7 @@ export function ChecklistClient({
                               </button>
                               <button
                                 onClick={() => setConfirmDeleteId(template.id)}
-                                className="text-nord-gray hover:text-red-400"
+                                className="text-nord-gray hover:text-nord-danger"
                                 title="Excluir"
                               >
                                 <Trash2 size={13} />
@@ -1020,7 +1020,7 @@ export function ChecklistClient({
                       <button onClick={() => duplicateItem(idx)} className="text-nord-gray hover:text-white" title="Duplicar">
                         <Copy size={13} />
                       </button>
-                      <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-red-400" title="Excluir">
+                      <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-nord-danger" title="Excluir">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -1157,7 +1157,7 @@ export function ChecklistClient({
                         </Badge>
                       </div>
                       {valor && <p className="text-nord-gray mt-1">Valor: {valor}</p>}
-                      {r.observacao && <p className="text-amber-300 mt-1">Observação: {r.observacao}</p>}
+                      {r.observacao && <p className="text-nord-warning mt-1">Observação: {r.observacao}</p>}
                       <p className="text-nord-gray/70 mt-1">
                         {r.respondidoPor?.name ?? "-"} {r.respondidoEm && `· ${formatDateTime(r.respondidoEm)}`}
                       </p>

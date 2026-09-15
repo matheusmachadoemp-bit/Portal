@@ -142,13 +142,13 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
         <Section title={`Próximas de atingir (${proximasDeAtingir.length})`}>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {proximasDeAtingir.map((g) => (
-              <div key={g.id} className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+              <div key={g.id} className="rounded-lg border border-nord-warning/40 bg-nord-warning/5 p-3">
                 <p className="text-white text-sm font-medium">{g.name}</p>
                 <p className="text-xs text-nord-gray mb-2">
                   {g.responsavel} · {GOAL_CATEGORY_LABEL[g.category as GoalCategoryKey]}
                 </p>
                 <ProgressBar percent={pct(g.valorRealizado, g.valorMeta)} color="#f59e0b" />
-                <p className="text-[11px] text-amber-400 mt-1">{pct(g.valorRealizado, g.valorMeta).toFixed(0)}% atingido</p>
+                <p className="text-[11px] text-nord-warning mt-1">{pct(g.valorRealizado, g.valorMeta).toFixed(0)}% atingido</p>
               </div>
             ))}
           </div>

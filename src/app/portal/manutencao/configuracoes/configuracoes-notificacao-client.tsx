@@ -186,7 +186,7 @@ export function ConfiguracoesNotificacaoClient({
           </div>
         )}
 
-        {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+        {error && <p className="text-xs text-nord-danger mt-3">{error}</p>}
       </Section>
 
       <AprovacaoFinanceiraNota />

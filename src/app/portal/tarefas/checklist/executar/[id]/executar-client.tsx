@@ -210,7 +210,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
           <span>Limite: {formatTime(occurrence.dueAt)}</span>
         </div>
         {!isDone && (
-          <p className="text-xs flex items-center gap-1.5 text-amber-400">
+          <p className="text-xs flex items-center gap-1.5 text-nord-warning">
             <Clock size={12} />
             {remaining >= 0 ? `${formatMinutes(remaining)} restantes` : `${formatMinutes(-remaining)} de atraso`}
           </p>
@@ -231,7 +231,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
             <label className="flex items-center gap-1.5 text-xs text-nord-blue-light cursor-pointer w-fit">
               <Camera size={13} />
               {uploadingGeral ? "Enviando..." : "Foto geral do checklist"}
-              {occurrence.template.fotoChecklist === "OBRIGATORIA" && <span className="text-amber-400">*</span>}
+              {occurrence.template.fotoChecklist === "OBRIGATORIA" && <span className="text-nord-warning">*</span>}
               <input
                 type="file"
                 accept="image/*"
@@ -257,8 +257,8 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
       </div>
 
       {isDone && (
-        <div className={`nord-card p-4 text-center ${occurrence.status === "CONCLUIDO_NO_PRAZO" ? "border-emerald-500/40" : "border-amber-500/40"}`}>
-          <CheckCircle2 size={28} className={occurrence.status === "CONCLUIDO_NO_PRAZO" ? "text-emerald-400 mx-auto mb-2" : "text-amber-400 mx-auto mb-2"} />
+        <div className={`nord-card p-4 text-center ${occurrence.status === "CONCLUIDO_NO_PRAZO" ? "border-nord-success/40" : "border-nord-warning/40"}`}>
+          <CheckCircle2 size={28} className={occurrence.status === "CONCLUIDO_NO_PRAZO" ? "text-nord-success mx-auto mb-2" : "text-nord-warning mx-auto mb-2"} />
           <p className="text-white font-medium">
             {occurrence.status === "CONCLUIDO_NO_PRAZO" ? "Checklist concluído no prazo" : "Checklist concluído com atraso"}
           </p>
@@ -267,9 +267,9 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
       )}
 
       {error && (
-        <div className="nord-card p-3 border-red-500/40 bg-red-500/5 flex items-center gap-2">
-          <AlertTriangle size={14} className="text-red-400 shrink-0" />
-          <p className="text-xs text-red-300">{error}</p>
+        <div className="nord-card p-3 border-nord-danger/40 bg-nord-danger/5 flex items-center gap-2">
+          <AlertTriangle size={14} className="text-nord-danger shrink-0" />
+          <p className="text-xs text-nord-danger">{error}</p>
         </div>
       )}
 
@@ -284,7 +284,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
                 <div className="min-w-0">
                   <p className="text-white text-sm font-medium">
                     {item.title}
-                    {item.obrigatorio && <span className="text-amber-400"> *</span>}
+                    {item.obrigatorio && <span className="text-nord-warning"> *</span>}
                   </p>
                   {item.orientacao && <p className="text-xs text-nord-gray mt-0.5">{item.orientacao}</p>}
                 </div>
@@ -300,7 +300,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
                       onClick={() => markDone(item.id)}
                       disabled={saving === item.id}
                       className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium ${
-                        status === "CONCLUIDO" ? "bg-emerald-500/15 text-emerald-400" : "bg-nord-panel border border-nord-border text-white"
+                        status === "CONCLUIDO" ? "bg-nord-success/15 text-nord-success" : "bg-nord-panel border border-nord-border text-white"
                       }`}
                     >
                       {status === "CONCLUIDO" ? <CheckCircle2 size={16} /> : <Circle size={16} />}
@@ -354,7 +354,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
                     <label className="flex items-center gap-1.5 text-xs text-nord-blue-light cursor-pointer w-fit">
                       <Camera size={13} />
                       {uploadingItem === item.id ? "Enviando..." : "Tirar/enviar foto"}
-                      {item.fotoObrigatoria && <span className="text-amber-400">*</span>}
+                      {item.fotoObrigatoria && <span className="text-nord-warning">*</span>}
                       <input
                         type="file"
                         accept="image/*"
@@ -384,7 +384,7 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
                         className="input min-h-16"
                       />
                       <div className="flex gap-2">
-                        <button onClick={() => submitProblem(item.id)} className="flex-1 bg-red-500/15 text-red-300 text-xs font-medium rounded-lg py-2">
+                        <button onClick={() => submitProblem(item.id)} className="flex-1 bg-nord-danger/15 text-nord-danger text-xs font-medium rounded-lg py-2">
                           Registrar problema
                         </button>
                         <button onClick={() => setProblemItem(null)} className="text-xs text-nord-gray px-3">
@@ -398,14 +398,14 @@ export function ExecutarClient({ occurrence: initial }: { occurrence: Occurrence
                         setProblemItem(item.id);
                         setObservacaoDraft(resp?.observacao ?? "");
                       }}
-                      className="text-xs text-nord-gray hover:text-amber-400 flex items-center gap-1"
+                      className="text-xs text-nord-gray hover:text-nord-warning flex items-center gap-1"
                     >
                       <AlertTriangle size={12} /> Informar problema
                     </button>
                   )}
                 </div>
               )}
-              {isDone && resp?.observacao && <p className="text-xs text-amber-300">Observação: {resp.observacao}</p>}
+              {isDone && resp?.observacao && <p className="text-xs text-nord-warning">Observação: {resp.observacao}</p>}
             </div>
           );
         })}

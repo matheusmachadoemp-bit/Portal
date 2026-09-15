@@ -139,7 +139,7 @@ export function OrcamentoFormModal({
               {anexos.map((a, idx) => (
                 <span key={idx} className="inline-flex items-center gap-1.5 bg-nord-panel border border-nord-border rounded-lg px-2 py-1 text-xs text-white">
                   {a.name}
-                  <button onClick={() => setAnexos((prev) => prev.filter((_, i) => i !== idx))} className="text-nord-gray hover:text-red-400">
+                  <button onClick={() => setAnexos((prev) => prev.filter((_, i) => i !== idx))} className="text-nord-gray hover:text-nord-danger">
                     <X size={12} />
                   </button>
                 </span>

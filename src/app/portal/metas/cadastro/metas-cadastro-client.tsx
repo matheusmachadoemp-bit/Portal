@@ -165,7 +165,7 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
   return (
     <div className="space-y-6">
       {!canCreate && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para criar
           ou editar metas.
         </p>
@@ -230,7 +230,7 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
             <div
               key={g.id}
               className={`nord-card p-4 flex flex-col gap-3 ${
-                g.status === "EM_RISCO" ? "border-amber-500/50 ring-1 ring-amber-500/20" : ""
+                g.status === "EM_RISCO" ? "border-nord-warning/50 ring-1 ring-nord-warning/20" : ""
               }`}
             >
               <div className="flex items-start justify-between">
@@ -262,7 +262,7 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
                   <Clock size={12} />
                   {daysLeft >= 0 ? `${daysLeft} dias restantes` : "Prazo encerrado"}
                 </span>
-                {g.bonificacao && <span className="text-emerald-400">{g.bonificacao}</span>}
+                {g.bonificacao && <span className="text-nord-success">{g.bonificacao}</span>}
               </div>
 
               {g.description && <p className="text-xs text-nord-gray">{g.description}</p>}
@@ -298,7 +298,7 @@ export function MetasCadastroClient({ initialGoals, canCreate = true }: { initia
                 </button>
                 <button
                   onClick={() => setConfirmDeleteId(g.id)}
-                  className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-red-400 py-1.5"
+                  className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-nord-danger py-1.5"
                 >
                   <Trash2 size={12} /> Excluir
                 </button>

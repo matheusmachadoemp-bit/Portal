@@ -198,7 +198,7 @@ export function MetasClient({
   return (
     <div className="space-y-6">
       {!canCreate && (
-        <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para criar
           ou editar metas.
         </p>
@@ -330,13 +330,13 @@ export function MetasClient({
                   <div
                     key={g.id}
                     className={`flex items-start gap-2.5 rounded-lg border p-3 ${
-                      late ? "border-red-500/40 bg-red-500/5" : "border-amber-500/40 bg-amber-500/5"
+                      late ? "border-nord-danger/40 bg-nord-danger/5" : "border-nord-warning/40 bg-nord-warning/5"
                     }`}
                   >
                     {late ? (
-                      <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                      <AlertCircle size={16} className="text-nord-danger shrink-0 mt-0.5" />
                     ) : (
-                      <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                      <AlertTriangle size={16} className="text-nord-warning shrink-0 mt-0.5" />
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="text-white text-xs font-medium truncate">{g.name}</p>
@@ -374,7 +374,7 @@ export function MetasClient({
               {ranked.map((g) => {
                 const percent = pct(g.valorRealizado, g.valorMeta);
                 return (
-                  <tr key={g.id} className={`border-b border-nord-border/50 ${g.status === "EM_RISCO" ? "bg-amber-500/5" : ""}`}>
+                  <tr key={g.id} className={`border-b border-nord-border/50 ${g.status === "EM_RISCO" ? "bg-nord-warning/5" : ""}`}>
                     <td className="py-2 px-3 text-white">{g.name}</td>
                     <td className="py-2 px-3 text-nord-gray">{g.responsavel}</td>
                     <td className="py-2 px-3 text-nord-gray">
@@ -403,7 +403,7 @@ export function MetasClient({
                           <button onClick={() => setAttachGoal(g)} className="text-nord-gray hover:text-white" title="Anexar">
                             <Paperclip size={13} />
                           </button>
-                          <button onClick={() => setConfirmDeleteId(g.id)} className="text-nord-gray hover:text-red-400" title="Excluir">
+                          <button onClick={() => setConfirmDeleteId(g.id)} className="text-nord-gray hover:text-nord-danger" title="Excluir">
                             <Trash2 size={13} />
                           </button>
                         </div>
