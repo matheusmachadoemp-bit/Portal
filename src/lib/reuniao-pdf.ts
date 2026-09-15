@@ -263,57 +263,141 @@ export function exportMeetingReportPdf(params: {
   doc.setFontSize(11);
   centeredText(doc, `${empresaName} · Fechamento de ${periodoLabel}`, centerX, 40);
 
-  setColor(doc, "setFillColor", COLOR.bgPanel);
-  doc.roundedRect(margin, 50, pageWidth - margin * 2, 18, 3, 3, "F");
-  setColor(doc, "setTextColor", COLOR.gold);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  centeredText(doc, `PREMIAÇÃO TOTAL DO MÊS: ${formatValue("currency", premiacaoTotal).toUpperCase()}`, centerX, 61);
+  // "PREMIAÇÃO TOTAL DO MÊS" só continua fazendo sentido pra Reunião Salão, cujas metas
+  // de venda por produto (SalaoProductGoal) são um mecanismo à parte que ainda tem
+  // meta+premiação de verdade — os outros 3 relatórios sempre mandam `premiacaoTotal: 0`
+  // porque os indicadores fixos deles deixaram de ter meta/premiação. Por isso o painel
+  // só aparece quando há valor real a mostrar, em vez de exibir "R$ 0,00" sempre.
+  let rowY: number;
+  if (premiacaoTotal > 0) {
+    setColor(doc, "setFillColor", COLOR.bgPanel);
+    doc.roundedRect(margin, 50, pageWidth - margin * 2, 18, 3, 3, "F");
+    setColor(doc, "setTextColor", COLOR.gold);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    centeredText(doc, `PREMIAÇÃO TOTAL DO MÊS: ${formatValue("currency", premiacaoTotal).toUpperCase()}`, centerX, 61);
+    rowY = 84;
+  } else {
+    rowY = 58;
+  }
 
-  let rowY = 84;
+  // Tabela de indicadores: comparação dos até 3 meses de histórico (mês selecionado +
+  // 2 anteriores) já calculado por cada tela em `ind.historico` — substitui o antigo
+  // conceito de META/STATUS, que não existe mais pros indicadores fixos.
+  const monthLabels = (indicators[0]?.historico ?? []).slice(-3).map((h) => h.monthLabel);
+  const colCount = Math.max(monthLabels.length, 1);
+  const labelColWidth = 64;
+  const colsStartX = margin + labelColWidth;
+  const colsAreaWidth = pageWidth - margin - colsStartX;
+  const colWidth = colsAreaWidth / colCount;
+  const colCenterX = (idx: number) => colsStartX + colWidth * idx + colWidth / 2;
+
   setColor(doc, "setTextColor", COLOR.gray);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.text("INDICADOR", margin, rowY);
-  doc.text("ATUAL", margin + 68, rowY);
-  doc.text("META", margin + 108, rowY);
-  doc.text("STATUS", margin + 140, rowY);
+  monthLabels.forEach((label, idx) => {
+    const isCurrent = idx === monthLabels.length - 1;
+    setColor(doc, "setTextColor", isCurrent ? COLOR.blue : COLOR.gray);
+    centeredText(doc, label.toUpperCase(), colCenterX(idx), rowY);
+  });
   rowY += 3;
   setColor(doc, "setDrawColor", COLOR.grid);
   doc.line(margin, rowY, pageWidth - margin, rowY);
   rowY += 8;
 
   for (const ind of indicators) {
-    const atual = ind.historico[ind.historico.length - 1]?.value ?? null;
+    const historico = ind.historico.slice(-3);
     setColor(doc, "setFillColor", COLOR.gold);
     doc.circle(margin + 1.5, rowY - 1.5, 1.5, "F");
     setColor(doc, "setTextColor", COLOR.white);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text(ind.label, margin + 5, rowY);
-    doc.text(formatValue(ind.unit, atual), margin + 68, rowY);
-    doc.text(formatValue(ind.unit, ind.meta), margin + 108, rowY);
-    const st = messageForStatusShort(ind.status);
-    setColor(doc, "setTextColor", st.color);
-    doc.text(st.label, margin + 140, rowY);
+    historico.forEach((point, idx) => {
+      const isCurrent = idx === historico.length - 1;
+      setColor(doc, "setTextColor", isCurrent ? COLOR.white : COLOR.grayLight);
+      doc.setFont("helvetica", isCurrent ? "bold" : "normal");
+      centeredText(doc, formatValue(ind.unit, point.value), colCenterX(idx), rowY);
+    });
     rowY += 10;
   }
 
-  rowY += 8;
-  setColor(doc, "setTextColor", COLOR.white);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("OBSERVAÇÕES DA REUNIÃO", margin, rowY);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
-  setColor(doc, "setTextColor", COLOR.grayLight);
-  const obsLines = doc.splitTextToSize(observacoes || "Sem observações registradas.", pageWidth - margin * 2);
-  doc.text(obsLines, margin, rowY + 8);
+  // Observações da reunião — painel com destaque (era só um título pequeno + texto
+  // cinza direto no fundo, o que fazia parecer uma nota de rodapé esquecida). Combos
+  // com tabela grande (ex. Salão com premiação + 8 linhas de indicador) e observação
+  // longa podiam empurrar o painel além do rodapé da página — por isso o texto flui em
+  // "fatias" (uma por página) em vez de tudo num bloco só: cada fatia cabe no espaço
+  // que sobrar até `obsFooterGap` do rodapé; se não sobrar espaço nem pra isso, o
+  // painel (ou o que faltar dele) continua numa página nova, sempre com o rodapé da
+  // marca desenhado em toda página que o relatório usar.
+  rowY += 10;
+  const obsPaddingX = 8;
+  const obsPaddingTop = 12;
+  const obsTitleGap = 9;
+  const obsLineHeight = 5.2;
+  const obsBottomPadding = 8;
+  const obsFooterGap = 20;
+  const obsLines = doc.splitTextToSize(observacoes || "Sem observações registradas.", pageWidth - margin * 2 - obsPaddingX * 2);
 
-  setColor(doc, "setTextColor", COLOR.gray);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
+  function drawPageFooter() {
+    setColor(doc, "setTextColor", COLOR.gray);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
+  }
+
+  let cursorY = rowY;
+  let linesDrawn = 0;
+  let isFirstObsChunk = true;
+  const obsHeaderHeight = obsPaddingTop + obsTitleGap;
+
+  while (linesDrawn < obsLines.length) {
+    const maxBottom = pageHeight - obsFooterGap;
+    const maxLinesHere = Math.floor((maxBottom - cursorY - obsHeaderHeight - obsBottomPadding) / obsLineHeight);
+
+    if (maxLinesHere < 1) {
+      // Não sobra espaço nem pra uma linha aqui — parte pra página nova antes de desenhar.
+      doc.addPage();
+      drawPageBackground(doc, pageWidth, pageHeight);
+      drawWordmark(doc, margin, 16);
+      cursorY = 24;
+      continue;
+    }
+
+    const chunk = obsLines.slice(linesDrawn, linesDrawn + maxLinesHere);
+    const panelHeight = obsHeaderHeight + chunk.length * obsLineHeight + obsBottomPadding;
+
+    setColor(doc, "setFillColor", COLOR.bgPanel);
+    doc.roundedRect(margin, cursorY, pageWidth - margin * 2, panelHeight, 4, 4, "F");
+    setColor(doc, "setFillColor", COLOR.blue);
+    doc.roundedRect(margin, cursorY, 3, panelHeight, 1.5, 1.5, "F");
+
+    setColor(doc, "setTextColor", COLOR.white);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(
+      isFirstObsChunk ? "OBSERVAÇÕES DA REUNIÃO" : "OBSERVAÇÕES DA REUNIÃO (CONTINUAÇÃO)",
+      margin + obsPaddingX,
+      cursorY + obsPaddingTop
+    );
+
+    setColor(doc, "setTextColor", COLOR.grayLight);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.text(chunk, margin + obsPaddingX, cursorY + obsPaddingTop + obsTitleGap);
+
+    linesDrawn += chunk.length;
+    isFirstObsChunk = false;
+    drawPageFooter();
+
+    if (linesDrawn < obsLines.length) {
+      doc.addPage();
+      drawPageBackground(doc, pageWidth, pageHeight);
+      drawWordmark(doc, margin, 16);
+      cursorY = 24;
+    }
+  }
 
   // Última página, opcional: "Metas de [próximo mês]" — o que precisa ser feito e o prêmio
   // de cada meta cadastrada pro mês que vem (só a Reunião Gerente passa `metasProximoMes`).
@@ -382,10 +466,4 @@ export function exportMeetingReportPdf(params: {
   }
 
   doc.save(`${fileSlug}-${periodoLabel.replace(/\s+/g, "-").toLowerCase()}.pdf`);
-}
-
-function messageForStatusShort(status: Status) {
-  if (status === "batida") return { label: "Meta batida", color: COLOR.success };
-  if (status === "abaixo") return { label: "Abaixo da meta", color: COLOR.warning };
-  return { label: "Sem dado", color: COLOR.grayLight };
 }
