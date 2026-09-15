@@ -84,6 +84,7 @@ model User {
   gerenteMeetings                    GerenteMeeting[]
   liderancaMeetings                  LiderancaMeeting[]
   reuniaoCustomIndicators            ReuniaoCustomIndicator[]
+  metasProximoMes                    MetaProximoMes[]
   goals                              Goal[]
   waiterSalesCreated                 WaiterSaleEntry[]                   @relation("WaiterSaleCreatedBy")
   stockMovementsCreated              StockMovement[]                     @relation("StockMovementCreatedBy")
@@ -271,6 +272,7 @@ model Empresa {
   gerenteMeetings                    GerenteMeeting[]
   liderancaMeetings                  LiderancaMeeting[]
   reuniaoCustomIndicators            ReuniaoCustomIndicator[]
+  metasProximoMes                    MetaProximoMes[]
   goals                              Goal[]
   employees                          Employee[]
   waiterSales                        WaiterSaleEntry[]
@@ -2527,6 +2529,48 @@ model GerenteMeeting {
   updatedAt   DateTime @updatedAt
 
   @@unique([empresaId, periodo])
+}
+
+/// Card "Metas de [nome do próximo mês]" da Reunião Gerente — cadastro livre de
+/// metas para o mês seguinte (ex.: "CMV: 35% — ganha R$500 — Equipe"), exibidas
+/// depois na última página do PDF exportado (ver src/lib/reuniao-pdf.ts, Fase 2).
+///
+/// `periodo` é o mês-alvo da meta ("2026-10", YYYY-MM — mesmo formato usado por
+/// GerenteMeeting.periodo/ReuniaoCustomIndicatorValue.periodo, sem inventar um
+/// formato novo). Normalmente é o mês seguinte ao atual no momento do cadastro
+/// (ver `proximoMesPeriodo()` em src/lib/reuniao.ts), mas fica gravado como valor
+/// próprio da linha (não recalculado on-the-fly a partir de `createdAt`) — assim
+/// o cadastro de metas de outubro continua sendo "de outubro" mesmo depois que o
+/// mês virar e o "próximo mês" passar a apontar para novembro.
+///
+/// Sem FK para GerenteMeeting de propósito: as metas de um mês são cadastradas
+/// ANTES desse mês começar (durante a reunião do mês atual), quando ainda não
+/// existe — e pode não vir a existir na hora certa — um GerenteMeeting daquele
+/// período futuro. Período solto em string (não uma relação) é o mesmo
+/// mecanismo já usado por ReuniaoCustomIndicatorValue.
+///
+/// Sem `meetingKey` por enquanto — pedido do usuário foi só para a Reunião
+/// Gerente. Se Salão/Cozinha/Delivery/Liderança quiserem o mesmo mecanismo
+/// depois, generalizar do mesmo jeito que ReuniaoCustomIndicator generalizou
+/// (nasceu só do Gerente, ganhou `meetingKey` em
+/// 20260914150000_reuniao_custom_indicador_compartilhado quando as outras 4
+/// reuniões precisaram da mesma seção).
+model MetaProximoMes {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id])
+  periodo      String // mês-alvo da meta, "2026-10" (YYYY-MM)
+  metrica      String // ex.: "CMV", "Tempo Pedido"
+  valorAlvo    String // ex.: "35%", "15min" — texto livre pra acomodar unidade variável por métrica
+  valorPremio  Float    @default(0) // prêmio em R$ ao bater a meta (ex.: 500)
+  destinatario String   @default("Equipe") // quem ganha o prêmio — texto livre, não enum (ex.: "Equipe", um cargo, uma pessoa)
+  order        Int      @default(0) // preserva a ordem de cadastro (exibição na tela e no PDF)
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([empresaId, periodo])
 }
 
 /// "Resultado do período" da Reunião Liderança é 100% computado a partir das

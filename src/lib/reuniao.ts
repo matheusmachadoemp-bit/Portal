@@ -43,6 +43,16 @@ export function nextPeriodo(periodo: string) {
 }
 
 /**
+ * Período-alvo (YYYY-MM) do card "Metas do próximo mês" da Reunião Gerente —
+ * sempre o mês seguinte ao atual, calculado a partir da data de hoje (nunca
+ * digitado pelo usuário). Combine com `periodoLabel()` para o nome do mês em
+ * português (ex.: hoje em setembro/2026 → "outubro de 2026").
+ */
+export function proximoMesPeriodo(): string {
+  return nextPeriodo(currentPeriodo());
+}
+
+/**
  * Resolve quais até 3 períodos entram no comparativo do PDF/gráfico.
  * Se o usuário escolheu meses manualmente (ex.: Jan/2025 x Jan/2026, ou
  * Jun x Jul x Ago), usa exatamente esses, em ordem cronológica. Sem
