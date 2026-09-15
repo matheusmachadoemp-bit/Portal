@@ -6,6 +6,7 @@ import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import * as XLSX from "xlsx";
 import type { ProductCategory } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
+import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 
 const INSERT_CHUNK_SIZE = 1000;
 
@@ -158,12 +159,38 @@ export async function POST(req: Request) {
 
   const faturamentoTotal = insertRows.reduce((sum, r) => sum + r.faturamento, 0);
   const garcons = new Set(insertRows.map((r) => r.garcomNome));
-  const semGarcomCadastrado = new Set(insertRows.filter((r) => !r.employeeId).map((r) => r.garcomNome));
+  const linhasSemGarcom = insertRows.filter((r) => !r.employeeId);
+  const semGarcomCadastrado = new Set(linhasSemGarcom.map((r) => r.garcomNome));
+  // Linhas cuja "Categoria" do arquivo não bateu com nenhuma categoria de produto conhecida
+  // (mapCategoria retornou null) — o item ainda entra no total vendido, só não aparece separado
+  // por categoria (ex.: bebidas/sobremesas no ranking de garçons).
+  const linhasSemCategoria = insertRows.filter((r) => !r.categoria);
+
+  const nomesSemGarcom = [...semGarcomCadastrado];
+  const nomesSemGarcomResumo =
+    nomesSemGarcom.length > 5
+      ? `${nomesSemGarcom.slice(0, 5).join(", ")} e mais ${nomesSemGarcom.length - 5}`
+      : nomesSemGarcom.join(", ");
+
+  const garcomStats = computeImportFallbackStats(linhasSemGarcom.length, insertRows.length);
+  const garcomWarning = buildImportFallbackBucket(
+    "garcom",
+    garcomStats,
+    `${garcomStats.percentLabel} das linhas importadas (${linhasSemGarcom.length} de ${insertRows.length}) não bateram com nenhum colaborador cadastrado em RH: ${nomesSemGarcomResumo}. Os dados entram no ranking mesmo assim, pelo nome do arquivo, mas cadastre esses garçons em RH → Colaboradores para ficar correto.`
+  );
+
+  const categoriaStats = computeImportFallbackStats(linhasSemCategoria.length, insertRows.length);
+  const categoriaWarning = buildImportFallbackBucket(
+    "categoria",
+    categoriaStats,
+    `${categoriaStats.percentLabel} das linhas importadas (${linhasSemCategoria.length} de ${insertRows.length}) têm uma categoria de produto que não reconhecemos — os itens continuam entrando no total vendido, só não aparecem separados por categoria (ex.: bebidas/sobremesas). Avise o suporte se for uma categoria nova no cardápio.`
+  );
 
   return NextResponse.json({
     itens: insertRows.length,
     faturamentoTotal,
     garcons: garcons.size,
-    semGarcomCadastrado: [...semGarcomCadastrado],
+    semGarcomCadastrado: nomesSemGarcom,
+    fallbackWarnings: [garcomWarning, categoriaWarning],
   });
 }
