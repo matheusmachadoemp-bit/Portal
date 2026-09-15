@@ -75,7 +75,6 @@ const CATEGORIES = [
       { key: "colaboradores", name: "Colaboradores", icon: "Users" },
       { key: "ranking", name: "Ranking", icon: "Trophy" },
       { key: "biblioteca", name: "Biblioteca", icon: "Library" },
-      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
       { key: "gestor", name: "Painel do Gestor", icon: "Briefcase" },
     ],
   },
