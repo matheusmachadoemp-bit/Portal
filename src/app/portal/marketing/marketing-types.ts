@@ -14,8 +14,6 @@ export type TaskDTO = {
   tags: string | null;
   estimatedMinutes: number | null;
   actualMinutes: number | null;
-  campaignId: string | null;
-  campaign?: { id: string; name: string } | null;
   responsavelId: string | null;
   responsavel: { id?: string; name: string } | null;
   createdBy?: { id?: string; name: string };

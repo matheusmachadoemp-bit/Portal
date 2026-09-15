@@ -103,6 +103,45 @@ export async function getStoreManagers(empresaId: string): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
+export type StoreUserOption = { id: string; name: string; email: string; role: string };
+
+/**
+ * Todos os usuários ativos com acesso à loja (ADMINISTRADOR/GESTOR têm acesso
+ * a todas as lojas; os demais cargos só se tiverem um `UserEmpresaAccess`
+ * explícito pra essa loja) — mesmo critério de acesso usado em
+ * `getUserEmpresas`/`getStoreManagers`, mas sem restringir a cargos de
+ * gestão: usado pra popular o seletor de "quem recebe notificação de chamado
+ * novo" (Manutenção > Configurações > Notificações), onde o objetivo é
+ * permitir escolher qualquer pessoa da loja (ex.: um técnico COLABORADOR),
+ * não só quem gerencia.
+ */
+export async function getStoreActiveUsers(empresaId: string): Promise<StoreUserOption[]> {
+  return prisma.user.findMany({
+    where: {
+      active: true,
+      OR: [{ role: { in: ["ADMINISTRADOR", "GESTOR"] } }, { empresaAccess: { some: { empresaId } } }],
+    },
+    select: { id: true, name: true, email: true, role: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * Ids dos usuários configurados (Manutenção > Configurações > Notificações,
+ * model `ManutencaoNotificacaoDestinatario`) pra sempre serem notificados
+ * quando um chamado novo é aberto nessa loja, independente de
+ * prioridade/responsável. Filtra `active: true` no próprio join — alguém
+ * desativado depois de configurado para de receber (mas a configuração em
+ * si não é apagada; volta a valer se a conta for reativada).
+ */
+export async function getManutencaoNotificacaoDestinatarios(empresaId: string): Promise<string[]> {
+  const destinatarios = await prisma.manutencaoNotificacaoDestinatario.findMany({
+    where: { empresaId, user: { active: true } },
+    select: { userId: true },
+  });
+  return destinatarios.map((d) => d.userId);
+}
+
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
@@ -303,154 +342,5 @@ export async function getManutencaoDashboardData(empresaIds: string[], filtros: 
     chamadosRecentes,
     proximasManutencoesList,
     equipamentosCriticos,
-  };
-}
-
-export type ManutencaoRelatorioFiltros = {
-  from?: Date;
-  to?: Date;
-  setor?: string;
-  categoria?: string;
-  equipamentoId?: string;
-  prestadorId?: string;
-  status?: string;
-};
-
-function sumBy<T>(items: T[], keyFn: (item: T) => string, valueFn: (item: T) => number): { key: string; valor: number }[] {
-  const map = new Map<string, number>();
-  for (const item of items) {
-    const key = keyFn(item);
-    map.set(key, (map.get(key) ?? 0) + valueFn(item));
-  }
-  return [...map.entries()].map(([key, valor]) => ({ key, valor })).sort((a, b) => b.valor - a.valor);
-}
-
-function countBy<T>(items: T[], keyFn: (item: T) => string): { key: string; total: number }[] {
-  const map = new Map<string, number>();
-  for (const item of items) {
-    const key = keyFn(item);
-    map.set(key, (map.get(key) ?? 0) + 1);
-  }
-  return [...map.entries()].map(([key, total]) => ({ key, total })).sort((a, b) => b.total - a.total);
-}
-
-export async function getManutencaoRelatorioData(empresaIds: string[], filtros: ManutencaoRelatorioFiltros = {}) {
-  const now = new Date();
-
-  const registroWhere: Prisma.ManutencaoRegistroWhereInput = {
-    empresaId: { in: empresaIds },
-    ...(filtros.from || filtros.to
-      ? { data: { ...(filtros.from ? { gte: filtros.from } : {}), ...(filtros.to ? { lte: filtros.to } : {}) } }
-      : {}),
-    ...(filtros.equipamentoId ? { equipamentoId: filtros.equipamentoId } : {}),
-    ...(filtros.prestadorId ? { prestadorId: filtros.prestadorId } : {}),
-    ...(filtros.setor || filtros.categoria
-      ? {
-          equipamento: {
-            ...(filtros.setor ? { setor: filtros.setor } : {}),
-            ...(filtros.categoria ? { categoria: filtros.categoria } : {}),
-          },
-        }
-      : {}),
-  };
-
-  const chamadoWhere: Prisma.ChamadoWhereInput = {
-    empresaId: { in: empresaIds },
-    ...(filtros.from || filtros.to
-      ? { createdAt: { ...(filtros.from ? { gte: filtros.from } : {}), ...(filtros.to ? { lte: filtros.to } : {}) } }
-      : {}),
-    ...(filtros.setor ? { setor: filtros.setor } : {}),
-    ...(filtros.categoria ? { categoria: filtros.categoria as ChamadoCategoria } : {}),
-    ...(filtros.equipamentoId ? { equipamentoId: filtros.equipamentoId } : {}),
-    ...(filtros.status ? { status: filtros.status as ChamadoStatus } : {}),
-  };
-
-  const [registros, chamados, equipamentos, preventivaOcorrencias, equipamentosParados] = await Promise.all([
-    prisma.manutencaoRegistro.findMany({
-      where: registroWhere,
-      include: {
-        equipamento: { select: { id: true, nome: true, codigo: true, setor: true, categoria: true, valorCompra: true, empresa: { select: { name: true } } } },
-        prestadorCadastrado: { select: { nome: true } },
-      },
-    }),
-    prisma.chamado.findMany({
-      where: chamadoWhere,
-      select: { id: true, setor: true, prioridade: true, createdAt: true, resolvidoEm: true, status: true },
-    }),
-    prisma.equipamento.findMany({
-      where: { empresaId: { in: empresaIds } },
-      select: { id: true, nome: true, codigo: true, valorCompra: true },
-    }),
-    prisma.manutencaoPreventivaOcorrencia.findMany({
-      where: { preventiva: { equipamento: { empresaId: { in: empresaIds } } } },
-      select: { status: true, dataProgramada: true },
-    }),
-    prisma.equipamento.count({ where: { empresaId: { in: empresaIds }, status: "PARADO" } }),
-  ]);
-
-  const custoTotal = registros.reduce((s, r) => s + r.valorTotal, 0);
-  const gastosPorLoja = sumBy(registros, (r) => r.equipamento.empresa.name, (r) => r.valorTotal);
-  const gastosPorSetor = sumBy(registros, (r) => r.equipamento.setor, (r) => r.valorTotal);
-  const gastosPorCategoria = sumBy(registros, (r) => r.equipamento.categoria, (r) => r.valorTotal);
-  const gastosPorPrestador = sumBy(registros, (r) => r.prestadorCadastrado?.nome ?? r.prestador ?? "Não informado", (r) => r.valorTotal);
-  const gastosPorEquipamento = sumBy(registros, (r) => `${r.equipamento.nome} (${r.equipamento.codigo})`, (r) => r.valorTotal).slice(0, 10);
-
-  const equipamentosComMaisProblemas = (
-    await prisma.chamado.groupBy({
-      by: ["equipamentoId"],
-      where: { ...chamadoWhere, equipamentoId: { not: null } },
-      _count: { _all: true },
-    })
-  )
-    .sort((a, b) => b._count._all - a._count._all)
-    .slice(0, 10)
-    .map((g) => {
-      const eq = equipamentos.find((e) => e.id === g.equipamentoId);
-      return { key: eq ? `${eq.nome} (${eq.codigo})` : "—", total: g._count._all };
-    });
-
-  const chamadosPorSetor = countBy(chamados, (c) => c.setor);
-  const chamadosPorPrioridade = countBy(chamados, (c) => c.prioridade);
-
-  const resolvidos = chamados.filter((c) => c.resolvidoEm);
-  const tempoMedioResolucaoHoras =
-    resolvidos.length > 0
-      ? resolvidos.reduce((s, c) => s + ((c.resolvidoEm as Date).getTime() - c.createdAt.getTime()), 0) / resolvidos.length / (1000 * 60 * 60)
-      : null;
-
-  const preventivasConcluidas = preventivaOcorrencias.filter((o) => o.status === "CONCLUIDA").length;
-  const preventivasAtrasadas = preventivaOcorrencias.filter((o) => o.status === "PROGRAMADA" && o.dataProgramada < now).length;
-  const preventivasNoPrazoPercent =
-    preventivasConcluidas + preventivasAtrasadas > 0
-      ? (preventivasConcluidas / (preventivasConcluidas + preventivasAtrasadas)) * 100
-      : null;
-
-  const custoAcumuladoPorEquipamento = sumBy(registros, (r) => r.equipamentoId, (r) => r.valorTotal);
-  const comparativoSubstituicao = equipamentos
-    .map((e) => {
-      const acumulado = custoAcumuladoPorEquipamento.find((c) => c.key === e.id)?.valor ?? 0;
-      return { nome: `${e.nome} (${e.codigo})`, custoAcumulado: acumulado, valorCompra: e.valorCompra ?? 0 };
-    })
-    .filter((e) => e.valorCompra > 0 && e.custoAcumulado > e.valorCompra * 0.5)
-    .sort((a, b) => b.custoAcumulado / (b.valorCompra || 1) - a.custoAcumulado / (a.valorCompra || 1));
-
-  return {
-    custoTotal,
-    gastosPorLoja,
-    gastosPorSetor,
-    gastosPorCategoria,
-    gastosPorPrestador,
-    gastosPorEquipamento,
-    equipamentosComMaisProblemas,
-    chamadosPorSetor,
-    chamadosPorPrioridade,
-    tempoMedioResolucaoHoras,
-    preventivasConcluidas,
-    preventivasAtrasadas,
-    preventivasNoPrazoPercent,
-    equipamentosParados,
-    comparativoSubstituicao,
-    totalChamados: chamados.length,
-    totalRegistros: registros.length,
   };
 }

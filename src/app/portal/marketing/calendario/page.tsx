@@ -15,7 +15,7 @@ export default async function CalendarioPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const [tasks, teamMembers, campaigns] = await Promise.all([
+  const [tasks, teamMembers] = await Promise.all([
     prisma.marketingTask.findMany({
       where: { empresaId: { in: empresaIds }, date: { not: null } },
       orderBy: { date: "asc" },
@@ -26,11 +26,6 @@ export default async function CalendarioPage() {
       },
     }),
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.marketingCampaign.findMany({
-      where: { empresaId: { in: empresaIds } },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
   ]);
 
   const serialized = tasks.map((t) => ({ ...t, date: t.date ? t.date.toISOString() : null }));
@@ -40,7 +35,6 @@ export default async function CalendarioPage() {
       <CalendarClient
         initialTasks={serialized as never}
         teamMembers={teamMembers}
-        campaigns={campaigns}
         canCreate={ctx?.mode === "single"}
       />
     </PageContainer>
