@@ -216,7 +216,7 @@ export function ClienteProfileClient({
             action={
               editing ? (
                 <div className="flex gap-1.5">
-                  <button onClick={salvarPerfil} disabled={saving} className="text-emerald-400 hover:text-emerald-300">
+                  <button onClick={salvarPerfil} disabled={saving} className="text-nord-success hover:text-nord-success/80">
                     <Check size={15} />
                   </button>
                   <button onClick={() => setEditing(false)} className="text-nord-gray hover:text-white">
@@ -281,7 +281,7 @@ export function ClienteProfileClient({
                   <div key={n.id} className="p-2.5 rounded-lg bg-nord-panel/60 border border-nord-border/50">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs text-white">{n.texto}</p>
-                      <button onClick={() => excluirNota(n.id)} className="text-nord-gray hover:text-red-400 shrink-0">
+                      <button onClick={() => excluirNota(n.id)} className="text-nord-gray hover:text-nord-danger shrink-0">
                         <Trash2 size={12} />
                       </button>
                     </div>

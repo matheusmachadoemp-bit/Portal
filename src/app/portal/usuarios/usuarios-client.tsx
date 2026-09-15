@@ -271,7 +271,7 @@ export function UsuariosClient({
                       <Pencil size={14} />
                     </button>
                     {u.id !== currentUserId && (
-                      <button onClick={() => setConfirmDeleteId(u.id)} className="text-nord-gray hover:text-red-400">
+                      <button onClick={() => setConfirmDeleteId(u.id)} className="text-nord-gray hover:text-nord-danger">
                         <Trash2 size={14} />
                       </button>
                     )}

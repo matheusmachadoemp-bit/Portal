@@ -232,7 +232,7 @@ export function FilesManager({
               <button onClick={() => duplicateFile(f)} className="text-nord-gray hover:text-white">
                 <Copy size={12} />
               </button>
-              <button onClick={() => setConfirmDeleteId(f.id)} className="text-nord-gray hover:text-red-400">
+              <button onClick={() => setConfirmDeleteId(f.id)} className="text-nord-gray hover:text-nord-danger">
                 <Trash2 size={12} />
               </button>
             </div>

@@ -220,7 +220,7 @@ export function FidelidadeClient({
                   {canManage && (
                     <button
                       onClick={() => toggleReward(r.id, r.ativo)}
-                      className={`text-[11px] px-2 py-0.5 rounded-full ${r.ativo ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-nord-gray"}`}
+                      className={`text-[11px] px-2 py-0.5 rounded-full ${r.ativo ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
                     >
                       {r.ativo ? "Ativa" : "Inativa"}
                     </button>

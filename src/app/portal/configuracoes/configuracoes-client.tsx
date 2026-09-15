@@ -229,14 +229,14 @@ export function ConfiguracoesClient({
             Alterar senha
           </button>
         </form>
-        {state?.error && <p className="text-sm text-red-400 mt-2">{state.error}</p>}
-        {state?.message && <p className="text-sm text-emerald-400 mt-2">{state.message}</p>}
+        {state?.error && <p className="text-sm text-nord-danger mt-2">{state.error}</p>}
+        {state?.message && <p className="text-sm text-nord-success mt-2">{state.message}</p>}
       </Section>
 
       {isAdmin && (
         <Section title="Ficha Técnica — Taxa iFood padrão">
           {taxaIfoodPadrao === null ? (
-            <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+            <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
               Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
               configurar a taxa iFood padrão.
             </p>
@@ -260,7 +260,7 @@ export function ConfiguracoesClient({
               </button>
             </div>
           )}
-          {ifoodMessage && <p className="text-xs text-emerald-400 mt-2">{ifoodMessage}</p>}
+          {ifoodMessage && <p className="text-xs text-nord-success mt-2">{ifoodMessage}</p>}
           <p className="text-xs text-nord-gray mt-3">
             Usada para calcular o preço sugerido no iFood em cada ficha técnica. Pode ser sobrescrita
             individualmente em cada produto.
@@ -271,7 +271,7 @@ export function ConfiguracoesClient({
       {isAdmin && (
         <Section title="Integração Saipos — vendas">
           {saipos === null ? (
-            <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+            <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
               Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
               configurar a integração com a Saipos.
             </p>
@@ -331,7 +331,7 @@ export function ConfiguracoesClient({
                   </span>
                 )}
               </div>
-              {saiposMessage && <p className="text-xs text-emerald-400 mt-2">{saiposMessage}</p>}
+              {saiposMessage && <p className="text-xs text-nord-success mt-2">{saiposMessage}</p>}
             </>
           )}
         </Section>
@@ -340,7 +340,7 @@ export function ConfiguracoesClient({
       {isAdmin && (
         <Section title="Integração Meta Ads — tráfego pago">
           {metaAds === null ? (
-            <p className="text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+            <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
               Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
               configurar a integração com o Meta Ads.
             </p>
@@ -451,7 +451,7 @@ export function ConfiguracoesClient({
                 o que já foi sincronizado fica salvo; é só clicar de novo (ela recomeça do mês mais recente e
                 segue voltando no tempo).
               </p>
-              {metaMessage && <p className="text-xs text-emerald-400 mt-2">{metaMessage}</p>}
+              {metaMessage && <p className="text-xs text-nord-success mt-2">{metaMessage}</p>}
             </>
           )}
         </Section>
