@@ -264,7 +264,6 @@ const CATEGORIES = [
       { key: "equipamentos", name: "Equipamentos", icon: "Boxes" },
       { key: "calendario", name: "Calendário preventivo", icon: "CalendarClock" },
       { key: "prestadores", name: "Prestadores", icon: "Users" },
-      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
