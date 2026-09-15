@@ -8,6 +8,7 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "@/lib/estoque";
+import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type CountItem = { nome: string; unidade: string; esperado: number; contado: number | null; diferencaPercent: number | null; status: string; observacao: string | null; justificativa: string | null };
 type CountRow = {
@@ -36,16 +37,28 @@ const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "O
 export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [detail, setDetail] = useState<CountRow | null>(null);
+
+  const range = useMemo(() => {
+    if (periodo === "personalizado" && (!customFrom || !customTo)) return null;
+    return resolveRollingPeriod(periodo, { from: customFrom, to: customTo });
+  }, [periodo, customFrom, customTo]);
 
   const filtered = useMemo(
     () =>
       counts.filter((c) => {
         if (typeFilter && c.type !== typeFilter) return false;
         if (statusFilter && c.status !== statusFilter) return false;
+        if (range) {
+          const data = new Date(c.dataContagem);
+          if (data < range.from || data > range.to) return false;
+        }
         return true;
       }),
-    [counts, typeFilter, statusFilter]
+    [counts, typeFilter, statusFilter, range]
   );
 
   return (
@@ -55,6 +68,17 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
         <Toolbar
           filters={
             <>
+              <select className="input w-40" value={periodo} onChange={(e) => setPeriodo(e.target.value as RollingPeriodKey)}>
+                {STANDARD_PERIOD_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
+              {periodo === "personalizado" && (
+                <>
+                  <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input w-auto" />
+                  <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input w-auto" />
+                </>
+              )}
               <select className="input w-40" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
                 <option value="">Todos os tipos</option>
                 <option value="SEMANAL">Semanal</option>

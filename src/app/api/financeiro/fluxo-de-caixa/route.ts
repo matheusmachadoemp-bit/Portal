@@ -1,22 +1,19 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { getIndicadoresData } from "@/lib/producao-indicadores-server";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { computeFluxoCaixa } from "@/lib/fluxo-caixa-server";
 import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "producao", "canView"))) {
-    return NextResponse.json({ error: "Seu perfil de permissão não permite ver a Produção." }, { status: 403 });
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+    return NextResponse.json({ error: "Seu perfil de permissão não permite ver o Financeiro." }, { status: 403 });
   }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
-  const empresaIds = empresaIdsForContext(ctx);
-  const empresa = await requireActiveSingleEmpresa();
 
   const { searchParams } = new URL(req.url);
   const periodo = (searchParams.get("periodo") as RollingPeriodKey) || "mes-atual";
@@ -24,9 +21,7 @@ export async function GET(req: Request) {
   const to = searchParams.get("to");
 
   const range = resolveRollingPeriod(periodo, { from: from ?? undefined, to: to ?? undefined });
+  const data = await computeFluxoCaixa(empresaIdsForContext(ctx), range.from, range.to);
 
-  const settings = empresa ? await prisma.productionSettings.findUnique({ where: { empresaId: empresa.id } }) : null;
-  const data = await getIndicadoresData(empresaIds, range.from, range.to, settings?.toleranciaAlertaPct ?? 10);
-
-  return NextResponse.json({ data });
+  return NextResponse.json(data);
 }

@@ -7,6 +7,7 @@ import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency } from "@/lib/calc";
 import { format, startOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
 import {
   ResponsiveContainer,
   BarChart,
@@ -24,12 +25,34 @@ import {
 type Entry = { valor: number; date: string; empresa: { id: string; name: string }; categoria: string };
 
 export function FluxoCaixaClient({
-  data,
+  data: initialData,
 }: {
   data: { payables: Entry[]; receivables: Entry[]; saldoInicial: number };
 }) {
+  const [data, setData] = useState(initialData);
   const [granularidade, setGranularidade] = useState<"diario" | "semanal" | "mensal">("diario");
   const [empresa, setEmpresa] = useState("");
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ periodo: key });
+      if (key === "personalizado" && from && to) {
+        params.set("from", from);
+        params.set("to", to);
+      }
+      const res = await fetch(`/api/financeiro/fluxo-de-caixa?${params.toString()}`);
+      if (!res.ok) return;
+      setData(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const empresaOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -82,6 +105,39 @@ export function FluxoCaixaClient({
 
   return (
     <div className="space-y-6">
+      <div>
+        <div className="flex flex-wrap gap-1.5">
+          {STANDARD_PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => {
+                if (opt.key !== "personalizado") applyPeriodo(opt.key);
+                else setPeriodo(opt.key);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {periodo === "personalizado" && (
+          <div className="flex items-center gap-2 mt-2">
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input-sm" />
+            <span className="text-xs text-nord-gray">até</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input-sm" />
+            <button
+              onClick={() => applyPeriodo("personalizado", customFrom, customTo)}
+              disabled={!customFrom || !customTo || loading}
+              className="px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
+            >
+              Aplicar
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center gap-2 flex-wrap">
         {(["diario", "semanal", "mensal"] as const).map((g) => (
           <button
@@ -94,6 +150,7 @@ export function FluxoCaixaClient({
             {g}
           </button>
         ))}
+        {loading && <span className="text-xs text-nord-gray animate-pulse">Atualizando...</span>}
         <select value={empresa} onChange={(e) => setEmpresa(e.target.value)} className="input-sm ml-auto">
           <option value="">Todas as empresas</option>
           {empresaOptions.map(([id, name]) => (

@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { FluxoCaixaClient } from "./fluxo-client";
-import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { computeFluxoCaixa } from "@/lib/fluxo-caixa-server";
+import { resolveRollingPeriod } from "@/lib/periods";
 
 export default async function FluxoDeCaixaPage() {
   const session = await auth();
@@ -13,57 +13,11 @@ export default async function FluxoDeCaixaPage() {
     redirect("/portal/inicio");
   }
 
-  const since = subDays(new Date(), 180);
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const range = resolveRollingPeriod("mes-atual");
 
-  const [payables, receivables, accounts] = await Promise.all([
-    prisma.payable.findMany({
-      where: {
-        empresaId: { in: empresaIds },
-        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
-        dataPagamento: { gte: since },
-      },
-      select: {
-        valor: true,
-        dataPagamento: true,
-        empresa: { select: { id: true, name: true } },
-        categoria: { select: { name: true } },
-      },
-    }),
-    prisma.receivable.findMany({
-      where: {
-        empresaId: { in: empresaIds },
-        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
-        dataRecebimento: { gte: since },
-      },
-      select: {
-        valor: true,
-        dataRecebimento: true,
-        empresa: { select: { id: true, name: true } },
-        categoria: { select: { name: true } },
-      },
-    }),
-    prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } } }),
-  ]);
-
-  const saldoInicial = accounts.reduce((a, acc) => a + acc.saldoInicial, 0);
-
-  const serialized = {
-    payables: payables.map((p) => ({
-      valor: p.valor,
-      date: p.dataPagamento!.toISOString(),
-      empresa: p.empresa,
-      categoria: p.categoria.name,
-    })),
-    receivables: receivables.map((r) => ({
-      valor: r.valor,
-      date: r.dataRecebimento!.toISOString(),
-      empresa: r.empresa,
-      categoria: r.categoria.name,
-    })),
-    saldoInicial,
-  };
+  const serialized = await computeFluxoCaixa(empresaIds, range.from, range.to);
 
   return (
     <PageContainer title="Financeiro" subtitle="Fluxo de Caixa">
