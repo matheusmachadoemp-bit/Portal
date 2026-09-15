@@ -238,10 +238,10 @@ export function DashboardClient({
                                 e.stopPropagation();
                                 markDone(t);
                               }}
-                              className="shrink-0 w-4 h-4 rounded-full border border-nord-border hover:border-emerald-400 cursor-pointer"
+                              className="shrink-0 w-4 h-4 rounded-full border border-nord-border hover:border-nord-success cursor-pointer"
                             />
                           ) : (
-                            <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+                            <CheckCircle2 size={16} className="shrink-0 text-nord-success" />
                           )}
                           <span className="min-w-0">
                             <p className="text-sm text-white truncate">{t.title}</p>

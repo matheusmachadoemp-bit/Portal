@@ -104,7 +104,7 @@ export function ConfiguracoesClient({
             <FormError message={error} />
             <p className="text-xs text-nord-gray mb-3">
               A previsão semanal é distribuída entre os dias segundo esses pesos — a soma precisa dar 100%. Soma atual:{" "}
-              <span className={somaPesos === 100 ? "text-emerald-400" : "text-amber-400"}>{somaPesos.toFixed(1)}%</span>
+              <span className={somaPesos === 100 ? "text-nord-success" : "text-nord-warning"}>{somaPesos.toFixed(1)}%</span>
             </p>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
               {weights.map((percent, weekday) => (

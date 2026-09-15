@@ -158,7 +158,7 @@ export function HojeClient({
               </div>
 
               {ordem.status === "ATRASADO" && (
-                <p className="flex items-center gap-1 text-xs text-red-400">
+                <p className="flex items-center gap-1 text-xs text-nord-danger">
                   <AlertTriangle size={12} /> Prazo vencido
                 </p>
               )}
@@ -177,7 +177,7 @@ export function HojeClient({
               {(ordem.status === "EM_PRODUCAO" || ordem.status === "ATRASADO") && (
                 <button
                   onClick={() => setFinalizando(ordem)}
-                  className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg py-2.5"
+                  className="w-full flex items-center justify-center gap-1.5 bg-nord-success/90 hover:bg-nord-success text-white text-sm font-medium rounded-lg py-2.5"
                 >
                   Finalizar Produção
                 </button>

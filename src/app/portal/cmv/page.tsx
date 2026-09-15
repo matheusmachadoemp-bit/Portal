@@ -117,7 +117,7 @@ export default async function CmvPage() {
         />
 
         {divergenciaAlta && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/5 px-4 py-3">
+          <div className="flex items-center gap-2 rounded-lg border border-nord-danger/40 bg-nord-danger/5 px-4 py-3">
             <Badge tone="danger">Atenção</Badge>
             <p className="text-sm text-white">
               CMV Real está {diferencaPP >= 0 ? diferencaPP.toFixed(1) : (-diferencaPP).toFixed(1)} pontos

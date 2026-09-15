@@ -165,7 +165,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
                       {revealed[e.id] ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
                     <button onClick={() => copyPassword(e.id)} className="text-nord-gray hover:text-white">
-                      {copiedId === e.id ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                      {copiedId === e.id ? <Check size={13} className="text-nord-success" /> : <Copy size={13} />}
                     </button>
                   </div>
                 </td>
@@ -179,7 +179,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
                     <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
                       <Pencil size={14} />
                     </button>
-                    <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-red-400">
+                    <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-nord-danger">
                       <Trash2 size={14} />
                     </button>
                   </div>

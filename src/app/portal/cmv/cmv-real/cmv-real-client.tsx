@@ -165,7 +165,7 @@ export function CmvRealClient({
           ].map((row) => (
             <div key={row.label} className="flex items-center justify-between border-b border-nord-border/60 pb-2 last:border-0">
               <span className="text-nord-gray">{row.label}</span>
-              <span className={row.value < 0 ? "text-red-400" : "text-white"}>{formatCurrency(row.value)}</span>
+              <span className={row.value < 0 ? "text-nord-danger" : "text-white"}>{formatCurrency(row.value)}</span>
             </div>
           ))}
           <div className="flex items-center justify-between pt-2 font-medium">

@@ -180,7 +180,7 @@ export function IdeasClient({
                   >
                     <Sparkles size={13} /> {promoted === idea.id ? "Tarefa criada!" : "Promover"}
                   </button>
-                  <button onClick={() => setConfirmDeleteId(idea.id)} className="text-nord-gray hover:text-red-400">
+                  <button onClick={() => setConfirmDeleteId(idea.id)} className="text-nord-gray hover:text-nord-danger">
                     <Trash2 size={13} />
                   </button>
                 </div>

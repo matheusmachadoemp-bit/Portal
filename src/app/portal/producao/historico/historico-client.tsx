@@ -86,7 +86,7 @@ export function HistoricoClient({ initialOrdens }: { initialOrdens: ProductionOr
                   <td className="py-2 px-3 text-white">
                     {produzido} {o.productionItem.unidade}
                   </td>
-                  <td className={`py-2 px-3 font-medium ${alerta === "abaixo" ? "text-amber-400" : alerta === "acima" ? "text-blue-400" : "text-nord-gray"}`}>
+                  <td className={`py-2 px-3 font-medium ${alerta === "abaixo" ? "text-nord-warning" : alerta === "acima" ? "text-blue-400" : "text-nord-gray"}`}>
                     {diferenca > 0 ? "+" : ""}
                     {diferenca.toFixed(1)} {o.productionItem.unidade}
                   </td>

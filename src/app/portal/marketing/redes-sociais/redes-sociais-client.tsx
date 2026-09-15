@@ -102,7 +102,7 @@ export function RedesSociaisClient({
     <div className="space-y-6">
       <div>
         <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loading} />
-        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+        {error && <p className="text-xs text-nord-danger mt-2">{error}</p>}
       </div>
 
       <nav className="flex flex-wrap gap-2" aria-label="Seções de Redes Sociais">

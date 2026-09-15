@@ -272,7 +272,7 @@ export function PartnersClient({
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div>
           <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loadingPeriodo} />
-          {periodoError && <p className="text-xs text-red-400 mt-2">{periodoError}</p>}
+          {periodoError && <p className="text-xs text-nord-danger mt-2">{periodoError}</p>}
         </div>
         {canCreate && (
           <button
@@ -338,10 +338,10 @@ export function PartnersClient({
                   <td className="py-2.5 px-4 text-nord-gray">{formatNumber(p.quantidadeUtilizada)}</td>
                   <td className="py-2.5 px-4 text-white">{formatCurrency(p.vendas)}</td>
                   <td className="py-2.5 px-4 text-nord-gray">{formatCurrency(p.gasto)}</td>
-                  <td className={`py-2.5 px-4 font-medium ${retorno >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  <td className={`py-2.5 px-4 font-medium ${retorno >= 0 ? "text-nord-success" : "text-nord-danger"}`}>
                     {formatCurrency(retorno)}
                   </td>
-                  <td className={`py-2.5 px-4 font-medium ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  <td className={`py-2.5 px-4 font-medium ${roi >= 0 ? "text-nord-success" : "text-nord-danger"}`}>
                     {formatNumber(roi, 1)}%
                   </td>
                   <td className="py-2.5 px-4">
@@ -358,7 +358,7 @@ export function PartnersClient({
                           <button onClick={() => openEdit(p)} title="Editar cadastro" className="text-nord-gray hover:text-white">
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => setConfirmDeleteId(p.id)} title="Excluir parceiro" className="text-nord-gray hover:text-red-400">
+                          <button onClick={() => setConfirmDeleteId(p.id)} title="Excluir parceiro" className="text-nord-gray hover:text-nord-danger">
                             <Trash2 size={14} />
                           </button>
                         </>
@@ -431,7 +431,7 @@ export function PartnersClient({
               ranking soma os lançamentos dentro do período filtrado na tela.
             </p>
 
-            {entriesError && <p className="text-xs text-red-400">{entriesError}</p>}
+            {entriesError && <p className="text-xs text-nord-danger">{entriesError}</p>}
 
             <div className="space-y-2 max-h-64 overflow-y-auto nord-scrollbar">
               {entriesLoading && <p className="text-xs text-nord-gray text-center py-4">Carregando...</p>}
@@ -456,7 +456,7 @@ export function PartnersClient({
                         <button
                           onClick={() => setConfirmDeleteEntryId(e.id)}
                           title="Excluir lançamento"
-                          className="text-nord-gray hover:text-red-400"
+                          className="text-nord-gray hover:text-nord-danger"
                         >
                           <Trash2 size={13} />
                         </button>

@@ -188,7 +188,7 @@ export function ProdutosClient({
                 <button onClick={() => openEdit(item)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
                   <Pencil size={12} /> Editar
                 </button>
-                <button onClick={() => setConfirmDeleteId(item.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-red-400 py-1.5">
+                <button onClick={() => setConfirmDeleteId(item.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-nord-danger py-1.5">
                   <Trash2 size={12} /> Excluir
                 </button>
               </div>
@@ -311,7 +311,7 @@ export function ProdutosClient({
                   placeholder="un."
                   className="input w-16"
                 />
-                <button onClick={() => removeLine(line.key)} className="text-nord-gray hover:text-red-400">
+                <button onClick={() => removeLine(line.key)} className="text-nord-gray hover:text-nord-danger">
                   <X size={14} />
                 </button>
               </div>

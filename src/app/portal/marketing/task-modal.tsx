@@ -239,7 +239,7 @@ export function TaskModal({
               <div key={idx} className="flex items-center gap-2">
                 <input type="checkbox" checked={item.done} onChange={() => toggleChecklistItem(idx)} className="accent-nord-blue" />
                 <span className={`text-sm flex-1 ${item.done ? "text-nord-gray line-through" : "text-white"}`}>{item.text}</span>
-                <button onClick={() => removeChecklistItem(idx)} className="text-nord-gray hover:text-red-400">
+                <button onClick={() => removeChecklistItem(idx)} className="text-nord-gray hover:text-nord-danger">
                   <Trash2 size={12} />
                 </button>
               </div>

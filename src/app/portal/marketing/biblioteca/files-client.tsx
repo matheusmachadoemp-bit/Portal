@@ -131,7 +131,7 @@ export function FilesClient({
         )}
       </div>
 
-      {uploadError && <p className="text-xs text-red-400">{uploadError}</p>}
+      {uploadError && <p className="text-xs text-nord-danger">{uploadError}</p>}
 
       <div className="flex gap-1.5 flex-wrap">
         <button
@@ -171,7 +171,7 @@ export function FilesClient({
             {canCreate && (
               <button
                 onClick={() => setConfirmDeleteId(f.id)}
-                className="absolute top-2 right-2 p-1 rounded bg-black/60 text-nord-gray hover:text-red-400 opacity-0 group-hover:opacity-100"
+                className="absolute top-2 right-2 p-1 rounded bg-black/60 text-nord-gray hover:text-nord-danger opacity-0 group-hover:opacity-100"
               >
                 <Trash2 size={12} />
               </button>
