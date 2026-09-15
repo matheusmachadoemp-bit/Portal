@@ -20,6 +20,12 @@ type Meeting = {
   cmvPercent: number | null;
   npsPercent: number | null;
   cancelamentoDeliveryPercent: number | null;
+  // `turnoverPercent`/`faltasAtrasosAtestados`/`checklistOperacionalPercent` seguem existindo na
+  // coluna do banco — o modal "Fechamento do mês" deixou de ter campo pra editá-los (seção
+  // "Resultado do período" removida), mas o tipo continua com os 3 porque `buildForm` precisa
+  // deles pra fazer round-trip no `submit()` (ver comentário lá: sem isso, salvar qualquer outra
+  // coisa no modal apagaria retroativamente valores já lançados em meses anteriores, já que a
+  // rota `POST /api/reuniao/gerente` trata campo ausente no body como "grava null").
   turnoverPercent: number | null;
   faltasAtrasosAtestados: number | null;
   checklistOperacionalPercent: number | null;
@@ -65,6 +71,15 @@ function formToPayload(periodo: string, form: ReturnType<typeof buildForm>) {
 }
 
 function buildForm(m?: Meeting | null) {
+  // Turnover (%), Faltas/Atrasos/Atestados e Checklist Operacional (%) não têm mais input no
+  // modal (seção "Resultado do período" removida), mas continuam aqui "congelados" com o valor
+  // já salvo — mesmo padrão usado pro campo `valor` dos indicadores customizados (ver
+  // `buildCustomForm`/`CustomForm` abaixo). É só pra fazer round-trip no payload do `submit()`:
+  // como a rota POST grava `null` em qualquer campo que não vier no body, se essas 3 chaves
+  // simplesmente não existissem no form, qualquer "Salvar" (ex.: só criando um indicador
+  // customizado, sem tocar nesses 3) apagaria retroativamente um valor já lançado em um mês
+  // anterior. Congelado = nunca mudam pela UI, mas sempre voltam pro servidor do jeito que já
+  // estavam.
   return {
     turnoverPercent: m?.turnoverPercent != null ? String(m.turnoverPercent) : "",
     faltasAtrasosAtestados: m?.faltasAtrasosAtestados != null ? String(m.faltasAtrasosAtestados) : "",
@@ -73,6 +88,11 @@ function buildForm(m?: Meeting | null) {
   };
 }
 
+// `valor` era escrito por um input duplicado na antiga seção "Resultado do período" (removida
+// a pedido do usuário) e nunca é lido/exibido em nenhum outro lugar do app — quem alimenta a
+// tela é sempre `valorReferencia`, usado no card "Fechamento do mês" (dentro e fora do modal).
+// Mantido aqui só porque divide a mesma estrutura de estado que `valorReferencia`; sem input
+// escrevendo nele, fica congelado no valor carregado da API (comportamento aceito pelo usuário).
 type CustomForm = Record<string, { valor: string; valorReferencia: string }>;
 
 function buildCustomForm(indicators: GerenteCustomIndicatorDTO[]): CustomForm {
@@ -296,6 +316,9 @@ export function GerenteClient({
     }
   }
 
+  // `form.turnoverPercent`/`form.checklistOperacionalPercent` não têm mais input (congelados,
+  // ver `buildForm`), mas continuam refletindo o valor já salvo — dá pra seguir usando como fonte
+  // do comparativo do PDF sem mudança de comportamento.
   const turnoverValor = form.turnoverPercent ? Number(form.turnoverPercent) : null;
   const checklistValor = form.checklistOperacionalPercent ? Number(form.checklistOperacionalPercent) : null;
 
@@ -635,57 +658,6 @@ export function GerenteClient({
           widthClass="max-w-2xl"
         >
           <div className="space-y-5">
-            <div>
-              <p className="text-xs text-nord-gray mb-2 font-medium">Resultado do período</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Turnover (%)</span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={form.turnoverPercent}
-                    onChange={(e) => setForm({ ...form, turnoverPercent: e.target.value })}
-                    placeholder="%"
-                    className="input"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Faltas/Atrasos/Atestados</span>
-                  <input
-                    type="number"
-                    value={form.faltasAtrasosAtestados}
-                    onChange={(e) => setForm({ ...form, faltasAtrasosAtestados: e.target.value })}
-                    placeholder="qtd"
-                    className="input"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Checklist Operacional (%)</span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={form.checklistOperacionalPercent}
-                    onChange={(e) => setForm({ ...form, checklistOperacionalPercent: e.target.value })}
-                    placeholder="%"
-                    className="input"
-                  />
-                </label>
-                {customIndicators.map((ind) => (
-                  <label key={ind.id} className="block">
-                    <span className="block text-xs text-nord-gray mb-1">{ind.nome}</span>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={customForm[ind.id]?.valor ?? ""}
-                      onChange={(e) => updateCustomForm(ind.id, { valor: e.target.value })}
-                      placeholder={ind.unidade === "PERCENT" ? "%" : ind.unidade === "CURRENCY" ? "R$" : "valor"}
-                      className="input"
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
             <div>
               {/* Lista única de indicadores — nome + 1 valor de referência por mês, sem
                   meta-alvo nem premiação. Inclui tanto os 4 indicadores migrados de
