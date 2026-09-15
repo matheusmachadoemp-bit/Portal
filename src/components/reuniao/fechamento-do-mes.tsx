@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IconPicker } from "@/components/ui/icon-picker";
+import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import type { ReuniaoCustomIndicatorDTO } from "@/lib/reuniao-server";
 
@@ -45,6 +46,44 @@ function formatIndicatorValue(unidade: FechamentoIndicator["unidade"], value: nu
  * critério (sem distinção visual entre indicadores) da Reunião Gerente. */
 const INDICATOR_ACCENT = "#64748b";
 
+/**
+ * Cards prontos, no mesmo formato de `items` aceito por `SortableCardGrid`,
+ * para os indicadores personalizados da seção "Fechamento do mês" — usa o
+ * mesmo `IndicatorCard` (mesmo tamanho/estilo) que os cards fixos de cada
+ * reunião, só que sempre na cor neutra acima, para não competir visualmente
+ * com o conjunto de cores próprio dos indicadores fixos. `indicators` deve
+ * ser o próprio estado React (`customIndicators`/`fdm.customIndicators`) que
+ * criar, editar e excluir um indicador já atualiza sozinho — então o grid de
+ * cards do topo de cada reunião fica em dia automaticamente, sem precisar de
+ * nenhuma lógica de sincronização própria. Usado tanto pelas 4 telas que
+ * usam este hook (Salão, Cozinha, Delivery, Liderança) quanto pela Reunião
+ * Gerente, que mantém sua própria implementação inline de estado mas
+ * consome esta função do mesmo jeito — o formato do indicador
+ * (`FechamentoIndicator`/`GerenteCustomIndicatorDTO`) é idêntico nos dois
+ * casos.
+ *
+ * Não recebe `comparison` (a linha "vs mês passado" que os cards fixos
+ * mostram): o DTO só traz o valor do período atual, sem o do mês anterior.
+ */
+export function customIndicatorCards(indicators: FechamentoIndicator[]): { key: string; content: React.ReactNode }[] {
+  return indicators.map((ind) => ({
+    key: `custom-${ind.id}`,
+    content: (
+      <IndicatorCard
+        icon={ind.icon}
+        color={INDICATOR_ACCENT}
+        label={ind.nome}
+        status={statusOf(null)}
+        valueSlot={
+          <span className="text-2xl font-semibold text-white">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
+        }
+        metaText="Indicador informativo"
+        premio={0}
+      />
+    ),
+  }));
+}
+
 type IndicatorFormState = { nome: string; unidade: FechamentoIndicator["unidade"]; icon: string; valorPadrao: string };
 
 function emptyIndicatorForm(): IndicatorFormState {
@@ -59,10 +98,11 @@ function buildCustomForm(indicators: FechamentoIndicator[]): Record<string, stri
  * Estado + chamadas de API da seção "Fechamento do mês" de uma reunião.
  * `apiBase` é a rota da própria reunião (ex.: "/api/reuniao/cozinha") — os
  * indicadores usam sempre `${apiBase}/indicadores` (criar) e
- * `${apiBase}/indicadores/{id}` (editar/excluir). `onSaved` é chamado depois
- * de qualquer criação/edição/exclusão de indicador — normalmente o `refresh`
- * que a própria tela já tem, pra manter a lista em sincronia com o servidor
- * sem duplicar lógica de fetch aqui.
+ * `${apiBase}/indicadores/{id}` (editar/excluir). `periodo` é o período
+ * (mês) selecionado na tela no momento — passe sempre o estado que a
+ * própria tela já mantém (ex.: `selectedPeriodo`), atualizado a cada
+ * render; é usado só para buscar de novo os indicadores do período certo
+ * depois de editar um (ver `saveEdit` abaixo).
  *
  * O valor de referência de cada indicador (`valorReferencia`, o "1 valor"
  * mostrado nos cards) só é persistido quando a tela salva o restante da
@@ -70,15 +110,49 @@ function buildCustomForm(indicators: FechamentoIndicator[]): Record<string, stri
  * por isso este hook não expõe um "salvar" próprio para ele; use
  * `buildIndicatorsPayload()` no submit da própria tela.
  *
- * Criar/editar/excluir indicador atualiza a lista local direto a partir da
+ * Criar/excluir indicador atualizam a lista local direto a partir da
  * resposta da própria chamada (sem pedir pra tela recarregar o período
- * inteiro) — além de mais rápido, evita uma referência circular entre este
- * hook e a função `refresh` de cada tela (que várias delas só declaram mais
- * abaixo no arquivo).
+ * inteiro) — mais rápido e sem ambiguidade: um indicador recém-criado nunca
+ * tem valor salvo pro período (sempre cai no valorPadrao) e um excluído
+ * simplesmente some da lista — nos dois casos não há dúvida sobre o valor
+ * certo a mostrar.
+ *
+ * Editar já não é tão simples: o PATCH devolve só o indicador "cru" (nome/
+ * ícone/unidade/valorPadrao), sem dizer se o período atual já tinha ou não
+ * um valorReferencia próprio salvo — e não dá pra decidir isso com certeza
+ * só com o dado local (uma tentativa anterior tentava inferir comparando
+ * com o valorPadrao antigo, e falhava sempre que o valor salvo do período
+ * coincidia por acaso com esse valorPadrao antigo, indistinguível de "nunca
+ * foi salvo"). Por isso `saveEdit`, depois de um PATCH bem-sucedido, busca
+ * os indicadores do período de novo em `${apiBase}?periodo=...` — a mesma
+ * rota que a tela já usa pra carregar/trocar de período — e aplica o
+ * resultado via `sync()`, em vez de tentar adivinhar o valor no cliente.
+ *
+ * Como agora existem várias buscas assíncronas independentes que podem
+ * terminar aplicando indicadores nesse estado — a da própria tela (mount e
+ * troca de período, e o `refresh()` que cada tela declara depois de salvar/
+ * excluir a reunião) e a de `refreshIndicators` acima — é preciso proteger
+ * contra resposta fora de ordem: ex. o usuário edita um indicador estando
+ * no período P (dispara uma busca pra P), troca pro período Q antes dela
+ * voltar (dispara outra busca, mais nova, que volta rápido e mostra Q
+ * certinho) — se a busca de P, mais lenta, for aplicada quando finalmente
+ * chegar, ela sobrescreve Q com o dado errado de P sem nenhum aviso visual,
+ * e esse valor errado pode até ser salvo de verdade se o usuário confirmar
+ * a reunião logo depois. `beginFetch()`/`sync(token, ...)` abaixo existem
+ * por causa disso: toda busca que vai terminar chamando `sync()` — na
+ * própria tela ou aqui dentro — precisa chamar `beginFetch()` ANTES de
+ * disparar o fetch, guardar o token devolvido, e passar esse token pra
+ * `sync()` quando a resposta chegar; `sync()` só aplica o resultado se o
+ * token ainda for o da busca mais recente, descartando silenciosamente
+ * qualquer resposta que chegou fora de ordem.
  */
-export function useFechamentoDoMes(apiBase: string, initialCustomIndicators: FechamentoIndicator[]) {
+export function useFechamentoDoMes(apiBase: string, periodo: string, initialCustomIndicators: FechamentoIndicator[]) {
   const [customIndicators, setCustomIndicators] = useState(initialCustomIndicators);
   const [customForm, setCustomForm] = useState(buildCustomForm(initialCustomIndicators));
+  // Incrementado a cada `beginFetch()` — "geração" da busca mais recente.
+  // Ver o comentário de `useFechamentoDoMes` acima sobre resposta fora de
+  // ordem.
+  const fetchGenerationRef = useRef(0);
 
   const [newOpen, setNewOpen] = useState(false);
   const [newForm, setNewForm] = useState(emptyIndicatorForm());
@@ -93,12 +167,67 @@ export function useFechamentoDoMes(apiBase: string, initialCustomIndicators: Fec
   const [deleteTarget, setDeleteTarget] = useState<FechamentoIndicator | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  /** Chamado pela tela depois de recarregar o período (troca de mês, ou após
-   * salvar o restante da reunião) — mantém a lista e o rascunho de edição em
-   * dia com o que veio da API. */
-  function sync(indicators: FechamentoIndicator[]) {
+  /** Chame ANTES de disparar qualquer fetch que vá terminar chamando
+   * `sync()` (troca de período, `refresh()` de cada tela, ou
+   * `refreshIndicators` abaixo) — devolve um token que identifica essa
+   * busca como a mais recente até então. Guarde o valor devolvido e passe
+   * pra `sync()` quando a resposta chegar; ver o comentário de
+   * `useFechamentoDoMes` acima sobre por que isso é necessário. */
+  function beginFetch(): number {
+    fetchGenerationRef.current += 1;
+    return fetchGenerationRef.current;
+  }
+
+  /** Aplica os indicadores vindos do servidor — mas só se `token` (obtido de
+   * `beginFetch()` chamado antes do fetch que trouxe esses dados) ainda for
+   * a busca mais recente; uma resposta fora de ordem é descartada em
+   * silêncio, sem sobrescrever o que já está correto na tela. Quando aceita,
+   * mantém a lista e o rascunho de edição em dia com o que veio da API,
+   * preservando a digitação em andamento do campo "Valor" de qualquer
+   * indicador que o usuário já tenha alterado (o texto atual é diferente do
+   * que estava carregado antes desta chamada) — só os campos ainda
+   * intocados acompanham o valor novo vindo do servidor. Isso importa
+   * porque `refreshIndicators` (chamado por `saveEdit` no meio de uma
+   * edição pontual de indicador) também passa por aqui, sem que o restante
+   * do formulário da reunião — incluindo o "Valor" dos outros indicadores —
+   * tenha sido salvo ainda. */
+  function sync(token: number, indicators: FechamentoIndicator[]) {
+    if (token !== fetchGenerationRef.current) return;
+    setCustomForm((prevForm) => {
+      const next: Record<string, string> = {};
+      for (const ind of indicators) {
+        const prevInd = customIndicators.find((p) => p.id === ind.id);
+        const prevDraft = prevForm[ind.id];
+        const draftTouched = prevInd !== undefined && prevDraft !== undefined && prevDraft !== String(prevInd.valorReferencia);
+        next[ind.id] = draftTouched ? prevDraft : String(ind.valorReferencia);
+      }
+      return next;
+    });
     setCustomIndicators(indicators);
-    setCustomForm(buildCustomForm(indicators));
+  }
+
+  /** Busca de novo, direto do servidor, os indicadores personalizados do
+   * período informado (mesma rota `${apiBase}?periodo=...` que a tela usa
+   * pra carregar/trocar de período) e aplica o resultado via `sync()`. Usado
+   * por `saveEdit`: ver o comentário de `useFechamentoDoMes` acima sobre por
+   * que uma edição não dá pra resolver só com o dado local. Erro de rede
+   * aqui (depois do PATCH já ter tido sucesso no servidor) é engolido em
+   * silêncio — o dado real já está correto, só o estado desta aba que fica
+   * desatualizado até trocar de período ou recarregar a página; não vale
+   * quebrar a UI do modal (que já fechou) por causa disso. */
+  async function refreshIndicators(targetPeriodo: string) {
+    const token = beginFetch();
+    try {
+      const res = await fetch(`${apiBase}?periodo=${targetPeriodo}`);
+      const data = await res.json().catch(() => null);
+      // `res.ok` importa aqui: numa resposta de erro (401/403/500...) o corpo
+      // ainda pode ser um JSON válido (ex.: `{ error: "..." }`), só que sem
+      // `customIndicators` — sem essa checagem, `data.customIndicators ?? []`
+      // aplicaria uma lista vazia e apagaria os indicadores da tela.
+      if (res.ok && data) sync(token, data.customIndicators ?? []);
+    } catch (err) {
+      console.error("Não foi possível recarregar os indicadores do período depois de editar:", err);
+    }
   }
 
   function updateValorReferencia(id: string, value: string) {
@@ -180,21 +309,12 @@ export function useFechamentoDoMes(apiBase: string, initialCustomIndicators: Fec
         setEditError(data?.error ?? "Não foi possível salvar as alterações do indicador.");
         return;
       }
-      const editedId = editTarget.id;
-      setCustomIndicators((prev) =>
-        prev.map((ind) =>
-          ind.id === editedId
-            ? {
-                ...ind,
-                nome: data.indicator.nome,
-                icon: data.indicator.icon,
-                unidade: data.indicator.unidade,
-                valorPadrao: data.indicator.valorPadrao,
-              }
-            : ind
-        )
-      );
       setEditTarget(null);
+      // Busca os indicadores do período de novo em vez de tentar atualizar o
+      // estado local a partir da resposta do PATCH (que não diz se o período
+      // atual já tinha ou não um valorReferencia próprio salvo) — ver o
+      // comentário de `useFechamentoDoMes` acima.
+      await refreshIndicators(periodo);
     } finally {
       setSavingEdit(false);
     }
@@ -221,6 +341,7 @@ export function useFechamentoDoMes(apiBase: string, initialCustomIndicators: Fec
   return {
     customIndicators,
     customForm,
+    beginFetch,
     sync,
     updateValorReferencia,
     buildIndicatorsPayload,

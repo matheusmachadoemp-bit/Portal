@@ -240,7 +240,7 @@ export function EmployeeProfileClient({
               {employee.pixKey && <span>Pix: {employee.pixKey}</span>}
             </div>
             {photoUploading && <p className="text-xs text-nord-gray mt-1">Enviando foto...</p>}
-            {!photoUploading && photoError && <p className="text-xs text-red-400 mt-1">{photoError}</p>}
+            {!photoUploading && photoError && <p className="text-xs text-nord-danger mt-1">{photoError}</p>}
           </div>
         </div>
         {canCreate && (

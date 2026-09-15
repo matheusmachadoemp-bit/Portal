@@ -10,6 +10,7 @@ import {
   FechamentoDoMesSection,
   FechamentoDoMesEditor,
   useFechamentoDoMes,
+  customIndicatorCards,
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
@@ -57,7 +58,7 @@ export function LiderancaClient({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const fdm = useFechamentoDoMes("/api/reuniao/lideranca", initialCustomIndicators);
+  const fdm = useFechamentoDoMes("/api/reuniao/lideranca", selectedPeriodo, initialCustomIndicators);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -66,6 +67,7 @@ export function LiderancaClient({
       return;
     }
     let cancelled = false;
+    const fdmToken = fdm.beginFetch();
     setLoading(true);
     fetch(`/api/reuniao/lideranca?periodo=${selectedPeriodo}`)
       .then((res) => res.json())
@@ -73,7 +75,7 @@ export function LiderancaClient({
         if (cancelled) return;
         setCurrent(data.current);
         setResumo(data.resumo);
-        fdm.sync(data.customIndicators ?? []);
+        fdm.sync(fdmToken, data.customIndicators ?? []);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -83,11 +85,12 @@ export function LiderancaClient({
   }, [selectedPeriodo]);
 
   async function refresh(targetPeriodo: string) {
+    const fdmToken = fdm.beginFetch();
     const res = await fetch(`/api/reuniao/lideranca?periodo=${targetPeriodo}`);
     const data = await res.json();
     setCurrent(data.current);
     setResumo(data.resumo);
-    fdm.sync(data.customIndicators ?? []);
+    fdm.sync(fdmToken, data.customIndicators ?? []);
   }
 
   async function submit() {
@@ -260,7 +263,7 @@ export function LiderancaClient({
         <SortableCardGrid
           storageKey="reuniao-lideranca-resumo-kpi-order"
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-          items={cards}
+          items={[...cards, ...customIndicatorCards(fdm.customIndicators)]}
         />
       </Section>
 

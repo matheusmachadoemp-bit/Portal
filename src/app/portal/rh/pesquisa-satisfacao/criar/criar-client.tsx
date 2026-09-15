@@ -187,8 +187,8 @@ export function CriarPesquisaClient({
   return (
     <div className="space-y-6 max-w-3xl">
       {error && (
-        <div className="nord-card p-3 border-red-500/40 bg-red-500/5">
-          <p className="text-xs text-red-300">{error}</p>
+        <div className="nord-card p-3 border-nord-danger/40 bg-nord-danger/5">
+          <p className="text-xs text-nord-danger">{error}</p>
         </div>
       )}
 
@@ -288,7 +288,7 @@ export function CriarPesquisaClient({
                         placeholder={`Opção ${oIdx + 1}`}
                         className="input flex-1"
                       />
-                      <button onClick={() => removeOption(idx, oIdx)} className="text-nord-gray hover:text-red-400">
+                      <button onClick={() => removeOption(idx, oIdx)} className="text-nord-gray hover:text-nord-danger">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -331,7 +331,7 @@ export function CriarPesquisaClient({
                   <button onClick={() => duplicateQuestion(idx)} className="text-nord-gray hover:text-white" title="Duplicar">
                     <Copy size={13} />
                   </button>
-                  <button onClick={() => removeQuestion(idx)} className="text-nord-gray hover:text-red-400" title="Excluir">
+                  <button onClick={() => removeQuestion(idx)} className="text-nord-gray hover:text-nord-danger" title="Excluir">
                     <Trash2 size={13} />
                   </button>
                 </div>

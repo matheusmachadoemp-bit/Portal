@@ -289,7 +289,7 @@ export function PesquisaSatisfacaoClient({
                           {s.status === "RASCUNHO" && (
                             <button
                               onClick={() => setConfirmDeleteId(s.id)}
-                              className="text-nord-gray hover:text-red-400"
+                              className="text-nord-gray hover:text-nord-danger"
                               title="Excluir"
                             >
                               <Trash2 size={13} />
