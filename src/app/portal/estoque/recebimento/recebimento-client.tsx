@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, CheckCheck, Send, History } from "lucide-react";
-import { Section, Badge, StatCard } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
@@ -171,26 +172,32 @@ export function RecebimentoClient({
   return (
     <div className="space-y-6">
       <Section title="Dashboard gerencial (últimos 30 dias)">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Recebimentos" value={String(dashboard.totalRecebimentos)} icon="PackageCheck" color="#1464F4" />
-          <StatCard label="Sem divergência" value={`${dashboard.pctSemDivergencia.toFixed(0)}%`} icon="CheckCircle2" color="#22C55E" />
-          <StatCard label="Pedidos atrasados" value={String(dashboard.pedidosAtrasados)} icon="Clock" color="#F59E0B" invertDeltaColor />
-          <StatCard label="Divergências abertas" value={String(dashboard.divergenciasAbertas)} icon="TriangleAlert" color="#EF4444" invertDeltaColor />
-          <StatCard label="Valor em divergências" value={formatCurrency(dashboard.valorDivergencias)} icon="DollarSign" color="#EF4444" invertDeltaColor />
-          <StatCard
-            label="Tempo médio de resolução"
-            value={dashboard.tempoMedioResolucaoDias != null ? `${dashboard.tempoMedioResolucaoDias.toFixed(1)} dias` : "—"}
-            icon="Timer"
-            color="#A855F7"
-          />
-          <StatCard
-            label="Fornecedor com mais problemas"
-            value={dashboard.fornecedorMaisProblemas ? dashboard.fornecedorMaisProblemas.nome : "—"}
-            hint={dashboard.fornecedorMaisProblemas ? `${dashboard.fornecedorMaisProblemas.count} divergência(s)` : undefined}
-            icon="AlertTriangle"
-            color="#F59E0B"
-          />
-        </div>
+        <SortableStatCards
+          storageKey="estoque-recebimento-kpi-order"
+          className="grid grid-cols-2 md:grid-cols-4 gap-3"
+          cards={[
+            { key: "recebimentos", label: "Recebimentos", value: String(dashboard.totalRecebimentos), icon: "PackageCheck", color: "#1464F4" },
+            { key: "sem-divergencia", label: "Sem divergência", value: `${dashboard.pctSemDivergencia.toFixed(0)}%`, icon: "CheckCircle2", color: "#22C55E" },
+            { key: "pedidos-atrasados", label: "Pedidos atrasados", value: String(dashboard.pedidosAtrasados), icon: "Clock", color: "#F59E0B", invertDeltaColor: true },
+            { key: "divergencias-abertas", label: "Divergências abertas", value: String(dashboard.divergenciasAbertas), icon: "TriangleAlert", color: "#EF4444", invertDeltaColor: true },
+            { key: "valor-divergencias", label: "Valor em divergências", value: formatCurrency(dashboard.valorDivergencias), icon: "DollarSign", color: "#EF4444", invertDeltaColor: true },
+            {
+              key: "tempo-medio-resolucao",
+              label: "Tempo médio de resolução",
+              value: dashboard.tempoMedioResolucaoDias != null ? `${dashboard.tempoMedioResolucaoDias.toFixed(1)} dias` : "—",
+              icon: "Timer",
+              color: "#A855F7",
+            },
+            {
+              key: "fornecedor-mais-problemas",
+              label: "Fornecedor com mais problemas",
+              value: dashboard.fornecedorMaisProblemas ? dashboard.fornecedorMaisProblemas.nome : "—",
+              hint: dashboard.fornecedorMaisProblemas ? `${dashboard.fornecedorMaisProblemas.count} divergência(s)` : undefined,
+              icon: "AlertTriangle",
+              color: "#F59E0B",
+            },
+          ]}
+        />
       </Section>
 
       <Section
@@ -347,7 +354,7 @@ export function RecebimentoClient({
               <span className="block text-xs text-nord-gray mb-1">Observação</span>
               <input className="input" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
             </label>
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && <p className="text-xs text-nord-danger">{error}</p>}
             <button onClick={confirmar} className="btn-primary w-full py-2.5">
               Confirmar recebimento
             </button>

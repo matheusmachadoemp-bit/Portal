@@ -6,11 +6,12 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { LOSS_REASONS, LOSS_REASON_LABEL, SECTORS } from "@/lib/estoque";
-import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type Loss = {
   id: string;
@@ -40,6 +41,14 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function applyPeriodo(key: RollingPeriodKey, newFrom?: string, newTo?: string) {
+    setPeriodo(key);
+    if (key === "personalizado") {
+      setFrom(newFrom ?? "");
+      setTo(newTo ?? "");
+    }
+  }
 
   const range = useMemo(() => {
     if (periodo === "personalizado" && (!from || !to)) return null;
@@ -169,17 +178,6 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
           <Toolbar
             filters={
               <>
-                <select className="input w-40" value={periodo} onChange={(e) => setPeriodo(e.target.value as RollingPeriodKey)}>
-                  {STANDARD_PERIOD_OPTIONS.map((o) => (
-                    <option key={o.key} value={o.key}>{o.label}</option>
-                  ))}
-                </select>
-                {periodo === "personalizado" && (
-                  <>
-                    <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
-                    <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
-                  </>
-                )}
                 <select className="input w-48" value={motivoFilter} onChange={(e) => setMotivoFilter(e.target.value)}>
                   <option value="">Todos os motivos</option>
                   {LOSS_REASONS.map((m) => (
@@ -213,6 +211,10 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
           />
         }
       >
+        <div className="mb-4">
+          <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} />
+        </div>
+
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>
@@ -298,7 +300,7 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
             <input className="input" value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} />
           </label>
           {valorEstimadoPreview > 0 && <p className="text-xs text-nord-gray">Valor estimado: {formatCurrency(valorEstimadoPreview)}</p>}
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={submit} disabled={!form.ingredientId || !form.quantidade || submitting} className="btn-primary w-full py-2.5">
             {submitting ? "Registrando..." : "Registrar perda"}
           </button>

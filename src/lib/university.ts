@@ -20,11 +20,22 @@ export function nextLevelForXp(xp: number) {
 }
 
 export const XP_RULES = {
-  COURSE_COMPLETED: 100,
+  // Antes (curso sem hierarquia de módulo) esse XP era dado por CURSO
+  // concluído; agora que avaliação/certificado passaram a ser por MÓDULO
+  // (ver prisma/migrations/20260915130000_universidade_curso_modulo_aula),
+  // é dado por MÓDULO concluído — mesmo valor de antes, só o gatilho mudou
+  // de nível. Renomeado de COURSE_COMPLETED pra refletir isso.
+  MODULE_COMPLETED: 100,
   QUIZ_PERFECT_SCORE: 50,
   EXTRA_COURSE: 150,
 };
 
+// Nome mantido "MODULE_TYPE_OPTIONS" (não "LESSON_TYPE_OPTIONS") de propósito:
+// já é usado por course-builder-modal.tsx (tela, fora do escopo desta fase) —
+// os VALORES continuam corretos pro enum TrainingLesson.type (renomeado de
+// ModuleType pra LessonType no schema), só o nome da constante ficou
+// desatualizado; renomear pertence à Fase 3 (tela), junto do resto do
+// course-builder-modal.
 export const MODULE_TYPE_OPTIONS = [
   { key: "VIDEO", label: "Vídeo", icon: "Video" },
   { key: "PDF", label: "PDF", icon: "FileText" },

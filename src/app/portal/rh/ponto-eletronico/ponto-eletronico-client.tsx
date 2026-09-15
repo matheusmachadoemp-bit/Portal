@@ -5,11 +5,12 @@ import { Plus, Pencil, Trash2, Upload, AlertTriangle } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
 import { formatNumber } from "@/lib/calc";
 import { pontoAlerts, type TimeEntryLike } from "@/lib/rh-helpers";
 import { format } from "date-fns";
-import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 import { RhTabs } from "../rh-tabs";
 import {
   ResponsiveContainer,
@@ -69,6 +70,14 @@ export function PontoEletronicoClient({
   const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+
+  function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    if (key === "personalizado") {
+      setCustomFrom(from ?? "");
+      setCustomTo(to ?? "");
+    }
+  }
 
   const visible = useMemo(() => {
     return fixedEmployeeId ? entries.filter((e) => e.employeeId === fixedEmployeeId) : entries;
@@ -317,28 +326,7 @@ export function PontoEletronicoClient({
         </div>
       </div>
 
-      <div>
-        <div className="flex flex-wrap gap-1.5">
-          {STANDARD_PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => setPeriodo(opt.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {periodo === "personalizado" && (
-          <div className="flex items-center gap-2 mt-2">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
-            <span className="text-xs text-nord-gray">até</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
-          </div>
-        )}
-      </div>
+      <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} />
 
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">

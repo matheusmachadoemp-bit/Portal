@@ -10,7 +10,7 @@ import { Badge, ProgressBar } from "@/components/ui/stat-card";
 import { COURSE_STATUS_OPTIONS, formatMinutes } from "@/lib/university";
 import type { CourseDTO } from "../university-types";
 
-type CourseWithMeta = CourseDTO & { totalMinutes: number; hasQuiz: boolean };
+type CourseWithMeta = CourseDTO & { totalMinutes: number; totalLessons: number; hasQuiz: boolean };
 type Enrollment = { courseId: string; status: string; progressPercent: number };
 
 export function CoursesClient({
@@ -139,7 +139,7 @@ export function CoursesClient({
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-nord-gray mb-3">
                   <span className="flex items-center gap-1"><Clock size={11} /> {formatMinutes(c.totalMinutes)}</span>
-                  <span className="flex items-center gap-1"><PlayCircle size={11} /> {c.modules.length} aula(s)</span>
+                  <span className="flex items-center gap-1"><PlayCircle size={11} /> {c.totalLessons} aula(s) em {c.modules.length} módulo(s)</span>
                   {isAdmin && <span className="flex items-center gap-1"><Award size={11} /> {c._count?.enrollments ?? 0} matriculados</span>}
                 </div>
 

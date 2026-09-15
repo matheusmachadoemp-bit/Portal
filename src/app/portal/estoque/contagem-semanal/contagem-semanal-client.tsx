@@ -207,7 +207,7 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
             <span className="block text-xs text-nord-gray mb-1">Responsável</span>
             <input className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} />
           </label>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={iniciarContagem} className="btn-primary w-full py-2.5">
             Iniciar
           </button>
@@ -284,7 +284,7 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
               <div className="nord-card p-4 space-y-1.5 text-sm">
                 <div className="flex justify-between"><span className="text-nord-gray">Valor esperado</span><span className="text-white">{formatCurrency(summary.esperado)}</span></div>
                 <div className="flex justify-between"><span className="text-nord-gray">Valor contado</span><span className="text-white">{formatCurrency(summary.contado)}</span></div>
-                <div className="flex justify-between font-medium"><span className="text-white">Diferença total</span><span className={summary.contado - summary.esperado < 0 ? "text-red-400" : "text-emerald-400"}>{formatCurrency(summary.contado - summary.esperado)}</span></div>
+                <div className="flex justify-between font-medium"><span className="text-white">Diferença total</span><span className={summary.contado - summary.esperado < 0 ? "text-nord-danger" : "text-nord-success"}>{formatCurrency(summary.contado - summary.esperado)}</span></div>
               </div>
             )}
 

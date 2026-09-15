@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
-import { Section, StatCard, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency } from "@/lib/calc";
-import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
+import { type RollingPeriodKey } from "@/lib/periods";
 import type { ConsumoComparativoRow, IndicadoresData } from "@/lib/producao-indicadores-server";
 
 export function IndicadoresClient({ initialData, consumoHoje }: { initialData: IndicadoresData; consumoHoje: ConsumoComparativoRow[] }) {
   const [data, setData] = useState(initialData);
   const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
@@ -34,47 +34,28 @@ export function IndicadoresClient({ initialData, consumoHoje }: { initialData: I
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex flex-wrap gap-1.5">
-          {STANDARD_PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => {
-                if (opt.key !== "personalizado") applyPeriodo(opt.key);
-                else setPeriodo(opt.key);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                periodo === opt.key ? "bg-nord-blue text-white" : "bg-nord-panel text-nord-gray hover:text-white"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-          {loading && <span className="text-xs text-nord-gray self-center">Atualizando...</span>}
-        </div>
-        {periodo === "personalizado" && (
-          <div className="flex items-center gap-2 mt-2">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
-            <span className="text-xs text-nord-gray">até</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
-            <button
-              onClick={() => applyPeriodo("personalizado", customFrom, customTo)}
-              disabled={!customFrom || !customTo || loading}
-              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              Aplicar
-            </button>
-          </div>
-        )}
+        <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loading} />
+        {loading && <span className="text-xs text-nord-gray mt-2 inline-block">Atualizando...</span>}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Precisão Média da Produção" value={`${data.precisaoMedia}%`} icon="Target" color="#22c55e" />
-        <StatCard label="% Produções no Prazo" value={`${data.percentNoPrazo}%`} icon="Clock" color="#1464F4" />
-        <StatCard label="Produções Atrasadas" value={String(data.producoesAtrasadas)} icon="AlertTriangle" color="#ef4444" />
-        <StatCard label="Desperdício Estimado" value={formatCurrency(data.desperdicioEstimado)} icon="Trash2" color="#f97316" />
-        <StatCard label="Produção Excedente" value={String(data.producaoExcedente.count)} hint={formatCurrency(data.producaoExcedente.valorEstimado)} icon="TrendingUp" color="#3b82f6" />
-        <StatCard label="Produção Insuficiente" value={String(data.producaoInsuficiente.count)} icon="TrendingDown" color="#eab308" />
-      </div>
+      <SortableStatCards
+        storageKey="producao-indicadores-kpi-order"
+        cards={[
+          { key: "precisao-media", label: "Precisão Média da Produção", value: `${data.precisaoMedia}%`, icon: "Target", color: "#22c55e" },
+          { key: "no-prazo", label: "% Produções no Prazo", value: `${data.percentNoPrazo}%`, icon: "Clock", color: "#1464F4" },
+          { key: "atrasadas", label: "Produções Atrasadas", value: String(data.producoesAtrasadas), icon: "AlertTriangle", color: "#ef4444" },
+          { key: "desperdicio", label: "Desperdício Estimado", value: formatCurrency(data.desperdicioEstimado), icon: "Trash2", color: "#f97316" },
+          {
+            key: "excedente",
+            label: "Produção Excedente",
+            value: String(data.producaoExcedente.count),
+            hint: formatCurrency(data.producaoExcedente.valorEstimado),
+            icon: "TrendingUp",
+            color: "#3b82f6",
+          },
+          { key: "insuficiente", label: "Produção Insuficiente", value: String(data.producaoInsuficiente.count), icon: "TrendingDown", color: "#eab308" },
+        ]}
+      />
 
       <Section title="Precisão da produção ao longo do tempo">
         {data.serieDiaria.length === 0 ? (

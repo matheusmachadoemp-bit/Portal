@@ -207,7 +207,7 @@ export function NovoPedidoClient({
                 {ing && ing.precoAtual > 0 && it.valorUnitario && Number(it.valorUnitario) > ing.precoAtual * 1.15 && (
                   <span className="text-[10px] text-nord-warning shrink-0">Acima da média</span>
                 )}
-                <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-red-400 shrink-0">
+                <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-nord-danger shrink-0">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -226,7 +226,7 @@ export function NovoPedidoClient({
         </div>
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-nord-danger">{error}</p>}
 
       <div className="flex items-center gap-3">
         <button onClick={() => submit(false)} disabled={saving} className="btn-outline flex-1 py-2.5">

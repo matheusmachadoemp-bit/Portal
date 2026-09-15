@@ -1,9 +1,45 @@
 import type { FechamentoSubmissaoStatus, FechamentoTipoResposta } from "@prisma/client";
+import { spDateTime } from "@/lib/checklist";
 
 // Helpers puros do módulo Fechamento do Dia — mesmo espírito de src/lib/checklist.ts (nenhuma
 // consulta ao banco aqui, só cálculo). Os helpers de fuso horário (spDateKey/spStartOfDay/
 // spDateTime/weekdayFieldFor) são genéricos o bastante para o Portal inteiro e já vivem em
-// @/lib/checklist — reaproveitados diretamente por quem consome este arquivo, sem duplicar.
+// @/lib/checklist — reaproveitados diretamente por quem consome este arquivo, sem duplicar (a
+// única exceção é `fechamentoReleaseEDueAt` logo abaixo, que importa `spDateTime` para montar um
+// cálculo composto específico deste módulo — ver comentário da função).
+
+/**
+ * Calcula `releaseAt`/`dueAt` de uma submissão a partir do dia (`dateKey`, "YYYY-MM-DD" de São
+ * Paulo) e dos horários "HH:mm" configurados no `FechamentoCargo`. Existe para cobrir o caso do
+ * prazo cruzar a meia-noite (ex.: libera 23:35, prazo 00:00 — ajuste pedido pelo usuário depois
+ * do padrão inicial 21:00–23:59): a leitura de "prazo à meia-noite" é sempre a meia-noite que
+ * vem DEPOIS da liberação, nunca a que já passou no início do mesmo `dateKey`.
+ *
+ * Sem este ajuste, `spDateTime(dateKey, horarioLimite)` sozinho interpretaria "00:00" como a
+ * meia-noite NO INÍCIO do mesmo `dateKey` — ou seja, ~23h35 ANTES da liberação. Uma submissão
+ * assim nasceria com `dueAt` no passado (antes até de `releaseAt`), e `computeFechamentoStatus`
+ * (abaixo) marcaria ATRASADO o dia inteiro, inclusive horas antes do formulário liberar — e o
+ * cron de cobrança (`processFechamentoAlertas`, em @/lib/fechamento-server) notificaria o dono
+ * o dia inteiro, não só depois do prazo real vencer.
+ *
+ * Regra: sempre que o horário-limite, interpretado no mesmo `dateKey` da liberação, cair antes
+ * ou no mesmo instante da liberação, o prazo é jogado 24h para frente (dia seguinte). Cargos sem
+ * cruzamento de meia-noite (ex.: o padrão anterior 21:00–23:59, ou qualquer config futura em que
+ * o prazo continue mais tarde no mesmo dia) não são afetados — a condição só entra em ação
+ * quando o prazo é numericamente <= à liberação.
+ */
+export function fechamentoReleaseEDueAt(
+  dateKey: string,
+  horarioLiberacao: string,
+  horarioLimite: string
+): { releaseAt: Date; dueAt: Date } {
+  const releaseAt = spDateTime(dateKey, horarioLiberacao);
+  let dueAt = spDateTime(dateKey, horarioLimite);
+  if (dueAt.getTime() <= releaseAt.getTime()) {
+    dueAt = new Date(dueAt.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return { releaseAt, dueAt };
+}
 
 /**
  * Calcula o status "ao vivo" de uma submissão a partir do horário-limite e de

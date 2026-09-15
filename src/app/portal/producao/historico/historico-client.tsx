@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { Toolbar } from "@/components/ui/toolbar";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { compareProducedToPlanned, PRODUCTION_STATUS_LABEL } from "@/lib/producao";
-import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 import type { ProductionOrderDTO } from "../types";
 
 export function HistoricoClient({ initialOrdens }: { initialOrdens: ProductionOrderDTO[] }) {
@@ -11,6 +12,14 @@ export function HistoricoClient({ initialOrdens }: { initialOrdens: ProductionOr
   const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+
+  function applyPeriodo(key: RollingPeriodKey, newFrom?: string, newTo?: string) {
+    setPeriodo(key);
+    if (key === "personalizado") {
+      setFrom(newFrom ?? "");
+      setTo(newTo ?? "");
+    }
+  }
 
   const range = useMemo(() => {
     if (periodo === "personalizado" && (!from || !to)) return null;
@@ -27,22 +36,9 @@ export function HistoricoClient({ initialOrdens }: { initialOrdens: ProductionOr
 
   return (
     <div className="space-y-4">
+      <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} />
+
       <Toolbar
-        filters={
-          <>
-            <select className="input w-40" value={periodo} onChange={(e) => setPeriodo(e.target.value as RollingPeriodKey)}>
-              {STANDARD_PERIOD_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>{o.label}</option>
-              ))}
-            </select>
-            {periodo === "personalizado" && (
-              <>
-                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-auto" />
-                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-auto" />
-              </>
-            )}
-          </>
-        }
         exportFilename="historico-producao"
         exportSheetName="Histórico"
         exportRows={() =>

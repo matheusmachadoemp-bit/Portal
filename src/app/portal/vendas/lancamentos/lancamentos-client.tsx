@@ -4,10 +4,11 @@ import { useState } from "react";
 import { Plus, Trash2, X, Ban, RotateCcw } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { PAYMENT_METHOD_LABEL, SALE_CHANNEL_LABEL, SALE_PAYMENT_METHODS, SALE_PLATFORM_LABEL } from "@/lib/vendas-analytics";
-import { STANDARD_PERIOD_OPTIONS, resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type ProductOption = { id: string; name: string; category: string; precoVenda: number };
 type EmployeeOption = { id: string; name: string };
@@ -105,6 +106,10 @@ export function LancamentosClient({
 
   async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
     setPeriodo(key);
+    if (key === "personalizado") {
+      setCustomFrom(from ?? "");
+      setCustomTo(to ?? "");
+    }
     setLoadingPeriodo(true);
     try {
       await refresh(resolveRollingPeriod(key, { from, to }));
@@ -196,42 +201,13 @@ export function LancamentosClient({
       }
     >
       {!canCreate && (
-        <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas.
         </p>
       )}
 
       <div className="mb-4">
-        <div className="flex flex-wrap gap-1.5">
-          {STANDARD_PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => {
-                if (opt.key !== "personalizado") applyPeriodo(opt.key);
-                else setPeriodo(opt.key);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {periodo === "personalizado" && (
-          <div className="flex items-center gap-2 mt-2">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
-            <span className="text-xs text-nord-gray">até</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
-            <button
-              onClick={() => applyPeriodo("personalizado", customFrom, customTo)}
-              disabled={!customFrom || !customTo || loadingPeriodo}
-              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              Aplicar
-            </button>
-          </div>
-        )}
+        <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loadingPeriodo} />
       </div>
 
       <div className="overflow-x-auto nord-scrollbar">
@@ -277,7 +253,7 @@ export function LancamentosClient({
                       >
                         {s.cancelado ? <RotateCcw size={14} /> : <Ban size={14} />}
                       </button>
-                      <button onClick={() => setConfirmDeleteId(s.id)} className="text-nord-gray hover:text-red-400">
+                      <button onClick={() => setConfirmDeleteId(s.id)} className="text-nord-gray hover:text-nord-danger">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -412,7 +388,7 @@ export function LancamentosClient({
                   onChange={(e) => updateLine(line.key, { precoUnitario: e.target.value })}
                   className="input col-span-3"
                 />
-                <button onClick={() => removeLine(line.key)} className="col-span-1 text-nord-gray hover:text-red-400">
+                <button onClick={() => removeLine(line.key)} className="col-span-1 text-nord-gray hover:text-nord-danger">
                   <X size={14} />
                 </button>
               </div>
@@ -426,7 +402,7 @@ export function LancamentosClient({
           </div>
         </div>
 
-        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+        {error && <p className="text-xs text-nord-danger mt-2">{error}</p>}
         <button
           onClick={submit}
           disabled={lines.length === 0 || submitting}

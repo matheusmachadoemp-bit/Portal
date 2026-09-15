@@ -82,8 +82,8 @@ export function ConfiguracoesEstoqueClient({
           <p className="text-xs text-nord-gray mt-2">
             A meta de CMV agora é editada em CMV → Comparativo Real x Teórico.
           </p>
-          {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
-          {saved && <p className="text-xs text-emerald-400 mt-2">Configurações salvas.</p>}
+          {error && <p className="text-xs text-nord-danger mt-2">{error}</p>}
+          {saved && <p className="text-xs text-nord-success mt-2">Configurações salvas.</p>}
           <button onClick={salvar} disabled={submitting} className="btn-primary mt-4 disabled:opacity-60">
             {submitting ? "Salvando..." : "Salvar"}
           </button>

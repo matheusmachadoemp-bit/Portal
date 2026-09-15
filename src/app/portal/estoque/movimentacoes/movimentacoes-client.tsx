@@ -109,7 +109,7 @@ export function MovimentacoesClient({
       }
     >
       {!canCreate && (
-        <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+        <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
           registrar movimentações.
         </p>
@@ -209,7 +209,7 @@ export function MovimentacoesClient({
             <span className="block text-xs text-nord-gray mb-1">Motivo / observação (opcional)</span>
             <input value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value })} className="input" />
           </label>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button
             onClick={submit}
             disabled={!form.ingredientId || !form.quantidade || submitting}

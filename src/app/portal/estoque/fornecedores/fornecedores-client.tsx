@@ -281,7 +281,7 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
             <input className="input" value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} />
           </label>
         </div>
-        {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+        {error && <p className="text-xs text-nord-danger mt-3">{error}</p>}
         <button onClick={submit} disabled={!form.razaoSocial.trim() || submitting} className="btn-primary w-full mt-4 py-2.5">
           {submitting ? "Salvando..." : "Salvar"}
         </button>

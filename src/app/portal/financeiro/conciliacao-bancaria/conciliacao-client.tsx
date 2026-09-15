@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { CheckCircle2, Circle, EyeOff, Upload, ArrowDownCircle, ArrowUpCircle, Wand2, Link2 } from "lucide-react";
-import { StatCard, Section, Badge } from "@/components/ui/stat-card";
+import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, FormError } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency } from "@/lib/calc";
@@ -164,12 +165,16 @@ export function ConciliacaoClient({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Entradas" value={formatCurrency(summary.totalEntradas)} icon="ArrowDownCircle" color="#3FB68B" />
-        <StatCard label="Saídas" value={formatCurrency(summary.totalSaidas)} icon="ArrowUpCircle" color="#E5534B" />
-        <StatCard label="Saldo do período" value={formatCurrency(summary.saldo)} icon="Scale" color="#1464F4" />
-        <StatCard label="Pendentes de conciliar" value={String(summary.pendentes)} icon="ListChecks" color="#E8A33D" />
-      </div>
+      <SortableStatCards
+        storageKey="financeiro-conciliacao-kpi-order"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+        cards={[
+          { key: "entradas", label: "Entradas", value: formatCurrency(summary.totalEntradas), icon: "ArrowDownCircle", color: "#3FB68B" },
+          { key: "saidas", label: "Saídas", value: formatCurrency(summary.totalSaidas), icon: "ArrowUpCircle", color: "#E5534B" },
+          { key: "saldo-periodo", label: "Saldo do período", value: formatCurrency(summary.saldo), icon: "Scale", color: "#1464F4" },
+          { key: "pendentes", label: "Pendentes de conciliar", value: String(summary.pendentes), icon: "ListChecks", color: "#E8A33D" },
+        ]}
+      />
 
       <Section
         title="Extrato Bancário"
@@ -226,7 +231,7 @@ export function ConciliacaoClient({
         }
       >
         {!canImport && (
-          <p className="mb-4 text-xs text-amber-400 bg-amber-950/20 border border-amber-900/40 rounded-lg px-3 py-2">
+          <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
             Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para importar
             e conciliar o extrato bancário.
           </p>

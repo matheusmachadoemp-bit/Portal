@@ -4,8 +4,11 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
+// quantidadeUtilizada/vendas/gasto saíram daqui — não são mais colunas de
+// MarketingPartner (viraram lançamentos, ver MarketingPartnerEntry). Editar
+// um lançamento é em /api/marketing/partners/[id]/entries/[entryId]; este
+// PATCH agora só edita o cadastro do parceiro (nome/cupom/observações).
 const STR_FIELDS = ["nome", "cupom", "observacoes"] as const;
-const NUM_FIELDS = ["quantidadeUtilizada", "vendas", "gasto"] as const;
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -27,9 +30,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: Record<string, unknown> = {};
   for (const f of STR_FIELDS) {
     if (body[f] !== undefined) data[f] = body[f] || null;
-  }
-  for (const f of NUM_FIELDS) {
-    if (body[f] !== undefined) data[f] = Number(body[f]) || 0;
   }
 
   const partner = await prisma.marketingPartner.update({ where: { id }, data });

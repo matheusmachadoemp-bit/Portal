@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
+import { ImportFallbackWarning } from "@/components/ui/import-fallback-warning";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { buildCurvaAbc, type AbcClass } from "@/lib/vendas-analytics";
-import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
+import { type RollingPeriodKey } from "@/lib/periods";
+import type { ImportFallbackBucket } from "@/lib/import-fallback";
 
 type Row = { nome: string; quantidade: number; faturamento: number; margem: number };
 type Criterio = "quantidade" | "faturamento" | "margem";
@@ -20,14 +23,17 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
   const [rows, setRows] = useState(initialRows);
   const [criterio, setCriterio] = useState<Criterio>("faturamento");
   const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<{ itens: number; faturamentoTotal: number; comProduto: number } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    itens: number;
+    faturamentoTotal: number;
+    comProduto: number;
+    fallbackWarnings: ImportFallbackBucket[];
+  } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   // Depois de importar um novo arquivo, o Modal chama router.refresh() — como o
@@ -83,7 +89,12 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
         setImportError(data.error ?? "Não foi possível importar o arquivo.");
         return;
       }
-      setImportResult({ itens: data.itens, faturamentoTotal: data.faturamentoTotal, comProduto: data.comProduto });
+      setImportResult({
+        itens: data.itens,
+        faturamentoTotal: data.faturamentoTotal,
+        comProduto: data.comProduto,
+        fallbackWarnings: data.fallbackWarnings ?? [],
+      });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
       router.refresh();
@@ -122,36 +133,7 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
       }
     >
       <div className="mb-4">
-        <div className="flex flex-wrap gap-1.5">
-          {STANDARD_PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => {
-                if (opt.key !== "personalizado") applyPeriodo(opt.key);
-                else setPeriodo(opt.key);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                periodo === opt.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {periodo === "personalizado" && (
-          <div className="flex items-center gap-2 mt-2">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
-            <span className="text-xs text-nord-gray">até</span>
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
-            <button
-              onClick={() => applyPeriodo("personalizado", customFrom, customTo)}
-              disabled={!customFrom || !customTo || loading}
-              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
-            >
-              Aplicar
-            </button>
-          </div>
-        )}
+        <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loading} />
       </div>
 
       <div className="flex items-center gap-3 mb-4 text-xs text-nord-gray">
@@ -225,9 +207,9 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
               className="input"
             />
           </label>
-          {importError && <p className="text-xs text-red-400">{importError}</p>}
+          {importError && <p className="text-xs text-nord-danger">{importError}</p>}
           {importResult && (
-            <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
+            <div className="text-xs bg-nord-success/10 border border-nord-success/30 rounded-lg px-3 py-2 text-nord-success space-y-1">
               <p>
                 Importação concluída: {importResult.itens} item(ns), somando {formatCurrency(importResult.faturamentoTotal)}.
               </p>
@@ -237,6 +219,7 @@ export function ItensVendidosClient({ rows: initialRows, canCreate = true }: { r
               </p>
             </div>
           )}
+          {importResult && <ImportFallbackWarning buckets={importResult.fallbackWarnings} />}
         </div>
         <button
           onClick={submitImport}

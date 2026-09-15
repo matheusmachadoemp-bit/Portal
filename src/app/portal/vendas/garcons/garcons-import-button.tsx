@@ -4,8 +4,10 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { ImportFallbackWarning } from "@/components/ui/import-fallback-warning";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
+import type { ImportFallbackBucket } from "@/lib/import-fallback";
 
 export function GarconsImportButton({ canCreate = true }: { canCreate?: boolean }) {
   const router = useRouter();
@@ -19,7 +21,7 @@ export function GarconsImportButton({ canCreate = true }: { canCreate?: boolean 
     itens: number;
     faturamentoTotal: number;
     garcons: number;
-    semGarcomCadastrado: string[];
+    fallbackWarnings: ImportFallbackBucket[];
   } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,7 +61,7 @@ export function GarconsImportButton({ canCreate = true }: { canCreate?: boolean 
         itens: data.itens,
         faturamentoTotal: data.faturamentoTotal,
         garcons: data.garcons,
-        semGarcomCadastrado: data.semGarcomCadastrado ?? [],
+        fallbackWarnings: data.fallbackWarnings ?? [],
       });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
@@ -117,21 +119,16 @@ export function GarconsImportButton({ canCreate = true }: { canCreate?: boolean 
               className="input"
             />
           </label>
-          {importError && <p className="text-xs text-red-400">{importError}</p>}
+          {importError && <p className="text-xs text-nord-danger">{importError}</p>}
           {importResult && (
-            <div className="text-xs bg-emerald-950/20 border border-emerald-900/40 rounded-lg px-3 py-2 text-emerald-300 space-y-1">
+            <div className="text-xs bg-nord-success/10 border border-nord-success/30 rounded-lg px-3 py-2 text-nord-success space-y-1">
               <p>
                 Importação concluída: {importResult.itens} linha(s), {importResult.garcons} garçom(s), somando{" "}
                 {formatCurrency(importResult.faturamentoTotal)}.
               </p>
-              {importResult.semGarcomCadastrado.length > 0 && (
-                <p className="text-amber-300">
-                  Não encontrei cadastro em RH para: {importResult.semGarcomCadastrado.join(", ")}. Os dados entram
-                  no ranking mesmo assim, pelo nome do arquivo.
-                </p>
-              )}
             </div>
           )}
+          {importResult && <ImportFallbackWarning buckets={importResult.fallbackWarnings} />}
         </div>
         <button
           onClick={submitImport}

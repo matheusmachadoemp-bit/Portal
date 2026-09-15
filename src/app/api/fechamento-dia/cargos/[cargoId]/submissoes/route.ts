@@ -3,8 +3,8 @@ import type { FechamentoTipoResposta } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { spDateKey, spDateTime, spStartOfDay } from "@/lib/checklist";
-import { fechamentoPerguntasFaltando } from "@/lib/fechamento";
+import { spDateKey, spStartOfDay } from "@/lib/checklist";
+import { fechamentoPerguntasFaltando, fechamentoReleaseEDueAt } from "@/lib/fechamento";
 import { gerarFechamentoOcorrencias, podeExecutarFechamentoCargo } from "@/lib/fechamento-server";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
@@ -167,8 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
     }
   }
 
-  const releaseAt = spDateTime(dateKey, cargo.horarioLiberacao);
-  const dueAt = spDateTime(dateKey, cargo.horarioLimite);
+  const { releaseAt, dueAt } = fechamentoReleaseEDueAt(dateKey, cargo.horarioLiberacao, cargo.horarioLimite);
   const now = new Date();
   const atrasado = now.getTime() > dueAt.getTime();
 
