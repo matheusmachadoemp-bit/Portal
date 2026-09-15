@@ -20,7 +20,11 @@ export default async function CertificadosPage() {
   const certificates = await prisma.trainingCertificate.findMany({
     where: isAdmin ? {} : { userId: session.user.id },
     orderBy: { issuedAt: "desc" },
-    include: { user: { select: { name: true } }, course: { select: { name: true, instructor: true } } },
+    include: {
+      user: { select: { name: true } },
+      course: { select: { name: true, instructor: true } },
+      module: { select: { title: true } },
+    },
   });
 
   return (
@@ -43,6 +47,7 @@ export default async function CertificadosPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-white text-sm font-medium truncate">{c.course.name}</p>
+                    <p className="text-xs text-nord-gray truncate">{c.module.title}</p>
                     {isAdmin && <p className="text-xs text-nord-gray truncate">{c.user.name}</p>}
                   </div>
                 </div>

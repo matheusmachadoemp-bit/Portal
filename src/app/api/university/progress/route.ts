@@ -2,44 +2,49 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { MIN_WATCH_PERCENT_TO_COMPLETE } from "@/lib/university";
-import { recalcEnrollmentProgress } from "@/lib/university-server";
+import { getOrCreateModuleEnrollment, recalcModuleEnrollmentProgress } from "@/lib/university-server";
 
+// Campo do corpo renomeado de "moduleId" pra "lessonId" nesta fase: o que
+// antes era chamado de "módulo" (o vídeo/pdf/checklist/link individual) agora
+// é "aula" (TrainingLesson) — "módulo" passou a ser o nível novo que agrupa
+// aulas. A tela (player-client.tsx) já foi atualizada nesta própria Fase 2 e
+// já envia "lessonId" corretamente.
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const moduleId: string = body.moduleId;
+  const lessonId: string = body.lessonId;
   const deltaSeconds: number = Math.max(0, Math.round(Number(body.deltaSeconds) || 0));
   const device: string = body.device || "desktop";
   const started: boolean = !!body.started;
 
-  const trainingModule = await prisma.trainingModule.findUnique({ where: { id: moduleId } });
-  if (!trainingModule) return NextResponse.json({ error: "Módulo não encontrado." }, { status: 404 });
+  const lesson = await prisma.trainingLesson.findUnique({ where: { id: lessonId }, include: { module: true } });
+  if (!lesson) return NextResponse.json({ error: "Aula não encontrada." }, { status: 404 });
 
-  const enrollment = await prisma.trainingEnrollment.upsert({
-    where: { userId_courseId: { userId: session.user.id, courseId: trainingModule.courseId } },
-    update: {},
-    create: { userId: session.user.id, courseId: trainingModule.courseId },
-  });
+  const { moduleEnrollment } = await getOrCreateModuleEnrollment(
+    session.user.id,
+    lesson.module.courseId,
+    lesson.moduleId
+  );
 
-  const existing = await prisma.trainingModuleProgress.findUnique({
-    where: { enrollmentId_moduleId: { enrollmentId: enrollment.id, moduleId } },
+  const existing = await prisma.trainingLessonProgress.findUnique({
+    where: { moduleEnrollmentId_lessonId: { moduleEnrollmentId: moduleEnrollment.id, lessonId } },
   });
 
   const watchedSeconds = Math.min(
-    trainingModule.durationSeconds || Number.MAX_SAFE_INTEGER,
+    lesson.durationSeconds || Number.MAX_SAFE_INTEGER,
     (existing?.watchedSeconds ?? 0) + deltaSeconds
   );
-  const percentWatched = trainingModule.durationSeconds
-    ? Math.min(100, Math.round((watchedSeconds / trainingModule.durationSeconds) * 100))
+  const percentWatched = lesson.durationSeconds
+    ? Math.min(100, Math.round((watchedSeconds / lesson.durationSeconds) * 100))
     : deltaSeconds > 0
       ? 100
       : 0;
   const completed = percentWatched >= MIN_WATCH_PERCENT_TO_COMPLETE || existing?.completed || false;
 
-  const progress = await prisma.trainingModuleProgress.upsert({
-    where: { enrollmentId_moduleId: { enrollmentId: enrollment.id, moduleId } },
+  const progress = await prisma.trainingLessonProgress.upsert({
+    where: { moduleEnrollmentId_lessonId: { moduleEnrollmentId: moduleEnrollment.id, lessonId } },
     update: {
       watchedSeconds,
       percentWatched,
@@ -50,8 +55,8 @@ export async function POST(req: Request) {
       playCount: started ? { increment: 1 } : undefined,
     },
     create: {
-      enrollmentId: enrollment.id,
-      moduleId,
+      moduleEnrollmentId: moduleEnrollment.id,
+      lessonId,
       watchedSeconds,
       percentWatched,
       completed,
@@ -62,7 +67,7 @@ export async function POST(req: Request) {
     },
   });
 
-  const recalced = await recalcEnrollmentProgress(enrollment.id);
+  const recalced = await recalcModuleEnrollmentProgress(moduleEnrollment.id);
 
-  return NextResponse.json({ progress, enrollment: recalced });
+  return NextResponse.json({ progress, moduleEnrollment: recalced });
 }

@@ -18,8 +18,10 @@ export default async function VideoaulasPage() {
   const enrollments = await prisma.trainingEnrollment.findMany({
     where: { userId: session.user.id },
     orderBy: { updatedAt: "desc" },
-    include: { course: { include: { modules: { select: { id: true } } } } },
+    include: { course: { include: { modules: { select: { lessons: { select: { id: true } } } } } } },
   });
+  const totalLessons = (e: (typeof enrollments)[number]) =>
+    e.course.modules.reduce((a, m) => a + m.lessons.length, 0);
 
   const emAndamento = enrollments.filter((e) => e.status === "EM_ANDAMENTO" || e.status === "REPROVADO");
   const naoIniciado = enrollments.filter((e) => e.status === "NAO_INICIADO");
@@ -50,7 +52,7 @@ export default async function VideoaulasPage() {
                       <Badge tone={statusOpt?.tone ?? "default"}>{statusOpt?.label}</Badge>
                     </div>
                     <ProgressBar percent={e.progressPercent} />
-                    <p className="text-[11px] text-nord-gray mt-1">{e.progressPercent}% concluído · {e.course.modules.length} aula(s)</p>
+                    <p className="text-[11px] text-nord-gray mt-1">{e.progressPercent}% concluído · {totalLessons(e)} aula(s)</p>
                   </Link>
                 );
               })}
@@ -64,7 +66,7 @@ export default async function VideoaulasPage() {
               {naoIniciado.map((e) => (
                 <Link key={e.id} href={`/portal/universidade/cursos/${e.courseId}`} className="nord-card p-3 hover:border-nord-blue/50 block">
                   <p className="text-white text-sm font-medium">{e.course.name}</p>
-                  <p className="text-[11px] text-nord-gray mt-1">{e.course.modules.length} aula(s)</p>
+                  <p className="text-[11px] text-nord-gray mt-1">{totalLessons(e)} aula(s)</p>
                 </Link>
               ))}
             </div>

@@ -19,8 +19,13 @@ export async function GET() {
     where: { OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }] },
     orderBy: [{ order: "asc" }, { name: "asc" }],
     include: {
-      modules: { orderBy: { order: "asc" } },
-      quiz: { include: { questions: { include: { options: true }, orderBy: { order: "asc" } } } },
+      modules: {
+        orderBy: { order: "asc" },
+        include: {
+          lessons: { orderBy: { order: "asc" } },
+          quiz: { include: { questions: { include: { options: true }, orderBy: { order: "asc" } } } },
+        },
+      },
       empresa: { select: { name: true } },
       _count: { select: { enrollments: true } },
     },
@@ -29,20 +34,23 @@ export async function GET() {
   const isManager = canManageUsers(session.user.role);
   const sanitized = isManager
     ? courses
-    : courses.map((c) =>
-        c.quiz
-          ? {
-              ...c,
-              quiz: {
-                ...c.quiz,
-                questions: c.quiz.questions.map((q) => ({
-                  ...q,
-                  options: q.options.map((o) => ({ ...o, correct: false })),
-                })),
-              },
-            }
-          : c
-      );
+    : courses.map((c) => ({
+        ...c,
+        modules: c.modules.map((m) =>
+          m.quiz
+            ? {
+                ...m,
+                quiz: {
+                  ...m.quiz,
+                  questions: m.quiz.questions.map((q) => ({
+                    ...q,
+                    options: q.options.map((o) => ({ ...o, correct: false })),
+                  })),
+                },
+              }
+            : m
+        ),
+      }));
 
   return NextResponse.json({ courses: sanitized });
 }
