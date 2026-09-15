@@ -38,6 +38,14 @@ export type MeetingIndicator = {
   historico: { monthLabel: string; value: number | null }[];
 };
 
+/** Uma meta do card "Metas de [próximo mês]" da Reunião Gerente — ver model `MetaProximoMes`. */
+export type MeetingNextMonthGoal = {
+  metrica: string;
+  valorAlvo: string;
+  valorPremio: number;
+  destinatario: string;
+};
+
 function formatValue(unit: Unit, value: number | null) {
   if (value === null) return "-";
   if (unit === "percent") return `${value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
@@ -115,8 +123,15 @@ export function exportMeetingReportPdf(params: {
   indicators: MeetingIndicator[];
   premiacaoTotal: number;
   observacoes: string;
+  /**
+   * Card "Metas de [próximo mês]" (só a Reunião Gerente tem, por enquanto) — quando
+   * informado, vira uma última página no PDF com o que precisa ser feito e o prêmio de cada
+   * meta; `null`/`undefined` (as outras 4 reuniões que chamam esta função não têm esse card)
+   * não adiciona página nenhuma.
+   */
+  metasProximoMes?: { periodoLabel: string; metas: MeetingNextMonthGoal[] } | null;
 }) {
-  const { fileSlug, empresaName, periodoLabel, indicators, premiacaoTotal, observacoes } = params;
+  const { fileSlug, empresaName, periodoLabel, indicators, premiacaoTotal, observacoes, metasProximoMes } = params;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -299,6 +314,72 @@ export function exportMeetingReportPdf(params: {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
+
+  // Última página, opcional: "Metas de [próximo mês]" — o que precisa ser feito e o prêmio
+  // de cada meta cadastrada pro mês que vem (só a Reunião Gerente passa `metasProximoMes`).
+  if (metasProximoMes) {
+    doc.addPage();
+    drawPageBackground(doc, pageWidth, pageHeight);
+    drawWordmark(doc, margin, 16);
+
+    setColor(doc, "setTextColor", COLOR.white);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(26);
+    centeredText(doc, "METAS DO PRÓXIMO MÊS", centerX, 32);
+    setColor(doc, "setTextColor", COLOR.grayLight);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    centeredText(doc, `${empresaName} · ${metasProximoMes.periodoLabel}`, centerX, 40);
+
+    const metas = metasProximoMes.metas;
+
+    if (metas.length === 0) {
+      setColor(doc, "setTextColor", COLOR.grayLight);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      centeredText(doc, "NENHUMA META CADASTRADA PARA O PRÓXIMO MÊS", centerX, pageHeight / 2);
+    } else {
+      const premioTotal = metas.reduce((s, m) => s + m.valorPremio, 0);
+      setColor(doc, "setFillColor", COLOR.bgPanel);
+      doc.roundedRect(margin, 50, pageWidth - margin * 2, 18, 3, 3, "F");
+      setColor(doc, "setTextColor", COLOR.gold);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      centeredText(doc, `POTENCIAL DE PREMIAÇÃO DO MÊS: ${formatValue("currency", premioTotal).toUpperCase()}`, centerX, 61);
+
+      let rowY = 84;
+      setColor(doc, "setTextColor", COLOR.gray);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("O QUE PRECISA SER FEITO", margin, rowY);
+      doc.text("PRÊMIO", margin + 95, rowY);
+      doc.text("PARA QUEM", margin + 130, rowY);
+      rowY += 3;
+      setColor(doc, "setDrawColor", COLOR.grid);
+      doc.line(margin, rowY, pageWidth - margin, rowY);
+      rowY += 8;
+
+      for (const meta of metas) {
+        setColor(doc, "setFillColor", COLOR.gold);
+        doc.circle(margin + 1.5, rowY - 1.5, 1.5, "F");
+        setColor(doc, "setTextColor", COLOR.white);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.text(`${meta.metrica}: ${meta.valorAlvo}`, margin + 5, rowY);
+        setColor(doc, "setTextColor", COLOR.success);
+        doc.setFont("helvetica", "normal");
+        doc.text(formatValue("currency", meta.valorPremio), margin + 95, rowY);
+        setColor(doc, "setTextColor", COLOR.grayLight);
+        doc.text(meta.destinatario, margin + 130, rowY);
+        rowY += 10;
+      }
+    }
+
+    setColor(doc, "setTextColor", COLOR.gray);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
+  }
 
   doc.save(`${fileSlug}-${periodoLabel.replace(/\s+/g, "-").toLowerCase()}.pdf`);
 }

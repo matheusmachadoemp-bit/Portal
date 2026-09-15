@@ -147,7 +147,11 @@ quando há 2+ cards.
 ### `Section` — bloco de conteúdo com título
 
 `.nord-card p-4`, título `text-white font-medium text-sm` + slot de
-ação opcional (ex.: link "Ver todas") alinhado à direita.
+ação opcional (ex.: link "Ver todas") alinhado à direita. Prop opcional
+`titleClassName` soma classes extras ao título (ex.: `"capitalize"`
+quando o título embute um nome de mês em minúsculo vindo de
+`periodoLabel()`, como no card "Metas de [próximo mês]" da Reunião
+Gerente) sem alterar o padrão dos demais usos.
 
 ### `Badge` — etiqueta de status
 
