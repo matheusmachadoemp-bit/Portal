@@ -354,7 +354,7 @@ export function RecebimentoClient({
               <span className="block text-xs text-nord-gray mb-1">Observação</span>
               <input className="input" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
             </label>
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && <p className="text-xs text-nord-danger">{error}</p>}
             <button onClick={confirmar} className="btn-primary w-full py-2.5">
               Confirmar recebimento
             </button>

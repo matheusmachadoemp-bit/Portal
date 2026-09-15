@@ -175,7 +175,7 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
               <option value="MENSAL">Mensal</option>
             </select>
           </label>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={submit} disabled={!form.name.trim() || submitting} className="btn-primary w-full py-2.5">
             {submitting ? "Salvando..." : "Salvar"}
           </button>

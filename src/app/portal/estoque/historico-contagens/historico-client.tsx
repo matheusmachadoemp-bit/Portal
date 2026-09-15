@@ -152,7 +152,7 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
                 <td className="py-2.5 pr-4 text-white">{c.totalItens}</td>
                 <td className="py-2.5 pr-4"><Badge tone={c.divergencias ? "danger" : "default"}>{c.divergencias}</Badge></td>
                 <td className="py-2.5 pr-4">
-                  <span className={c.valorDiferenca < 0 ? "text-red-400" : "text-emerald-400"}>{formatCurrency(c.valorDiferenca)}</span>
+                  <span className={c.valorDiferenca < 0 ? "text-nord-danger" : "text-nord-success"}>{formatCurrency(c.valorDiferenca)}</span>
                 </td>
                 <td className="py-2.5 pr-4"><Badge tone={COUNT_STATUS_TONE[c.status]}>{COUNT_STATUS_LABEL[c.status] ?? c.status}</Badge></td>
                 <td className="py-2.5 pr-4 text-right">

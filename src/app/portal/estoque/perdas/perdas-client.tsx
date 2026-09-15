@@ -300,7 +300,7 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
             <input className="input" value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} />
           </label>
           {valorEstimadoPreview > 0 && <p className="text-xs text-nord-gray">Valor estimado: {formatCurrency(valorEstimadoPreview)}</p>}
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={submit} disabled={!form.ingredientId || !form.quantidade || submitting} className="btn-primary w-full py-2.5">
             {submitting ? "Registrando..." : "Registrar perda"}
           </button>

@@ -213,7 +213,7 @@ export function TransferenciasClient({
                         </button>
                       )}
                       {canCreate && t.status === "ENVIADA" && (
-                        <button onClick={() => openRecebimento(t)} className="text-xs text-emerald-400 hover:underline">
+                        <button onClick={() => openRecebimento(t)} className="text-xs text-nord-success hover:underline">
                           Conferir recebimento
                         </button>
                       )}
@@ -259,7 +259,7 @@ export function TransferenciasClient({
                   ))}
                 </select>
                 <input className="input w-28" type="number" placeholder="Qtd." value={it.quantidade} onChange={(e) => updateItem(idx, { quantidade: e.target.value })} />
-                <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-red-400">
+                <button onClick={() => removeItem(idx)} className="text-nord-gray hover:text-nord-danger">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -272,7 +272,7 @@ export function TransferenciasClient({
             <span className="block text-xs text-nord-gray mb-1">Observação</span>
             <input className="input" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
           </label>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={submit} disabled={submitting} className="btn-primary w-full py-2.5 disabled:opacity-50">
             {submitting ? "Solicitando..." : "Solicitar transferência"}
           </button>
