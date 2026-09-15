@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Section, Badge, StatCard } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
+import { InstagramIcon, FacebookIcon, YoutubeIcon } from "@/components/ui/social-icons";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatNumber, formatPercent, growth, pct } from "@/lib/calc";
 import type { RollingPeriodKey } from "@/lib/periods";
@@ -17,6 +18,19 @@ const NETWORK_ICON: Record<string, string> = {
   Site: "Globe",
   YouTube: "Youtube",
 };
+
+/**
+ * A lucide-react (usada pelo `DynamicIcon`) não tem ícones de marca de
+ * rede social — só ícones genéricos. Pra Instagram/Facebook/YouTube usamos
+ * os SVGs próprios de `social-icons.tsx`; o resto continua vindo do
+ * `DynamicIcon` normalmente.
+ */
+function NetworkIcon({ name, size, className }: { name: string; size?: number; className?: string }) {
+  if (name === "Instagram") return <InstagramIcon size={size} className={className} />;
+  if (name === "Facebook") return <FacebookIcon size={size} className={className} />;
+  if (name === "Youtube") return <YoutubeIcon size={size} className={className} />;
+  return <DynamicIcon name={name} size={size} className={className} />;
+}
 
 type EntrySummary = {
   seguidoresInicio: number;
@@ -100,7 +114,7 @@ export function RedesSociaisClient({
               tab === t.key ? "border-nord-blue bg-nord-blue" : "border-nord-border hover:border-nord-blue/60"
             }`}
           >
-            <DynamicIcon name={t.icon} size={14} />
+            <NetworkIcon name={t.icon} size={14} />
             {t.label}
           </button>
         ))}
@@ -148,7 +162,7 @@ export function RedesSociaisClient({
                 {countsByNetwork.map(({ network, posts }) => (
                   <div key={network}>
                     <div className="flex items-center gap-2 mb-2">
-                      <DynamicIcon name={NETWORK_ICON[network] ?? "Share2"} size={15} className="text-nord-blue-light" />
+                      <NetworkIcon name={NETWORK_ICON[network] ?? "Share2"} size={15} className="text-nord-blue-light" />
                       <h4 className="text-white text-sm font-medium">{network}</h4>
                       <Badge>{posts.length} publicados</Badge>
                     </div>
@@ -204,7 +218,7 @@ function InstagramOrganicoView({
   if (!current) {
     return (
       <div className="nord-card p-6 text-center">
-        <DynamicIcon name="Instagram" size={28} className="text-nord-gray mx-auto mb-3" />
+        <InstagramIcon size={28} className="text-nord-gray mx-auto mb-3" />
         <p className="text-white text-sm font-medium mb-1">Instagram ainda não sincronizou dados</p>
         <p className="text-xs text-nord-gray max-w-md mx-auto">
           Conecte a conta do Instagram vinculada ao Meta Ads em Configurações &gt; Meta Ads — os seguidores e o alcance
@@ -223,7 +237,7 @@ function InstagramOrganicoView({
           rel="noopener noreferrer"
           className="flex items-center gap-2 text-sm text-nord-blue-light hover:underline w-fit"
         >
-          <DynamicIcon name="Instagram" size={16} />@{username}
+          <InstagramIcon size={16} />@{username}
         </a>
       )}
       <p className="text-xs text-nord-gray">Dados reais sincronizados da conta do Instagram vinculada ao Meta Ads.</p>
