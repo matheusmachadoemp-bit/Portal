@@ -443,7 +443,7 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
                   </button>
                   <button
                     onClick={() => fdm.setDeleteTarget(ind)}
-                    className="text-nord-gray hover:text-red-400 flex items-center gap-1 text-xs"
+                    className="text-nord-gray hover:text-nord-danger flex items-center gap-1 text-xs"
                   >
                     <Trash2 size={12} /> Excluir indicador
                   </button>

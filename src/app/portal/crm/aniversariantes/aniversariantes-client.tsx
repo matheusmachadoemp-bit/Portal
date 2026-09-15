@@ -92,7 +92,7 @@ export function AniversariantesClient({ rows, isGrupo }: { rows: Row[]; isGrupo:
                   <td className="py-2.5 pr-4 text-white">{r.nome}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">
                     {new Date(r.dataNascimento + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                    {r.diasAte === 0 && <span className="text-emerald-400"> · hoje!</span>}
+                    {r.diasAte === 0 && <span className="text-nord-success"> · hoje!</span>}
                   </td>
                   {isGrupo && (
                     <td className="py-2.5 pr-4">

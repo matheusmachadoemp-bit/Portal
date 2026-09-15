@@ -290,7 +290,7 @@ function SegmentCard({
           <p className="text-xs text-nord-gray mt-0.5">{description}</p>
         </div>
         {onDelete && (
-          <button onClick={onDelete} className="text-nord-gray hover:text-red-400 shrink-0">
+          <button onClick={onDelete} className="text-nord-gray hover:text-nord-danger shrink-0">
             <Trash2 size={13} />
           </button>
         )}

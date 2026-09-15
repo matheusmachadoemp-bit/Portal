@@ -612,7 +612,7 @@ export function SalaoClient({
               {current ? (
                 <button
                   onClick={() => setConfirmDelete(true)}
-                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                  className="flex items-center gap-1.5 text-xs text-nord-danger hover:text-nord-danger/80"
                 >
                   <Trash2 size={13} /> Excluir esta reunião
                 </button>
