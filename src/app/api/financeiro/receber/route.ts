@@ -65,9 +65,18 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  if (!body.cliente || !String(body.cliente).trim()) {
+    return NextResponse.json({ error: "Cliente é obrigatório." }, { status: 400 });
+  }
+  if (!body.descricao || !String(body.descricao).trim()) {
+    return NextResponse.json({ error: "Descrição é obrigatória." }, { status: 400 });
+  }
+  const valor = Number(body.valor);
+  if (!body.valor || !Number.isFinite(valor) || valor <= 0) {
+    return NextResponse.json({ error: "Valor é obrigatório e deve ser maior que zero." }, { status: 400 });
+  }
 
   const status = body.status || "EM_ABERTO";
-  const valor = Number(body.valor) || 0;
 
   const preDelta = balanceDelta(1, status, valor);
   if (preDelta && body.bankAccountId) {
