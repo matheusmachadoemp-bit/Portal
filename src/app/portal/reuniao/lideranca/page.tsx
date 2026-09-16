@@ -3,22 +3,10 @@ import { PageContainer } from "@/components/page-container";
 import { LiderancaClient } from "./lideranca-client";
 import { getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
-import { computeLiderancaResumo, loadReuniaoCustomIndicators, type LiderancaResumoDTO } from "@/lib/reuniao-server";
+import { loadReuniaoCustomIndicators } from "@/lib/reuniao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-
-/** Resumo "zerado" usado no modo Grupo Nord (várias lojas ao mesmo tempo) — mesmo
- * padrão das outras 4 reuniões: o resumo consolidado só faz sentido loja a loja. */
-const EMPTY_RESUMO: LiderancaResumoDTO = {
-  faturamentoTotalValor: null,
-  cmvPercent: null,
-  npsPercent: null,
-  cancelamentoDeliveryPercent: null,
-  turnoverPercent: null,
-  checklistOperacionalPercent: null,
-  fontes: { gerente: false, salao: false, cozinha: false, delivery: false },
-};
 
 export default async function ReuniaoLiderancaPage() {
   const session = await auth();
@@ -30,25 +18,29 @@ export default async function ReuniaoLiderancaPage() {
   const periodo = currentPeriodo();
   const isSingle = ctx?.mode === "single";
 
-  // "Resultado do período" é 100% um resumo consolidado das outras 4 reuniões
-  // (ver computeLiderancaResumo) — nunca digitado à mão, então (diferente das
-  // outras 4 telas) esta página não precisa carregar o histórico de todos os
-  // períodos: só a linha do período selecionado (usada apenas para saber se
-  // já existe um "fechamento" salvo e permitir excluí-lo).
-  const resumo = isSingle ? await computeLiderancaResumo(ctx.empresa.id, periodo) : EMPTY_RESUMO;
+  // Esta página não precisa carregar o histórico de todos os períodos: só a linha do
+  // período selecionado (usada apenas para saber se já existe um "fechamento" salvo e
+  // permitir excluí-lo) — igual às outras 4 reuniões, "Resultado do período" (o antigo
+  // resumo consolidado calculado via computeLiderancaResumo) saiu de tela, deixando só
+  // "Fechamento do mês" (indicadores customizados) e "Metas de [próximo mês]".
   const current = isSingle
     ? await prisma.liderancaMeeting.findUnique({ where: { empresaId_periodo: { empresaId: ctx.empresa.id, periodo } } })
     : null;
   const customIndicators = isSingle ? await loadReuniaoCustomIndicators(ctx.empresa.id, "LIDERANCA", periodo) : [];
 
+  // Card "Metas de [próximo mês]": criar/editar já é coberto pelo mesmo critério de
+  // `canCreate` (isSingle) que o resto da tela usa — mas excluir uma meta exige
+  // especificamente `canDelete` no módulo "reuniao" (ver mesmo comentário em gerente/page.tsx).
+  const canDeleteMetas = await hasModulePermission(session.user.id, "reuniao", "canDelete");
+
   return (
     <PageContainer title="Reunião" subtitle="Reunião Liderança">
       <LiderancaClient
         initialCurrent={current ? { id: current.id, periodo: current.periodo } : null}
-        initialResumo={resumo}
         initialCustomIndicators={customIndicators}
         periodo={periodo}
         canCreate={isSingle}
+        canDeleteMetas={canDeleteMetas}
       />
     </PageContainer>
   );

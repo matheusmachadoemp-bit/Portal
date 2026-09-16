@@ -2,55 +2,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
-import { Section } from "@/components/ui/stat-card";
-import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
-import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
-import {
-  FechamentoDoMesSection,
-  FechamentoDoMesEditor,
-  useFechamentoDoMes,
-  customIndicatorCards,
-  type FechamentoIndicator,
-} from "@/components/reuniao/fechamento-do-mes";
-import { formatCurrency, formatNumber } from "@/lib/calc";
+import { FechamentoDoMesSection, FechamentoDoMesEditor, useFechamentoDoMes, type FechamentoIndicator } from "@/components/reuniao/fechamento-do-mes";
+import { useMetasProximoMes, MetasProximoMesSection } from "@/components/reuniao/metas-proximo-mes";
 import { periodoLabel } from "@/lib/reuniao";
-import type { LiderancaResumoDTO } from "@/lib/reuniao-server";
 
 type Meeting = { id: string; periodo: string };
-type Fontes = LiderancaResumoDTO["fontes"];
-
-const FONTE_LABEL: Record<keyof Fontes, string> = {
-  gerente: "Gerente",
-  salao: "Salão",
-  cozinha: "Cozinha",
-  delivery: "Delivery",
-};
-
-/** Aviso discreto pro card de um número que vem de uma área que ainda não
- * "fechou o mês" (ver LiderancaResumoDTO.fontes) — o número pode até já
- * existir (calculado ao vivo de Vendas/CRM/Estoque), mas ninguém revisou/
- * confirmou aquela reunião ainda, então não é tratado como definitivo. */
-function fonteAviso(fontes: Fontes, area: keyof Fontes) {
-  return fontes[area] ? null : `${FONTE_LABEL[area]} ainda não fechou este mês`;
-}
 
 export function LiderancaClient({
   initialCurrent,
-  initialResumo,
   initialCustomIndicators,
   periodo,
   canCreate,
+  canDeleteMetas,
 }: {
   initialCurrent: Meeting | null;
-  initialResumo: LiderancaResumoDTO;
   initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
+  /** Controla só o botão de excluir do card "Metas de [próximo mês]" — ver
+   * canDeleteMetas em gerente/page.tsx (mesmo critério, `canDelete` no módulo "reuniao"). */
+  canDeleteMetas: boolean;
 }) {
   const [selectedPeriodo, setSelectedPeriodo] = useState(periodo);
   const [current, setCurrent] = useState(initialCurrent);
-  const [resumo, setResumo] = useState(initialResumo);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fechamentoModalOpen, setFechamentoModalOpen] = useState(false);
@@ -59,6 +34,7 @@ export function LiderancaClient({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fdm = useFechamentoDoMes("/api/reuniao/lideranca", selectedPeriodo, initialCustomIndicators);
+  const mp = useMetasProximoMes("/api/reuniao/lideranca", canCreate);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -74,7 +50,6 @@ export function LiderancaClient({
       .then((data) => {
         if (cancelled) return;
         setCurrent(data.current);
-        setResumo(data.resumo);
         fdm.sync(fdmToken, data.customIndicators ?? []);
       })
       .finally(() => !cancelled && setLoading(false));
@@ -89,7 +64,6 @@ export function LiderancaClient({
     const res = await fetch(`/api/reuniao/lideranca?periodo=${targetPeriodo}`);
     const data = await res.json();
     setCurrent(data.current);
-    setResumo(data.resumo);
     fdm.sync(fdmToken, data.customIndicators ?? []);
   }
 
@@ -127,123 +101,6 @@ export function LiderancaClient({
     }
   }
 
-  const cards = [
-    {
-      key: "faturamento",
-      content: (
-        <IndicatorCard
-          icon="DollarSign"
-          color="#22c55e"
-          label="Faturamento Total"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {resumo.faturamentoTotalValor === null ? "-" : formatCurrency(resumo.faturamentoTotalValor)}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          warning={fonteAviso(resumo.fontes, "cozinha")}
-        />
-      ),
-    },
-    {
-      key: "cmv",
-      content: (
-        <IndicatorCard
-          icon="Percent"
-          color="#1464F4"
-          label="CMV"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {resumo.cmvPercent === null ? "-" : `${formatNumber(resumo.cmvPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          warning={fonteAviso(resumo.fontes, "cozinha")}
-        />
-      ),
-    },
-    {
-      key: "nps",
-      content: (
-        <IndicatorCard
-          icon="Smile"
-          color="#f59e0b"
-          label="NPS Geral"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {resumo.npsPercent === null ? "-" : `${formatNumber(resumo.npsPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          warning={fonteAviso(resumo.fontes, "salao")}
-        />
-      ),
-    },
-    {
-      key: "cancelamento-delivery",
-      content: (
-        <IndicatorCard
-          icon="XCircle"
-          color="#ef4444"
-          label="Cancelamento Delivery"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {resumo.cancelamentoDeliveryPercent === null ? "-" : `${formatNumber(resumo.cancelamentoDeliveryPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          warning={fonteAviso(resumo.fontes, "delivery")}
-        />
-      ),
-    },
-    {
-      key: "turnover",
-      content: (
-        <IndicatorCard
-          icon="UserMinus"
-          color="#a855f7"
-          label="Turnover"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {resumo.turnoverPercent === null ? "-" : `${formatNumber(resumo.turnoverPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          warning={fonteAviso(resumo.fontes, "gerente")}
-        />
-      ),
-    },
-    {
-      key: "checklist",
-      content: (
-        <IndicatorCard
-          icon="ClipboardCheck"
-          color="#14b8a6"
-          label="Checklist Operacional"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {resumo.checklistOperacionalPercent === null ? "-" : `${formatNumber(resumo.checklistOperacionalPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          warning={fonteAviso(resumo.fontes, "gerente")}
-        />
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -259,15 +116,22 @@ export function LiderancaClient({
         )}
       </div>
 
-      <Section title="Resultado do período">
-        <SortableCardGrid
-          storageKey="reuniao-lideranca-resumo-kpi-order"
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-          items={[...cards, ...customIndicatorCards(fdm.customIndicators)]}
-        />
-      </Section>
+      {/* Sem loja específica selecionada (visão consolidada "Grupo Nord"), a reunião não
+          tem o que mostrar aqui — mesmo padrão de aviso já usado em gerente-client.tsx
+          (reaproveitado aqui em vez de inventar um texto novo). */}
+      {!canCreate && (
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e
+          editar o fechamento do mês desta reunião.
+        </p>
+      )}
 
       {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
+
+      {/* Liderança não tem "Observações da reunião" (não existe esse campo pra ela) — o card
+          "Metas de [próximo mês]" fica logo depois de "Fechamento do mês", mesma posição
+          relativa das outras 4 reuniões. */}
+      {canCreate && <MetasProximoMesSection mp={mp} canDelete={canDeleteMetas} />}
 
       {canCreate && (
         <Modal

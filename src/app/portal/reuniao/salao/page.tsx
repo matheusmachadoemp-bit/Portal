@@ -39,6 +39,11 @@ export default async function ReuniaoSalaoPage() {
   const current = isSingle ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
   const customIndicators = isSingle ? await loadReuniaoCustomIndicators(ctx.empresa.id, "SALAO", periodo) : [];
 
+  // Card "Metas de [próximo mês]": criar/editar já é coberto pelo mesmo critério de
+  // `canCreate` (isSingle) que o resto da tela usa — mas excluir uma meta exige
+  // especificamente `canDelete` no módulo "reuniao" (ver mesmo comentário em gerente/page.tsx).
+  const canDeleteMetas = await hasModulePermission(session.user.id, "reuniao", "canDelete");
+
   return (
     <PageContainer title="Reunião" subtitle="Reunião Salão">
       <SalaoClient
@@ -50,6 +55,7 @@ export default async function ReuniaoSalaoPage() {
         initialCustomIndicators={customIndicators}
         periodo={periodo}
         canCreate={isSingle}
+        canDeleteMetas={canDeleteMetas}
         empresaName={isSingle ? ctx.empresa.name : "Grupo Nord"}
       />
     </PageContainer>

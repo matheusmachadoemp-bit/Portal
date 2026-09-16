@@ -5,6 +5,28 @@ import { getStoreManagers } from "@/lib/manutencao-server";
 import { createNotifications } from "@/lib/notifications";
 
 /**
+ * Recalcula `Goal.valorRealizado` (e o `status`, que depende dele) a partir
+ * da soma de todos os `GoalWeeklyUpdate` da meta — chamado sempre que um
+ * lançamento semanal é criado, editado ou excluído (ver rotas em
+ * src/app/api/metas/[id]/semanas/**). Nunca mais é a rota de criar/editar
+ * meta quem escreve `valorRealizado` diretamente.
+ */
+export async function recomputeGoalRealizado(goalId: string) {
+  const [goal, agg] = await Promise.all([
+    prisma.goal.findUniqueOrThrow({ where: { id: goalId } }),
+    prisma.goalWeeklyUpdate.aggregate({ where: { goalId }, _sum: { valor: true } }),
+  ]);
+
+  const valorRealizado = agg._sum.valor ?? 0;
+  const status = computeGoalStatus(valorRealizado, goal.valorMeta, goal.endDate);
+
+  return prisma.goal.update({
+    where: { id: goalId },
+    data: { valorRealizado, status: status as never },
+  });
+}
+
+/**
  * Roda diariamente (ver vercel.json): toda meta cujo período já terminou e
  * ainda não teve alerta disparado é reavaliada — se ficou "NAO_ATINGIDA",
  * gerentes e administradores da loja são notificados. `alertaEnviado`

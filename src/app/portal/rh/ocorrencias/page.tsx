@@ -14,6 +14,8 @@ export default async function OcorrenciasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const [occurrences, employees] = await Promise.all([
     prisma.occurrence.findMany({
@@ -39,7 +41,7 @@ export default async function OcorrenciasPage() {
       <OcorrenciasClient
         initialOccurrences={serialized}
         employees={employees.map((e) => ({ id: e.id, name: e.name, setor: e.setor }))}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );

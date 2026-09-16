@@ -575,7 +575,7 @@ export function ColaboradoresClient({
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <Field label="Nome">
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
               </Field>
             </div>
             <Field label="Cargo">

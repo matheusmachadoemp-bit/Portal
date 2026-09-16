@@ -6,7 +6,6 @@ import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IconPicker } from "@/components/ui/icon-picker";
-import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import type { ReuniaoCustomIndicatorDTO } from "@/lib/reuniao-server";
 
@@ -81,57 +80,6 @@ const INDICATOR_COLOR_PALETTE = [
 
 export function indicatorAccentColor(index: number): string {
   return INDICATOR_COLOR_PALETTE[index % INDICATOR_COLOR_PALETTE.length];
-}
-
-/**
- * Cards prontos, no mesmo formato de `items` aceito por `SortableCardGrid`,
- * para os indicadores personalizados da seção "Fechamento do mês" — usa o
- * mesmo `IndicatorCard` (mesmo tamanho/estilo) que os cards fixos de cada
- * reunião, cada um com a cor de `indicatorAccentColor` acima (ver comentário
- * dela). `indicators` deve ser o próprio estado React (`customIndicators`/
- * `fdm.customIndicators`) que
- * criar, editar e excluir um indicador já atualiza sozinho — então o grid de
- * cards do topo de cada reunião fica em dia automaticamente, sem precisar de
- * nenhuma lógica de sincronização própria. Usado tanto pelas 4 telas que
- * usam este hook (Salão, Cozinha, Delivery, Liderança) quanto pela Reunião
- * Gerente, que mantém sua própria implementação inline de estado mas
- * consome esta função do mesmo jeito — o formato do indicador
- * (`FechamentoIndicator`/`GerenteCustomIndicatorDTO`) é idêntico nos dois
- * casos.
- *
- * Não recebe `comparison` (a linha "vs mês passado" que os cards fixos
- * mostram): o DTO só traz o valor do período atual, sem o do mês anterior.
- */
-export function customIndicatorCards(indicators: FechamentoIndicator[]): { key: string; content: React.ReactNode }[] {
-  return indicators.map((ind, index) => ({
-    key: `custom-${ind.id}`,
-    content: (
-      <IndicatorCard
-        icon={ind.icon}
-        color={indicatorAccentColor(index)}
-        label={ind.nome}
-        status={statusOf(null)}
-        valueSlot={
-          <div>
-            <span className="text-2xl font-semibold text-white">{formatIndicatorValue(ind.unidade, ind.valorReferencia)}</span>
-            {/* Segundo valor (indicador "composto", ex.: Cancelamentos = % + quantidade) — só
-                aparece quando o indicador tem unidadeSecundaria configurada; indicador simples
-                (a maioria) segue mostrando só o valor principal acima, sem regressão. */}
-            {ind.unidadeSecundaria && (
-              <p className="text-xs text-nord-gray mt-1">
-                {ind.nomeSecundario}:{" "}
-                <span className="text-white font-medium">
-                  {formatIndicatorValue(ind.unidadeSecundaria, ind.valorSecundario ?? 0)}
-                </span>
-              </p>
-            )}
-          </div>
-        }
-        metaText="Indicador informativo"
-        premio={0}
-      />
-    ),
-  }));
 }
 
 type IndicatorFormState = {

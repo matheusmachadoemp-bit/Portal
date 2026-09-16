@@ -15,6 +15,8 @@ export default async function ParceriasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageMarketing;
 
   // Carga inicial já filtrada pelo período default do filtro de página
   // ("mes-atual"), pra bater com o que o cliente mostra assim que abre a
@@ -25,7 +27,7 @@ export default async function ParceriasPage() {
 
   return (
     <PageContainer title="Marketing" subtitle="Parcerias — ranking de influencers por retorno">
-      <PartnersClient initialPartners={serialized} canCreate={ctx?.mode === "single"} />
+      <PartnersClient initialPartners={serialized} canCreate={canCreate} />
     </PageContainer>
   );
 }

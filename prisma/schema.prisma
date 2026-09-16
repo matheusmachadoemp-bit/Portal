@@ -86,6 +86,7 @@ model User {
   reuniaoCustomIndicators            ReuniaoCustomIndicator[]
   metasProximoMes                    MetaProximoMes[]
   goals                              Goal[]
+  goalWeeklyUpdates                  GoalWeeklyUpdate[]
   waiterSalesCreated                 WaiterSaleEntry[]                   @relation("WaiterSaleCreatedBy")
   stockMovementsCreated              StockMovement[]                     @relation("StockMovementCreatedBy")
   purchasesCreated                   Purchase[]                          @relation("PurchaseCreatedBy")
@@ -1159,6 +1160,14 @@ model Goal {
   description    String?
   indicador      String?
   valorMeta      Float        @default(0)
+  /// Cache calculado: sempre igual à soma de `GoalWeeklyUpdate.valor` desta
+  /// meta (ver `recomputeGoalRealizado` em src/lib/goals-server.ts) — não é
+  /// mais editado diretamente por nenhuma rota. Mantido como coluna própria
+  /// (em vez de um SUM em toda leitura) porque várias telas/rotas já leem
+  /// `Goal.valorRealizado` direto (painel "Progresso das metas" da Início,
+  /// "Minha rotina de hoje", o job de alerta de meta não atingida) e não
+  /// precisam saber nada sobre lançamentos semanais para continuar
+  /// funcionando sem alteração.
   valorRealizado Float        @default(0)
   unidade        String       @default("R$")
   startDate      DateTime
@@ -1175,6 +1184,7 @@ model Goal {
 
   attachments   GoalAttachment[]
   notifications Notification[]
+  weeklyUpdates GoalWeeklyUpdate[]
 
   @@index([empresaId, endDate])
 }
@@ -1186,6 +1196,40 @@ model GoalAttachment {
   fileName  String
   fileUrl   String
   createdAt DateTime @default(now())
+}
+
+/// Atualização semanal do progresso de uma meta — pedido do usuário: em vez
+/// de editar direto um "valor realizado" único, cada semana do mês da meta
+/// recebe seu próprio lançamento, e o sistema soma todos eles para chegar no
+/// valor do mês (`Goal.valorRealizado`, recalculado a cada
+/// criação/edição/exclusão aqui — ver `recomputeGoalRealizado` em
+/// src/lib/goals-server.ts).
+///
+/// `weekNumber` identifica "qual bloco de até 7 dias dentro do mês da meta"
+/// (1 a 5 — dias 1-7, 8-14, 15-21, 22-28, 29-fim do mês), em vez de uma data
+/// de início de semana civil/ISO: como toda `Goal` já vale por exatamente um
+/// mês calendário (`startDate` = dia 1, `endDate` = último dia — ver
+/// `monthToDateRange` em src/lib/goals.ts), numerar por bloco evita qualquer
+/// ambiguidade de "semana ISO cruzando dois meses" e deixa o número de
+/// semanas do mês 100% determinístico a partir do próprio período da meta
+/// (ver `weeksInGoalPeriod`/`weekDayRange` em src/lib/goals.ts). Cada semana
+/// tem no máximo 1 lançamento (`@@unique([goalId, weekNumber])`): lançar de
+/// novo a mesma semana SUBSTITUI o valor anterior dela (upsert), nunca soma
+/// dentro da própria semana — quem soma é o conjunto das semanas entre si.
+model GoalWeeklyUpdate {
+  id          String   @id @default(cuid())
+  goalId      String
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  weekNumber  Int
+  valor       Float    @default(0)
+  observacao  String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([goalId, weekNumber])
+  @@index([goalId])
 }
 
 // ---------------------------------------------------------------------------
@@ -2648,19 +2692,21 @@ model MetaProximoMes {
   @@index([empresaId, meetingKey, periodo])
 }
 
-/// "Resultado do período" da Reunião Liderança é 100% computado a partir das
-/// outras 4 reuniões do mesmo período (resumo consolidado — ver
-/// `computeLiderancaResumo` em `src/lib/reuniao-server.ts`), por isso este
-/// model não guarda nenhum número próprio: nem "puxado automaticamente" (como
-/// GerenteMeeting, que grava uma cópia dos números de Cozinha/Salão/Delivery
-/// no momento do fechamento) nem digitado manualmente. Decisão desta
-/// migration: uma consulta sempre ao vivo (sem coluna própria) é mais simples
-/// e nunca desatualiza, mesmo que a Cozinha/Salão/Delivery/Gerente daquele
-/// período seja editada depois de a Liderança já ter "fechado" o mês. Fica só
-/// o que é genuinamente próprio da reunião de Liderança: notas e autoria,
-/// igual ao padrão das outras 4 — mais a seção "Fechamento do mês" (ver
-/// ReuniaoCustomIndicator/Value, meetingKey LIDERANCA), pra indicadores de
-/// nível de liderança que não pertencem a nenhuma área específica.
+/// Este model guarda só o que é genuinamente próprio da reunião de
+/// Liderança: notas e autoria, igual ao padrão das outras 4 — mais a seção
+/// "Fechamento do mês" (ver ReuniaoCustomIndicator/Value, meetingKey
+/// LIDERANCA), pra indicadores de nível de liderança que não pertencem a
+/// nenhuma área específica.
+///
+/// Histórico: a migration original (20260914170000_lideranca_meeting) previa
+/// também um card "Resultado do período" — resumo consolidado calculado ao
+/// vivo a partir das outras 4 reuniões do mesmo período (por isso nunca
+/// ganhou coluna própria aqui, nem "puxada automaticamente" como
+/// GerenteMeeting nem digitada manualmente). O card saiu de tela e,
+/// depois, o cálculo em si (que continuava rodando à toa a cada
+/// carregamento da página) também foi removido do backend — não existem mais
+/// `computeLiderancaResumo` nem `LiderancaResumoDTO` em
+/// `src/lib/reuniao-server.ts`.
 model LiderancaMeeting {
   id        String  @id @default(cuid())
   empresaId String

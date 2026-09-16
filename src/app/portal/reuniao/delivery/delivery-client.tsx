@@ -1,22 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, FileDown, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
-import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
+import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import {
   FechamentoDoMesSection,
   FechamentoDoMesEditor,
   useFechamentoDoMes,
-  customIndicatorCards,
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
+import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatNumber } from "@/lib/calc";
-import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
+import { periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
 
 type Meeting = {
   id: string;
@@ -53,6 +52,7 @@ export function DeliveryClient({
   initialCustomIndicators,
   periodo,
   canCreate,
+  canDeleteMetas,
   empresaName,
 }: {
   initialMeetings: Meeting[];
@@ -61,6 +61,9 @@ export function DeliveryClient({
   initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
+  /** Controla só o botão de excluir do card "Metas de [próximo mês]" — ver
+   * canDeleteMetas em gerente/page.tsx (mesmo critério, `canDelete` no módulo "reuniao"). */
+  canDeleteMetas: boolean;
   empresaName: string;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
@@ -77,6 +80,7 @@ export function DeliveryClient({
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const fdm = useFechamentoDoMes("/api/reuniao/delivery", selectedPeriodo, initialCustomIndicators);
+  const mp = useMetasProximoMes("/api/reuniao/delivery", canCreate);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -107,18 +111,14 @@ export function DeliveryClient({
   const tempoEntregaValor = form.tempoEntregaMinutos ? Number(form.tempoEntregaMinutos) : null;
   const chamadosValor = form.chamadosPercent ? Number(form.chamadosPercent) : null;
 
-  const previousMeeting = useMemo(
-    () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
-    [meetings, selectedPeriodo]
-  );
-  const compCancelamento = compareToPrevious(metrics.cancelamentoPercent, previousMeeting?.cancelamentoPercent, "min");
-  const compAvaliacao = compareToPrevious(avaliacaoValor, previousMeeting?.avaliacaoNota, "max");
-  const compTempoEntrega = compareToPrevious(tempoEntregaValor, previousMeeting?.tempoEntregaMinutos, "min");
-  const compChamados = compareToPrevious(chamadosValor, previousMeeting?.chamadosPercent, "min");
-
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
     const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
+
+    // Busca as metas do próximo mês na hora de exportar (não reaproveita o estado `mp.metas`
+    // já carregado na tela) pra garantir que o PDF sai com o que está salvo agora — mesmo
+    // padrão da Reunião Gerente (ver fetchMetasProximoMesForPdf).
+    const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/delivery");
 
     function historico<K extends "cancelamentoPercent" | "avaliacaoNota" | "tempoEntregaMinutos" | "chamadosPercent">(
       key: K,
@@ -185,6 +185,15 @@ export function DeliveryClient({
           historico: historico("chamadosPercent", chamadosValor),
         },
       ],
+      metasProximoMes: {
+        periodoLabel: metasData.periodoLabel,
+        metas: metasData.metas.map((m) => ({
+          metrica: m.metrica,
+          valorAlvo: m.valorAlvo,
+          valorPremio: m.valorPremio,
+          destinatario: m.destinatario,
+        })),
+      },
     });
   }
 
@@ -241,73 +250,6 @@ export function DeliveryClient({
     }
   }
 
-  const cards = [
-    {
-      key: "cancelamento",
-      content: (
-        <IndicatorCard
-          icon="XCircle"
-          color="#ef4444"
-          label="Cancelamento"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.cancelamentoPercent === null ? "-" : `${formatNumber(metrics.cancelamentoPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compCancelamento}
-        />
-      ),
-    },
-    {
-      key: "avaliacao",
-      content: (
-        <IndicatorCard
-          icon="Star"
-          color="#f59e0b"
-          label="Avaliações (iFood)"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{avaliacaoValor ?? "-"}</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compAvaliacao}
-        />
-      ),
-    },
-    {
-      key: "tempo-entrega",
-      content: (
-        <IndicatorCard
-          icon="Truck"
-          color="#1464F4"
-          label="Tempo de Entrega"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{tempoEntregaValor ?? "-"} min</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compTempoEntrega}
-        />
-      ),
-    },
-    {
-      key: "chamados",
-      content: (
-        <IndicatorCard
-          icon="PhoneCall"
-          color="#a855f7"
-          label="Chamados"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{chamadosValor === null ? "-" : `${chamadosValor}%`}</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compChamados}
-        />
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -337,11 +279,15 @@ export function DeliveryClient({
         </div>
       </div>
 
-      <SortableCardGrid
-        storageKey="reuniao-delivery-kpi-order"
-        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
-        items={[...cards, ...customIndicatorCards(fdm.customIndicators)]}
-      />
+      {/* Sem loja específica selecionada (visão consolidada "Grupo Nord"), a reunião não
+          tem o que mostrar aqui — mesmo padrão de aviso já usado em gerente-client.tsx e
+          lideranca-client.tsx (reaproveitado aqui em vez de inventar um texto novo). */}
+      {!canCreate && (
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e
+          editar o fechamento do mês desta reunião.
+        </p>
+      )}
 
       {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
 
@@ -451,6 +397,8 @@ export function DeliveryClient({
           </button>
         </Section>
       )}
+
+      {canCreate && <MetasProximoMesSection mp={mp} canDelete={canDeleteMetas} />}
 
       {meetings.length > 0 && (
         <Section title="Histórico de reuniões">
