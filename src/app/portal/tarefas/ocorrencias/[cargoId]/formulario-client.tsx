@@ -270,7 +270,7 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
           <button type="button" onClick={load} className="btn-outline">
             <RefreshCw size={13} /> Tentar de novo
           </button>
-          <Link href="/portal/fechamento-dia" className="text-xs text-nord-gray hover:text-white">
+          <Link href="/portal/tarefas/ocorrencias" className="text-xs text-nord-gray hover:text-white">
             Voltar ao status do dia
           </Link>
         </div>
@@ -305,7 +305,7 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
             {enviado.atrasado ? "Enviado com atraso, mas já está registrado." : "Enviado dentro do prazo."}
           </p>
           <Link
-            href="/portal/fechamento-dia"
+            href="/portal/tarefas/ocorrencias"
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-medium bg-nord-blue hover:bg-nord-blue-light text-white transition mt-1"
           >
             Voltar ao status do dia
