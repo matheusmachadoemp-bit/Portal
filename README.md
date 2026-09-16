@@ -49,6 +49,15 @@ usuário e menu lateral reorganizável por arrastar e soltar.
   diário (`vercel.json` → `/api/integracoes/saipos/sync`, autenticado com o
   header `Authorization: Bearer $CRON_SECRET`). Ver `src/lib/saipos-client.ts`,
   `src/lib/saipos-sync.ts` e `src/lib/saipos-mapper.ts`.
+  - Cada venda gera/atualiza um `Sale` (alimenta Faturamento, Lançamentos e
+    Acompanhamento de Vendas) e o total do dia é agregado em `SalesEntry`
+    (fonte usada por Visão Geral/Início). Upsert idempotente por
+    `saiposSaleId` — reexecutar o sync sobre o mesmo período não duplica.
+  - **Limitações confirmadas com o suporte da Saipos**: a API de Dados pode
+    ter delay de até D+1 na consolidação (não é tempo real); o endpoint
+    `search_sales` não retorna itens por venda nem o garçom responsável, então
+    "Itens vendidos" e "Desempenho por garçom" não são alimentados pela
+    Saipos (só pela importação manual de arquivo ou lançamento no Portal).
 - **Meta Ads** (implementada): o Portal consulta a Graph API da Meta
   (`GET https://graph.facebook.com/{versão}/act_{id}/insights`, nível campanha,
   breakdown por `publisher_platform`/`platform_position`) para importar
