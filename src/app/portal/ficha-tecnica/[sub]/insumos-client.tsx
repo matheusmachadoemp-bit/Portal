@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, AlertTriangle, Tag, Settings2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 
@@ -65,6 +65,7 @@ export function InsumosClient({
   const [priceAlert, setPriceAlert] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   async function refresh() {
     const res = await fetch("/api/ficha-tecnica/insumos");
@@ -75,6 +76,7 @@ export function InsumosClient({
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
+    setFormError(null);
     setShowForm(true);
   }
 
@@ -92,12 +94,18 @@ export function InsumosClient({
       validade: i.validade ? i.validade.slice(0, 10) : "",
       categoryId: i.categoryId ?? "",
     });
+    setFormError(null);
     setShowForm(true);
   }
 
   async function submit() {
     if (submitting) return;
+    if (!form.name.trim()) {
+      setFormError("Informe o nome do insumo.");
+      return;
+    }
     setSubmitting(true);
+    setFormError(null);
     try {
       if (editing) {
         const res = await fetch(`/api/ficha-tecnica/insumos/${editing.id}`, {
@@ -105,6 +113,11 @@ export function InsumosClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
         });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setFormError(data.error ?? "Não foi possível salvar o insumo.");
+          return;
+        }
         const data = await res.json();
         if (data.affectedProducts?.length) {
           setPriceAlert(
@@ -114,11 +127,16 @@ export function InsumosClient({
           );
         }
       } else {
-        await fetch("/api/ficha-tecnica/insumos", {
+        const res = await fetch("/api/ficha-tecnica/insumos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
         });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setFormError(data.error ?? "Não foi possível salvar o insumo.");
+          return;
+        }
       }
       setShowForm(false);
       refresh();
@@ -302,10 +320,11 @@ export function InsumosClient({
       )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar insumo" : "Novo insumo"}>
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <Field label="Nome do insumo">
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
             </Field>
           </div>
           <div className="col-span-2">
