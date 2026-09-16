@@ -17,6 +17,8 @@ export default async function ColaboradoresPage() {
   const monthStart = startOfMonth(now);
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const [employees, occurrencesThisMonth] = await Promise.all([
     prisma.employee.findMany({
@@ -56,7 +58,7 @@ export default async function ColaboradoresPage() {
         desligamentos={desligamentos}
         quadroMedio={quadroMedio}
         totalOcorrencias={occurrencesThisMonth.length}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
         showLoja={ctx?.mode === "grupo"}
       />
     </PageContainer>

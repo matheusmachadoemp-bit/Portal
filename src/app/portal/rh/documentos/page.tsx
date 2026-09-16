@@ -14,6 +14,8 @@ export default async function DocumentosPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const [documents, employees] = await Promise.all([
     prisma.employeeDocument.findMany({
@@ -36,7 +38,7 @@ export default async function DocumentosPage() {
 
   return (
     <PageContainer title="RH" subtitle="Documentos">
-      <DocumentosClient initialDocuments={serialized} employees={employees} canCreate={ctx?.mode === "single"} />
+      <DocumentosClient initialDocuments={serialized} employees={employees} canCreate={canCreate} />
     </PageContainer>
   );
 }

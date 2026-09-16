@@ -31,13 +31,19 @@ export default async function MetasSubPage({ params }: { params: Promise<{ sub: 
   const goals = await prisma.goal.findMany({
     where: { category: info.category as never, empresaId: { in: empresaIds } },
     orderBy: { endDate: "asc" },
-    include: { attachments: true },
+    include: { attachments: true, weeklyUpdates: { orderBy: { weekNumber: "asc" } } },
   });
 
   const serialized = goals.map((g) => ({
     ...g,
     startDate: g.startDate.toISOString(),
     endDate: g.endDate.toISOString(),
+    weeklyUpdates: g.weeklyUpdates.map((w) => ({
+      id: w.id,
+      weekNumber: w.weekNumber,
+      valor: w.valor,
+      observacao: w.observacao,
+    })),
   }));
 
   return (

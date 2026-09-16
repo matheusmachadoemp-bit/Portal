@@ -15,6 +15,8 @@ export default async function VendasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageVendas = await hasModulePermission(session.user.id, "vendas", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageVendas;
 
   const entries = await prisma.salesEntry.findMany({
     where: { empresaId: { in: empresaIds }, date: { gte: subDays(new Date(), 90) } },
@@ -34,7 +36,7 @@ export default async function VendasPage() {
       <div className="space-y-6">
         <VendasClient
           initialEntries={serialized}
-          canCreate={ctx?.mode === "single"}
+          canCreate={canCreate}
           empresaName={ctx?.mode === "single" ? ctx.empresa.name : undefined}
         />
       </div>

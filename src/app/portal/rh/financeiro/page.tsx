@@ -14,6 +14,8 @@ export default async function FinanceiroPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const [entries, employees] = await Promise.all([
     prisma.employeeFinanceEntry.findMany({
@@ -32,7 +34,7 @@ export default async function FinanceiroPage() {
 
   return (
     <PageContainer title="RH" subtitle="Financeiro">
-      <FinanceiroClient initialEntries={serialized} employees={employees} canCreate={ctx?.mode === "single"} />
+      <FinanceiroClient initialEntries={serialized} employees={employees} canCreate={canCreate} />
     </PageContainer>
   );
 }

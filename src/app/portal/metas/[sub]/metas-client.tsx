@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle, Award, CalendarCheck2 } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { RadialProgress } from "@/components/ui/radial-progress";
@@ -11,15 +10,23 @@ import { formatNumber, growth, pct } from "@/lib/calc";
 import {
   currentMonth,
   dateToMonth,
-  GOAL_CATEGORIES,
   GOAL_CATEGORY_LABEL,
-  GOAL_CATEGORY_ROUTE,
   GOAL_STATUS_LABEL,
   GOAL_STATUS_TONE,
   monthToDateRange,
+  weekDayRange,
+  weeksInGoalPeriod,
   type GoalCategoryKey,
 } from "@/lib/goals";
 import { previousPeriodo } from "@/lib/reuniao";
+import { differenceInCalendarDays } from "date-fns";
+
+type WeeklyUpdateDTO = {
+  id: string;
+  weekNumber: number;
+  valor: number;
+  observacao: string | null;
+};
 
 type GoalDTO = {
   id: string;
@@ -38,6 +45,7 @@ type GoalDTO = {
   observacoes: string | null;
   planoDeAcao: string | null;
   attachments: { id: string; fileName: string; fileUrl: string }[];
+  weeklyUpdates: WeeklyUpdateDTO[];
 };
 
 const emptyForm = {
@@ -46,7 +54,6 @@ const emptyForm = {
   description: "",
   indicador: "",
   valorMeta: "",
-  valorRealizado: "",
   unidade: "R$",
   mes: currentMonth(),
   bonificacao: "",
@@ -78,8 +85,6 @@ export function MetasClient({
 }) {
   const [goals, setGoals] = useState(initialGoals);
   const [mesFiltro, setMesFiltro] = useState(currentMonth());
-  const [filterResponsavel, setFilterResponsavel] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GoalDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -89,23 +94,12 @@ export function MetasClient({
   const [attachUrl, setAttachUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const responsaveis = useMemo(() => [...new Set(goals.map((g) => g.responsavel))].filter(Boolean).sort(), [goals]);
+  const [weeklyGoal, setWeeklyGoal] = useState<GoalDTO | null>(null);
+  const [weekValues, setWeekValues] = useState<Record<number, string>>({});
+  const [weekObs, setWeekObs] = useState<Record<number, string>>({});
+  const [savingWeek, setSavingWeek] = useState<number | null>(null);
 
-  const withRefinements = useMemo(
-    () =>
-      (list: GoalDTO[]) =>
-        list.filter((g) => {
-          if (filterResponsavel && g.responsavel !== filterResponsavel) return false;
-          if (filterStatus && g.status !== filterStatus) return false;
-          return true;
-        }),
-    [filterResponsavel, filterStatus]
-  );
-
-  const filtered = useMemo(
-    () => withRefinements(mesFiltro ? goalsOfMonth(goals, mesFiltro) : goals),
-    [goals, mesFiltro, withRefinements]
-  );
+  const filtered = useMemo(() => (mesFiltro ? goalsOfMonth(goals, mesFiltro) : goals), [goals, mesFiltro]);
 
   const ranked = useMemo(
     () => [...filtered].sort((a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)),
@@ -114,15 +108,20 @@ export function MetasClient({
 
   const baseMonth = mesFiltro || currentMonth();
   const prevMonth = previousPeriodo(baseMonth);
-  const curr = kpisOf(withRefinements(goalsOfMonth(goals, baseMonth)));
-  const prev = kpisOf(withRefinements(goalsOfMonth(goals, prevMonth)));
+  const curr = kpisOf(goalsOfMonth(goals, baseMonth));
+  const prev = kpisOf(goalsOfMonth(goals, prevMonth));
 
   const alertas = filtered.filter((g) => g.status === "EM_RISCO" || g.status === "NAO_ATINGIDA");
 
   async function refresh() {
     const res = await fetch(`/api/metas?category=${category}`);
     const data = await res.json();
+    // Se a sessão expirar ou a API recusar o pedido, `data.goals` não vem —
+    // não sobrescreve a lista já carregada com `undefined` (quebraria os
+    // filtros/cards na hora), só devolve a lista anterior.
+    if (!Array.isArray(data.goals)) return goals;
     setGoals(data.goals);
+    return data.goals as GoalDTO[];
   }
 
   function openNew() {
@@ -139,7 +138,6 @@ export function MetasClient({
       description: g.description ?? "",
       indicador: g.indicador ?? "",
       valorMeta: String(g.valorMeta),
-      valorRealizado: String(g.valorRealizado),
       unidade: g.unidade,
       mes: dateToMonth(g.startDate),
       bonificacao: g.bonificacao ?? "",
@@ -195,6 +193,55 @@ export function MetasClient({
     refresh();
   }
 
+  function openWeekly(g: GoalDTO) {
+    const values: Record<number, string> = {};
+    const obs: Record<number, string> = {};
+    g.weeklyUpdates.forEach((w) => {
+      values[w.weekNumber] = String(w.valor);
+      obs[w.weekNumber] = w.observacao ?? "";
+    });
+    setWeekValues(values);
+    setWeekObs(obs);
+    setWeeklyGoal(g);
+  }
+
+  async function saveWeek(weekNumber: number) {
+    if (!weeklyGoal) return;
+    const valor = Number(weekValues[weekNumber]);
+    if (Number.isNaN(valor)) return;
+    setSavingWeek(weekNumber);
+    try {
+      await fetch(`/api/metas/${weeklyGoal.id}/semanas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weekNumber, valor, observacao: weekObs[weekNumber]?.trim() || undefined }),
+      });
+      const refreshed = await refresh();
+      const updated = refreshed.find((g) => g.id === weeklyGoal.id);
+      if (updated) setWeeklyGoal(updated);
+    } finally {
+      setSavingWeek(null);
+    }
+  }
+
+  async function deleteWeek(weekId: string, weekNumber: number) {
+    if (!weeklyGoal) return;
+    setSavingWeek(weekNumber);
+    try {
+      await fetch(`/api/metas/${weeklyGoal.id}/semanas/${weekId}`, { method: "DELETE" });
+      const refreshed = await refresh();
+      const updated = refreshed.find((g) => g.id === weeklyGoal.id);
+      if (updated) setWeeklyGoal(updated);
+      setWeekValues((prev) => ({ ...prev, [weekNumber]: "" }));
+      setWeekObs((prev) => ({ ...prev, [weekNumber]: "" }));
+    } finally {
+      setSavingWeek(null);
+    }
+  }
+
+  const weeklyTotalDays = weeklyGoal ? differenceInCalendarDays(new Date(weeklyGoal.endDate), new Date(weeklyGoal.startDate)) + 1 : 0;
+  const weeklyTotalSemanas = weeklyGoal ? weeksInGoalPeriod(new Date(weeklyGoal.startDate), new Date(weeklyGoal.endDate)) : 0;
+
   return (
     <div className="space-y-6">
       {!canCreate && (
@@ -204,20 +251,6 @@ export function MetasClient({
         </p>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap">
-        {GOAL_CATEGORIES.map((c) => (
-          <Link
-            key={c}
-            href={`/portal/metas/${GOAL_CATEGORY_ROUTE[c]}`}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              c === category ? "bg-nord-blue text-white" : "text-nord-gray border border-nord-border hover:text-white hover:border-nord-blue-light"
-            }`}
-          >
-            {GOAL_CATEGORY_LABEL[c]}
-          </Link>
-        ))}
-      </div>
-
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <input type="month" value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} className="input w-auto" />
@@ -226,22 +259,6 @@ export function MetasClient({
               Ver todos os meses
             </button>
           )}
-          <select value={filterResponsavel} onChange={(e) => setFilterResponsavel(e.target.value)} className="input w-auto">
-            <option value="">Todos os responsáveis</option>
-            {responsaveis.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input w-auto">
-            <option value="">Todos os status</option>
-            {Object.entries(GOAL_STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
         </div>
         {canCreate && (
           <button
@@ -357,70 +374,72 @@ export function MetasClient({
         </Section>
       </div>
 
-      <Section title="Metas individuais">
-        <div className="overflow-x-auto nord-scrollbar">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-white border-b border-nord-border">
-                <th className="py-2 px-3">Meta</th>
-                <th className="py-2 px-3">Responsável</th>
-                <th className="py-2 px-3">Meta / Realizado</th>
-                <th className="py-2 px-3">Progresso</th>
-                <th className="py-2 px-3">Status</th>
-                <th className="py-2 px-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((g) => {
-                const percent = pct(g.valorRealizado, g.valorMeta);
-                return (
-                  <tr key={g.id} className={`border-b border-nord-border/50 ${g.status === "EM_RISCO" ? "bg-nord-warning/5" : ""}`}>
-                    <td className="py-2 px-3 text-white">{g.name}</td>
-                    <td className="py-2 px-3 text-nord-gray">{g.responsavel}</td>
-                    <td className="py-2 px-3 text-nord-gray">
-                      {formatNumber(g.valorRealizado)} / {formatNumber(g.valorMeta)} {g.unidade}
-                    </td>
-                    <td className="py-2 px-3 w-40">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 rounded-full bg-nord-border overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${Math.min(100, percent)}%`, backgroundColor: percent >= 100 ? "#22c55e" : "#1464F4" }}
-                          />
-                        </div>
-                        <span className="text-xs text-nord-gray shrink-0">{percent.toFixed(0)}%</span>
-                      </div>
-                    </td>
-                    <td className="py-2 px-3">
-                      <Badge tone={GOAL_STATUS_TONE[g.status]}>{GOAL_STATUS_LABEL[g.status]}</Badge>
-                    </td>
-                    <td className="py-2 px-3">
-                      {canCreate && (
-                        <div className="flex items-center gap-2 justify-end">
-                          <button onClick={() => openEdit(g)} className="text-nord-gray hover:text-white" title="Editar">
-                            <Pencil size={13} />
-                          </button>
-                          <button onClick={() => setAttachGoal(g)} className="text-nord-gray hover:text-white" title="Anexar">
-                            <Paperclip size={13} />
-                          </button>
-                          <button onClick={() => setConfirmDeleteId(g.id)} className="text-nord-gray hover:text-nord-danger" title="Excluir">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {ranked.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-center text-sm text-nord-gray py-8">
-                    {mesFiltro ? "Nenhuma meta cadastrada nesse mês." : "Nenhuma meta cadastrada nesta categoria ainda."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      <Section title={`Metas — ${GOAL_CATEGORY_LABEL[category as GoalCategoryKey] ?? category}`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {ranked.map((g) => {
+            const percent = pct(g.valorRealizado, g.valorMeta);
+            return (
+              <div
+                key={g.id}
+                className={`nord-card p-4 flex flex-col gap-3 ${
+                  g.status === "EM_RISCO" ? "border-nord-warning/50 ring-1 ring-nord-warning/20" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-white font-medium text-sm min-w-0 truncate">{g.name}</p>
+                  <Badge tone={GOAL_STATUS_TONE[g.status]}>{GOAL_STATUS_LABEL[g.status]}</Badge>
+                </div>
+                <p className="text-xs text-nord-gray truncate">{g.responsavel}</p>
+
+                <p className="text-xs text-white">
+                  Realizado: <span className="font-medium">{formatNumber(g.valorRealizado)} {g.unidade}</span>
+                  <span className="text-nord-gray"> — Meta: </span>
+                  <span className="font-medium">{formatNumber(g.valorMeta)} {g.unidade}</span>
+                </p>
+
+                <div>
+                  <div className="h-2 rounded-full bg-nord-border overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.min(100, percent)}%`, backgroundColor: percent >= 100 ? "#22c55e" : "#1464F4" }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-nord-gray mt-1">{percent.toFixed(0)}% concluído</p>
+                </div>
+
+                {g.bonificacao && (
+                  <p className="flex items-center gap-1.5 text-xs text-nord-success">
+                    <Award size={13} className="shrink-0" /> Prêmio: {g.bonificacao}
+                  </p>
+                )}
+
+                {canCreate && (
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-nord-border/60 mt-1">
+                    <button
+                      onClick={() => openWeekly(g)}
+                      className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-nord-blue/15 text-nord-blue-light hover:bg-nord-blue/25 rounded-lg py-1.5 font-medium"
+                    >
+                      <CalendarCheck2 size={13} /> Atualizar semana
+                    </button>
+                    <button onClick={() => openEdit(g)} className="text-nord-gray hover:text-white p-1.5" title="Editar meta">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => setAttachGoal(g)} className="text-nord-gray hover:text-white p-1.5" title="Anexar">
+                      <Paperclip size={13} />
+                    </button>
+                    <button onClick={() => setConfirmDeleteId(g.id)} className="text-nord-gray hover:text-nord-danger p-1.5" title="Excluir">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {ranked.length === 0 && (
+            <p className="text-sm text-nord-gray col-span-full text-center py-8">
+              {mesFiltro ? "Nenhuma meta cadastrada nesse mês." : "Nenhuma meta cadastrada nesta categoria ainda."}
+            </p>
+          )}
         </div>
       </Section>
 
@@ -439,9 +458,6 @@ export function MetasClient({
           </Field>
           <Field label="Valor da meta">
             <input type="number" value={form.valorMeta} onChange={(e) => setForm({ ...form, valorMeta: e.target.value })} className="input" />
-          </Field>
-          <Field label="Valor realizado">
-            <input type="number" value={form.valorRealizado} onChange={(e) => setForm({ ...form, valorRealizado: e.target.value })} className="input" />
           </Field>
           <Field label="Unidade de medida">
             <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" />
@@ -493,6 +509,76 @@ export function MetasClient({
             Adicionar anexo
           </button>
         </div>
+      </Modal>
+
+      <Modal
+        open={!!weeklyGoal}
+        onClose={() => setWeeklyGoal(null)}
+        title={weeklyGoal ? `Atualizações semanais — ${weeklyGoal.name}` : "Atualizações semanais"}
+        widthClass="max-w-lg"
+      >
+        {weeklyGoal && (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-nord-border bg-nord-panel px-3 py-2.5 flex items-center justify-between">
+              <span className="text-xs text-nord-gray">Total somado até agora</span>
+              <span className="text-sm text-white font-semibold">
+                {formatNumber(weeklyGoal.valorRealizado)} / {formatNumber(weeklyGoal.valorMeta)} {weeklyGoal.unidade}
+              </span>
+            </div>
+            <p className="text-[11px] text-nord-gray">
+              Lance o valor de cada semana do mês — o sistema soma tudo automaticamente até o fim do período.
+            </p>
+            <div className="space-y-2">
+              {Array.from({ length: weeklyTotalSemanas }, (_, i) => i + 1).map((weekNumber) => {
+                const existing = weeklyGoal.weeklyUpdates.find((w) => w.weekNumber === weekNumber) ?? null;
+                const { startDay, endDay } = weekDayRange(weekNumber, weeklyTotalDays);
+                const saving = savingWeek === weekNumber;
+                return (
+                  <div key={weekNumber} className="rounded-lg border border-nord-border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white font-medium">
+                        Semana {weekNumber} <span className="text-nord-gray font-normal">(dias {startDay}–{endDay})</span>
+                      </span>
+                      {existing && <span className="text-[10px] text-nord-success">Lançado</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={weekValues[weekNumber] ?? ""}
+                        onChange={(e) => setWeekValues({ ...weekValues, [weekNumber]: e.target.value })}
+                        placeholder={`Valor da semana (${weeklyGoal.unidade})`}
+                        className="input flex-1"
+                      />
+                      <button
+                        onClick={() => saveWeek(weekNumber)}
+                        disabled={saving || weekValues[weekNumber] === undefined || weekValues[weekNumber] === ""}
+                        className="px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium shrink-0"
+                      >
+                        {saving ? "Salvando..." : existing ? "Corrigir" : "Lançar"}
+                      </button>
+                      {existing && (
+                        <button
+                          onClick={() => deleteWeek(existing.id, weekNumber)}
+                          disabled={saving}
+                          className="text-nord-gray hover:text-nord-danger p-1.5 shrink-0 disabled:opacity-50"
+                          title="Remover lançamento"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      value={weekObs[weekNumber] ?? ""}
+                      onChange={(e) => setWeekObs({ ...weekObs, [weekNumber]: e.target.value })}
+                      placeholder="Observação (opcional)"
+                      className="input text-xs"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog

@@ -16,6 +16,8 @@ export default async function ContasAReceberPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageFinanceiro = await hasModulePermission(session.user.id, "financeiro", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageFinanceiro;
 
   const [receivables, categorias, contas] = await Promise.all([
     prisma.receivable.findMany({
@@ -41,7 +43,7 @@ export default async function ContasAReceberPage() {
           initialReceivables={serialized}
           categorias={categorias}
           contas={contas}
-          canCreate={ctx?.mode === "single"}
+          canCreate={canCreate}
         />
       </div>
     </PageContainer>
