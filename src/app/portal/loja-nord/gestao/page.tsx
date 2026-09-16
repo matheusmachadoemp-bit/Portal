@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { PageContainer } from "@/components/page-container";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { startOfMonth, endOfMonth } from "date-fns";
@@ -27,6 +28,14 @@ export default async function GestaoLojaNordPage() {
   const fimMes = endOfMonth(now);
   const canManageCatalog = session.user.role === "ADMINISTRADOR" || session.user.role === "GESTOR";
 
+  // Só para escopar `colaboradores` (seletor de "lançar pontos" abaixo) à(s) loja(s) que este
+  // usuário tem acesso — GESTOR_ROLES inclui GERENTE/SUPERVISOR, que normalmente só administram
+  // lojas específicas (o catálogo de brindes em si, `empresas` logo abaixo, continua listando
+  // todas as lojas ativas: só ADMINISTRADOR/GESTOR enxergam `canManageCatalog`, e esses dois
+  // cargos já têm acesso a toda a rede mesmo).
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
   const [
     resgatesPendentes,
     resgatesEntreguesMes,
@@ -51,7 +60,7 @@ export default async function GestaoLojaNordPage() {
     prisma.lojaNordReward.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.lojaNordPointTransaction.findMany({ select: { userId: true }, distinct: ["userId"] }),
     prisma.empresa.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { order: "asc" } }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSelectableTeamMembers(empresaIds),
     prisma.lojaNordRedemption.findMany({
       where: { status: { in: ["AGUARDANDO_APROVACAO", "APROVADO", "DISPONIVEL_RETIRADA"] } },
       orderBy: { createdAt: "asc" },

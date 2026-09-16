@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { requireActiveSingleEmpresa } from "@/lib/empresa";
+import { findUsersWithoutEmpresaAccess, requireActiveSingleEmpresa } from "@/lib/empresa";
 import type { ChecklistItemType } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -27,6 +27,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const { id } = await params;
   const body = await req.json();
+
+  // Responsável/substituto precisam ter acesso a esta loja — mesma validação de
+  // POST /api/checklist/templates, aplicada também na edição.
+  const idsToCheck = [body.responsavelId, body.substitutoId].filter((v): v is string => !!v);
+  if (idsToCheck.length > 0) {
+    const invalidIds = await findUsersWithoutEmpresaAccess(idsToCheck, empresa.id);
+    if (invalidIds.length > 0) {
+      return NextResponse.json(
+        { error: "Responsável/substituto selecionado não tem acesso a esta loja." },
+        { status: 400 }
+      );
+    }
+  }
 
   const weekdayData = Object.fromEntries(WEEKDAYS.map((d) => [d, Boolean(body[d])]));
   const incomingItens: Record<string, unknown>[] = body.itens || [];

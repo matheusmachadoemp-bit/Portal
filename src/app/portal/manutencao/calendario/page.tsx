@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { CalendarioClient } from "./calendario-client";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { generateDuePreventivaOcorrencias } from "@/lib/manutencao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -33,7 +33,7 @@ export default async function CalendarioPreventivoPage() {
       },
     }),
     prisma.equipamento.findMany({ where: { empresaId: { in: empresaIds } }, select: { id: true, nome: true, codigo: true }, orderBy: { nome: "asc" } }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSelectableTeamMembers(empresaIds),
     prisma.prestador.findMany({ where: { active: true }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
   ]);
 

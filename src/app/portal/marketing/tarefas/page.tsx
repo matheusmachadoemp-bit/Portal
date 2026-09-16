@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { TasksClient } from "./tasks-client";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -27,7 +27,7 @@ export default async function TarefasPage() {
         comments: { include: { author: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
       },
     }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSelectableTeamMembers(empresaIds),
     prisma.auditLog.findMany({
       where: { empresaId: { in: empresaIds }, entityType: "MarketingTask", action: { in: ["CREATE", "STATUS_CHANGE"] } },
       orderBy: { createdAt: "desc" },

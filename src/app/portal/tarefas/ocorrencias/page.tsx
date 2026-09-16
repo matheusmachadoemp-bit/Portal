@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasModulePermission } from "@/lib/authz";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { PageContainer } from "@/components/page-container";
 import { StatusDoDiaClient } from "./status-do-dia-client";
 import { OcorrenciasClient } from "./ocorrencias-client";
@@ -20,10 +20,11 @@ import { OcorrenciasClient } from "./ocorrencias-client";
  * de cada bloco vêm 100% daquelas rotas, consumidas pelos respectivos client components abaixo
  * — nenhuma regra de autorização é reimplementada aqui.
  *
- * As duas listas buscadas diretamente aqui (categorias e usuários ativos) são só para alimentar
- * seletores do bloco de Ocorrências (categoria pra editar, responsável pra transformar) — mesmo
- * padrão já usado em Manutenção/Tarefas/Checklist (`prisma.user.findMany` direto no page.tsx
- * pra popular um `<select>`, sem rota própria pra isso).
+ * As duas listas buscadas diretamente aqui (categorias e usuários ativos com acesso à(s) loja(s)
+ * do contexto ativo, via `getSelectableTeamMembers`) são só para alimentar seletores do bloco de
+ * Ocorrências (categoria pra editar, responsável pra transformar) — mesmo padrão já usado em
+ * Manutenção/Tarefas/Checklist (busca direta no page.tsx pra popular um `<select>`, sem rota
+ * própria pra isso).
  */
 export default async function OcorrenciasPage() {
   const session = await auth();
@@ -41,7 +42,7 @@ export default async function OcorrenciasPage() {
       select: { id: true, nome: true, icon: true, empresaId: true },
       orderBy: [{ empresaId: "asc" }, { ordem: "asc" }],
     }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSelectableTeamMembers(empresaIds),
   ]);
 
   // Mesma projeção "campos de vitrine apenas" de Tarefas/Chamados (tarefas-client.tsx,

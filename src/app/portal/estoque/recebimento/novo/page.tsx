@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { requireActiveSingleEmpresa } from "@/lib/empresa";
+import { getSelectableTeamMembers, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { NovoPedidoClient } from "./novo-pedido-client";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -28,11 +28,7 @@ export default async function NovoPedidoRecebimentoPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true, unidade: true, unidadeCompra: true, precoAtual: true },
     }),
-    prisma.user.findMany({
-      where: { active: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
+    getSelectableTeamMembers([empresa.id]),
   ]);
 
   return (

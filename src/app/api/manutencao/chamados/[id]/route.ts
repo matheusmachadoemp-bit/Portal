@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { assertEmpresaAccess } from "@/lib/empresa";
+import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { CHAMADO_STATUS_LABEL } from "@/lib/manutencao";
 import {
   MANAGER_ROLES,
@@ -67,12 +67,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Só a gestão pode aprovar ou resolver um chamado." }, { status: 403 });
   }
   // Só a gestão decide quem é o responsável pelo chamado.
-  if (
-    body.responsavelId !== undefined &&
-    (body.responsavelId || null) !== existing.responsavelId &&
-    !isManager
-  ) {
-    return NextResponse.json({ error: "Só a gestão pode definir o responsável pelo chamado." }, { status: 403 });
+  if (body.responsavelId !== undefined && (body.responsavelId || null) !== existing.responsavelId) {
+    if (!isManager) {
+      return NextResponse.json({ error: "Só a gestão pode definir o responsável pelo chamado." }, { status: 403 });
+    }
+    // O novo responsável precisa ter acesso a esta loja — sem essa checagem, qualquer usuário
+    // ativo da empresa toda podia ser designado responsável por um chamado de uma loja à qual
+    // não tem acesso nenhum.
+    if (body.responsavelId) {
+      const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], existing.empresaId);
+      if (invalidIds.length > 0) {
+        return NextResponse.json({ error: "Esse colaborador não tem acesso a esta loja." }, { status: 400 });
+      }
+    }
   }
 
   if (body.status === "RESOLVIDO" && !(body.descricaoSolucao || existing.descricaoSolucao)) {

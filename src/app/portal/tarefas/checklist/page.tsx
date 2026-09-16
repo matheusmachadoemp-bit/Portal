@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ChecklistClient } from "./checklist-client";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { generateChecklistOccurrences, refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { CHECKLIST_TERMINAL_STATUSES, spDateKey, spStartOfDay } from "@/lib/checklist";
 import { auth } from "@/auth";
@@ -92,7 +92,7 @@ export default async function ChecklistPage() {
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSelectableTeamMembers(empresaIds),
   ]);
 
   const serializedOccurrences = occurrences.map((o) => ({

@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { assertEmpresaAccess } from "@/lib/empresa";
+import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
+// "responsavelId" fica fora desta lista de propósito: precisa de uma validação de acesso à
+// loja antes de virar `data.responsavelId` (ver abaixo), diferente dos demais campos que são
+// só um valor de texto/enum sem checagem extra.
 const FIELDS = [
   "title",
   "description",
@@ -14,7 +17,6 @@ const FIELDS = [
   "status",
   "priority",
   "time",
-  "responsavelId",
   "checklist",
   "tags",
   "recurrenceRule",
@@ -40,6 +42,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: Record<string, unknown> = {};
   for (const f of FIELDS) {
     if (body[f] !== undefined) data[f] = body[f] || null;
+  }
+  if (body.responsavelId !== undefined) {
+    // O responsável precisa ter acesso a esta loja — sem essa checagem, qualquer usuário
+    // ativo da empresa toda podia ser designado responsável por uma tarefa de marketing de
+    // uma loja à qual não tem acesso nenhum.
+    if (body.responsavelId) {
+      const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], existing.empresaId);
+      if (invalidIds.length > 0) {
+        return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+      }
+    }
+    data.responsavelId = body.responsavelId || null;
   }
   if (body.date !== undefined) data.date = body.date ? new Date(body.date) : null;
   if (body.order !== undefined) data.order = Number(body.order) || 0;

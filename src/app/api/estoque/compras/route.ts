@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import {
+  empresaIdsForContext,
+  findUsersWithoutEmpresaAccess,
+  getActiveEmpresaContext,
+  requireActiveSingleEmpresa,
+} from "@/lib/empresa";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 import { hasModulePermission } from "@/lib/authz";
@@ -59,6 +64,16 @@ export async function POST(req: Request) {
 
   if (body.enviarParaRecebimento && !body.responsavelRecebimentoId) {
     return NextResponse.json({ error: "Selecione o responsável pelo recebimento antes de enviar." }, { status: 400 });
+  }
+
+  // O responsável pelo recebimento precisa ter acesso a esta loja — sem essa checagem,
+  // qualquer usuário ativo da empresa toda podia ser designado responsável por um recebimento
+  // de uma loja à qual não tem acesso nenhum.
+  if (body.responsavelRecebimentoId) {
+    const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelRecebimentoId], empresa.id);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
   }
 
   const purchase = await prisma.purchase.create({

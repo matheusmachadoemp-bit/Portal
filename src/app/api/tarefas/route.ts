@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { TaskRecurrenceFreq } from "@prisma/client";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, findUsersWithoutEmpresaAccess, getActiveEmpresaContext } from "@/lib/empresa";
 import { generateDueTaskOccurrences, logTaskHistory, notifyUser } from "@/lib/tarefas-server";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -146,10 +146,30 @@ export async function POST(req: Request) {
   }
 
   const assigneeIds: string[] = Array.isArray(body.assigneeIds) ? body.assigneeIds : [];
+  const validatorId: string | null = body.requiresValidation && body.validatorId ? body.validatorId : null;
   const checklistItems: string[] = Array.isArray(body.checklist) ? body.checklist.filter((s: unknown) => typeof s === "string" && s.trim()) : [];
   const attachments: { name: string; fileUrl: string; mimeType?: string; sizeBytes?: number }[] = Array.isArray(body.attachments)
     ? body.attachments
     : [];
+
+  // Cada responsável/validador atribuído precisa ter acesso à(s) loja(s) em que a tarefa está
+  // sendo criada — sem essa checagem, qualquer usuário ativo da empresa toda podia ser atribuído
+  // a uma tarefa de uma loja à qual não tem acesso nenhum (o designado, ao tentar agir depois,
+  // era barrado por assertEmpresaAccess na rota de destino — mas nada impedia essa atribuição
+  // "órfã" aqui). Validado ANTES do loop abaixo, pra nunca criar tarefa nenhuma se algum id não
+  // for válido pra alguma das lojas selecionadas.
+  const assignedIdsToCheck = Array.from(new Set([...assigneeIds, ...(validatorId ? [validatorId] : [])]));
+  if (assignedIdsToCheck.length > 0) {
+    for (const empresaId of empresaIds) {
+      const invalidIds = await findUsersWithoutEmpresaAccess(assignedIdsToCheck, empresaId);
+      if (invalidIds.length > 0) {
+        return NextResponse.json(
+          { error: "Um ou mais responsáveis/validador não têm acesso a uma das unidades selecionadas." },
+          { status: 400 }
+        );
+      }
+    }
+  }
 
   const recurrenceFreq: TaskRecurrenceFreq = body.recurrenceFreq || "NENHUMA";
   const createdTasks = [];
@@ -167,7 +187,7 @@ export async function POST(req: Request) {
           priority: body.priority || "MEDIA",
           proofType: body.proofType || "NENHUMA",
           requiresValidation: !!body.requiresValidation,
-          validatorId: body.requiresValidation ? body.validatorId || null : null,
+          validatorId,
           defaultAssigneeIds: assigneeIds.join(","),
           dueTime: body.dueTime || null,
           freq: recurrenceFreq,
@@ -194,7 +214,7 @@ export async function POST(req: Request) {
         recurrenceId,
         proofType: body.proofType || "NENHUMA",
         requiresValidation: !!body.requiresValidation,
-        validatorId: body.requiresValidation ? body.validatorId || null : null,
+        validatorId,
         sourceType: body.sourceType || "MANUAL",
         sourceId: body.sourceId || null,
         createdById: session.user.id,
