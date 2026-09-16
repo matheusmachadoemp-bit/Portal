@@ -13,15 +13,17 @@ import {
   useDroppable,
 } from "@dnd-kit/core";
 import { useDndSensors } from "@/lib/use-dnd-sensors";
-import { Badge } from "@/components/ui/stat-card";
+import { Badge, ColorBadge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Toolbar } from "@/components/ui/toolbar";
 import {
   CHAMADO_CATEGORIA_LABEL,
   CHAMADO_PRIORIDADE_COLOR,
   CHAMADO_PRIORIDADE_LABEL,
+  CHAMADO_STATUS_COLOR,
   CHAMADO_STATUS_LABEL,
-  KANBAN_COLUMNS,
+  KANBAN_GROUPS,
+  getKanbanGroupKey,
   isChamadoOverdue,
 } from "@/lib/manutencao";
 import { ChamadoFormModal } from "../chamado-form-modal";
@@ -60,9 +62,16 @@ export function ChamadosClient({
     setActiveId(null);
     if (!over) return;
     const chamadoId = String(active.id);
-    const newStatus = String(over.id);
+    const targetGroupKey = String(over.id);
     const chamado = chamados.find((c) => c.id === chamadoId);
-    if (!chamado || chamado.status === newStatus) return;
+    if (!chamado) return;
+    // Só dispara mudança de status quando o card cruza de bucket (coluna). Soltar em outra
+    // posição dentro do mesmo bucket (ex.: entre um AGUARDANDO_ORCAMENTO e um APROVADO, ambos
+    // em "Chamado aberto") não altera o status real do chamado.
+    if (getKanbanGroupKey(chamado.status) === targetGroupKey) return;
+    const targetGroup = KANBAN_GROUPS.find((g) => g.key === targetGroupKey);
+    if (!targetGroup) return;
+    const newStatus: string = targetGroup.dropStatus;
     if (newStatus === "RESOLVIDO" && !chamado.descricaoSolucao) {
       router.push(`/portal/manutencao/chamados/${chamadoId}`);
       return;
@@ -132,14 +141,14 @@ export function ChamadosClient({
       {view === "kanban" ? (
         <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={handleDragEnd}>
           <div className="flex gap-3 overflow-x-auto nord-scrollbar pb-2">
-            {KANBAN_COLUMNS.map((col) => (
+            {KANBAN_GROUPS.map((group) => (
               <KanbanColumn
-                key={col.key}
-                columnKey={col.key}
-                label={col.label}
-                icon={col.icon}
-                color={col.color}
-                chamados={chamados.filter((c) => c.status === col.key)}
+                key={group.key}
+                columnKey={group.key}
+                label={group.label}
+                icon={group.icon}
+                color={group.color}
+                chamados={chamados.filter((c) => (group.statuses as readonly string[]).includes(c.status))}
                 onOpen={openDetail}
               />
             ))}
@@ -225,7 +234,7 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`w-64 shrink-0 rounded-xl border p-2 ${isOver ? "border-nord-blue bg-nord-blue/5" : "border-nord-border bg-nord-panel/40"}`}
+      className={`w-72 shrink-0 rounded-xl border p-2 ${isOver ? "border-nord-blue bg-nord-blue/5" : "border-nord-border bg-nord-panel/40"}`}
     >
       <div className="flex items-center gap-1.5 px-1 py-1.5 mb-1">
         <DynamicIcon name={icon} size={13} style={{ color }} />
@@ -261,6 +270,9 @@ function ChamadoCard({ chamado, onOpen, dragging }: { chamado: ChamadoDTO; onOpe
       <p className="text-[10px] text-nord-gray font-mono mb-1">{chamado.protocolo}</p>
       <p className="text-white text-xs font-medium leading-snug mb-1.5">{chamado.titulo}</p>
       <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+        <ColorBadge color={CHAMADO_STATUS_COLOR[chamado.status] ?? "#9aa4b2"}>
+          {CHAMADO_STATUS_LABEL[chamado.status] ?? chamado.status}
+        </ColorBadge>
         <Badge>{CHAMADO_CATEGORIA_LABEL[chamado.categoria] ?? chamado.categoria}</Badge>
         <span className="text-[10px] font-medium" style={{ color: CHAMADO_PRIORIDADE_COLOR[chamado.prioridade] }}>
           {CHAMADO_PRIORIDADE_LABEL[chamado.prioridade]}
