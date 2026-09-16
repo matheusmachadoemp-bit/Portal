@@ -54,6 +54,11 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) {
+    return NextResponse.json({ error: "Informe o nome do insumo." }, { status: 400 });
+  }
+
   if (body.fornecedorPrincipalId) {
     const supplier = await prisma.supplier.findUnique({
       where: { id: body.fornecedorPrincipalId },
@@ -67,7 +72,7 @@ export async function POST(req: Request) {
   const ingredient = await prisma.ingredient.create({
     data: {
       empresaId: empresa.id,
-      name: body.name,
+      name,
       fornecedor: body.fornecedor || null,
       unidade: body.unidade || "g",
       precoAtual: Number(body.precoAtual) || 0,

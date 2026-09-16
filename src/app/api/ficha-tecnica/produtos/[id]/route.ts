@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+
+/** `Product.code` é `@unique` no schema inteiro (não por loja) — ver comentário em `PATCH`. */
+function isProductCodeConflict(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    e.code === "P2002" &&
+    ((e.meta?.target as string[] | undefined)?.includes("code") ?? true)
+  );
+}
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -21,6 +31,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const body = await req.json();
 
+  let name: string | undefined;
+  if (body.name !== undefined) {
+    name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
+    }
+  }
+  let code: string | undefined;
+  if (body.code !== undefined) {
+    code = typeof body.code === "string" ? body.code.trim() : "";
+    if (!code) {
+      return NextResponse.json({ error: "Informe o código do produto." }, { status: 400 });
+    }
+  }
+
   if (body.ingredients) {
     const ingredientIds = [
       ...new Set((body.ingredients as { ingredientId: string }[]).map((i) => i.ingredientId).filter(Boolean)),
@@ -35,25 +60,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  await prisma.product.update({
-    where: { id },
-    data: {
-      name: body.name ?? undefined,
-      code: body.code ?? undefined,
-      category: body.category ?? undefined,
-      photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
-      taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
-      description: body.description ?? undefined,
-      rendimento: body.rendimento ?? undefined,
-      tamanho: body.tamanho ?? undefined,
-      pesoFinal: body.pesoFinal !== undefined ? Number(body.pesoFinal) : undefined,
-      precoVenda: body.precoVenda !== undefined ? Number(body.precoVenda) : undefined,
-      modoPreparo: body.modoPreparo ?? undefined,
-      tempoPreparo: body.tempoPreparo !== undefined ? Number(body.tempoPreparo) : undefined,
-      validade: body.validade ?? undefined,
-      responsavel: body.responsavel ?? undefined,
-    },
-  });
+  try {
+    await prisma.product.update({
+      where: { id },
+      data: {
+        name: name ?? undefined,
+        code: code ?? undefined,
+        category: body.category ?? undefined,
+        photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
+        taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
+        description: body.description ?? undefined,
+        rendimento: body.rendimento ?? undefined,
+        tamanho: body.tamanho ?? undefined,
+        pesoFinal: body.pesoFinal !== undefined ? Number(body.pesoFinal) : undefined,
+        precoVenda: body.precoVenda !== undefined ? Number(body.precoVenda) : undefined,
+        modoPreparo: body.modoPreparo ?? undefined,
+        tempoPreparo: body.tempoPreparo !== undefined ? Number(body.tempoPreparo) : undefined,
+        validade: body.validade ?? undefined,
+        responsavel: body.responsavel ?? undefined,
+      },
+    });
+  } catch (e) {
+    if (isProductCodeConflict(e)) {
+      return NextResponse.json({ error: "Este código já está em uso." }, { status: 409 });
+    }
+    throw e;
+  }
 
   if (body.ingredients) {
     await prisma.productIngredient.deleteMany({ where: { productId: id } });

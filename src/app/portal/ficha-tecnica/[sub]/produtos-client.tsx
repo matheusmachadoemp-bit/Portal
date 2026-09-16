@@ -10,7 +10,7 @@ import { useDndSensors } from "@/lib/use-dnd-sensors";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 import {
   cmvPercent,
@@ -101,6 +101,7 @@ export function ProdutosClient({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const sensors = useDndSensors();
 
@@ -114,6 +115,7 @@ export function ProdutosClient({
     setEditing(null);
     setForm(emptyForm);
     setLines([{ key: newLineKey(), ingredientId: ingredientOptions[0]?.id ?? "", quantidadeUsada: "", percentualPerda: "0" }]);
+    setFormError(null);
     setShowForm(true);
   }
 
@@ -142,6 +144,7 @@ export function ProdutosClient({
         percentualPerda: String(pi.percentualPerda),
       }))
     );
+    setFormError(null);
     setShowForm(true);
   }
 
@@ -196,21 +199,33 @@ export function ProdutosClient({
 
   async function submit() {
     if (submitting) return;
+    if (!form.name.trim()) {
+      setFormError("Informe o nome do produto.");
+      return;
+    }
+    if (!form.code.trim()) {
+      setFormError("Informe o código do produto.");
+      return;
+    }
     setSubmitting(true);
+    setFormError(null);
     try {
       const payload = { ...form, category, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
-      if (editing) {
-        await fetch(`/api/ficha-tecnica/produtos/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetch("/api/ficha-tecnica/produtos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      const res = editing
+        ? await fetch(`/api/ficha-tecnica/produtos/${editing.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await fetch("/api/ficha-tecnica/produtos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setFormError(data.error ?? "Não foi possível salvar a ficha técnica.");
+        return;
       }
       setShowForm(false);
       refresh();
@@ -330,12 +345,14 @@ export function ProdutosClient({
 
         {uploadError && <p className="text-xs text-nord-danger mb-3">{uploadError}</p>}
 
+        <FormError message={formError} />
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome do produto">
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
           </Field>
           <Field label="Código">
-            <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="input" />
+            <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="input" />
           </Field>
           <Field label="Rendimento">
             <input value={form.rendimento} onChange={(e) => setForm({ ...form, rendimento: e.target.value })} className="input" />

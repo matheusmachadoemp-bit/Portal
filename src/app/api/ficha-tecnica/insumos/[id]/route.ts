@@ -21,6 +21,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 403 }
     );
   }
+  let name: string | undefined;
+  if (body.name !== undefined) {
+    name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      return NextResponse.json({ error: "Informe o nome do insumo." }, { status: 400 });
+    }
+  }
+
   const priceChanged =
     body.precoAtual !== undefined && Number(body.precoAtual) !== existing?.precoAtual;
 
@@ -37,7 +45,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const ingredient = await prisma.ingredient.update({
     where: { id },
     data: {
-      name: body.name ?? undefined,
+      name: name ?? undefined,
       fornecedor: body.fornecedor ?? undefined,
       unidade: body.unidade ?? undefined,
       precoAtual: body.precoAtual !== undefined ? Number(body.precoAtual) : undefined,
