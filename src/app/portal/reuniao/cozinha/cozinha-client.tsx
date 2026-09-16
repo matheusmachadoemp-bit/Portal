@@ -1,22 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, FileDown, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
-import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
+import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import {
   FechamentoDoMesSection,
   FechamentoDoMesEditor,
   useFechamentoDoMes,
-  customIndicatorCards,
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
+import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { compareToPrevious, periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos } from "@/lib/reuniao";
+import { periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
 
 type Meeting = {
   id: string;
@@ -52,6 +51,7 @@ export function CozinhaClient({
   initialCustomIndicators,
   periodo,
   canCreate,
+  canDeleteMetas,
   empresaName,
 }: {
   initialMeetings: Meeting[];
@@ -60,6 +60,9 @@ export function CozinhaClient({
   initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
+  /** Controla só o botão de excluir do card "Metas de [próximo mês]" — ver
+   * canDeleteMetas em gerente/page.tsx (mesmo critério, `canDelete` no módulo "reuniao"). */
+  canDeleteMetas: boolean;
   empresaName: string;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
@@ -76,6 +79,7 @@ export function CozinhaClient({
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const fdm = useFechamentoDoMes("/api/reuniao/cozinha", selectedPeriodo, initialCustomIndicators);
+  const mp = useMetasProximoMes("/api/reuniao/cozinha", canCreate);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -105,18 +109,14 @@ export function CozinhaClient({
   const tempoValor = form.tempoPedidoMinutos ? Number(form.tempoPedidoMinutos) : null;
   const organizacaoValor = form.organizacaoPercent ? Number(form.organizacaoPercent) : null;
 
-  const previousMeeting = useMemo(
-    () => meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null,
-    [meetings, selectedPeriodo]
-  );
-  const compCmv = compareToPrevious(metrics.cmvPercent, previousMeeting?.cmvPercent, "min");
-  const compDesperdicio = compareToPrevious(metrics.desperdicioValor, previousMeeting?.desperdicioValor, "min");
-  const compTempo = compareToPrevious(tempoValor, previousMeeting?.tempoPedidoMinutos, "min");
-  const compOrganizacao = compareToPrevious(organizacaoValor, previousMeeting?.organizacaoPercent, "max");
-
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
     const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
+
+    // Busca as metas do próximo mês na hora de exportar (não reaproveita o estado `mp.metas`
+    // já carregado na tela) pra garantir que o PDF sai com o que está salvo agora — mesmo
+    // padrão da Reunião Gerente (ver fetchMetasProximoMesForPdf).
+    const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/cozinha");
 
     function historico<K extends "cmvPercent" | "desperdicioValor" | "tempoPedidoMinutos" | "organizacaoPercent">(
       key: K,
@@ -183,6 +183,15 @@ export function CozinhaClient({
           historico: historico("organizacaoPercent", organizacaoValor),
         },
       ],
+      metasProximoMes: {
+        periodoLabel: metasData.periodoLabel,
+        metas: metasData.metas.map((m) => ({
+          metrica: m.metrica,
+          valorAlvo: m.valorAlvo,
+          valorPremio: m.valorPremio,
+          destinatario: m.destinatario,
+        })),
+      },
     });
   }
 
@@ -239,73 +248,6 @@ export function CozinhaClient({
     }
   }
 
-  const cards = [
-    {
-      key: "cmv",
-      content: (
-        <IndicatorCard
-          icon="Percent"
-          color="#1464F4"
-          label="CMV"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.cmvPercent === null ? "-" : `${formatNumber(metrics.cmvPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compCmv}
-        />
-      ),
-    },
-    {
-      key: "desperdicio",
-      content: (
-        <IndicatorCard
-          icon="Trash2"
-          color="#ef4444"
-          label="Desperdício"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{formatCurrency(metrics.desperdicioValor)}</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compDesperdicio}
-        />
-      ),
-    },
-    {
-      key: "tempo-pedido",
-      content: (
-        <IndicatorCard
-          icon="Clock"
-          color="#a855f7"
-          label="Tempo Pedido"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{tempoValor ?? "-"} min</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compTempo}
-        />
-      ),
-    },
-    {
-      key: "organizacao",
-      content: (
-        <IndicatorCard
-          icon="Sparkles"
-          color="#14b8a6"
-          label="Organização"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{organizacaoValor ?? "-"}%</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compOrganizacao}
-        />
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -335,11 +277,15 @@ export function CozinhaClient({
         </div>
       </div>
 
-      <SortableCardGrid
-        storageKey="reuniao-cozinha-kpi-order"
-        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4"
-        items={[...cards, ...customIndicatorCards(fdm.customIndicators)]}
-      />
+      {/* Sem loja específica selecionada (visão consolidada "Grupo Nord"), a reunião não
+          tem o que mostrar aqui — mesmo padrão de aviso já usado em gerente-client.tsx e
+          lideranca-client.tsx (reaproveitado aqui em vez de inventar um texto novo). */}
+      {!canCreate && (
+        <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
+          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e
+          editar o fechamento do mês desta reunião.
+        </p>
+      )}
 
       {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
 
@@ -438,6 +384,8 @@ export function CozinhaClient({
           </button>
         </Section>
       )}
+
+      {canCreate && <MetasProximoMesSection mp={mp} canDelete={canDeleteMetas} />}
 
       {meetings.length > 0 && (
         <Section title="Histórico de reuniões">
