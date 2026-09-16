@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { logPurchaseEvent } from "@/lib/recebimento-server";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -57,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         prisma.ingredient.update({
           where: { id: item.ingredientId },
           data: {
-            estoqueAtual: item.ingredient.estoqueAtual + item.quantidade,
+            estoqueAtual: { increment: item.quantidade },
             precoAtual: item.valorUnitario,
             lastPurchaseDate: new Date(),
             ...(item.valorUnitario !== item.ingredient.precoAtual ? { priceHistory: { create: { price: item.valorUnitario } } } : {}),
@@ -65,6 +66,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         })
       ),
     ]);
+
+    await logPurchaseEvent({
+      purchaseId: existing.id,
+      empresaId: existing.empresaId,
+      action: "Recebimento confirmado (tela de Compras)",
+      userId: session.user.id,
+    });
   }
 
   const purchase = await prisma.purchase.update({

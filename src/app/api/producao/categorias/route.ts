@@ -29,18 +29,27 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  if (!body.name || !body.key) {
-    return NextResponse.json({ error: "Nome e chave são obrigatórios." }, { status: 400 });
-  }
+  if (!body.name) return NextResponse.json({ error: "Informe o nome da categoria." }, { status: 400 });
 
-  const count = await prisma.productionCategory.count();
+  // A key é sempre gerada no servidor (nunca confia na que o cliente mandou) e recebe um sufixo
+  // único — mesmo padrão de src/app/api/estoque/categorias/route.ts — para nunca esbarrar na
+  // unique constraint ao recriar uma categoria com o mesmo nome (ex.: "Massas", que já vem no seed).
+  const key = String(body.name)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  const maxOrder = await prisma.productionCategory.aggregate({ _max: { order: true } });
+
   const categoria = await prisma.productionCategory.create({
     data: {
-      key: body.key,
+      key: `${key}-${Date.now().toString(36)}`,
       name: body.name,
       color: body.color || "#2952E3",
       icon: body.icon || "ChefHat",
-      order: count,
+      order: (maxOrder._max.order ?? 0) + 1,
     },
   });
 
