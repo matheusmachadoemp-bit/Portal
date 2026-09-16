@@ -61,17 +61,21 @@ export function ConfiguracoesClient({
 
   async function criarCategoria() {
     if (!novaCategoria.key || !novaCategoria.name) return;
+    setError(null);
     const res = await fetch("/api/producao/categorias", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(novaCategoria),
     });
-    if (res.ok) {
-      const data = await res.json();
-      setCategorias((c) => [...c, data.categoria]);
-      setShowCategoriaForm(false);
-      setNovaCategoria({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Não foi possível criar a categoria.");
+      return;
     }
+    const data = await res.json();
+    setCategorias((c) => [...c, data.categoria]);
+    setShowCategoriaForm(false);
+    setNovaCategoria({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
   }
 
   return (
@@ -80,7 +84,10 @@ export function ConfiguracoesClient({
         title="Categorias de produção"
         action={
           <button
-            onClick={() => setShowCategoriaForm(true)}
+            onClick={() => {
+              setError(null);
+              setShowCategoriaForm(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
             <Plus size={13} /> Nova categoria
@@ -147,6 +154,7 @@ export function ConfiguracoesClient({
 
       <Modal open={showCategoriaForm} onClose={() => setShowCategoriaForm(false)} title="Nova categoria de produção">
         <div className="space-y-3">
+          <FormError message={error} />
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Nome</span>
             <input

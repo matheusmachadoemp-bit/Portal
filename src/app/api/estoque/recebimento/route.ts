@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { logPurchaseEvent } from "@/lib/recebimento-server";
 
 export async function GET() {
   const session = await auth();
@@ -113,12 +114,19 @@ export async function POST(req: Request) {
             }),
             prisma.ingredient.update({
               where: { id: item.ingredientId },
-              data: { estoqueAtual: item.ingredient.estoqueAtual + quantidadeRecebida, precoAtual: item.valorUnitario, lastPurchaseDate: new Date() },
+              data: { estoqueAtual: { increment: quantidadeRecebida }, precoAtual: item.valorUnitario, lastPurchaseDate: new Date() },
             }),
           ];
         })
       : []),
   ]);
+
+  await logPurchaseEvent({
+    purchaseId: purchase.id,
+    empresaId: purchase.empresaId,
+    action: houveDivergencia ? "Recebimento finalizado com divergência" : "Recebimento finalizado",
+    userId: session.user.id,
+  });
 
   return NextResponse.json({ receiving, houveDivergencia });
 }
