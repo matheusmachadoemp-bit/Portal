@@ -13,7 +13,7 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 const QUICK_ACTIONS: { label: string; href: string; icon: string }[] = [
   { label: "Criar tarefa", href: "/portal/tarefas", icon: "ListTodo" },
   { label: "Preencher checklist", href: "/portal/tarefas/checklist", icon: "ClipboardCheck" },
-  { label: "Criar meta", href: "/portal/metas/cadastro", icon: "Target" },
+  { label: "Criar meta", href: "/portal/metas", icon: "Target" },
   { label: "Agendar reunião", href: "/portal/reuniao/gerente", icon: "Users" },
 ];
 
