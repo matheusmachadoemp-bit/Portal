@@ -1,3 +1,12 @@
+/**
+ * Formato de período usado em toda a Reunião (`AAAA-MM`, ex.: "2026-10") —
+ * compartilhado pelas 5 rotas GET/POST/PATCH
+ * /api/reuniao/{sub}/metas-proximo-mes(/[id]), que validam `periodo` contra
+ * este regex antes de gravar (nasceu só na rota do Gerente, extraído aqui
+ * para não duplicar em cada uma das 4 rotas novas).
+ */
+export const PERIODO_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 export function periodoRange(periodo: string) {
   const [yearStr, monthStr] = periodo.split("-");
   const year = Number(yearStr);

@@ -7,17 +7,16 @@ import { deleteMetaProximoMes, findMetaProximoMesForMeeting, updateMetaProximoMe
 
 /**
  * Edita/exclui uma meta já criada do card "Metas de [próximo mês]" da
- * Reunião Gerente. Rota fina: posse (`findMetaProximoMesForMeeting`) e
- * gravação (`updateMetaProximoMes`/`deleteMetaProximoMes`) ficam
- * centralizadas em `src/lib/reuniao-server.ts`, `meetingKey: "GERENTE"` —
- * compartilhadas com as mesmas rotas de Salão/Cozinha/Delivery/Liderança.
+ * Reunião Cozinha — mesmo mecanismo de
+ * `/api/reuniao/gerente/metas-proximo-mes/[id]` (ver comentário lá), só
+ * trocando `meetingKey` para "COZINHA".
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "reuniao", "canEdit"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite editar metas da Reunião Gerente." },
+      { error: "Seu perfil de permissão não permite editar metas da Reunião Cozinha." },
       { status: 403 }
     );
   }
@@ -31,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const { id } = await params;
-  const meta = await findMetaProximoMesForMeeting(id, empresa.id, "GERENTE");
+  const meta = await findMetaProximoMesForMeeting(id, empresa.id, "COZINHA");
   if (!meta) {
     return NextResponse.json({ error: "Meta não encontrada." }, { status: 404 });
   }
@@ -89,7 +88,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "reuniao", "canDelete"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite excluir metas da Reunião Gerente." },
+      { error: "Seu perfil de permissão não permite excluir metas da Reunião Cozinha." },
       { status: 403 }
     );
   }
@@ -103,7 +102,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   const { id } = await params;
-  const meta = await findMetaProximoMesForMeeting(id, empresa.id, "GERENTE");
+  const meta = await findMetaProximoMesForMeeting(id, empresa.id, "COZINHA");
   if (!meta) {
     return NextResponse.json({ error: "Meta não encontrada." }, { status: 404 });
   }
