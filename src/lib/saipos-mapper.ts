@@ -7,6 +7,14 @@ const PLATFORM_KEYWORDS: [string, SalePlatform][] = [
   ["99", "FOOD99"],
 ];
 
+// Ordem importa: a primeira palavra-chave que bater é usada, então as mais
+// específicas vêm antes das mais genéricas (mesmo critério usado em
+// HEADER_ALIASES/PAYMENT_KEYWORDS de src/app/api/vendas/importar/route.ts,
+// para a importação manual de arquivo). "fiado"/"online" foram adicionados
+// depois de perceber que o mapeamento aqui nunca tinha sido atualizado com
+// PAGO_ONLINE/FIADO (adicionados ao enum PaymentMethod para a importação de
+// arquivo) — sem isso, toda venda da Saipos paga por um desses dois meios
+// caía silenciosamente em OUTRO.
 const PAYMENT_KEYWORDS: [string, PaymentMethod][] = [
   ["pix", "PIX"],
   ["dinheiro", "DINHEIRO"],
@@ -15,7 +23,10 @@ const PAYMENT_KEYWORDS: [string, PaymentMethod][] = [
   ["credito", "CARTAO_CREDITO"],
   ["voucher", "VOUCHER"],
   ["vr", "VOUCHER"],
+  ["transferencia", "TRANSFERENCIA"],
   ["cheque", "CHEQUE"],
+  ["fiado", "FIADO"],
+  ["online", "PAGO_ONLINE"],
 ];
 
 function normalize(value?: string | null): string {
@@ -55,8 +66,16 @@ export function mapSaiposPaymentMethod(record: SaiposSaleRecord): PaymentMethod 
   return "OUTRO";
 }
 
+// Tolerante a variações de formato (a Saipos já mandou booleano puro em vez
+// de "Y"/"S" no passado) — sem isso, `normalize()` chamado direto sobre um
+// booleano quebra com TypeError (`value.normalize is not a function`) e
+// derruba a sincronização inteira por causa de uma única venda.
+const CANCELED_VALUES = new Set(["y", "s", "sim", "yes", "true", "1", "cancelado", "canceled", "cancelled"]);
+
 export function isSaiposSaleCanceled(record: SaiposSaleRecord): boolean {
-  return normalize(record.canceled) === "y" || normalize(record.canceled) === "s";
+  if (typeof record.canceled === "boolean") return record.canceled;
+  if (typeof record.canceled === "number") return record.canceled === 1;
+  return CANCELED_VALUES.has(normalize(record.canceled as string | null | undefined));
 }
 
 /**
@@ -97,5 +116,36 @@ export function toSaiposSaleData(empresaId: string, record: SaiposSaleRecord) {
     valorTotal: Number(record.total_amount ?? 0),
     cancelado: isSaiposSaleCanceled(record),
     raw: record as object,
+  };
+}
+
+/**
+ * Constrói os dados de um registro granular `Sale` a partir de uma venda da
+ * Saipos — reaproveita `toSaiposSaleData` (mesma validação de id_sale/
+ * shift_date, mesmo mapeamento de canal/plataforma/forma de pagamento) e só
+ * adiciona o que é específico de `Sale` (bairro, marcador de origem).
+ *
+ * Sem item a item (garcom/produtos): a própria Saipos confirmou por e-mail
+ * que o endpoint `search_sales` não retorna detalhamento por item nem
+ * vínculo com o garçom da venda (testado empiricamente: 0 vendas com
+ * "items" no payload, mesmo para vendas de salão) — por isso "Itens
+ * vendidos" e "Desempenho por garçom" continuam vazios para vendas
+ * sincronizadas automaticamente (aviso já existente na tela de
+ * Configurações → Integração Saipos).
+ */
+export function toSaleData(empresaId: string, record: SaiposSaleRecord) {
+  const base = toSaiposSaleData(empresaId, record);
+  return {
+    empresaId,
+    saiposSaleId: base.saiposId,
+    dateTime: base.dateTime,
+    channel: base.channel,
+    platform: base.platform,
+    formaPagamento: base.formaPagamento,
+    bairro: record.delivery?.district ?? null,
+    valorTotal: base.valorTotal,
+    cancelado: base.cancelado,
+    source: "SAIPOS" as const,
+    createdById: null,
   };
 }
