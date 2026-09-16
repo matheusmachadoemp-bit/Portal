@@ -3,27 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Trophy, Pencil, FileDown, Star, Quote, Trash2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { IndicatorCard, statusOf } from "@/components/reuniao/indicator-card";
+import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import {
   FechamentoDoMesSection,
   FechamentoDoMesEditor,
   useFechamentoDoMes,
-  customIndicatorCards,
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
+import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import {
-  compareToPrevious,
-  periodoLabel,
-  periodoShortLabel,
-  previousPeriodo,
-  resolveComparePeriodos,
-  SALAO_PRODUTOS_PADRAO,
-} from "@/lib/reuniao";
+import { periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
 
 type ProdutoMeta = { produto: string; quantidade: number | null; meta: number; premiacao: number };
 
@@ -104,6 +96,7 @@ export function SalaoClient({
   initialCustomIndicators,
   periodo,
   canCreate,
+  canDeleteMetas,
   empresaName,
 }: {
   initialMeetings: Meeting[];
@@ -114,6 +107,9 @@ export function SalaoClient({
   initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
+  /** Controla só o botão de excluir do card "Metas de [próximo mês]" — ver
+   * canDeleteMetas em gerente/page.tsx (mesmo critério, `canDelete` no módulo "reuniao"). */
+  canDeleteMetas: boolean;
   empresaName: string;
 }) {
   const [meetings, setMeetings] = useState(initialMeetings);
@@ -133,6 +129,7 @@ export function SalaoClient({
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const fdm = useFechamentoDoMes("/api/reuniao/salao", selectedPeriodo, initialCustomIndicators);
+  const mp = useMetasProximoMes("/api/reuniao/salao", canCreate);
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -177,13 +174,15 @@ export function SalaoClient({
   }
 
   const anteriorParaComparacao = anteriorMeeting();
-  const compNps = compareToPrevious(metrics.npsPercent, anteriorParaComparacao?.npsPercent, "max");
-  const compFaturamento = compareToPrevious(metrics.faturamentoValor, anteriorParaComparacao?.faturamentoValor, "max");
-  const compTicketMedio = compareToPrevious(metrics.ticketMedioValor, anteriorParaComparacao?.ticketMedioValor, "max");
 
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
     const periodosComparados = resolveComparePeriodos(selectedPeriodo, comparePeriodos);
+
+    // Busca as metas do próximo mês na hora de exportar (não reaproveita o estado `mp.metas`
+    // já carregado na tela) pra garantir que o PDF sai com o que está salvo agora — mesmo
+    // padrão da Reunião Gerente (ver fetchMetasProximoMesForPdf).
+    const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/salao");
 
     function historico<K extends "npsPercent" | "faturamentoValor" | "ticketMedioValor">(key: K, atualValue: number | null) {
       return periodosComparados.map((p) => {
@@ -257,6 +256,15 @@ export function SalaoClient({
           };
         }),
       ],
+      metasProximoMes: {
+        periodoLabel: metasData.periodoLabel,
+        metas: metasData.metas.map((m) => ({
+          metrica: m.metrica,
+          valorAlvo: m.valorAlvo,
+          valorPremio: m.valorPremio,
+          destinatario: m.destinatario,
+        })),
+      },
     });
   }
 
@@ -323,62 +331,6 @@ export function SalaoClient({
     }
   }
 
-  const cards = [
-    {
-      key: "nps",
-      content: (
-        <IndicatorCard
-          icon="Smile"
-          color="#1464F4"
-          label="NPS Geral"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.npsPercent === null ? "-" : `${formatNumber(metrics.npsPercent, 1)}%`}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compNps}
-        />
-      ),
-    },
-    {
-      key: "faturamento",
-      content: (
-        <IndicatorCard
-          icon="TrendingUp"
-          color="#22c55e"
-          label="Faturamento do Salão"
-          status={statusOf(null)}
-          valueSlot={<span className="text-2xl font-semibold text-white">{formatCurrency(metrics.faturamentoValor)}</span>}
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compFaturamento}
-        />
-      ),
-    },
-    {
-      key: "ticket-medio",
-      content: (
-        <IndicatorCard
-          icon="Receipt"
-          color="#f59e0b"
-          label="Ticket Médio"
-          status={statusOf(null)}
-          valueSlot={
-            <span className="text-2xl font-semibold text-white">
-              {metrics.ticketMedioValor === null ? "-" : formatCurrency(metrics.ticketMedioValor)}
-            </span>
-          }
-          metaText="Indicador informativo"
-          premio={0}
-          comparison={compTicketMedio}
-        />
-      ),
-    },
-  ];
-
   const anterior = anteriorParaComparacao;
 
   return (
@@ -404,12 +356,6 @@ export function SalaoClient({
           )}
         </div>
       </div>
-
-      <SortableCardGrid
-        storageKey="reuniao-salao-kpi-order"
-        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
-        items={[...cards, ...customIndicatorCards(fdm.customIndicators)]}
-      />
 
       {premiacaoTotal > 0 && (
         <div className="nord-card p-4 flex items-center gap-3 bg-amber-950/10 border-amber-900/40">
@@ -667,6 +613,8 @@ export function SalaoClient({
           </button>
         </Section>
       )}
+
+      {canCreate && <MetasProximoMesSection mp={mp} canDelete={canDeleteMetas} />}
 
       {meetings.length > 0 && (
         <Section title="Histórico de reuniões">
