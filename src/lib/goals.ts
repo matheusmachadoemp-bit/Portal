@@ -71,6 +71,30 @@ export function currentMonth(): string {
   return dateToMonth(new Date());
 }
 
+/**
+ * Quantas "semanas" (blocos de até 7 dias, contados a partir do dia 1 do
+ * período da meta) cabem no período de uma meta — sempre 4 ou 5, já que toda
+ * `Goal` vale por um mês calendário inteiro (28 a 31 dias). Usado tanto para
+ * validar `GoalWeeklyUpdate.weekNumber` (nunca pode passar desse total) quanto
+ * para a tela (Caio) montar os cards/inputs de cada semana do mês.
+ */
+export function weeksInGoalPeriod(startDate: Date, endDate: Date): number {
+  const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+  return Math.max(1, Math.ceil(totalDays / 7));
+}
+
+/**
+ * Intervalo de dias (base 1, relativo ao início do período da meta) de uma
+ * semana específica — ex.: semana 2 de um mês de 30 dias = dias 8 a 14; a
+ * última semana do mês pode ter menos de 7 dias (ex.: semana 5 de um mês de
+ * 31 dias = só o dia 29 a 31, 3 dias).
+ */
+export function weekDayRange(weekNumber: number, totalDays: number): { startDay: number; endDay: number } {
+  const startDay = (weekNumber - 1) * 7 + 1;
+  const endDay = Math.min(weekNumber * 7, totalDays);
+  return { startDay, endDay };
+}
+
 const NEAR_TARGET_THRESHOLD = 90;
 
 /**
