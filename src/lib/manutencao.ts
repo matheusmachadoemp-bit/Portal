@@ -21,6 +21,52 @@ export const CHAMADO_STATUS_COLOR: Record<string, string> = Object.fromEntries(
   KANBAN_COLUMNS.map((c) => [c.key, c.color])
 );
 
+/**
+ * Agrupamento VISUAL do kanban de chamados: os 10 status do enum `ChamadoStatus` continuam
+ * existindo de verdade (é o que a API espera e o que o fluxo de orçamento/aprovação usa) — isso
+ * aqui só define em qual das 3 colunas do kanban cada status aparece. CANCELADO não entra em
+ * nenhum bucket de propósito: chamados cancelados saem do kanban (não são mais um trabalho
+ * ativo), mas continuam aparecendo normalmente na visão em Lista.
+ *
+ * `dropStatus` é o status aplicado quando o usuário arrasta um card de OUTRA coluna para dentro
+ * deste bucket (não se aplica a mover o card dentro do mesmo bucket, que não muda status).
+ */
+export const KANBAN_GROUPS = [
+  {
+    key: "CHAMADO_ABERTO",
+    label: "Chamado aberto",
+    icon: "AlertCircle",
+    color: "#3b82f6",
+    statuses: ["RASCUNHO", "ABERTO", "AGUARDANDO_AVALIACAO", "AGUARDANDO_ORCAMENTO", "AGUARDANDO_APROVACAO", "APROVADO"],
+    dropStatus: "ABERTO",
+  },
+  {
+    key: "EM_MANUTENCAO_GRUPO",
+    label: "Em manutenção",
+    icon: "Wrench",
+    color: "#2952E3",
+    statuses: ["EM_MANUTENCAO", "AGUARDANDO_PECA"],
+    dropStatus: "EM_MANUTENCAO",
+  },
+  {
+    key: "RESOLVIDO_GRUPO",
+    label: "Resolvido",
+    icon: "CheckCircle2",
+    color: "#22c55e",
+    statuses: ["RESOLVIDO"],
+    dropStatus: "RESOLVIDO",
+  },
+] as const;
+
+export type KanbanGroupKey = (typeof KANBAN_GROUPS)[number]["key"];
+
+/** Em qual bucket do kanban (3 colunas) um status real do chamado cai. Retorna `null` para
+ * CANCELADO (propositalmente fora do kanban — ver comentário de `KANBAN_GROUPS`). */
+export function getKanbanGroupKey(status: string): KanbanGroupKey | null {
+  const group = KANBAN_GROUPS.find((g) => (g.statuses as readonly string[]).includes(status));
+  return group ? group.key : null;
+}
+
 export const CHAMADO_PRIORIDADE_OPTIONS = [
   { key: "BAIXA", label: "Baixa", color: "#6b7280" },
   { key: "MEDIA", label: "Média", color: "#eab308" },
