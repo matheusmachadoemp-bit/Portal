@@ -89,4 +89,86 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  callbacks: {
+    // Mantém o `session` callback de `authConfig` (copia claims do token pra
+    // `session.user`) sem alteração — só o `jwt` é substituído abaixo.
+    ...authConfig.callbacks,
+
+    // Sobrescreve (não estende) o `jwt` de `authConfig`: aquele é a versão
+    // "Edge-safe" usada pelo middleware (ver comentário em `auth.config.ts`
+    // pra explicação de por que a consulta ao banco não pode morar lá). Esta
+    // versão, usada por `auth()` em toda Server Component / Route Handler /
+    // Server Action do app (nunca pelo middleware), é quem de fato fecha a
+    // brecha encontrada pelo Jonas: antes, uma vez logado, o token JWT
+    // (`role`/`id`/`avatarUrl`) só era populado no login e depois só
+    // repassado como veio por até 8h (`maxAge`), então desativar um usuário
+    // ou trocar o cargo dele não tinha nenhum efeito até a sessão expirar ou
+    // a pessoa sair sozinha. Agora, toda requisição sem `user` (ou seja,
+    // toda requisição pós-login — `user` só vem preenchido no exato momento
+    // do login) revalida `active`/`role`/`avatarUrl` direto no banco.
+    jwt: async (params) => {
+      const { token, user } = params;
+
+      if (user) {
+        // Login: mesma lógica de sempre (popula o token a partir do usuário
+        // recém-autenticado em `authorize` acima). Delega pro callback base
+        // pra não duplicar essa lógica em dois arquivos.
+        return authConfig.callbacks.jwt(params);
+      }
+
+      const userId = typeof token.id === "string" ? token.id : null;
+      if (!userId) {
+        // Não deveria acontecer (o token sempre ganha `id` no login, acima),
+        // mas sem ele não dá pra revalidar nada — nega por segurança em vez
+        // de deixar passar um token sem dono.
+        return null;
+      }
+
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { active: true, role: true, avatarUrl: true },
+        });
+
+        if (!dbUser || !dbUser.active) {
+          // Usuário excluído ou desativado (`active: false`) depois do
+          // login: invalida a sessão. Retornar `null` aqui é o mecanismo
+          // nativo do Auth.js pra isso — o `session()` do `@auth/core`
+          // (chamado por `auth()` em toda requisição) trata token nulo como
+          // "sem sessão": limpa o cookie de sessão e devolve sessão vazia.
+          // Como o app inteiro já trata "sem sessão" como "não logado" (é
+          // o que `!req.auth` no middleware, `if (!session?.user)` em
+          // `getActiveEmpresaContext` etc. já fazem hoje pra usuário
+          // deslogado), isso já basta pra forçar login de novo em qualquer
+          // página/rota protegida, sem precisar de nenhum campo novo tipo
+          // `session.error` nem mudar `middleware.ts`.
+          return null;
+        }
+
+        // Usuário ainda ativo: atualiza `role`/`avatarUrl` com o valor atual
+        // do banco. Como o `session` callback (herdado de `authConfig`)
+        // sempre copia esses claims do token pra `session.user`, isso faz
+        // toda leitura de `session.user.role` no resto do app (as ~251
+        // ocorrências encontradas pelo Jonas) passar a vir sempre fresca,
+        // sem precisar tocar em nenhuma dessas rotas.
+        token.role = dbUser.role;
+        token.avatarUrl = dbUser.avatarUrl;
+        return token;
+      } catch (error) {
+        // Falha ao consultar o banco (ex.: banco fora do ar por um
+        // instante): fail-closed — trata como sessão inválida (nega, força
+        // novo login) em vez de deixar passar com o cargo/estado antigo do
+        // token, ou de propagar a exceção sem controle. `@auth/core` já
+        // teria um comportamento parecido se a exceção escapasse daqui (ele
+        // limpa o cookie de sessão quando o `jwt` callback lança), mas
+        // fazemos isso explicitamente pra não depender desse detalhe
+        // interno e pra deixar um log claro de quando isso acontece.
+        console.error(
+          "[auth] Falha ao revalidar sessão contra o banco — negando por segurança (fail-closed):",
+          error
+        );
+        return null;
+      }
+    },
+  },
 });
