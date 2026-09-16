@@ -41,6 +41,7 @@ export function SegmentosClient({
   lojas,
   isGrupo,
   canCreate,
+  canDelete,
 }: {
   autoSegments: AutoSegment[];
   customSegments: CustomSegment[];
@@ -48,6 +49,7 @@ export function SegmentosClient({
   lojas: { id: string; name: string; color: string }[];
   isGrupo: boolean;
   canCreate: boolean;
+  canDelete: boolean;
 }) {
   const router = useRouter();
   const [customSegments, setCustomSegments] = useState(initialCustom);
@@ -95,7 +97,12 @@ export function SegmentosClient({
   }
 
   async function excluir(id: string) {
-    await fetch(`/api/crm/segmentos/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/crm/segmentos/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "Não foi possível excluir esse segmento.");
+      return;
+    }
     setCustomSegments((prev) => prev.filter((s) => s.id !== id));
   }
 
@@ -145,7 +152,7 @@ export function SegmentosClient({
                 ticketMedio={s.ticketMedio}
                 onCampanha={() => router.push(`/portal/crm/campanhas/novo?segmentoId=${s.id}`)}
                 onVer={() => router.push(`/portal/crm/clientes?criteria=${encodeURIComponent(JSON.stringify(s.criteria))}`)}
-                onDelete={() => excluir(s.id)}
+                onDelete={canDelete ? () => excluir(s.id) : undefined}
               />
             ))}
           </div>

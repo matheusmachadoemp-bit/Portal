@@ -16,6 +16,7 @@ export default async function BibliotecaPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageMarketing;
+  const canDelete = await hasModulePermission(session.user.id, "marketing", "canDelete");
 
   const files = await prisma.marketingFile.findMany({
     where: { empresaId: { in: empresaIds }, space: "biblioteca" },
@@ -27,7 +28,7 @@ export default async function BibliotecaPage() {
 
   return (
     <PageContainer title="Marketing" subtitle="Biblioteca de arquivos">
-      <FilesClient initialFiles={serialized} canCreate={canCreate} />
+      <FilesClient initialFiles={serialized} canCreate={canCreate} canDelete={canDelete} />
     </PageContainer>
   );
 }

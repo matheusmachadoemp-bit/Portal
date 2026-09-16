@@ -19,6 +19,7 @@ export default async function SegmentosPage() {
   const isGrupo = ctx?.mode === "grupo";
   const canManageCrm = await hasModulePermission(session.user.id, "crm", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageCrm;
+  const canDelete = await hasModulePermission(session.user.id, "crm", "canDelete");
 
   const [clientes, segmentosSalvos] = await Promise.all([
     loadClientesCompletos(empresaIds),
@@ -80,6 +81,7 @@ export default async function SegmentosPage() {
           lojas={lojas}
           isGrupo={isGrupo}
           canCreate={canCreate}
+          canDelete={canDelete}
         />
       </div>
     </PageContainer>
