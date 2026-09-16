@@ -35,11 +35,13 @@ export function AutomacoesClient({
   templates,
   custom,
   canCreate,
+  canEdit,
   canDelete,
 }: {
   templates: Template[];
   custom: Custom[];
   canCreate: boolean;
+  canEdit: boolean;
   canDelete: boolean;
 }) {
   const router = useRouter();
@@ -125,10 +127,11 @@ export function AutomacoesClient({
                 {t.existing ? (
                   <button
                     onClick={() => toggleAtivo(t.existing!.id, t.existing!.active)}
-                    disabled={busyKey === t.existing.id}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${t.existing.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
+                    disabled={busyKey === t.existing.id || !canEdit}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${t.existing.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
                   >
-                    {t.existing.active ? "Ativa" : "Inativa"} · clique para {t.existing.active ? "desativar" : "ativar"}
+                    {t.existing.active ? "Ativa" : "Inativa"}
+                    {canEdit ? ` · clique para ${t.existing.active ? "desativar" : "ativar"}` : ""}
                   </button>
                 ) : (
                   <button
@@ -166,8 +169,8 @@ export function AutomacoesClient({
                 </p>
                 <button
                   onClick={() => toggleAtivo(c.id, c.active)}
-                  disabled={busyKey === c.id}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${c.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
+                  disabled={busyKey === c.id || !canEdit}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${c.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
                 >
                   {c.active ? "Ativa" : "Inativa"}
                 </button>
