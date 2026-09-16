@@ -43,7 +43,7 @@ export function StatCard({
             <DynamicIcon name={icon} size={20} style={{ color }} />
           </div>
         )}
-        <span className={`truncate ${labelClassName}`}>{label}</span>
+        <span className={`truncate ${labelClassName}`} title={label}>{label}</span>
       </div>
       <span className="text-white text-2xl font-semibold tracking-tight truncate">{value}</span>
       <div className="flex items-center gap-1 min-h-[20px]">

@@ -49,7 +49,7 @@ export function Modal({
       <div
         className={`relative z-10 w-full ${widthClass} nord-card bg-nord-card shadow-2xl max-h-[90vh] overflow-y-auto nord-scrollbar`}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-nord-border sticky top-0 bg-nord-card">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-nord-border sticky top-0 z-10 bg-nord-card">
           <h2 className="text-white font-semibold text-base">{title}</h2>
           <button onClick={onClose} className="text-nord-gray hover:text-white">
             <X size={18} />

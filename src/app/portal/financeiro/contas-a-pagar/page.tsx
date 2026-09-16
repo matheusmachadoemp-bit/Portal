@@ -44,6 +44,7 @@ export default async function ContasAPagarPage() {
           categorias={categorias}
           contas={contas}
           canCreate={canCreate}
+          isGrupoNordMode={ctx?.mode !== "single"}
         />
       </div>
     </PageContainer>

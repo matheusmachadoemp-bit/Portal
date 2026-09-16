@@ -42,6 +42,7 @@ export default async function OcorrenciasPage() {
         initialOccurrences={serialized}
         employees={employees.map((e) => ({ id: e.id, name: e.name, setor: e.setor }))}
         canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
       />
     </PageContainer>
   );

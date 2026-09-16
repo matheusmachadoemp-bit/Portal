@@ -51,7 +51,7 @@ export function Topbar({
       <div className="flex items-center gap-2 min-w-0">
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="md:hidden shrink-0 text-nord-gray hover:text-white p-2 -ml-2 rounded-lg hover:bg-white/5"
+          className="lg:hidden shrink-0 text-nord-gray hover:text-white p-2 -ml-2 rounded-lg hover:bg-white/5"
           aria-label="Abrir menu"
         >
           <Menu size={20} />
