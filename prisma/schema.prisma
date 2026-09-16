@@ -2594,9 +2594,12 @@ model GerenteMeeting {
   @@unique([empresaId, periodo])
 }
 
-/// Card "Metas de [nome do próximo mês]" da Reunião Gerente — cadastro livre de
-/// metas para o mês seguinte (ex.: "CMV: 35% — ganha R$500 — Equipe"), exibidas
-/// depois na última página do PDF exportado (ver src/lib/reuniao-pdf.ts, Fase 2).
+/// Card "Metas de [nome do próximo mês]" de cada uma das 5 reuniões
+/// (`meetingKey` diz de qual) — cadastro livre de metas para o mês seguinte
+/// (ex.: "CMV: 35% — ganha R$500 — Equipe"), exibidas depois na última página
+/// do PDF exportado (ver src/lib/reuniao-pdf.ts — hoje só o parâmetro
+/// `metasProximoMes` do PDF do Gerente é preenchido; estender pras outras 4
+/// reuniões é Fase 2/tela, fora do escopo desta migration).
 ///
 /// `periodo` é o mês-alvo da meta ("2026-10", YYYY-MM — mesmo formato usado por
 /// GerenteMeeting.periodo/ReuniaoCustomIndicatorValue.periodo, sem inventar um
@@ -2606,34 +2609,39 @@ model GerenteMeeting {
 /// o cadastro de metas de outubro continua sendo "de outubro" mesmo depois que o
 /// mês virar e o "próximo mês" passar a apontar para novembro.
 ///
-/// Sem FK para GerenteMeeting de propósito: as metas de um mês são cadastradas
-/// ANTES desse mês começar (durante a reunião do mês atual), quando ainda não
-/// existe — e pode não vir a existir na hora certa — um GerenteMeeting daquele
-/// período futuro. Período solto em string (não uma relação) é o mesmo
-/// mecanismo já usado por ReuniaoCustomIndicatorValue.
+/// Sem FK para GerenteMeeting/SalaoMeeting/etc. de propósito: as metas de um
+/// mês são cadastradas ANTES desse mês começar (durante a reunião do mês
+/// atual), quando ainda não existe — e pode não vir a existir na hora certa —
+/// um fechamento daquele período futuro. Período solto em string (não uma
+/// relação) é o mesmo mecanismo já usado por ReuniaoCustomIndicatorValue.
 ///
-/// Sem `meetingKey` por enquanto — pedido do usuário foi só para a Reunião
-/// Gerente. Se Salão/Cozinha/Delivery/Liderança quiserem o mesmo mecanismo
-/// depois, generalizar do mesmo jeito que ReuniaoCustomIndicator generalizou
-/// (nasceu só do Gerente, ganhou `meetingKey` em
-/// 20260914150000_reuniao_custom_indicador_compartilhado quando as outras 4
-/// reuniões precisaram da mesma seção).
+/// `meetingKey` (enum ReuniaoMeetingKey, mesmo conjunto fechado de
+/// ReuniaoCustomIndicator — ver comentário lá) generaliza este model, que
+/// nasceu só do Gerente (sem essa coluna, migration
+/// 20260915181816_reuniao_gerente_metas_proximo_mes) e ganhou `meetingKey` em
+/// 20260916000000_meta_proximo_mes_meeting_key quando Salão/Cozinha/Delivery/
+/// Liderança passaram a ter o mesmo card — mesmo raciocínio de
+/// 20260914150000_reuniao_custom_indicador_compartilhado. Sem valor default:
+/// diferente do backfill do dado já existente (100% do Gerente, feito na
+/// própria migration), toda linha nova precisa informar a reunião de forma
+/// explícita.
 model MetaProximoMes {
-  id           String   @id @default(cuid())
+  id           String            @id @default(cuid())
   empresaId    String
-  empresa      Empresa  @relation(fields: [empresaId], references: [id])
+  empresa      Empresa           @relation(fields: [empresaId], references: [id])
+  meetingKey   ReuniaoMeetingKey
   periodo      String // mês-alvo da meta, "2026-10" (YYYY-MM)
   metrica      String // ex.: "CMV", "Tempo Pedido"
   valorAlvo    String // ex.: "35%", "15min" — texto livre pra acomodar unidade variável por métrica
-  valorPremio  Float    @default(0) // prêmio em R$ ao bater a meta (ex.: 500)
-  destinatario String   @default("Equipe") // quem ganha o prêmio — texto livre, não enum (ex.: "Equipe", um cargo, uma pessoa)
-  order        Int      @default(0) // preserva a ordem de cadastro (exibição na tela e no PDF)
+  valorPremio  Float             @default(0) // prêmio em R$ ao bater a meta (ex.: 500)
+  destinatario String            @default("Equipe") // quem ganha o prêmio — texto livre, não enum (ex.: "Equipe", um cargo, uma pessoa)
+  order        Int               @default(0) // preserva a ordem de cadastro (exibição na tela e no PDF)
   createdById  String
-  createdBy    User     @relation(fields: [createdById], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdBy    User              @relation(fields: [createdById], references: [id])
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
-  @@index([empresaId, periodo])
+  @@index([empresaId, meetingKey, periodo])
 }
 
 /// "Resultado do período" da Reunião Liderança é 100% computado a partir das

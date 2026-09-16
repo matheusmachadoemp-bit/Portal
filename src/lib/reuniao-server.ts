@@ -485,3 +485,112 @@ export async function findReuniaoCustomIndicatorForMeeting(id: string, empresaId
   if (!indicator || indicator.empresaId !== empresaId || indicator.meetingKey !== meetingKey) return null;
   return indicator;
 }
+
+/**
+ * Card "Metas de [próximo mês]" de cada uma das 5 reuniões (`meetingKey` diz
+ * de qual) — cadastro livre de metas para o mês seguinte (métrica, valor-alvo,
+ * prêmio em R$, destinatário). Mecanismo único (model `MetaProximoMes`, ver
+ * schema.prisma) compartilhado pelas 5 reuniões desde
+ * 20260916023001_meta_proximo_mes_meeting_key — nasceu só do Gerente
+ * (20260915181816_reuniao_gerente_metas_proximo_mes) e foi generalizado do
+ * mesmo jeito que ReuniaoCustomIndicator generalizou. Mesmo padrão de
+ * funções/comentários de load/create/find usado logo acima para os
+ * indicadores.
+ */
+
+/**
+ * Lista as metas de uma reunião específica (`meetingKey`) num período, na
+ * ordem de cadastro (order, com createdAt como desempate) — cada uma com o
+ * nome de quem cadastrou. Extraído aqui porque as 5 rotas GET
+ * /api/reuniao/{sub}/metas-proximo-mes repetem exatamente essa consulta, só
+ * trocando o `meetingKey`.
+ */
+export async function loadMetasProximoMes(empresaId: string, meetingKey: ReuniaoMeetingKeyDTO, periodo: string) {
+  return prisma.metaProximoMes.findMany({
+    where: { empresaId, meetingKey, periodo },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    include: { createdBy: { select: { name: true } } },
+  });
+}
+
+/**
+ * Cria uma meta nova para uma reunião específica (`meetingKey`), sempre no
+ * fim da lista daquele período+reunião (maior `order` + 1 entre as metas com
+ * o mesmo `meetingKey`/`periodo`) — mesma lógica de
+ * `createReuniaoCustomIndicator`. Extraído aqui porque as 5 rotas POST
+ * /api/reuniao/{sub}/metas-proximo-mes repetem exatamente essa lógica; cada
+ * rota só cuida da validação (período/métrica/valor-alvo) antes de chamar
+ * isto.
+ */
+export async function createMetaProximoMes(params: {
+  empresaId: string;
+  meetingKey: ReuniaoMeetingKeyDTO;
+  periodo: string;
+  metrica: string;
+  valorAlvo: string;
+  valorPremio: number;
+  destinatario: string;
+  createdById: string;
+}) {
+  const maxOrder = await prisma.metaProximoMes.aggregate({
+    where: { empresaId: params.empresaId, meetingKey: params.meetingKey, periodo: params.periodo },
+    _max: { order: true },
+  });
+
+  return prisma.metaProximoMes.create({
+    data: {
+      empresaId: params.empresaId,
+      meetingKey: params.meetingKey,
+      periodo: params.periodo,
+      metrica: params.metrica,
+      valorAlvo: params.valorAlvo,
+      valorPremio: params.valorPremio,
+      destinatario: params.destinatario,
+      order: (maxOrder._max.order ?? 0) + 1,
+      createdById: params.createdById,
+    },
+    include: { createdBy: { select: { name: true } } },
+  });
+}
+
+/**
+ * Busca uma meta pelo id, mas só devolve algo se ela realmente for dessa
+ * empresa E dessa reunião (`meetingKey`) — mesma dupla checagem de posse de
+ * `findReuniaoCustomIndicatorForMeeting` acima, usada pelas rotas
+ * PATCH/DELETE /api/reuniao/{sub}/metas-proximo-mes/{id}, pra uma rota de uma
+ * reunião nunca conseguir editar/excluir a meta de outra (mesmo que alguém
+ * descubra/adivinhe o id).
+ */
+export async function findMetaProximoMesForMeeting(id: string, empresaId: string, meetingKey: ReuniaoMeetingKeyDTO) {
+  const meta = await prisma.metaProximoMes.findUnique({ where: { id } });
+  if (!meta || meta.empresaId !== empresaId || meta.meetingKey !== meetingKey) return null;
+  return meta;
+}
+
+export type MetaProximoMesUpdateInput = {
+  periodo?: string;
+  metrica?: string;
+  valorAlvo?: string;
+  valorPremio?: number;
+  destinatario?: string;
+  order?: number;
+};
+
+/**
+ * Atualiza os campos enviados (todos opcionais) de uma meta já criada. A
+ * rota chamadora já validou o payload e confirmou a posse (mesma empresa +
+ * mesma reunião) via `findMetaProximoMesForMeeting` antes de chamar isto —
+ * este helper é um repasse direto ao Prisma, extraído aqui só por simetria
+ * com o resto do módulo (load/create/find já centralizados acima).
+ */
+export async function updateMetaProximoMes(id: string, data: MetaProximoMesUpdateInput) {
+  return prisma.metaProximoMes.update({ where: { id }, data });
+}
+
+/**
+ * Exclui uma meta já criada. Mesma observação de `updateMetaProximoMes`: a
+ * posse já foi confirmada pela rota chamadora antes de chamar isto.
+ */
+export async function deleteMetaProximoMes(id: string): Promise<void> {
+  await prisma.metaProximoMes.delete({ where: { id } });
+}

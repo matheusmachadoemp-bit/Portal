@@ -6,28 +6,10 @@ import { periodoLabel, proximoMesPeriodo, PERIODO_REGEX } from "@/lib/reuniao";
 import { createMetaProximoMes, loadMetasProximoMes } from "@/lib/reuniao-server";
 
 /**
- * Card "Metas de [nome do próximo mês]" da Reunião Gerente (logo abaixo de
- * "Observações da reunião") — lista de metas cadastradas para um mês-alvo
- * (`periodo`, "AAAA-MM"), cada uma com métrica, valor-alvo, prêmio em R$ e
- * destinatário do prêmio. Mesmo mecanismo de permissão do resto da Reunião
- * Gerente (moduleKey "reuniao" — não existe um moduleKey separado por
- * sub-reunião neste projeto).
- *
- * GET lista as metas de um período (default: o próximo mês a partir de hoje,
- * `proximoMesPeriodo()` — nunca digitado). POST cria uma meta nova nesse
- * período. Editar/excluir uma meta específica é em
- * /api/reuniao/gerente/metas-proximo-mes/[id].
- *
- * Em modo "Grupo Nord" (múltiplas lojas ao mesmo tempo) devolve lista vazia —
- * mesmo critério já usado por `current`/`customIndicators` em
- * /api/reuniao/gerente: metas premiam uma equipe de UMA loja específica, não
- * faz sentido misturar metas de lojas diferentes numa visão consolidada.
- *
- * Rota fina: toda a lógica de leitura/gravação fica centralizada em
- * `src/lib/reuniao-server.ts` (`loadMetasProximoMes`/`createMetaProximoMes`,
- * `meetingKey: "GERENTE"`), compartilhada com as mesmas rotas de
- * Salão/Cozinha/Delivery/Liderança — mesmo padrão já usado pelas rotas de
- * indicadores (.../indicadores/route.ts).
+ * Card "Metas de [nome do próximo mês]" da Reunião Delivery — mesmo mecanismo
+ * de `/api/reuniao/gerente/metas-proximo-mes` (ver comentário lá), só
+ * trocando `meetingKey` para "DELIVERY". Rota fina: toda a lógica fica em
+ * `src/lib/reuniao-server.ts` (`loadMetasProximoMes`/`createMetaProximoMes`).
  */
 export async function GET(req: Request) {
   const session = await auth();
@@ -43,7 +25,7 @@ export async function GET(req: Request) {
   const periodoParam = searchParams.get("periodo");
   const periodo = periodoParam && PERIODO_REGEX.test(periodoParam) ? periodoParam : proximoMesPeriodo();
 
-  const metas = ctx.mode === "single" ? await loadMetasProximoMes(ctx.empresa.id, "GERENTE", periodo) : [];
+  const metas = ctx.mode === "single" ? await loadMetasProximoMes(ctx.empresa.id, "DELIVERY", periodo) : [];
 
   return NextResponse.json({ metas, periodo, periodoLabel: periodoLabel(periodo) });
 }
@@ -53,7 +35,7 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "reuniao", "canCreate"))) {
     return NextResponse.json(
-      { error: "Seu perfil de permissão não permite cadastrar metas na Reunião Gerente." },
+      { error: "Seu perfil de permissão não permite cadastrar metas na Reunião Delivery." },
       { status: 403 }
     );
   }
@@ -89,7 +71,7 @@ export async function POST(req: Request) {
 
   const meta = await createMetaProximoMes({
     empresaId: empresa.id,
-    meetingKey: "GERENTE",
+    meetingKey: "DELIVERY",
     periodo,
     metrica,
     valorAlvo,
