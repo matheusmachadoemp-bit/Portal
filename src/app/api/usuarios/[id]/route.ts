@@ -23,6 +23,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
 
+  // Nome vazio/só espaço (ou `null` explícito) não é um "não mexe" — isso é a chave `name`
+  // ausente do body (`undefined`), tratada como no-op logo abaixo. Sem essa checagem, um
+  // PATCH { name: "" } passava direto e gravava o usuário sem nome no banco silenciosamente
+  // (reproduzido ao vivo: 200 OK, nome virou "" no banco). `name` é obrigatório e não-nulo no
+  // schema (`User.name String`), então mesmo um `null` explícito é rejeitado aqui, não só
+  // ignorado. Mesmo padrão/mensagem de erro do POST /api/usuarios (nome obrigatório).
+  let name: string | undefined;
+  if (body.name !== undefined) {
+    name = String(body.name ?? "").trim();
+    if (!name) {
+      return NextResponse.json({ error: "Informe o nome do usuário." }, { status: 400 });
+    }
+  }
+
   // Ninguém pode alterar o próprio nível de acesso (role) nem o próprio perfil de
   // permissão por essa rota — mesmo um Gestor com permissão para editar usuários não
   // pode se autopromover trocando o próprio cargo, nem se dar mais acesso limpando o
@@ -110,7 +124,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const data: Record<string, unknown> = {
-    name: body.name ?? undefined,
+    name,
     email,
     role: body.role ?? undefined,
     active: body.active ?? undefined,
