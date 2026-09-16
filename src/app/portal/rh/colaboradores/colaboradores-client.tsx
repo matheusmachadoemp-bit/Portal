@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Eye, Upload } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -142,6 +142,71 @@ export function ColaboradoresClient({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Catálogo de Cargos/Setores já cadastrados (EmployeeCargo/EmployeeSetor, por loja ativa) —
+  // alimenta os selects "Cargo"/"Setor" do formulário, em vez de texto livre (GET /api/rh/cargos
+  // e /api/rh/setores). Cada campo tem um modo "digitar novo" próprio: entra automaticamente
+  // quando o catálogo daquela loja ainda está vazio, ou manualmente ao escolher "+ Cadastrar
+  // novo..." no select — o texto digitado é cadastrado no catálogo pela própria rota de salvar
+  // colaborador (resolveEmployeeCargo/resolveEmployeeSetor em @/lib/rh-server).
+  const [cargoOptions, setCargoOptions] = useState<string[]>([]);
+  const [setorOptions, setSetorOptions] = useState<string[]>([]);
+  const [cargoCatalogError, setCargoCatalogError] = useState<string | null>(null);
+  const [setorCatalogError, setSetorCatalogError] = useState<string | null>(null);
+  const [cargoManualEntry, setCargoManualEntry] = useState(false);
+  const [setorManualEntry, setSetorManualEntry] = useState(false);
+
+  // Busca cargos/setores já cadastrados na API. Reaproveitada tanto na montagem quanto depois de
+  // um submit() bem-sucedido (do mesmo jeito que refresh() recarrega a lista de colaboradores) —
+  // assim, ao cadastrar um cargo/setor novo via "+ Cadastrar novo..." e salvar, ele já aparece
+  // como opção no select do próximo colaborador cadastrado na mesma sessão, sem precisar recarregar
+  // a página.
+  const loadCargoSetorCatalog = useCallback(() => {
+    fetch("/api/rh/cargos")
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? "Não foi possível carregar a lista de cargos.");
+        }
+        return res.json();
+      })
+      .then((data) => setCargoOptions((data.cargos ?? []).map((c: { nome: string }) => c.nome)))
+      .catch((err) =>
+        setCargoCatalogError(err instanceof Error ? err.message : "Não foi possível carregar a lista de cargos.")
+      );
+
+    fetch("/api/rh/setores")
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? "Não foi possível carregar a lista de setores.");
+        }
+        return res.json();
+      })
+      .then((data) => setSetorOptions((data.setores ?? []).map((s: { nome: string }) => s.nome)))
+      .catch((err) =>
+        setSetorCatalogError(err instanceof Error ? err.message : "Não foi possível carregar a lista de setores.")
+      );
+  }, []);
+
+  useEffect(() => {
+    loadCargoSetorCatalog();
+  }, [loadCargoSetorCatalog]);
+
+  // Modo "select" some se ainda não há nada cadastrado (ou a lista falhou ao carregar) — nesses
+  // casos o campo vira texto livre para não travar o cadastro, com uma mensagem explicando o motivo.
+  const showCargoInput = cargoManualEntry || cargoOptions.length === 0;
+  const showSetorInput = setorManualEntry || setorOptions.length === 0;
+  // Garante que o valor atual do formulário sempre apareça como opção (ex.: colaborador com um
+  // cargo/setor que, por algum motivo, ainda não está no catálogo) em vez de ficar "orfão" no select.
+  const cargoSelectOptions = useMemo(
+    () => (form.cargo && !cargoOptions.includes(form.cargo) ? [form.cargo, ...cargoOptions] : cargoOptions),
+    [form.cargo, cargoOptions]
+  );
+  const setorSelectOptions = useMemo(
+    () => (form.setor && !setorOptions.includes(form.setor) ? [form.setor, ...setorOptions] : setorOptions),
+    [form.setor, setorOptions]
+  );
+
   const [search, setSearch] = useState("");
   const [filterLoja, setFilterLoja] = useState("");
   const [filterCargo, setFilterCargo] = useState("");
@@ -178,6 +243,8 @@ export function ColaboradoresClient({
     setForm(emptyForm);
     setPhotoError(null);
     setFormError(null);
+    setCargoManualEntry(false);
+    setSetorManualEntry(false);
     setShowForm(true);
   }
 
@@ -185,6 +252,8 @@ export function ColaboradoresClient({
     setEditing(e);
     setPhotoError(null);
     setFormError(null);
+    setCargoManualEntry(false);
+    setSetorManualEntry(false);
     setForm({
       name: e.name,
       cargo: e.cargo,
@@ -232,6 +301,7 @@ export function ColaboradoresClient({
       }
       setShowForm(false);
       await refresh();
+      loadCargoSetorCatalog();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Erro ao salvar colaborador.");
     } finally {
@@ -513,10 +583,112 @@ export function ColaboradoresClient({
               </Field>
             </div>
             <Field label="Cargo">
-              <input required value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="input" />
+              {showCargoInput ? (
+                <>
+                  <input
+                    required
+                    value={form.cargo}
+                    onChange={(e) => setForm({ ...form, cargo: e.target.value })}
+                    className="input"
+                    placeholder="Digite o cargo"
+                  />
+                  {cargoCatalogError ? (
+                    <p className="text-[11px] text-nord-warning mt-1">
+                      {cargoCatalogError} Digite normalmente — será cadastrado ao salvar.
+                    </p>
+                  ) : cargoOptions.length === 0 ? (
+                    <p className="text-[11px] text-nord-gray mt-1">
+                      Nenhum cargo cadastrado ainda nesta loja. Digite para cadastrar o primeiro.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCargoManualEntry(false)}
+                      className="text-[11px] text-nord-blue-light hover:underline mt-1"
+                    >
+                      Usar lista de cargos já cadastrados
+                    </button>
+                  )}
+                </>
+              ) : (
+                <select
+                  required
+                  value={form.cargo}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setCargoManualEntry(true);
+                      setForm({ ...form, cargo: "" });
+                    } else {
+                      setForm({ ...form, cargo: e.target.value });
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value="" disabled>
+                    Selecione o cargo
+                  </option>
+                  {cargoSelectOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Cadastrar novo cargo...</option>
+                </select>
+              )}
             </Field>
             <Field label="Setor">
-              <input required value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })} className="input" />
+              {showSetorInput ? (
+                <>
+                  <input
+                    required
+                    value={form.setor}
+                    onChange={(e) => setForm({ ...form, setor: e.target.value })}
+                    className="input"
+                    placeholder="Digite o setor"
+                  />
+                  {setorCatalogError ? (
+                    <p className="text-[11px] text-nord-warning mt-1">
+                      {setorCatalogError} Digite normalmente — será cadastrado ao salvar.
+                    </p>
+                  ) : setorOptions.length === 0 ? (
+                    <p className="text-[11px] text-nord-gray mt-1">
+                      Nenhum setor cadastrado ainda nesta loja. Digite para cadastrar o primeiro.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSetorManualEntry(false)}
+                      className="text-[11px] text-nord-blue-light hover:underline mt-1"
+                    >
+                      Usar lista de setores já cadastrados
+                    </button>
+                  )}
+                </>
+              ) : (
+                <select
+                  required
+                  value={form.setor}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setSetorManualEntry(true);
+                      setForm({ ...form, setor: "" });
+                    } else {
+                      setForm({ ...form, setor: e.target.value });
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value="" disabled>
+                    Selecione o setor
+                  </option>
+                  {setorSelectOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Cadastrar novo setor...</option>
+                </select>
+              )}
             </Field>
             <Field label="Data de admissão">
               <input type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} className="input" />

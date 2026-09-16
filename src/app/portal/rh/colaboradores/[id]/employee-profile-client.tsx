@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
@@ -123,6 +123,57 @@ export function EmployeeProfileClient({
     lastTrainingDate: employee.lastTrainingDate ? format(new Date(employee.lastTrainingDate), "yyyy-MM-dd") : "",
     lastTrainingName: employee.lastTrainingName ?? "",
   });
+
+  // Catálogo de Cargos/Setores já cadastrados (EmployeeCargo/EmployeeSetor, mesma loja do
+  // colaborador) — alimenta os selects "Cargo"/"Setor" do modal de edição, em vez de texto livre.
+  // Mesmo padrão de RH > Colaboradores (colaboradores-client.tsx): GET /api/rh/cargos e
+  // /api/rh/setores, com um modo "digitar novo" que entra sozinho quando o catálogo está vazio,
+  // ou manualmente ao escolher "+ Cadastrar novo...".
+  const [cargoOptions, setCargoOptions] = useState<string[]>([]);
+  const [setorOptions, setSetorOptions] = useState<string[]>([]);
+  const [cargoCatalogError, setCargoCatalogError] = useState<string | null>(null);
+  const [setorCatalogError, setSetorCatalogError] = useState<string | null>(null);
+  const [cargoManualEntry, setCargoManualEntry] = useState(false);
+  const [setorManualEntry, setSetorManualEntry] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/rh/cargos")
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? "Não foi possível carregar a lista de cargos.");
+        }
+        return res.json();
+      })
+      .then((data) => setCargoOptions((data.cargos ?? []).map((c: { nome: string }) => c.nome)))
+      .catch((err) =>
+        setCargoCatalogError(err instanceof Error ? err.message : "Não foi possível carregar a lista de cargos.")
+      );
+
+    fetch("/api/rh/setores")
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? "Não foi possível carregar a lista de setores.");
+        }
+        return res.json();
+      })
+      .then((data) => setSetorOptions((data.setores ?? []).map((s: { nome: string }) => s.nome)))
+      .catch((err) =>
+        setSetorCatalogError(err instanceof Error ? err.message : "Não foi possível carregar a lista de setores.")
+      );
+  }, []);
+
+  const showCargoInput = cargoManualEntry || cargoOptions.length === 0;
+  const showSetorInput = setorManualEntry || setorOptions.length === 0;
+  const cargoSelectOptions = useMemo(
+    () => (form.cargo && !cargoOptions.includes(form.cargo) ? [form.cargo, ...cargoOptions] : cargoOptions),
+    [form.cargo, cargoOptions]
+  );
+  const setorSelectOptions = useMemo(
+    () => (form.setor && !setorOptions.includes(form.setor) ? [form.setor, ...setorOptions] : setorOptions),
+    [form.setor, setorOptions]
+  );
 
   const totals = useMemo(() => {
     const sumType = (type: string) => financeEntries.filter((f) => f.type === type).reduce((s, f) => s + f.value, 0);
@@ -267,6 +318,8 @@ export function EmployeeProfileClient({
           <button
             onClick={() => {
               setEditError(null);
+              setCargoManualEntry(false);
+              setSetorManualEntry(false);
               setShowEdit(true);
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white self-start"
@@ -408,10 +461,112 @@ export function EmployeeProfileClient({
               </Field>
             </div>
             <Field label="Cargo">
-              <input required value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} className="input" />
+              {showCargoInput ? (
+                <>
+                  <input
+                    required
+                    value={form.cargo}
+                    onChange={(e) => setForm({ ...form, cargo: e.target.value })}
+                    className="input"
+                    placeholder="Digite o cargo"
+                  />
+                  {cargoCatalogError ? (
+                    <p className="text-[11px] text-nord-warning mt-1">
+                      {cargoCatalogError} Digite normalmente — será cadastrado ao salvar.
+                    </p>
+                  ) : cargoOptions.length === 0 ? (
+                    <p className="text-[11px] text-nord-gray mt-1">
+                      Nenhum cargo cadastrado ainda nesta loja. Digite para cadastrar o primeiro.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCargoManualEntry(false)}
+                      className="text-[11px] text-nord-blue-light hover:underline mt-1"
+                    >
+                      Usar lista de cargos já cadastrados
+                    </button>
+                  )}
+                </>
+              ) : (
+                <select
+                  required
+                  value={form.cargo}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setCargoManualEntry(true);
+                      setForm({ ...form, cargo: "" });
+                    } else {
+                      setForm({ ...form, cargo: e.target.value });
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value="" disabled>
+                    Selecione o cargo
+                  </option>
+                  {cargoSelectOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Cadastrar novo cargo...</option>
+                </select>
+              )}
             </Field>
             <Field label="Setor">
-              <input required value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })} className="input" />
+              {showSetorInput ? (
+                <>
+                  <input
+                    required
+                    value={form.setor}
+                    onChange={(e) => setForm({ ...form, setor: e.target.value })}
+                    className="input"
+                    placeholder="Digite o setor"
+                  />
+                  {setorCatalogError ? (
+                    <p className="text-[11px] text-nord-warning mt-1">
+                      {setorCatalogError} Digite normalmente — será cadastrado ao salvar.
+                    </p>
+                  ) : setorOptions.length === 0 ? (
+                    <p className="text-[11px] text-nord-gray mt-1">
+                      Nenhum setor cadastrado ainda nesta loja. Digite para cadastrar o primeiro.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSetorManualEntry(false)}
+                      className="text-[11px] text-nord-blue-light hover:underline mt-1"
+                    >
+                      Usar lista de setores já cadastrados
+                    </button>
+                  )}
+                </>
+              ) : (
+                <select
+                  required
+                  value={form.setor}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setSetorManualEntry(true);
+                      setForm({ ...form, setor: "" });
+                    } else {
+                      setForm({ ...form, setor: e.target.value });
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value="" disabled>
+                    Selecione o setor
+                  </option>
+                  {setorSelectOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Cadastrar novo setor...</option>
+                </select>
+              )}
             </Field>
             <Field label="Data de admissão">
               <input type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} className="input" />
