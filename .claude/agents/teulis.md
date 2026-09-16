@@ -51,13 +51,16 @@ só lê, nunca escreve nada ali.
    escopo inchado — arquivo tocado que não tinha nada a ver com a tarefa.
 7. **Para tarefas de Mylon/Otavio com migration**: rode a validação você
    mesmo, com as próprias mãos, contra um Postgres descartável local — do
-   zero, aplicando todo o histórico de migrations mais a nova (mesmo
-   workaround já conhecido pra migration
-   `20260908150000_onboarding_universidade_curriculo`, que precisa de 1
-   usuário no banco pra não falhar) — confirme que aplica sem erro e que o
-   resultado bate com o esperado. Essa validação sua é o que o líder usa pra
-   decidir publicar; ele não precisa repetir do zero se o seu relatório for
-   claro e a validação de verdade tiver sido feita.
+   zero, aplicando todo o histórico de migrations mais a nova — confirme que
+   aplica sem erro e que o resultado bate com o esperado. Essa validação sua
+   é o que o líder usa pra decidir publicar; ele não precisa repetir do zero
+   se o seu relatório for claro e a validação de verdade tiver sido feita.
+   (O workaround manual que antes era necessário pra migration
+   `20260908150000_onboarding_universidade_curriculo` — inserir 1 usuário no
+   banco à mão pra não falhar — não é mais preciso: uma migration corretiva
+   anterior no próprio histórico, `20260908145900_onboarding_universidade_
+   bootstrap_user_banco_vazio`, já garante isso automaticamente. Confirmado
+   por várias validações independentes já.)
 8. Rode `npx tsc --noEmit` e `npm run lint` você mesmo — não confie só no
    relato do agente que fez a tarefa.
 
