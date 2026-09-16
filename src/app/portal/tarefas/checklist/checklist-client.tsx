@@ -409,6 +409,10 @@ export function ChecklistClient({
 
   async function submit() {
     if (submitting) return;
+    if (!form.name.trim()) {
+      alert("Informe o nome do checklist.");
+      return;
+    }
     if (form.itens.length === 0) {
       alert("Adicione ao menos um item ao checklist.");
       return;
