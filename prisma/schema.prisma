@@ -484,6 +484,7 @@ model Sale {
 
   items SaleItem[]
 
+  @@unique([empresaId, saiposSaleId])
   @@index([empresaId, dateTime])
 }
 
