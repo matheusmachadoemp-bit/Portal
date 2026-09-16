@@ -31,6 +31,12 @@ type SaleDTO = {
 
 type ItemLine = { key: string; productId: string; nome: string; categoria: string; quantidade: string; precoUnitario: string };
 
+/** Cor da tag de plataforma: iFood em vermelho, 99Food em amarelo — igual à identidade visual de cada marca. */
+const PLATFORM_TONE: Record<string, "danger" | "warning" | "info"> = {
+  IFOOD: "danger",
+  FOOD99: "warning",
+};
+
 function newKey() {
   return Math.random().toString(36).slice(2);
 }
@@ -232,7 +238,7 @@ export function LancamentosClient({
                   <Badge>{SALE_CHANNEL_LABEL[s.channel]}</Badge>
                   {s.platform !== "SITE_PROPRIO" && (
                     <span className="ml-1">
-                      <Badge tone="info">{SALE_PLATFORM_LABEL[s.platform]}</Badge>
+                      <Badge tone={PLATFORM_TONE[s.platform] ?? "info"}>{SALE_PLATFORM_LABEL[s.platform]}</Badge>
                     </span>
                   )}
                 </td>
