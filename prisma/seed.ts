@@ -1094,12 +1094,18 @@ async function main() {
   }
 
   // --- Metas ---
+  // Cada meta seed já nasce com o "valor realizado" preenchido só pra fins de
+  // demonstração (não é o app criando isso via tela) — mas, como
+  // Goal.valorRealizado agora é um cache calculado a partir da soma de
+  // GoalWeeklyUpdate (ver comentário do model em schema.prisma e
+  // recomputeGoalRealizado em src/lib/goals-server.ts), cada meta seed
+  // também precisa nascer com 1 lançamento semanal (semana 1) igual a esse
+  // valor, senão o cache ficaria mentindo sobre a soma real das semanas.
   const existingGoals = await prisma.goal.count();
   if (existingGoals === 0) {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    await prisma.goal.createMany({
-      data: [
+    for (const goalData of [
         {
           empresaId: nordPizza.id,
           name: "Faturamento mensal",
@@ -1185,8 +1191,17 @@ async function main() {
           status: "EM_RISCO",
           createdById: admin.id,
         },
-      ],
-    });
+      ] as const) {
+      const goal = await prisma.goal.create({ data: goalData });
+      await prisma.goalWeeklyUpdate.create({
+        data: {
+          goalId: goal.id,
+          weekNumber: 1,
+          valor: goalData.valorRealizado,
+          createdById: goalData.createdById,
+        },
+      });
+    }
   }
 
   // --- RH ---

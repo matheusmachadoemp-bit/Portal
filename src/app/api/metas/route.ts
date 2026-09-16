@@ -27,7 +27,7 @@ export async function GET(req: Request) {
       ...(category ? { category: category as never } : {}),
     },
     orderBy: { endDate: "asc" },
-    include: { attachments: true },
+    include: { attachments: true, weeklyUpdates: { orderBy: { weekNumber: "asc" } } },
   });
 
   return NextResponse.json({ goals });
@@ -54,9 +54,12 @@ export async function POST(req: Request) {
   const body = await req.json();
 
   const valorMeta = Number(body.valorMeta) || 0;
-  const valorRealizado = Number(body.valorRealizado) || 0;
   const endDate = new Date(body.endDate);
 
+  // `valorRealizado` nunca é aceito na criação: toda meta nova começa
+  // zerada e só sobe através dos lançamentos semanais (ver
+  // POST /api/metas/[id]/semanas) — nunca mais um número digitado direto
+  // aqui, mesmo que o body envie um.
   const goal = await prisma.goal.create({
     data: {
       empresaId: empresa.id,
@@ -66,16 +69,16 @@ export async function POST(req: Request) {
       description: body.description || null,
       indicador: body.indicador || null,
       valorMeta,
-      valorRealizado,
       unidade: body.unidade || "R$",
       startDate: new Date(body.startDate),
       endDate,
       bonificacao: body.bonificacao || null,
-      status: computeGoalStatus(valorRealizado, valorMeta, endDate) as never,
+      status: computeGoalStatus(0, valorMeta, endDate) as never,
       observacoes: body.observacoes || null,
       planoDeAcao: body.planoDeAcao || null,
       createdById: session.user.id,
     },
+    include: { attachments: true, weeklyUpdates: true },
   });
 
   return NextResponse.json({ goal });
