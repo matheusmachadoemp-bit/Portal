@@ -10,7 +10,7 @@ não assuma conhecimento prévio de termos técnicos sem explicar rapidamente o
 que significam na primeira vez que aparecem.
 
 Sempre que repassar/resumir um relatório de agente pro usuário, deixe claro
-logo no início **quem** é o autor (Caio, Mylon, Otavio, Nelson ou Teulis) e
+logo no início **quem** é o autor (Caio, Mylon, Otavio, Jonas ou Teulis) e
 **de que tarefa/item** se trata (ex.: "item 11 — horário do Fechamento do
 Dia") — nunca deixe isso implícito só pelo contexto da conversa.
 
@@ -81,7 +81,7 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
   responsabilidades — existem dois pra poder tocar duas tarefas de backend
   independentes ao mesmo tempo. Ver "Conferir schema/migration antes de
   publicar" abaixo pra regra de coordenação entre os dois.
-- **Nelson** (`.claude/agents/nelson.md`, `subagent_type: "Nelson"`) —
+- **Jonas** (`.claude/agents/jonas.md`, `subagent_type: "Jonas"`) —
   especialista em segurança: audita autenticação/autorização, isolamento
   entre lojas, segredos/credenciais, dependências e injeção. Só investiga e
   relata (sem `Write`/`Edit`) — nunca corrige nada ele mesmo. Cada achado
@@ -105,12 +105,12 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
    surgirem duas tarefas de backend independentes, pode dividir uma pra
    cada, desde que não mexam no mesmo model/tabela — ver ponto 4); é um
    pedido de **auditoria/revisão de segurança** (achar vulnerabilidade,
-   revisar uma branch antes de publicar) → **Nelson**. Se envolve mais de
-   uma frente (ex.: Nelson encontra um achado que precisa de correção de
+   revisar uma branch antes de publicar) → **Jonas**. Se envolve mais de
+   uma frente (ex.: Jonas encontra um achado que precisa de correção de
    dado e outra de tela), quebre em tarefas separadas — uma por agente — e
    explique isso ao usuário antes de disparar.
 2. Dispare a tarefa com a ferramenta `Agent`, usando `subagent_type:
-   "Caio"`, `"Mylon"`, `"Otavio"` ou `"Nelson"` (o Teulis não entra nessa
+   "Caio"`, `"Mylon"`, `"Otavio"` ou `"Jonas"` (o Teulis não entra nessa
    classificação — ele não é pra quem o pedido do usuário é roteado, é uma
    etapa interna do líder antes de publicar, ver ponto 5), rodando em
    background (`run_in_background`, que é o padrão) — assim o usuário pode
@@ -121,8 +121,8 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
    continuidade à mesma tarefa (ex.: pedir um ajuste depois que ele já
    entregou algo), retome o agente já existente com `SendMessage` usando o
    nome/ID dele, em vez de criar um agente novo do zero.
-4. Caio, Mylon, Otavio e Nelson podem trabalhar **ao mesmo tempo**, em
-   tarefas diferentes, sem problema — Caio nunca toca no banco e Nelson
+4. Caio, Mylon, Otavio e Jonas podem trabalhar **ao mesmo tempo**, em
+   tarefas diferentes, sem problema — Caio nunca toca no banco e Jonas
    nunca escreve nada (só lê), então nenhum dos dois conflita com o outro
    nem com Mylon/Otavio. O cuidado de nunca ter duas tarefas simultâneas no
    **mesmo** agente vale igual pros quatro. Já Mylon e Otavio, apesar de
@@ -136,7 +136,7 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
 5. **Antes de publicar qualquer tarefa de produto (visual ou de banco),
    passa pelo Teulis primeiro.** Assim que Caio, Mylon ou Otavio terminam,
    o líder dispara o Teulis pra revisar o MESMO worktree/branch (ele não
-   precisa de worktree próprio, igual o Nelson) — passando o pedido
+   precisa de worktree próprio, igual o Jonas) — passando o pedido
    original resumido e quem fez. Só depois do relatório do Teulis vir
    liberado (ou dos achados dele serem corrigidos pelo agente que fez a
    tarefa e revisados de novo) o líder publica. Ver "Revisão do Teulis
@@ -188,7 +188,7 @@ Teulis primeiro. Fluxo:
    — a maioria volta pro mesmo agente que fez a tarefa, corrige, e passa
    pelo Teulis de novo; um achado de outra frente (ex.: bug visual achado
    numa tarefa do Mylon) vira uma tarefa separada pro agente certo, do jeito
-   que já se faz com achado do Nelson. Nunca publica com achado crítico ou
+   que já se faz com achado do Jonas. Nunca publica com achado crítico ou
    importante em aberto.
 
 Como o Teulis só lê (nunca escreve), ele pode revisar tranquilo mesmo com
@@ -227,14 +227,14 @@ direto na pasta onde o líder está.
 - Cada branch de tarefa vira, quando fizer sentido e o usuário pedir, um
   Pull Request próprio e focado — sem misturar features sem relação num
   PR só.
-- **Nelson e Teulis são a exceção**: como os dois só leem (nunca escrevem),
+- **Jonas e Teulis são a exceção**: como os dois só leem (nunca escrevem),
   não precisam de branch/worktree próprio — podem investigar/revisar direto
   num worktree já existente (no caso do Teulis, sempre o mesmo worktree da
   tarefa que ele está revisando). Mas atenção: a pasta principal do líder
   fica parada numa
   branch de fluxo de trabalho própria (`claude/project-leader-*`), que
   **nunca** recebe as mudanças de produto já publicadas — ela só serve para
-  editar `CLAUDE.md`/`.claude/agents/**`. Nunca aponte o Nelson ou o Teulis
+  editar `CLAUDE.md`/`.claude/agents/**`. Nunca aponte o Jonas ou o Teulis
   (nem leia você mesmo, líder) pra essa pasta achando que reflete o estado
   atual do Portal Nord — sempre `git fetch` a branch de produção
   (`claude/portal-nord-pizzaria-j180q7`) e investigue a partir de um
