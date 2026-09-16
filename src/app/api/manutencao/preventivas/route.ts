@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import {
+  assertEmpresaAccess,
+  empresaIdsForContext,
+  findUsersWithoutEmpresaAccess,
+  getActiveEmpresaContext,
+} from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -57,6 +62,16 @@ export async function POST(req: Request) {
       { error: "Seu perfil de permissão não permite programar manutenções preventivas." },
       { status: 403 }
     );
+  }
+
+  // O responsável precisa ter acesso a esta loja — sem essa checagem, qualquer usuário ativo
+  // da empresa toda podia ser designado responsável por uma preventiva de uma loja à qual não
+  // tem acesso nenhum.
+  if (body.responsavelId) {
+    const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], equipamento.empresaId);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
   }
 
   const preventiva = await prisma.manutencaoPreventiva.create({

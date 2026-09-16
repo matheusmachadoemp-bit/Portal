@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import {
+  empresaIdsForContext,
+  findUsersWithoutEmpresaAccess,
+  getActiveEmpresaContext,
+  requireActiveSingleEmpresa,
+} from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import type { ChecklistItemType } from "@prisma/client";
 
@@ -62,6 +67,20 @@ export async function POST(req: Request) {
   const itensInput: Record<string, unknown>[] = Array.isArray(body.itens) ? body.itens : [];
   if (itensInput.length === 0) {
     return NextResponse.json({ error: "Adicione ao menos um item ao checklist." }, { status: 400 });
+  }
+
+  // Responsável/substituto precisam ter acesso a esta loja — sem essa checagem, qualquer
+  // usuário ativo da empresa toda podia ser designado responsável por um checklist de uma loja
+  // à qual não tem acesso nenhum.
+  const idsToCheck = [body.responsavelId, body.substitutoId].filter((v): v is string => !!v);
+  if (idsToCheck.length > 0) {
+    const invalidIds = await findUsersWithoutEmpresaAccess(idsToCheck, empresa.id);
+    if (invalidIds.length > 0) {
+      return NextResponse.json(
+        { error: "Responsável/substituto selecionado não tem acesso a esta loja." },
+        { status: 400 }
+      );
+    }
   }
 
   const weekdayData = Object.fromEntries(WEEKDAYS.map((d) => [d, d === "terca" ? Boolean(body[d]) : body[d] !== false]));

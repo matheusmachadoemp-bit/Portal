@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { TarefasClient } from "./tarefas-client";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { generateDueTaskOccurrences } from "@/lib/tarefas-server";
 
 const TASK_INCLUDE = {
@@ -33,7 +33,7 @@ export default async function TarefasPage() {
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       include: TASK_INCLUDE,
     }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSelectableTeamMembers(empresaIds),
   ]);
 
   const now = Date.now();

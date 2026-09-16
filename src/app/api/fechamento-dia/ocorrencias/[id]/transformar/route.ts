@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { ChamadoCategoria, FechamentoGravidade } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { assertEmpresaAccess } from "@/lib/empresa";
+import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { createTaskFromExternalSource } from "@/lib/tarefas-server";
 import { generateChamadoProtocolo, logChamadoHistorico, notifyManutencaoUser } from "@/lib/manutencao-server";
@@ -85,6 +85,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const assigneeId: string | null =
     typeof body?.assigneeId === "string" ? body.assigneeId : (ocorrencia.cargo.responsavelId ?? null);
+
+  // O responsável (informado no corpo ou herdado do cargo) precisa ter acesso a esta loja —
+  // sem essa checagem, qualquer usuário ativo da empresa toda podia ser designado responsável
+  // pela Tarefa/Chamado gerado a partir desta ocorrência, mesmo sem acesso a esta loja.
+  if (assigneeId) {
+    const invalidIds = await findUsersWithoutEmpresaAccess([assigneeId], ocorrencia.empresaId);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
+  }
 
   if (tipo === "TASK") {
     const task = await createTaskFromExternalSource({

@@ -2,7 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import type { Empresa } from "@prisma/client";
+import type { Empresa, Prisma } from "@prisma/client";
 import { EMPRESA_COOKIE, GRUPO_SENTINEL } from "@/lib/empresa-constants";
 
 export { EMPRESA_COOKIE, GRUPO_SENTINEL };
@@ -140,4 +140,73 @@ export async function requireActiveSingleEmpresa(): Promise<Empresa | null> {
   const ctx = await getActiveEmpresaContext();
   if (!ctx || ctx.mode !== "single") return null;
   return ctx.empresa;
+}
+
+/**
+ * Filtro Prisma de "usuários ativos com acesso a pelo menos uma destas lojas" — mesmo critério
+ * de `assertEmpresaAccess`/`getUserEmpresas`: ADMINISTRADOR/GESTOR sempre contam (acesso a todas
+ * as lojas); os demais cargos só entram com `UserEmpresaAccess` explícito pra pelo menos uma das
+ * `empresaIds`. Mesmo critério já usado por `getStoreActiveUsers`
+ * (src/lib/manutencao-server.ts), mas generalizado pra aceitar uma lista (a maioria das telas usa
+ * `empresaIdsForContext(ctx)`, que pode ter mais de um id no modo Grupo Nord).
+ */
+function activeUserInEmpresasWhere(empresaIds: string[]): Prisma.UserWhereInput {
+  return {
+    active: true,
+    OR: [{ role: { in: ["ADMINISTRADOR", "GESTOR"] } }, { empresaAccess: { some: { empresaId: { in: empresaIds } } } }],
+  };
+}
+
+export type TeamMemberOption = { id: string; name: string };
+
+/**
+ * Usuários ativos selecionáveis como "Responsável"/"Membro da equipe" — usado pelos seletores de
+ * Tarefas, Checklist, Produção, Manutenção, Marketing, Loja Nord e Recebimento de estoque.
+ * Sempre escopado à(s) loja(s) do contexto ativo (passe `empresaIdsForContext(ctx)`, ou
+ * `[empresa.id]` quando só uma loja específica faz sentido) — nunca a lista global de usuários
+ * ativos da rede inteira: antes desta função existir, essas telas chamavam
+ * `prisma.user.findMany({ where: { active: true } })` direto, sem filtro nenhum de loja, e
+ * qualquer usuário via o nome de colaboradores de TODAS as lojas nesses seletores (inclusive
+ * podendo, do lado da escrita, atribuir a tarefa/checklist a alguém de outra loja — ver
+ * `findUsersWithoutEmpresaAccess` abaixo pra essa validação).
+ *
+ * Só retorna `id`/`name` — nunca e-mail/cargo (mesmo racional de `EMPRESA_SUMMARY_SELECT` acima
+ * pra `Empresa`): esses campos viram prop de Client Component, ficando visíveis no HTML/RSC
+ * payload a qualquer um que carregue a tela, mesmo sem motivo pra ver o e-mail de um colega.
+ */
+export async function getSelectableTeamMembers(empresaIds: string[]): Promise<TeamMemberOption[]> {
+  if (empresaIds.length === 0) return [];
+  return prisma.user.findMany({
+    where: activeUserInEmpresasWhere(empresaIds),
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * Dentre `userIds`, quais NÃO têm acesso a `empresaId` (mesmo critério de `assertEmpresaAccess`,
+ * checado usuário a usuário) — ids inexistentes também entram no resultado, nunca são ignorados
+ * em silêncio. Retorno vazio = todos os ids passaram.
+ *
+ * Use nas rotas de escrita que gravam um id de usuário vindo do corpo da requisição num registro
+ * de uma loja específica (responsável, substituto, validador, assignees de tarefa etc.), pra
+ * rejeitar quem não pertence a essa loja em vez de confiar cegamente no id enviado pelo cliente —
+ * mesmo padrão já usado em `POST /api/loja-nord/pontos`. Sem essa checagem, qualquer usuário
+ * ativo da empresa toda podia ser atribuído a um registro de uma loja à qual não tem acesso
+ * nenhum.
+ */
+export async function findUsersWithoutEmpresaAccess(
+  userIds: (string | null | undefined)[],
+  empresaId: string
+): Promise<string[]> {
+  const uniqueIds = Array.from(new Set(userIds.filter((id): id is string => !!id)));
+  if (uniqueIds.length === 0) return [];
+  const users = await prisma.user.findMany({ where: { id: { in: uniqueIds } }, select: { id: true, role: true } });
+  const roleById = new Map(users.map((u) => [u.id, u.role]));
+  const invalid: string[] = [];
+  for (const id of uniqueIds) {
+    const role = roleById.get(id);
+    if (!role || !(await assertEmpresaAccess(id, role, empresaId))) invalid.push(id);
+  }
+  return invalid;
 }

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import {
+  empresaIdsForContext,
+  findUsersWithoutEmpresaAccess,
+  getActiveEmpresaContext,
+  requireActiveSingleEmpresa,
+} from "@/lib/empresa";
 import {
   MANAGER_ROLES,
   generateChamadoProtocolo,
@@ -102,6 +107,16 @@ export async function POST(req: Request) {
 
   if (Array.isArray(body.anexos) && body.anexos.some((a: { fileUrl?: string }) => !isValidBlobUrl(a?.fileUrl))) {
     return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
+  }
+
+  // O responsável precisa ter acesso a esta loja — sem essa checagem, qualquer usuário ativo
+  // da empresa toda podia ser designado responsável por um chamado de uma loja à qual não tem
+  // acesso nenhum.
+  if (body.responsavelId) {
+    const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], empresa.id);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
   }
 
   const chamado = await prisma.$transaction(async (tx) => {

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { DashboardClient } from "./dashboard/dashboard-client";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -50,12 +50,8 @@ export default async function MarketingPage() {
         include: { responsavel: { select: { name: true } }, empresa: { select: { name: true, color: true } } },
         take: 200,
       }),
-      // Membros selecionáveis (qualquer usuário com acesso às empresas ativas)
-      prisma.user.findMany({
-        where: { active: true },
-        select: { id: true, name: true },
-        orderBy: { name: "asc" },
-      }),
+      // Membros selecionáveis: usuários ativos com acesso à(s) empresa(s) do contexto ativo.
+      getSelectableTeamMembers(empresaIds),
     ]);
 
   function serializeTask(t: (typeof weekTasks)[number]) {

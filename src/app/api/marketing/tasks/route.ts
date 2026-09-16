@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import {
+  empresaIdsForContext,
+  findUsersWithoutEmpresaAccess,
+  getActiveEmpresaContext,
+  requireActiveSingleEmpresa,
+} from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
@@ -50,6 +55,16 @@ export async function POST(req: Request) {
   const body = await req.json();
   if (!body.title || !String(body.title).trim()) {
     return NextResponse.json({ error: "Título é obrigatório." }, { status: 400 });
+  }
+
+  // O responsável precisa ter acesso a esta loja — sem essa checagem, qualquer usuário ativo
+  // da empresa toda podia ser designado responsável por uma tarefa de marketing de uma loja à
+  // qual não tem acesso nenhum.
+  if (body.responsavelId) {
+    const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], empresa.id);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
   }
 
   const task = await prisma.marketingTask.create({

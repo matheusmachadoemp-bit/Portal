@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { EquipamentoDetailClient } from "./equipamento-detail-client";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { notFound, redirect } from "next/navigation";
 import QRCode from "qrcode";
 import { headers } from "next/headers";
@@ -18,7 +18,7 @@ export default async function EquipamentoDetailPage({ params }: { params: Promis
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const [equipamento, teamMembers, prestadores, preventivas] = await Promise.all([
+  const [equipamento, prestadores, preventivas] = await Promise.all([
     prisma.equipamento.findFirst({
       where: { id, empresaId: { in: empresaIds } },
       include: {
@@ -34,7 +34,6 @@ export default async function EquipamentoDetailPage({ params }: { params: Promis
         },
       },
     }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.prestador.findMany({ where: { active: true }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
     prisma.manutencaoPreventiva.findMany({
       where: { equipamentoId: id, active: true },
@@ -43,6 +42,10 @@ export default async function EquipamentoDetailPage({ params }: { params: Promis
     }),
   ]);
   if (!equipamento) notFound();
+  // Só usuários com acesso à loja DESTE equipamento (não a lista inteira de lojas do contexto
+  // ativo, que em modo Grupo Nord pode ter mais de uma) — precisa ser buscado só depois do
+  // equipamento porque depende do empresaId dele.
+  const teamMembers = await getSelectableTeamMembers([equipamento.empresaId]);
 
   const custoAcumulado = await prisma.manutencaoRegistro.aggregate({
     where: { equipamentoId: id },

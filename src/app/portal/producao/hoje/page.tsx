@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { HojeClient } from "./hoje-client";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -31,7 +31,7 @@ export default async function ProducaoHojePage() {
       },
     }),
     prisma.productionCategory.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSelectableTeamMembers(empresaIds),
   ]);
 
   const serialized = ordens.map((o) => ({

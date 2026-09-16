@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { assertEmpresaAccess } from "@/lib/empresa";
+import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { logTaskHistory } from "@/lib/tarefas-server";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -63,6 +63,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const body = await req.json();
+
+  // Cada responsável/validador atribuído precisa ter acesso à loja desta tarefa — mesma
+  // validação de POST /api/tarefas, aplicada também na edição (sem ela, dava pra reatribuir
+  // uma tarefa já existente pra alguém sem UserEmpresaAccess pra essa loja).
+  const idsToCheck = [
+    ...(Array.isArray(body.assigneeIds) ? body.assigneeIds : []),
+    ...(body.validatorId ? [body.validatorId] : []),
+  ];
+  if (idsToCheck.length > 0) {
+    const invalidIds = await findUsersWithoutEmpresaAccess(idsToCheck, existing.empresaId);
+    if (invalidIds.length > 0) {
+      return NextResponse.json(
+        { error: "Um ou mais responsáveis/validador não têm acesso à loja desta tarefa." },
+        { status: 400 }
+      );
+    }
+  }
+
   const changes: string[] = [];
   if (body.title !== undefined && body.title !== existing.title) changes.push("título");
   if (body.dueDate !== undefined) changes.push("prazo");

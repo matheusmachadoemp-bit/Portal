@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
+import { getActiveEmpresaContext, empresaIdsForContext, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { refreshOccurrenceStatuses } from "@/lib/checklist-server";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -70,7 +70,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const data: Record<string, unknown> = {};
-  if ("responsavelId" in body) data.responsavelId = body.responsavelId || null;
+  if ("responsavelId" in body) {
+    // O novo responsável precisa ter acesso à loja desta ocorrência — sem essa checagem,
+    // qualquer usuário ativo da empresa toda podia ser reatribuído a um checklist de uma loja
+    // à qual não tem acesso nenhum.
+    if (body.responsavelId) {
+      const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], occurrence.empresaId);
+      if (invalidIds.length > 0) {
+        return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+      }
+    }
+    data.responsavelId = body.responsavelId || null;
+  }
   if ("justificativa" in body) data.justificativa = body.justificativa || null;
   // O único status "forjável" por aqui é JUSTIFICADO (usado pelo botão "Justificar"
   // em ocorrências ATRASADO/NAO_REALIZADO). Concluir uma ocorrência (CONCLUIDO_NO_PRAZO/

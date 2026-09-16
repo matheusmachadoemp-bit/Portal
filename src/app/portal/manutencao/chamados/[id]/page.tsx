@@ -3,6 +3,7 @@ import { PageContainer } from "@/components/page-container";
 import { ChamadoDetailClient } from "./chamado-detail-client";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { getSelectableTeamMembers } from "@/lib/empresa";
 import { notFound, redirect } from "next/navigation";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
@@ -15,7 +16,7 @@ export default async function ChamadoDetailPage({ params }: { params: Promise<{ 
     redirect("/portal/inicio");
   }
 
-  const [chamado, teamMembers, prestadores] = await Promise.all([
+  const [chamado, prestadores] = await Promise.all([
     prisma.chamado.findUnique({
       where: { id },
       include: {
@@ -30,13 +31,15 @@ export default async function ChamadoDetailPage({ params }: { params: Promise<{ 
         orcamentos: { orderBy: { createdAt: "desc" }, include: { prestador: true, anexos: true } },
       },
     }),
-    prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.prestador.findMany({ where: { active: true }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
   ]);
   if (!chamado) notFound();
   if (chamado.status === "RASCUNHO" && chamado.solicitanteId !== session.user.id && !MANAGER_ROLES.includes(session.user.role)) {
     notFound();
   }
+  // Só usuários com acesso à loja DESTE chamado (não a lista global de usuários ativos da
+  // rede) — precisa ser buscado só depois do chamado porque depende do empresaId dele.
+  const teamMembers = await getSelectableTeamMembers([chamado.empresaId]);
 
   const serialized = {
     ...chamado,

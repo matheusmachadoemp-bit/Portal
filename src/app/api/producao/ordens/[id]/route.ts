@@ -8,7 +8,7 @@ import {
   PRODUCTION_MANAGER_ROLES,
 } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
-import { assertEmpresaAccess } from "@/lib/empresa";
+import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -124,6 +124,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.action === "reatribuir") {
     if (!PRODUCTION_MANAGER_ROLES.includes(session.user.role)) {
       return NextResponse.json({ error: "Você não pode reatribuir o responsável." }, { status: 403 });
+    }
+    // O novo responsável precisa ter acesso à loja desta ordem de produção — sem essa
+    // checagem, qualquer usuário ativo da empresa toda podia ser reatribuído a uma ordem de
+    // uma loja à qual não tem acesso nenhum.
+    if (body.responsavelId) {
+      const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], existing.empresaId);
+      if (invalidIds.length > 0) {
+        return NextResponse.json({ error: "Esse colaborador não tem acesso a esta loja." }, { status: 400 });
+      }
     }
     const ordem = await prisma.productionOrder.update({
       where: { id },

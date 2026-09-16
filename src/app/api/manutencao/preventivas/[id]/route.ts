@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { assertEmpresaAccess } from "@/lib/empresa";
+import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { MANAGER_ROLES } from "@/lib/manutencao-server";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -26,6 +26,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const body = await req.json();
+
+  // O responsável precisa ter acesso a esta loja — mesma validação de
+  // POST /api/manutencao/preventivas, aplicada também na edição.
+  if (body.responsavelId) {
+    const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], existing.equipamento.empresaId);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
+  }
+
   const preventiva = await prisma.manutencaoPreventiva.update({
     where: { id },
     data: {
