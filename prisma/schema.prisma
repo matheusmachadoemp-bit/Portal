@@ -2692,19 +2692,21 @@ model MetaProximoMes {
   @@index([empresaId, meetingKey, periodo])
 }
 
-/// "Resultado do período" da Reunião Liderança é 100% computado a partir das
-/// outras 4 reuniões do mesmo período (resumo consolidado — ver
-/// `computeLiderancaResumo` em `src/lib/reuniao-server.ts`), por isso este
-/// model não guarda nenhum número próprio: nem "puxado automaticamente" (como
-/// GerenteMeeting, que grava uma cópia dos números de Cozinha/Salão/Delivery
-/// no momento do fechamento) nem digitado manualmente. Decisão desta
-/// migration: uma consulta sempre ao vivo (sem coluna própria) é mais simples
-/// e nunca desatualiza, mesmo que a Cozinha/Salão/Delivery/Gerente daquele
-/// período seja editada depois de a Liderança já ter "fechado" o mês. Fica só
-/// o que é genuinamente próprio da reunião de Liderança: notas e autoria,
-/// igual ao padrão das outras 4 — mais a seção "Fechamento do mês" (ver
-/// ReuniaoCustomIndicator/Value, meetingKey LIDERANCA), pra indicadores de
-/// nível de liderança que não pertencem a nenhuma área específica.
+/// Este model guarda só o que é genuinamente próprio da reunião de
+/// Liderança: notas e autoria, igual ao padrão das outras 4 — mais a seção
+/// "Fechamento do mês" (ver ReuniaoCustomIndicator/Value, meetingKey
+/// LIDERANCA), pra indicadores de nível de liderança que não pertencem a
+/// nenhuma área específica.
+///
+/// Histórico: a migration original (20260914170000_lideranca_meeting) previa
+/// também um card "Resultado do período" — resumo consolidado calculado ao
+/// vivo a partir das outras 4 reuniões do mesmo período (por isso nunca
+/// ganhou coluna própria aqui, nem "puxada automaticamente" como
+/// GerenteMeeting nem digitada manualmente). O card saiu de tela e,
+/// depois, o cálculo em si (que continuava rodando à toa a cada
+/// carregamento da página) também foi removido do backend — não existem mais
+/// `computeLiderancaResumo` nem `LiderancaResumoDTO` em
+/// `src/lib/reuniao-server.ts`.
 model LiderancaMeeting {
   id        String  @id @default(cuid())
   empresaId String

@@ -2,21 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeLiderancaResumo, loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
+import { loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
 import { hasModulePermission } from "@/lib/authz";
-
-/** Resumo "zerado" usado no modo Grupo Nord (várias lojas ao mesmo tempo) — mesmo
- * padrão das outras 4 rotas de reunião: o resumo consolidado só faz sentido loja a loja. */
-const EMPTY_RESUMO = {
-  faturamentoTotalValor: null,
-  cmvPercent: null,
-  npsPercent: null,
-  cancelamentoDeliveryPercent: null,
-  turnoverPercent: null,
-  checklistOperacionalPercent: null,
-  fontes: { gerente: false, salao: false, cozinha: false, delivery: false },
-} as const;
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -40,14 +28,9 @@ export async function GET(req: Request) {
 
   const current = ctx.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
 
-  // "Resultado do período" é 100% um resumo consolidado das outras 4 reuniões
-  // (ver computeLiderancaResumo) — nunca digitado à mão nem guardado em
-  // coluna própria de LiderancaMeeting.
-  const resumo = ctx.mode === "single" ? await computeLiderancaResumo(ctx.empresa.id, periodo) : EMPTY_RESUMO;
-
   const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "LIDERANCA", periodo) : [];
 
-  return NextResponse.json({ meetings, current, resumo, periodo, customIndicators });
+  return NextResponse.json({ meetings, current, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {
@@ -75,8 +58,9 @@ export async function POST(req: Request) {
   const body = await req.json();
   const periodo = String(body.periodo ?? currentPeriodo());
 
-  // Só "notas" é próprio de LiderancaMeeting — o resumo consolidado (GET
-  // acima) nunca é gravado aqui, é sempre recalculado ao vivo.
+  // Só "notas" é próprio de LiderancaMeeting — os indicadores da seção
+  // "Fechamento do mês" ficam em ReuniaoCustomIndicator/Value (ver
+  // upsertReuniaoCustomIndicatorValues abaixo), não nesta tabela.
   const data = { notas: body.notas || null };
 
   const meeting = await prisma.liderancaMeeting.upsert({
