@@ -91,7 +91,6 @@ const CATEGORIES = [
       { key: "marketing", name: "Metas de Marketing", icon: "Megaphone" },
       { key: "administrativo", name: "Metas Administrativas", icon: "FileText" },
       { key: "acumulada", name: "Venda Acumulada", icon: "Trophy" },
-      { key: "cadastro", name: "Cadastrar Metas", icon: "ListPlus" },
     ],
   },
   {
