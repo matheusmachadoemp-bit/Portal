@@ -66,6 +66,9 @@ export async function POST(req: Request) {
       responsavel: body.responsavel || null,
       status: body.status || "ENTREGUE",
       observacao: body.observacao || null,
+      termoAssinadoUrl: body.termoAssinadoUrl || null,
+      termoAssinadoNome: body.termoAssinadoNome || null,
+      termoAssinadoMimeType: body.termoAssinadoMimeType || null,
       createdById: session.user.id,
     },
   });

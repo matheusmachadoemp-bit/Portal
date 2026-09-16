@@ -14,6 +14,8 @@ export default async function CampanhasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageCrm = await hasModulePermission(session.user.id, "crm", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageCrm;
 
   const campanhas = await prisma.campaign.findMany({
     where: { empresaId: { in: empresaIds } },
@@ -39,7 +41,7 @@ export default async function CampanhasPage() {
   return (
     <PageContainer title="CRM" subtitle="Campanhas">
       <div className="space-y-6">
-        <CampanhasClient rows={rows} canCreate={ctx?.mode === "single"} />
+        <CampanhasClient rows={rows} canCreate={canCreate} />
       </div>
     </PageContainer>
   );

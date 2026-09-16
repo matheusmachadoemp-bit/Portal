@@ -16,6 +16,8 @@ export default async function MarketingPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const now = new Date();
+  const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageMarketing;
 
   const [weekTasks, recentFiles, recentLogs, allTasksForPanel, teamMembers] =
     await Promise.all([
@@ -68,7 +70,7 @@ export default async function MarketingPage() {
         recentFiles={recentFiles.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() }))}
         recentLogs={recentLogs.map((l) => ({ ...l, createdAt: l.createdAt.toISOString() }))}
         teamMembers={teamMembers}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );

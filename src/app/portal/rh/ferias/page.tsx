@@ -14,6 +14,8 @@ export default async function FeriasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const [vacations, employees] = await Promise.all([
     prisma.vacation.findMany({
@@ -38,7 +40,7 @@ export default async function FeriasPage() {
 
   return (
     <PageContainer title="RH" subtitle="Férias">
-      <FeriasClient initialVacations={serialized} employees={employees} canCreate={ctx?.mode === "single"} />
+      <FeriasClient initialVacations={serialized} employees={employees} canCreate={canCreate} />
     </PageContainer>
   );
 }

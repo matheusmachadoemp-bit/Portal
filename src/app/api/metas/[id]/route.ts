@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { computeGoalStatus } from "@/lib/goals";
+import { computeGoalStatus, weeksInGoalPeriod } from "@/lib/goals";
 import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,8 +23,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
 
   const valorMeta = body.valorMeta !== undefined ? Number(body.valorMeta) : existing.valorMeta;
-  const valorRealizado = body.valorRealizado !== undefined ? Number(body.valorRealizado) : existing.valorRealizado;
+  // `valorRealizado` nunca é aceito aqui (mesmo que o body envie um) — é
+  // sempre um cache da soma dos lançamentos semanais (ver
+  // src/app/api/metas/[id]/semanas/route.ts e recomputeGoalRealizado em
+  // src/lib/goals-server.ts), nunca editado direto na definição da meta.
+  const valorRealizado = existing.valorRealizado;
+  const startDate = body.startDate ? new Date(body.startDate) : existing.startDate;
   const endDate = body.endDate ? new Date(body.endDate) : existing.endDate;
+
+  // Mudar o período (mês) de uma meta que já tem lançamentos semanais pode
+  // "sobrar" semana: ex. reduzir de um mês de 31 dias (5 semanas) para um de
+  // 28 dias (4 semanas) enquanto já existe um lançamento na semana 5 deixaria
+  // um GoalWeeklyUpdate órfão, fora do novo período. Em vez de apagar dado
+  // silenciosamente, bloqueia a edição e pede pra resolver a semana antes.
+  if (body.startDate !== undefined || body.endDate !== undefined) {
+    const novoTotalSemanas = weeksInGoalPeriod(startDate, endDate);
+    const semanaForaDoPeriodo = await prisma.goalWeeklyUpdate.findFirst({
+      where: { goalId: id, weekNumber: { gt: novoTotalSemanas } },
+    });
+    if (semanaForaDoPeriodo) {
+      return NextResponse.json(
+        {
+          error: `Não é possível mudar o período: já existe um lançamento na semana ${semanaForaDoPeriodo.weekNumber}, que ficaria fora do novo período (só ${novoTotalSemanas} semana(s)). Exclua ou ajuste esse lançamento antes de mudar o período da meta.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
 
   const goal = await prisma.goal.update({
     where: { id },
@@ -35,15 +60,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       description: body.description ?? undefined,
       indicador: body.indicador ?? undefined,
       valorMeta,
-      valorRealizado,
       unidade: body.unidade ?? undefined,
-      startDate: body.startDate ? new Date(body.startDate) : undefined,
+      startDate: body.startDate ? startDate : undefined,
       endDate,
       bonificacao: body.bonificacao ?? undefined,
       status: computeGoalStatus(valorRealizado, valorMeta, endDate) as never,
       observacoes: body.observacoes ?? undefined,
       planoDeAcao: body.planoDeAcao ?? undefined,
     },
+    include: { attachments: true, weeklyUpdates: { orderBy: { weekNumber: "asc" } } },
   });
 
   return NextResponse.json({ goal });

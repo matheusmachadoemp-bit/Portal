@@ -16,12 +16,14 @@ export default async function GarconsDesempenhoPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const range = resolveRollingPeriod("mes-atual");
+  const canManageVendas = await hasModulePermission(session.user.id, "vendas", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageVendas;
 
   const ranking = await loadGarcomRanking(empresaIds, range.from, range.to);
 
   return (
     <PageContainer title="Vendas" subtitle="Desempenho por Garçom">
-      <GarconsClient initialRanking={ranking} canCreate={ctx?.mode === "single"} />
+      <GarconsClient initialRanking={ranking} canCreate={canCreate} />
     </PageContainer>
   );
 }

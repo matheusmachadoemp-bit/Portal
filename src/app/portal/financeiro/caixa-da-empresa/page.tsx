@@ -14,6 +14,8 @@ export default async function CaixaDaEmpresaPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageFinanceiro = await hasModulePermission(session.user.id, "financeiro", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageFinanceiro;
 
   const [movements, accounts] = await Promise.all([
     prisma.cashMovement.findMany({
@@ -34,7 +36,7 @@ export default async function CaixaDaEmpresaPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Caixa da Empresa">
       <div className="space-y-6">
-        <CaixaClient initialMovements={serialized} accounts={accounts} canCreate={ctx?.mode === "single"} />
+        <CaixaClient initialMovements={serialized} accounts={accounts} canCreate={canCreate} />
       </div>
     </PageContainer>
   );

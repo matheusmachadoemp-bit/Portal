@@ -14,6 +14,8 @@ export default async function TarefasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageMarketing;
 
   const [tasks, teamMembers, history] = await Promise.all([
     prisma.marketingTask.findMany({
@@ -49,7 +51,7 @@ export default async function TarefasPage() {
       <TasksClient
         initialTasks={serialized as never}
         teamMembers={teamMembers}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
         history={serializedHistory}
       />
     </PageContainer>

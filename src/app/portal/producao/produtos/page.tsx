@@ -14,6 +14,8 @@ export default async function ProducaoProdutosPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageProducao = await hasModulePermission(session.user.id, "producao", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageProducao;
 
   const [itens, categorias, ingredientOptions] = await Promise.all([
     prisma.productionItem.findMany({
@@ -35,7 +37,7 @@ export default async function ProducaoProdutosPage() {
         initialItens={itens as never}
         categorias={categorias}
         ingredientOptions={ingredientOptions}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );
