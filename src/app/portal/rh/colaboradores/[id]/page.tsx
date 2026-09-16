@@ -15,6 +15,8 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
   const { id } = await params;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const employee = await prisma.employee.findFirst({
     where: { id, empresaId: { in: empresaIds } },
@@ -66,7 +68,7 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
         }))}
         uniformDeliveries={uniformDeliveries.map((u) => ({ ...u, dataEntrega: u.dataEntrega.toISOString() }))}
         documents={documents.map((d) => ({ ...d, validade: d.validade ? d.validade.toISOString() : null }))}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );

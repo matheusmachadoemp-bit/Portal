@@ -16,6 +16,8 @@ export default async function TrafegoPagoPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const range = defaultMetaAdsRange();
+  const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageMarketing;
 
   const [entries, metaAdsSummary, metaAdsCampaigns] = await Promise.all([
     prisma.marketingEntry.findMany({
@@ -33,7 +35,7 @@ export default async function TrafegoPagoPage() {
     <PageContainer title="Marketing" subtitle="Tráfego pago — investimento, ROAS e conversões">
       <TrafegoPagoClient
         initialEntries={serialized}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
         metaAdsSummary={metaAdsSummary}
         metaAdsCampaigns={metaAdsCampaigns}
         metaAdsRange={{ start: range.start.toISOString(), end: range.end.toISOString() }}

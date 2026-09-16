@@ -14,6 +14,8 @@ export default async function EquipamentosPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageManutencao = await hasModulePermission(session.user.id, "manutencao", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageManutencao;
 
   const equipamentos = await prisma.equipamento.findMany({
     where: { empresaId: { in: empresaIds } },
@@ -36,7 +38,7 @@ export default async function EquipamentosPage() {
 
   return (
     <PageContainer title="Manutenção" subtitle="Equipamentos" backHref="/portal/manutencao" backLabel="Manutenção">
-      <EquipamentosClient initialEquipamentos={serialized as never} canCreate={ctx?.mode === "single"} />
+      <EquipamentosClient initialEquipamentos={serialized as never} canCreate={canCreate} />
     </PageContainer>
   );
 }

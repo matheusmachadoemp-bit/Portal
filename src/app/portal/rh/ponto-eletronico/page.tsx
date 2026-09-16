@@ -14,6 +14,8 @@ export default async function PontoEletronicoPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const [entries, employees] = await Promise.all([
     prisma.timeEntry.findMany({
@@ -32,7 +34,7 @@ export default async function PontoEletronicoPage() {
 
   return (
     <PageContainer title="RH" subtitle="Ponto Eletrônico">
-      <PontoEletronicoClient initialEntries={serialized} employees={employees} canCreate={ctx?.mode === "single"} />
+      <PontoEletronicoClient initialEntries={serialized} employees={employees} canCreate={canCreate} />
     </PageContainer>
   );
 }

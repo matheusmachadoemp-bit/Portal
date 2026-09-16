@@ -13,6 +13,8 @@ export default async function IdeiasPage() {
     redirect("/portal/inicio");
   }
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageMarketing;
 
   const ideas = await prisma.marketingIdea.findMany({
     where: { empresaId: { in: empresaIds } },
@@ -26,7 +28,7 @@ export default async function IdeiasPage() {
     <PageContainer title="Marketing" subtitle="Banco de ideias">
       <IdeasClient
         initialIdeas={serialized}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
         canApprove={IDEA_APPROVER_ROLES.includes(session?.user?.role ?? "")}
       />
     </PageContainer>

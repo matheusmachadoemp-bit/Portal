@@ -16,6 +16,8 @@ export default async function AutomacoesPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageCrm = await hasModulePermission(session.user.id, "crm", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageCrm;
 
   const [clientes, automacoesSalvas] = await Promise.all([
     loadClientesCompletos(empresaIds),
@@ -45,7 +47,7 @@ export default async function AutomacoesPage() {
   return (
     <PageContainer title="CRM" subtitle="Automações">
       <div className="space-y-6">
-        <AutomacoesClient templates={templates} custom={custom} canCreate={ctx?.mode === "single"} />
+        <AutomacoesClient templates={templates} custom={custom} canCreate={canCreate} />
       </div>
     </PageContainer>
   );
