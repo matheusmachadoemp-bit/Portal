@@ -14,6 +14,8 @@ export default async function CalendarioPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageMarketing;
 
   const [tasks, teamMembers] = await Promise.all([
     prisma.marketingTask.findMany({
@@ -35,7 +37,7 @@ export default async function CalendarioPage() {
       <CalendarClient
         initialTasks={serialized as never}
         teamMembers={teamMembers}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );

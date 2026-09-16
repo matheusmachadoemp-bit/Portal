@@ -16,13 +16,15 @@ export default async function ItensVendidosPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const range = resolveRollingPeriod("mes-atual");
+  const canManageVendas = await hasModulePermission(session.user.id, "vendas", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageVendas;
 
   const rows = await computeItensVendidosRows(empresaIds, range.from, range.to);
 
   return (
     <PageContainer title="Vendas" subtitle="Itens Vendidos — Curva ABC">
       <div className="space-y-6">
-        <ItensVendidosClient rows={rows} canCreate={ctx?.mode === "single"} />
+        <ItensVendidosClient rows={rows} canCreate={canCreate} />
       </div>
     </PageContainer>
   );

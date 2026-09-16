@@ -31,6 +31,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       responsavel: body.responsavel ?? undefined,
       status: body.status ?? undefined,
       observacao: body.observacao ?? undefined,
+      termoAssinadoUrl: "termoAssinadoUrl" in body ? (body.termoAssinadoUrl ?? null) : undefined,
+      termoAssinadoNome: "termoAssinadoNome" in body ? (body.termoAssinadoNome ?? null) : undefined,
+      termoAssinadoMimeType:
+        "termoAssinadoMimeType" in body ? (body.termoAssinadoMimeType ?? null) : undefined,
     },
   });
 

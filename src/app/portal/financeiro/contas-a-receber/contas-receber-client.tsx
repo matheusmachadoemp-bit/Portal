@@ -157,8 +157,20 @@ export function ContasReceberClient({
 
   async function submit() {
     if (saving) return;
+    if (!form.cliente.trim()) {
+      setFormError("Informe o cliente.");
+      return;
+    }
+    if (!form.descricao.trim()) {
+      setFormError("Informe a descrição.");
+      return;
+    }
     if (!form.categoriaId) {
       setFormError("Selecione uma categoria financeira antes de salvar.");
+      return;
+    }
+    if (!form.valor || Number(form.valor) <= 0) {
+      setFormError("Informe um valor maior que zero.");
       return;
     }
     setFormError(null);
@@ -358,10 +370,10 @@ export function ContasReceberClient({
         <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cliente">
-            <input value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} className="input" />
+            <input required value={form.cliente} onChange={(e) => setForm({ ...form, cliente: e.target.value })} className="input" />
           </Field>
           <Field label="Descrição">
-            <input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="input" />
+            <input required value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="input" />
           </Field>
           <Field label="Categoria Financeira (vínculo DRE obrigatório)">
             <select value={form.categoriaId} onChange={(e) => setForm({ ...form, categoriaId: e.target.value })} className="input">
@@ -376,7 +388,7 @@ export function ContasReceberClient({
             <input value={form.centroCusto} onChange={(e) => setForm({ ...form, centroCusto: e.target.value })} className="input" />
           </Field>
           <Field label="Valor (R$)">
-            <input type="number" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} className="input" />
+            <input required type="number" min="0.01" step="0.01" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} className="input" />
           </Field>
           <Field label="Data de Competência">
             <input type="date" value={form.dataCompetencia} onChange={(e) => setForm({ ...form, dataCompetencia: e.target.value })} className="input" />

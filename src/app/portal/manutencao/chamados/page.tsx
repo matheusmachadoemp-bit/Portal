@@ -18,6 +18,8 @@ export default async function ChamadosPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const canSeeDrafts = session?.user ? MANAGER_ROLES.includes(session.user.role) : false;
+  const canManageManutencao = await hasModulePermission(session.user.id, "manutencao", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageManutencao;
 
   const [chamados, equipamentos, teamMembers] = await Promise.all([
     prisma.chamado.findMany({
@@ -57,7 +59,7 @@ export default async function ChamadosPage() {
         initialChamados={serialized as never}
         equipamentos={equipamentos}
         teamMembers={teamMembers}
-        canCreate={ctx?.mode === "single"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );

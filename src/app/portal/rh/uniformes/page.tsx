@@ -14,6 +14,8 @@ export default async function UniformesPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageRh;
 
   const [deliveries, employees] = await Promise.all([
     prisma.uniformDelivery.findMany({
@@ -32,7 +34,7 @@ export default async function UniformesPage() {
 
   return (
     <PageContainer title="RH" subtitle="Uniformes">
-      <UniformesClient initialDeliveries={serialized} employees={employees} canCreate={ctx?.mode === "single"} />
+      <UniformesClient initialDeliveries={serialized} employees={employees} canCreate={canCreate} />
     </PageContainer>
   );
 }

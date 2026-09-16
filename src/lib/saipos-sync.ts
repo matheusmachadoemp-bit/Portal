@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/vault";
 import { fetchSaiposSales } from "@/lib/saipos-client";
-import { toSaiposSaleData } from "@/lib/saipos-mapper";
+import { toSaiposSaleData, toSaleData } from "@/lib/saipos-mapper";
 import { notifySyncFailure } from "@/lib/sync-notifications";
 import type { Empresa } from "@prisma/client";
 
@@ -133,6 +133,10 @@ export async function syncEmpresaSaiposSales(
     }
 
     await syncSalesEntriesFromSaipos(empresa.id, range);
+    await syncSalesFromSaipos(
+      empresa.id,
+      result.sales.map((r) => toSaleData(empresa.id, r))
+    );
 
     await prisma.$transaction([
       prisma.saiposSyncLog.update({
@@ -155,6 +159,76 @@ export async function syncEmpresaSaiposSales(
     }
     await notifySyncFailure({ empresaId: empresa.id, integration: "SAIPOS", errorMessage: message });
     return { ok: false, error: message };
+  }
+}
+
+/**
+ * Mesmo padrão de `bulkUpdateSaiposSales` acima (uma única query UPDATE...FROM
+ * UNNEST, sem `$transaction` sequencial) aplicado a `Sale` — para não
+ * reintroduzir o mesmo risco de timeout que motivou aquela correção.
+ */
+async function bulkUpdateSales(empresaId: string, rows: ReturnType<typeof toSaleData>[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  const saiposSaleIds = rows.map((r) => r.saiposSaleId);
+  const dateTimes = rows.map((r) => r.dateTime);
+  const channels = rows.map((r) => r.channel);
+  const platforms = rows.map((r) => r.platform);
+  const formasPagamento = rows.map((r) => r.formaPagamento);
+  const bairros = rows.map((r) => r.bairro);
+  const valoresTotal = rows.map((r) => r.valorTotal);
+  const cancelados = rows.map((r) => r.cancelado);
+
+  await prisma.$executeRaw`
+    UPDATE "Sale" AS s
+    SET
+      "dateTime" = v.date_time,
+      "channel" = v.channel::"SaleChannel",
+      "platform" = v.platform::"SalePlatform",
+      "formaPagamento" = v.forma_pagamento::"PaymentMethod",
+      "bairro" = v.bairro,
+      "valorTotal" = v.valor_total,
+      "cancelado" = v.cancelado
+    FROM UNNEST(
+      ${saiposSaleIds}::text[], ${dateTimes}::timestamp[], ${channels}::text[], ${platforms}::text[],
+      ${formasPagamento}::text[], ${bairros}::text[], ${valoresTotal}::float8[], ${cancelados}::boolean[]
+    ) AS v(saipos_sale_id, date_time, channel, platform, forma_pagamento, bairro, valor_total, cancelado)
+    WHERE s."empresaId" = ${empresaId} AND s."saiposSaleId" = v.saipos_sale_id
+  `;
+}
+
+/**
+ * Faz upsert de cada venda da Saipos também em `Sale` (além do agregado
+ * diário em `SalesEntry`, calculado por `syncSalesEntriesFromSaipos`) — sem
+ * isso, as sub-abas de Vendas que leem de `Sale`/`SaleItem` (Faturamento,
+ * Lançamentos, Acompanhamento de Vendas) ficam vazias mesmo com o sync
+ * reportando sucesso, porque nunca foram alimentadas por essa tabela.
+ *
+ * Vendas canceladas entram normalmente (com `cancelado: true`), para
+ * alimentar a tela de Acompanhamento de Vendas — só ficam de fora do
+ * agregado de faturamento em `syncSalesEntriesFromSaipos`.
+ *
+ * Limitação conhecida (confirmada com o suporte da Saipos): o endpoint
+ * `search_sales` não retorna item a item nem o garçom da venda, então
+ * nenhum `SaleItem` é criado aqui — "Itens vendidos" e "Desempenho por
+ * garçom" continuam vazios para vendas sincronizadas automaticamente.
+ */
+async function syncSalesFromSaipos(empresaId: string, salesData: ReturnType<typeof toSaleData>[]): Promise<void> {
+  if (salesData.length === 0) return;
+
+  const existing = await prisma.sale.findMany({
+    where: { empresaId, saiposSaleId: { in: salesData.map((d) => d.saiposSaleId) } },
+    select: { saiposSaleId: true },
+  });
+  const existingIds = new Set(existing.map((e) => e.saiposSaleId));
+  const toCreate = salesData.filter((d) => !existingIds.has(d.saiposSaleId));
+  const toUpdate = salesData.filter((d) => existingIds.has(d.saiposSaleId));
+
+  if (toCreate.length > 0) {
+    await prisma.sale.createMany({ data: toCreate, skipDuplicates: true });
+  }
+  if (toUpdate.length > 0) {
+    await bulkUpdateSales(empresaId, toUpdate);
   }
 }
 
