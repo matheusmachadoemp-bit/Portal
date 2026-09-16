@@ -434,7 +434,24 @@ model SalesEntry {
   metaDiaria          Float            @default(0)
   observacoes         String?
   createdById         String?
-  createdBy           User?            @relation(fields: [createdById], references: [id])
+  /// `onDelete: Restrict` anotado explicitamente pra documentar o comportamento
+  /// real já aplicado no banco (constraint criada quando `createdById` ainda era
+  /// obrigatório — ver migration `20260810151509_init_multiempresa` — e nunca
+  /// alterada quando o campo virou opcional em `20260813151500_sales_entry_saipos_source`).
+  /// Sem essa anotação, o padrão implícito do Prisma pra relação OPCIONAL sem
+  /// `onDelete` é `SetNull`, não `Restrict` — o que gerava um drift recorrente
+  /// (RESTRICT -> SET NULL) toda vez que alguém rodava `prisma migrate dev` do
+  /// zero, sempre descartado por agentes anteriores por ser mudança de
+  /// comportamento real e sem relação com a tarefa em questão (ver notas em
+  /// `20260914190000_remove_marketing_campaign_model`,
+  /// `20260915130000_universidade_curso_modulo_aula`,
+  /// `20260915160000_employee_cargo_setor_catalogo`,
+  /// `20260915181816_reuniao_gerente_metas_proximo_mes`,
+  /// `20260916023001_meta_proximo_mes_meeting_key` e
+  /// `20260916034027_metas_redesenho_lancamentos_semanais`). Mantendo `Restrict`:
+  /// excluir um usuário que já lançou uma venda continua bloqueado, em vez de
+  /// passar a desvincular o "criado por" silenciosamente.
+  createdBy           User?            @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -480,7 +497,13 @@ model Sale {
   source         SalesEntrySource @default(MANUAL)
   saiposSaleId   String?
   createdById    String?
-  createdBy      User?            @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  /// `onDelete: Restrict` anotado explicitamente — mesmo motivo do comentário em
+  /// `SalesEntry.createdBy` acima: constraint criada como RESTRICT quando o campo
+  /// ainda era obrigatório, campo virou opcional depois sem atualizar a relação,
+  /// e o padrão implícito do Prisma pra opcional sem `onDelete` é `SetNull`. Sem
+  /// esta anotação, isso gerava um drift recorrente (RESTRICT -> SET NULL) em
+  /// todo `prisma migrate dev` do zero.
+  createdBy      User?            @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   createdAt      DateTime         @default(now())
 
   items SaleItem[]
@@ -546,7 +569,16 @@ model MetaAdsInsight {
   raw               Json?
   createdAt         DateTime @default(now())
 
-  @@unique([empresaId, dateStart, dateStop, campaignId, publisherPlatform, platformPosition])
+  // Nome do índice fixado via `map` porque o nome "natural" (concatenando todas
+  // as colunas) passa de 63 bytes — limite de identificador do Postgres — e é
+  // truncado automaticamente. O nome abaixo é exatamente o que já está aplicado
+  // no banco hoje (criado em `20260815120000_meta_ads_integration`); sem fixar
+  // aqui, o algoritmo de truncamento do Prisma calcula um nome truncado
+  // ligeiramente diferente a cada `prisma migrate dev` do zero, gerando um
+  // RenameIndex fantasma (mesma constraint/colunas, sem efeito funcional) —
+  // drift recorrente já documentado em `20260914190000_remove_marketing_campaign_model`
+  // e nas migrations citadas no comentário de `SalesEntry.createdBy` acima.
+  @@unique([empresaId, dateStart, dateStop, campaignId, publisherPlatform, platformPosition], map: "MetaAdsInsight_empresaId_dateStart_dateStop_campaignId_pu_key")
   @@index([empresaId, dateStart])
 }
 
@@ -965,7 +997,13 @@ model MarketingEntry {
   observacoes         String?
   planoDeAcao         String?
   createdById         String?
-  createdBy           User?                @relation(fields: [createdById], references: [id])
+  /// `onDelete: Restrict` anotado explicitamente — mesmo motivo do comentário em
+  /// `SalesEntry.createdBy` (models VENDAS acima): constraint criada como
+  /// RESTRICT quando o campo ainda era obrigatório, campo virou opcional depois
+  /// sem atualizar a relação, e o padrão implícito do Prisma pra opcional sem
+  /// `onDelete` é `SetNull`. Sem esta anotação, isso gerava um drift recorrente
+  /// (RESTRICT -> SET NULL) em todo `prisma migrate dev` do zero.
+  createdBy           User?                @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
