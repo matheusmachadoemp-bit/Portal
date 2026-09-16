@@ -484,6 +484,7 @@ model Sale {
 
   items SaleItem[]
 
+  @@unique([empresaId, saiposSaleId])
   @@index([empresaId, dateTime])
 }
 
@@ -1721,21 +1722,24 @@ enum UniformStatus {
 }
 
 model UniformDelivery {
-  id          String          @id @default(cuid())
-  employeeId  String
-  employee    Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  empresaId   String
-  empresa     Empresa         @relation(fields: [empresaId], references: [id])
-  item        UniformItemType
-  quantidade  Int             @default(1)
-  tamanho     String?
-  dataEntrega DateTime
-  responsavel String?
-  status      UniformStatus   @default(ENTREGUE)
-  observacao  String?
-  createdById String
-  createdBy   User            @relation("UniformCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime        @default(now())
+  id                    String          @id @default(cuid())
+  employeeId            String
+  employee              Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId             String
+  empresa               Empresa         @relation(fields: [empresaId], references: [id])
+  item                  UniformItemType
+  quantidade            Int             @default(1)
+  tamanho               String?
+  dataEntrega           DateTime
+  responsavel           String?
+  status                UniformStatus   @default(ENTREGUE)
+  observacao            String?
+  termoAssinadoUrl      String?
+  termoAssinadoNome     String?
+  termoAssinadoMimeType String?
+  createdById           String
+  createdBy             User            @relation("UniformCreatedBy", fields: [createdById], references: [id])
+  createdAt             DateTime        @default(now())
 
   @@index([employeeId])
   @@index([empresaId, dataEntrega])
