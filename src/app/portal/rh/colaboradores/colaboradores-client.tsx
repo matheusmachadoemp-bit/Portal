@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, Eye, Upload } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -152,7 +152,12 @@ export function ColaboradoresClient({
   const [cargoManualEntry, setCargoManualEntry] = useState(false);
   const [setorManualEntry, setSetorManualEntry] = useState(false);
 
-  useEffect(() => {
+  // Busca cargos/setores já cadastrados na API. Reaproveitada tanto na montagem quanto depois de
+  // um submit() bem-sucedido (do mesmo jeito que refresh() recarrega a lista de colaboradores) —
+  // assim, ao cadastrar um cargo/setor novo via "+ Cadastrar novo..." e salvar, ele já aparece
+  // como opção no select do próximo colaborador cadastrado na mesma sessão, sem precisar recarregar
+  // a página.
+  const loadCargoSetorCatalog = useCallback(() => {
     fetch("/api/rh/cargos")
       .then(async (res) => {
         if (!res.ok) {
@@ -179,6 +184,10 @@ export function ColaboradoresClient({
         setSetorCatalogError(err instanceof Error ? err.message : "Não foi possível carregar a lista de setores.")
       );
   }, []);
+
+  useEffect(() => {
+    loadCargoSetorCatalog();
+  }, [loadCargoSetorCatalog]);
 
   // Modo "select" some se ainda não há nada cadastrado (ou a lista falhou ao carregar) — nesses
   // casos o campo vira texto livre para não travar o cadastro, com uma mensagem explicando o motivo.
@@ -289,6 +298,7 @@ export function ColaboradoresClient({
       }
       setShowForm(false);
       await refresh();
+      loadCargoSetorCatalog();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Erro ao salvar colaborador.");
     } finally {
