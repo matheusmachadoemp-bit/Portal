@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle, Award, CalendarCheck2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle, Award, CalendarCheck2, MessageCircle } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { RadialProgress } from "@/components/ui/radial-progress";
@@ -18,7 +18,7 @@ import {
   weeksInGoalPeriod,
   type GoalCategoryKey,
 } from "@/lib/goals";
-import { previousPeriodo } from "@/lib/reuniao";
+import { periodoLabel, previousPeriodo } from "@/lib/reuniao";
 import { differenceInCalendarDays } from "date-fns";
 
 type WeeklyUpdateDTO = {
@@ -74,6 +74,73 @@ function kpisOf(list: GoalDTO[]) {
   return { total, concluidas, emAndamento, atrasadas, mediaConclusao };
 }
 
+/**
+ * Semana "da vez" dentro do mês de referência (baseMonth) — usada só para o
+ * botão de relatório do WhatsApp saber que trecho do mês reportar. Reaproveita
+ * `weekDayRange`/`weeksInGoalPeriod` (os mesmos usados no modal "Atualizar
+ * semana"), então o relatório fala a mesma linguagem de "dias X–Y" que a tela
+ * já mostra. Se o mês em exibição não for o mês corrente (usuário filtrou um
+ * mês passado/futuro), cai no início ou no fim do período em vez de usar o
+ * dia de hoje (que não existe nesse mês).
+ */
+function currentWeekInfo(baseMonth: string) {
+  const { startDate, endDate } = monthToDateRange(baseMonth);
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const totalDays = differenceInCalendarDays(end, start) + 1;
+  const todayOffset = differenceInCalendarDays(new Date(), start) + 1;
+  const day = Math.min(Math.max(todayOffset, 1), totalDays);
+  const weekNumber = Math.ceil(day / 7);
+  const totalSemanas = weeksInGoalPeriod(start, end);
+  const { startDay, endDay } = weekDayRange(weekNumber, totalDays);
+  return { weekNumber, totalSemanas, startDay, endDay };
+}
+
+/**
+ * Texto do relatório semanal enviado pelo botão "Enviar por WhatsApp" de cada
+ * subcategoria de Metas — monta um resumo só com o que a tela já tem
+ * carregado (nenhuma chamada nova à API). Formatação com `*negrito*`/
+ * `_itálico_` porque o WhatsApp renderiza essa marcação no texto recebido.
+ */
+function buildWeeklyReportText(
+  categoryLabel: string,
+  baseMonth: string,
+  metas: GoalDTO[],
+  kpis: ReturnType<typeof kpisOf>,
+  semana: ReturnType<typeof currentWeekInfo>
+) {
+  const linhas = [
+    `*Relatório semanal de metas — ${categoryLabel}*`,
+    `_Semana ${semana.weekNumber} de ${semana.totalSemanas} (dias ${semana.startDay}–${semana.endDay}) — ${periodoLabel(baseMonth)}_`,
+    "",
+    `Concluídas: ${kpis.concluidas}`,
+    `Em andamento: ${kpis.emAndamento}`,
+    `Atrasadas: ${kpis.atrasadas}`,
+    `Média de conclusão: ${kpis.mediaConclusao.toFixed(0)}%`,
+  ];
+
+  if (metas.length > 0) {
+    linhas.push("", "Metas do período:");
+    metas.forEach((g) => {
+      const percent = pct(g.valorRealizado, g.valorMeta);
+      const semanaUpdate = g.weeklyUpdates.find((w) => w.weekNumber === semana.weekNumber);
+      linhas.push(
+        `• ${g.name}: ${formatNumber(g.valorRealizado)}/${formatNumber(g.valorMeta)} ${g.unidade} (${percent.toFixed(0)}%) — ${GOAL_STATUS_LABEL[g.status]}`
+      );
+      if (semanaUpdate) {
+        linhas.push(
+          `   Nesta semana: ${formatNumber(semanaUpdate.valor)} ${g.unidade}${semanaUpdate.observacao ? ` — ${semanaUpdate.observacao}` : ""}`
+        );
+      }
+    });
+  } else {
+    linhas.push("", `Nenhuma meta cadastrada em ${periodoLabel(baseMonth)} ainda.`);
+  }
+
+  linhas.push("", "Enviado pelo Portal Nord.");
+  return linhas.join("\n");
+}
+
 export function MetasClient({
   initialGoals,
   category,
@@ -108,10 +175,20 @@ export function MetasClient({
 
   const baseMonth = mesFiltro || currentMonth();
   const prevMonth = previousPeriodo(baseMonth);
-  const curr = kpisOf(goalsOfMonth(goals, baseMonth));
+  const metasDoMes = goalsOfMonth(goals, baseMonth);
+  const curr = kpisOf(metasDoMes);
   const prev = kpisOf(goalsOfMonth(goals, prevMonth));
 
   const alertas = filtered.filter((g) => g.status === "EM_RISCO" || g.status === "NAO_ATINGIDA");
+
+  const semanaAtual = currentWeekInfo(baseMonth);
+  const relatorioSemanalTexto = buildWeeklyReportText(
+    GOAL_CATEGORY_LABEL[category as GoalCategoryKey] ?? category,
+    baseMonth,
+    metasDoMes,
+    curr,
+    semanaAtual
+  );
 
   async function refresh() {
     const res = await fetch(`/api/metas?category=${category}`);
@@ -260,14 +337,25 @@ export function MetasClient({
             </button>
           )}
         </div>
-        {canCreate && (
-          <button
-            onClick={openNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+        <div className="flex items-center gap-2">
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(relatorioSemanalTexto)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-outline"
+            title="Enviar o desempenho semanal deste setor pelo WhatsApp"
           >
-            <Plus size={13} /> Nova meta
-          </button>
-        )}
+            <MessageCircle size={13} /> Enviar por WhatsApp
+          </a>
+          {canCreate && (
+            <button
+              onClick={openNew}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+            >
+              <Plus size={13} /> Nova meta
+            </button>
+          )}
+        </div>
       </div>
 
       <SortableStatCards
