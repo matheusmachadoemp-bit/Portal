@@ -53,7 +53,18 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  const valorMeta = Number(body.valorMeta) || 0;
+  if (!body.name || !String(body.name).trim()) {
+    return NextResponse.json({ error: "Nome da meta é obrigatório." }, { status: 400 });
+  }
+  const valorMetaNum = Number(body.valorMeta);
+  if (!body.valorMeta || !Number.isFinite(valorMetaNum) || valorMetaNum <= 0) {
+    return NextResponse.json(
+      { error: "Valor da meta é obrigatório e deve ser maior que zero." },
+      { status: 400 }
+    );
+  }
+
+  const valorMeta = valorMetaNum;
   const valorRealizado = Number(body.valorRealizado) || 0;
   const endDate = new Date(body.endDate);
 
