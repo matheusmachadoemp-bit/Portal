@@ -51,6 +51,10 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
+  if (!body.name || !String(body.name).trim()) {
+    return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
+  }
+
   // Cargo/Setor passam pelo catálogo de RH (EmployeeCargo/EmployeeSetor) em vez de gravar o texto
   // solto: reaproveita o item já cadastrado quando o texto bate, ou cadastra um item novo na hora
   // quando não bate com nenhum — nunca aceita/rejeita sem passar por essa checagem (ver
