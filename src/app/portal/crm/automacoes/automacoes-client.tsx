@@ -31,7 +31,17 @@ type Custom = {
   matchCount: number;
 };
 
-export function AutomacoesClient({ templates, custom, canCreate }: { templates: Template[]; custom: Custom[]; canCreate: boolean }) {
+export function AutomacoesClient({
+  templates,
+  custom,
+  canCreate,
+  canDelete,
+}: {
+  templates: Template[];
+  custom: Custom[];
+  canCreate: boolean;
+  canDelete: boolean;
+}) {
   const router = useRouter();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -62,7 +72,11 @@ export function AutomacoesClient({ templates, custom, canCreate }: { templates: 
 
   async function excluir(id: string) {
     setBusyKey(id);
-    await fetch(`/api/crm/automacoes/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/crm/automacoes/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "Não foi possível excluir essa automação.");
+    }
     setBusyKey(null);
     router.refresh();
   }
@@ -138,9 +152,11 @@ export function AutomacoesClient({ templates, custom, canCreate }: { templates: 
               <div key={c.id} className="rounded-xl border border-nord-border p-4 space-y-3">
                 <div className="flex items-start justify-between">
                   <p className="text-white text-sm font-medium">{c.name}</p>
-                  <button onClick={() => excluir(c.id)} className="text-nord-gray hover:text-nord-danger">
-                    <Trash2 size={13} />
-                  </button>
+                  {canDelete && (
+                    <button onClick={() => excluir(c.id)} className="text-nord-gray hover:text-nord-danger">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-nord-gray">
                   {AUTOMATION_ACTION_LABEL[c.actionType]} · {c.waitDays > 0 ? `após ${c.waitDays} dias` : "imediato"}

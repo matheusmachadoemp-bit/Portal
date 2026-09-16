@@ -26,10 +26,12 @@ const isImage = (url: string) => /\.(png|jpe?g|webp|gif)$/i.test(url);
 export function FilesClient({
   initialFiles,
   canCreate,
+  canDelete,
   space = "biblioteca",
 }: {
   initialFiles: FileDTO[];
   canCreate: boolean;
+  canDelete: boolean;
   space?: "biblioteca" | "drive";
 }) {
   const [files, setFiles] = useState(initialFiles);
@@ -168,7 +170,7 @@ export function FilesClient({
               <p className="text-[10px] text-nord-gray">{f.category} · {new Date(f.createdAt).toLocaleDateString("pt-BR")}</p>
               <p className="text-[10px] text-nord-gray truncate">{f.uploadedBy.name}</p>
             </a>
-            {canCreate && (
+            {canDelete && (
               <button
                 onClick={() => setConfirmDeleteId(f.id)}
                 className="absolute top-2 right-2 p-1 rounded bg-black/60 text-nord-gray hover:text-nord-danger opacity-0 group-hover:opacity-100"
