@@ -31,6 +31,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite criar lançamentos financeiros." },
+      { status: 403 }
+    );
+  }
 
   const empresa = await requireActiveSingleEmpresa();
   if (!empresa) {
@@ -42,8 +48,16 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
+  if (!body.descricao || !String(body.descricao).trim()) {
+    return NextResponse.json({ error: "Descrição é obrigatória." }, { status: 400 });
+  }
+  const valorInput = Number(body.valor);
+  if (!body.valor || !Number.isFinite(valorInput) || valorInput <= 0) {
+    return NextResponse.json({ error: "Valor é obrigatório e deve ser maior que zero." }, { status: 400 });
+  }
+
   const tipo: "PAGAR" | "RECEBER" = body.tipo;
-  const valor = Number(body.valor) || 0;
+  const valor = valorInput;
   const diaVencimento = Number(body.diaVencimento) || 1;
   const dataInicio = new Date(body.dataInicio);
   const meses = body.infinita ? MAX_INFINITE_MONTHS : Number(body.quantidadeMeses) || 1;
