@@ -14,6 +14,8 @@ export default async function ContasBancariasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const canManageFinanceiro = await hasModulePermission(session.user.id, "financeiro", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageFinanceiro;
 
   const accounts = await prisma.bankAccount.findMany({
     where: { empresaId: { in: empresaIds } },
@@ -28,7 +30,7 @@ export default async function ContasBancariasPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Contas Bancárias">
       <div className="space-y-6">
-        <ContasBancariasClient initialAccounts={serialized} canCreate={ctx?.mode === "single"} />
+        <ContasBancariasClient initialAccounts={serialized} canCreate={canCreate} />
       </div>
     </PageContainer>
   );

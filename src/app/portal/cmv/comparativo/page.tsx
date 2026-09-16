@@ -23,6 +23,14 @@ export default async function ComparativoPage() {
   const now = new Date();
   const since = subDays(now, PERIOD_DAYS);
   const metaCmvPercent = ctx?.mode === "single" ? ctx.empresa.metaCmvPercent : 30;
+  // A prop "canCreate" desta tela controla o botão "Gerar plano de ação",
+  // que na verdade chama POST /api/estoque/planos-acao — essa rota exige
+  // "canCreate" no módulo "estoque" (o plano de ação é uma feature do
+  // módulo de Estoque, só exibida aqui dentro do Comparativo de CMV), não
+  // "cmv". Checamos a permissão do módulo certo pra não liberar o botão
+  // pra quem tem "cmv:canCreate" mas não tem "estoque:canCreate" (e vice-versa).
+  const canManageEstoquePlanos = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageEstoquePlanos;
 
   const [ingredients, movements, salesEntries, products, plans] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } } }),
@@ -95,7 +103,7 @@ export default async function ComparativoPage() {
             status: p.status,
             createdByName: p.createdBy.name,
           }))}
-          canCreate={ctx?.mode === "single"}
+          canCreate={canCreate}
           canEditMeta={ctx?.mode === "single"}
         />
       </div>

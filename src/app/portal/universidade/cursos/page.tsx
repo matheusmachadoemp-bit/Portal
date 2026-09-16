@@ -13,6 +13,15 @@ export default async function CursosPage() {
     redirect("/portal/inicio");
   }
   const ctx = await getActiveEmpresaContext();
+  // Cursos não são "por loja" (o cadastro é global, ver query sem filtro de
+  // empresaIds abaixo) — por isso o gate de contexto aqui sempre foi mais
+  // permissivo que o padrão "só modo loja única" usado nos outros módulos
+  // (libera tanto "single" quanto "grupo", só nunca fica undefined). Mantido
+  // como estava; a parte que faltava era combinar com a permissão real do
+  // usuário — antes disso só dependia de `isAdmin` no client
+  // (`courses-client.tsx`), que é global e não específico do módulo.
+  const canManageUniversidade = await hasModulePermission(session.user.id, "universidade", "canCreate");
+  const canCreate = (ctx?.mode === "single" || ctx?.mode === "grupo") && canManageUniversidade;
 
   const [courses, myEnrollments, empresas] = await Promise.all([
     prisma.trainingCourse.findMany({
@@ -47,7 +56,7 @@ export default async function CursosPage() {
         myEnrollments={myEnrollments.map((e) => ({ courseId: e.courseId, status: e.status, progressPercent: e.progressPercent }))}
         isAdmin={session ? canManageUsers(session.user.role) : false}
         empresas={empresas}
-        canCreate={ctx?.mode === "single" || ctx?.mode === "grupo"}
+        canCreate={canCreate}
       />
     </PageContainer>
   );
