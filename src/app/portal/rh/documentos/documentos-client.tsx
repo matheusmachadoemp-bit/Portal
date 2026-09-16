@@ -64,11 +64,14 @@ export function DocumentosClient({
   employees,
   fixedEmployeeId,
   canCreate = true,
+  isGrupoNordMode = true,
 }: {
   initialDocuments: DocumentDTO[];
   employees: { id: string; name: string; setor: string }[];
   fixedEmployeeId?: string;
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const [documents, setDocuments] = useState(initialDocuments);
   const [showForm, setShowForm] = useState(false);
@@ -157,8 +160,9 @@ export function DocumentosClient({
       </div>
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          enviar documentos.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para enviar documentos."
+            : "Seu perfil de permissão não permite enviar documentos neste módulo."}
         </p>
       )}
 

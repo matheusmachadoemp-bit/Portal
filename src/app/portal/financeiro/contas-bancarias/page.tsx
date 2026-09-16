@@ -30,7 +30,11 @@ export default async function ContasBancariasPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Contas Bancárias">
       <div className="space-y-6">
-        <ContasBancariasClient initialAccounts={serialized} canCreate={canCreate} />
+        <ContasBancariasClient
+          initialAccounts={serialized}
+          canCreate={canCreate}
+          isGrupoNordMode={ctx?.mode !== "single"}
+        />
       </div>
     </PageContainer>
   );

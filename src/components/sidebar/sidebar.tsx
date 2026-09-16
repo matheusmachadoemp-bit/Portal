@@ -207,11 +207,11 @@ export function Sidebar({
   return (
     <>
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
       <aside
-        className={`h-screen fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:translate-x-0 flex flex-col bg-nord-panel border-r border-nord-border transition-all duration-200 ${
-          collapsed ? "w-72 md:w-[76px]" : "w-72"
+        className={`h-screen fixed inset-y-0 left-0 z-50 lg:sticky lg:top-0 lg:translate-x-0 flex flex-col bg-nord-panel border-r border-nord-border transition-all duration-200 ${
+          collapsed ? "w-72 lg:w-[76px]" : "w-72"
         } ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
       <div className="flex items-center justify-between px-4 h-16 border-b border-nord-border">
@@ -227,11 +227,11 @@ export function Sidebar({
         <div className="flex items-center gap-1">
           <button
             onClick={() => setCollapsed((v) => !v)}
-            className="hidden md:block text-nord-gray hover:text-white"
+            className="hidden lg:block text-nord-gray hover:text-white"
           >
             {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
           </button>
-          <button onClick={() => setMobileOpen(false)} className="md:hidden text-nord-gray hover:text-white">
+          <button onClick={() => setMobileOpen(false)} className="lg:hidden text-nord-gray hover:text-white">
             <X size={20} />
           </button>
         </div>

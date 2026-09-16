@@ -38,7 +38,12 @@ export default async function DocumentosPage() {
 
   return (
     <PageContainer title="RH" subtitle="Documentos">
-      <DocumentosClient initialDocuments={serialized} employees={employees} canCreate={canCreate} />
+      <DocumentosClient
+        initialDocuments={serialized}
+        employees={employees}
+        canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
+      />
     </PageContainer>
   );
 }

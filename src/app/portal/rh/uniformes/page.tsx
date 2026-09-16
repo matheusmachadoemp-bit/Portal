@@ -34,7 +34,12 @@ export default async function UniformesPage() {
 
   return (
     <PageContainer title="RH" subtitle="Uniformes">
-      <UniformesClient initialDeliveries={serialized} employees={employees} canCreate={canCreate} />
+      <UniformesClient
+        initialDeliveries={serialized}
+        employees={employees}
+        canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
+      />
     </PageContainer>
   );
 }

@@ -34,7 +34,12 @@ export default async function PontoEletronicoPage() {
 
   return (
     <PageContainer title="RH" subtitle="Ponto Eletrônico">
-      <PontoEletronicoClient initialEntries={serialized} employees={employees} canCreate={canCreate} />
+      <PontoEletronicoClient
+        initialEntries={serialized}
+        employees={employees}
+        canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
+      />
     </PageContainer>
   );
 }

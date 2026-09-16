@@ -38,6 +38,7 @@ export default async function VendasPage() {
           initialEntries={serialized}
           canCreate={canCreate}
           empresaName={ctx?.mode === "single" ? ctx.empresa.name : undefined}
+          isGrupoNordMode={ctx?.mode !== "single"}
         />
       </div>
     </PageContainer>

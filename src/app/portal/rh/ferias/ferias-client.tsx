@@ -69,11 +69,14 @@ export function FeriasClient({
   employees,
   fixedEmployeeId,
   canCreate = true,
+  isGrupoNordMode = true,
 }: {
   initialVacations: VacationDTO[];
   employees: { id: string; name: string; setor: string }[];
   fixedEmployeeId?: string;
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const [vacations, setVacations] = useState(initialVacations);
   const [showForm, setShowForm] = useState(false);
@@ -202,8 +205,9 @@ export function FeriasClient({
       </div>
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          solicitar ou editar férias.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para solicitar ou editar férias."
+            : "Seu perfil de permissão não permite solicitar ou editar férias neste módulo."}
         </p>
       )}
 

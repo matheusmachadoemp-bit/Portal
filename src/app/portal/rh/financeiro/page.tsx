@@ -34,7 +34,12 @@ export default async function FinanceiroPage() {
 
   return (
     <PageContainer title="RH" subtitle="Financeiro">
-      <FinanceiroClient initialEntries={serialized} employees={employees} canCreate={canCreate} />
+      <FinanceiroClient
+        initialEntries={serialized}
+        employees={employees}
+        canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
+      />
     </PageContainer>
   );
 }
