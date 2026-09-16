@@ -103,8 +103,6 @@ export function TrafegoPagoClient({
     : 0;
   const taxaEngajamento = current ? pct(totalInteracoes, current.alcance || current.seguidoresFim) : 0;
 
-  const prevRoas = previous ? safeDiv(previous.receitaTrafego, previous.investimentoTrafego) : 0;
-
   const roasClass = classifyKpi(roas, { ruim: 1.5, regular: 2.5, bom: 4 });
   const conversaoClass = classifyKpi(taxaConversao, { ruim: 1, regular: 2, bom: 4 });
   const engajamentoClass = classifyKpi(taxaEngajamento, { ruim: 1, regular: 2, bom: 4 });
@@ -261,7 +259,7 @@ export function TrafegoPagoClient({
           label="Seguidores"
           value={formatNumber(current?.seguidoresFim ?? 0)}
           icon="Users"
-          delta={growth(roas, prevRoas)}
+          delta={previous ? growth(current?.seguidoresFim ?? 0, previous.seguidoresFim) : null}
         />
       </div>
 
