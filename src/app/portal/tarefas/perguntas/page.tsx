@@ -11,8 +11,11 @@ import { PerguntasClient } from "./perguntas-client";
  * canEdit na subcategoria "fechamento-dia:perguntas" (mesmo gate que GET/POST
  * /api/fechamento-dia/perguntas já aplicam); a lista, os cargos e as categorias vêm 100%
  * daquela rota, consumida pelo client component abaixo.
+ *
+ * Vive em /portal/tarefas/perguntas (subcategoria "Perguntas" movida para dentro da categoria
+ * "Tarefas" no menu lateral) — só o caminho da tela mudou, o conteúdo é o mesmo de antes.
  */
-export default async function FechamentoDiaPerguntasPage() {
+export default async function TarefasPerguntasPage() {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "fechamento-dia", "canView", "perguntas"))) {
     redirect("/portal/inicio");
@@ -23,10 +26,10 @@ export default async function FechamentoDiaPerguntasPage() {
 
   return (
     <PageContainer
-      title="Fechamento do Dia"
-      subtitle="Perguntas"
-      backHref="/portal/fechamento-dia"
-      backLabel="Fechamento do Dia"
+      title="Perguntas"
+      subtitle="Catálogo de perguntas do Fechamento do Dia"
+      backHref="/portal/tarefas"
+      backLabel="Tarefas"
     >
       <PerguntasClient canEdit={canEdit} canDelete={canDelete} />
     </PageContainer>

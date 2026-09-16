@@ -115,14 +115,14 @@ function CargoCard({ item }: { item: CargoStatus }) {
 
       {submissao?.status === "ENVIADO" ? (
         <Link
-          href={`/portal/fechamento-dia/${cargo.id}`}
+          href={`/portal/tarefas/ocorrencias/${cargo.id}`}
           className="mt-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm bg-white/5 hover:bg-white/10 border border-nord-border text-white font-medium transition"
         >
           <Eye size={15} /> Ver feedback
         </Link>
       ) : submissao && podeExecutar ? (
         <Link
-          href={`/portal/fechamento-dia/${cargo.id}`}
+          href={`/portal/tarefas/ocorrencias/${cargo.id}`}
           className="mt-1 flex items-center justify-center gap-1.5 py-3 rounded-lg text-sm bg-nord-blue hover:bg-nord-blue-light text-white font-medium transition"
         >
           <PenLine size={15} /> Preencher agora
@@ -132,6 +132,11 @@ function CargoCard({ item }: { item: CargoStatus }) {
   );
 }
 
+/**
+ * Renderizado no topo de `./page.tsx` (subcategoria Ocorrências, dentro de Tarefas), acima da
+ * lista/gestão de ocorrências — antes vivia em uma tela própria ("Fechamento do Dia" /
+ * `/portal/fechamento-dia`), unificada aqui a pedido do usuário.
+ */
 export function StatusDoDiaClient() {
   const [data, setData] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
