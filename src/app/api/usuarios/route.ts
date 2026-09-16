@@ -65,6 +65,20 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
+  // Nunca deixa criar um usuário sem nome nem sem e-mail: sem essa checagem, um POST com esses
+  // campos vazios passava direto e criava uma conta "órfã" (sem e-mail pra logar, por exemplo)
+  // silenciosamente — o cliente hoje não tem `required` nesses campos (ver usuarios-client.tsx),
+  // então a API precisa ser a linha de defesa real. Mesmo padrão usado abaixo pra e-mail
+  // duplicado e em POST /api/checklist/templates pra nome/itens obrigatórios.
+  const name = String(body.name || "").trim();
+  if (!name) {
+    return NextResponse.json({ error: "Informe o nome do usuário." }, { status: 400 });
+  }
+  const email = String(body.email || "").toLowerCase().trim();
+  if (!email) {
+    return NextResponse.json({ error: "Informe o e-mail do usuário." }, { status: 400 });
+  }
+
   const role = body.role || "COLABORADOR";
   if (role === "ADMINISTRADOR" && user.role !== "ADMINISTRADOR") {
     return NextResponse.json(
@@ -108,10 +122,19 @@ export async function POST(req: Request) {
     employeeId = employee.id;
   }
 
+  // E-mail já cadastrado por outro usuário: `email` é `@unique` no schema, então sem essa
+  // checagem prévia o Prisma lança PrismaClientKnownRequestError (P2002) e a rota devolve
+  // um 500 sem corpo — confere antes de criar e devolve um erro claro, mesmo padrão do
+  // conflito de employeeId acima.
+  const existingEmail = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existingEmail) {
+    return NextResponse.json({ error: "Este e-mail já está cadastrado." }, { status: 409 });
+  }
+
   const created = await prisma.user.create({
     data: {
-      name: body.name,
-      email: body.email.toLowerCase().trim(),
+      name,
+      email,
       passwordHash,
       role,
       phone: body.phone || null,

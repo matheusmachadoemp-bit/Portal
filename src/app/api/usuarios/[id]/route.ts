@@ -93,9 +93,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // E-mail já usado por OUTRO usuário: `email` é `@unique` no schema, então sem essa checagem
+  // prévia o Prisma lança PrismaClientKnownRequestError (P2002) e a rota devolve um 500 sem
+  // corpo — mesmo problema (e mesma correção) do POST /api/usuarios. Reenviar o próprio e-mail
+  // do usuário sendo editado não é erro (no-op); só bloqueia se já pertencer a outro usuário.
+  let email: string | undefined;
+  if (body.email) {
+    email = String(body.email).toLowerCase().trim();
+    const existingEmail = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (existingEmail && existingEmail.id !== id) {
+      return NextResponse.json(
+        { error: "Este e-mail já está cadastrado por outro usuário." },
+        { status: 409 }
+      );
+    }
+  }
+
   const data: Record<string, unknown> = {
     name: body.name ?? undefined,
-    email: body.email ? body.email.toLowerCase().trim() : undefined,
+    email,
     role: body.role ?? undefined,
     active: body.active ?? undefined,
     phone: body.phone ?? undefined,

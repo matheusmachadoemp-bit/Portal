@@ -184,8 +184,16 @@ export function UsuariosClient({
 
   async function submit() {
     if (submitting) return;
-    setSubmitting(true);
     setFormError(null);
+    if (!form.name.trim()) {
+      setFormError("Informe o nome do usuário.");
+      return;
+    }
+    if (!form.email.trim()) {
+      setFormError("Informe o e-mail do usuário.");
+      return;
+    }
+    setSubmitting(true);
     try {
       const payload = {
         ...form,
@@ -287,10 +295,10 @@ export function UsuariosClient({
         {formError && <p className="text-xs text-nord-danger mb-3">{formError}</p>}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome">
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
           </Field>
           <Field label="E-mail">
-            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
+            <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
           </Field>
           <Field label={editing ? "Nova senha (opcional)" : "Senha inicial"}>
             <div className="relative">
