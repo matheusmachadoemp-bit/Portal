@@ -69,6 +69,7 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
         uniformDeliveries={uniformDeliveries.map((u) => ({ ...u, dataEntrega: u.dataEntrega.toISOString() }))}
         documents={documents.map((d) => ({ ...d, validade: d.validade ? d.validade.toISOString() : null }))}
         canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
       />
     </PageContainer>
   );
