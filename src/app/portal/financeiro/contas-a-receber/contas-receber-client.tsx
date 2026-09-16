@@ -84,11 +84,14 @@ export function ContasReceberClient({
   categorias,
   contas,
   canCreate = true,
+  isGrupoNordMode = true,
 }: {
   initialReceivables: ReceivableDTO[];
   categorias: { id: string; name: string; dreKey: string }[];
   contas: { id: string; name: string }[];
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const [receivables, setReceivables] = useState(initialReceivables);
   const [showForm, setShowForm] = useState(false);
@@ -294,8 +297,9 @@ export function ContasReceberClient({
     >
       {!canCreate && (
         <p className="mb-3 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          lançar ou editar contas.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar ou editar contas."
+            : "Seu perfil de permissão não permite lançar ou editar contas neste módulo."}
         </p>
       )}
       <FormError message={rowError} />

@@ -36,7 +36,12 @@ export default async function CaixaDaEmpresaPage() {
   return (
     <PageContainer title="Financeiro" subtitle="Caixa da Empresa">
       <div className="space-y-6">
-        <CaixaClient initialMovements={serialized} accounts={accounts} canCreate={canCreate} />
+        <CaixaClient
+          initialMovements={serialized}
+          accounts={accounts}
+          canCreate={canCreate}
+          isGrupoNordMode={ctx?.mode !== "single"}
+        />
       </div>
     </PageContainer>
   );

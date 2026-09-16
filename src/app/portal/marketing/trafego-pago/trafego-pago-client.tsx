@@ -72,12 +72,15 @@ type TabKey = (typeof TABS)[number]["key"];
 export function TrafegoPagoClient({
   initialEntries,
   canCreate = true,
+  isGrupoNordMode = true,
   metaAdsSummary,
   metaAdsCampaigns,
   metaAdsRange,
 }: {
   initialEntries: MarketingEntryDTO[];
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
   metaAdsSummary: MetaAdsInsightSummary;
   metaAdsCampaigns: MetaAdsCampaignPerformance[];
   metaAdsRange: { start: string; end: string };
@@ -221,8 +224,9 @@ export function TrafegoPagoClient({
         <>
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar
-          ou editar dados.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar ou editar dados."
+            : "Seu perfil de permissão não permite lançar ou editar dados neste módulo."}
         </p>
       )}
       {canCreate && (

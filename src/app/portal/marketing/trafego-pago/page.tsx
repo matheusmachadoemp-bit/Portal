@@ -36,6 +36,7 @@ export default async function TrafegoPagoPage() {
       <TrafegoPagoClient
         initialEntries={serialized}
         canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
         metaAdsSummary={metaAdsSummary}
         metaAdsCampaigns={metaAdsCampaigns}
         metaAdsRange={{ start: range.start.toISOString(), end: range.end.toISOString() }}

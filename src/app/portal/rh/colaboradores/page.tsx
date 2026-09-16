@@ -60,6 +60,7 @@ export default async function ColaboradoresPage() {
         totalOcorrencias={occurrencesThisMonth.length}
         canCreate={canCreate}
         showLoja={ctx?.mode === "grupo"}
+        isGrupoNordMode={ctx?.mode !== "single"}
       />
     </PageContainer>
   );

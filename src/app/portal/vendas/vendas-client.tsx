@@ -58,10 +58,13 @@ export function VendasClient({
   initialEntries,
   canCreate = true,
   empresaName,
+  isGrupoNordMode = true,
 }: {
   initialEntries: SalesEntryDTO[];
   canCreate?: boolean;
   empresaName?: string;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [periodKey, setPeriodKey] = useState<PeriodKey>("mes");
@@ -348,8 +351,9 @@ export function VendasClient({
       </div>
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar
-          ou editar dados.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar ou editar dados."
+            : "Seu perfil de permissão não permite lançar ou editar dados neste módulo."}
         </p>
       )}
 

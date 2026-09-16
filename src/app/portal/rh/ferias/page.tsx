@@ -40,7 +40,12 @@ export default async function FeriasPage() {
 
   return (
     <PageContainer title="RH" subtitle="Férias">
-      <FeriasClient initialVacations={serialized} employees={employees} canCreate={canCreate} />
+      <FeriasClient
+        initialVacations={serialized}
+        employees={employees}
+        canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
+      />
     </PageContainer>
   );
 }

@@ -69,6 +69,7 @@ export function EmployeeProfileClient({
   uniformDeliveries,
   documents,
   canCreate = true,
+  isGrupoNordMode = true,
 }: {
   employee: EmployeeDTO;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,6 +85,8 @@ export function EmployeeProfileClient({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   documents: any[];
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Resumo");
@@ -389,22 +392,58 @@ export function EmployeeProfileClient({
       )}
 
       {tab === "Financeiro" && (
-        <FinanceiroClient initialEntries={financeEntries} employees={[]} fixedEmployeeId={employee.id} canCreate={canCreate} />
+        <FinanceiroClient
+          initialEntries={financeEntries}
+          employees={[]}
+          fixedEmployeeId={employee.id}
+          canCreate={canCreate}
+          isGrupoNordMode={isGrupoNordMode}
+        />
       )}
       {tab === "Ponto Eletrônico" && (
-        <PontoEletronicoClient initialEntries={timeEntries} employees={[]} fixedEmployeeId={employee.id} canCreate={canCreate} />
+        <PontoEletronicoClient
+          initialEntries={timeEntries}
+          employees={[]}
+          fixedEmployeeId={employee.id}
+          canCreate={canCreate}
+          isGrupoNordMode={isGrupoNordMode}
+        />
       )}
       {tab === "Ocorrências" && (
-        <OcorrenciasClient initialOccurrences={occurrences} employees={[]} fixedEmployeeId={employee.id} canCreate={canCreate} />
+        <OcorrenciasClient
+          initialOccurrences={occurrences}
+          employees={[]}
+          fixedEmployeeId={employee.id}
+          canCreate={canCreate}
+          isGrupoNordMode={isGrupoNordMode}
+        />
       )}
       {tab === "Férias" && (
-        <FeriasClient initialVacations={vacations} employees={[]} fixedEmployeeId={employee.id} canCreate={canCreate} />
+        <FeriasClient
+          initialVacations={vacations}
+          employees={[]}
+          fixedEmployeeId={employee.id}
+          canCreate={canCreate}
+          isGrupoNordMode={isGrupoNordMode}
+        />
       )}
       {tab === "Uniformes" && (
-        <UniformesClient initialDeliveries={uniformDeliveries} employees={[]} fixedEmployeeId={employee.id} canCreate={canCreate} />
+        <UniformesClient
+          initialDeliveries={uniformDeliveries}
+          employees={[]}
+          fixedEmployeeId={employee.id}
+          canCreate={canCreate}
+          isGrupoNordMode={isGrupoNordMode}
+        />
       )}
       {tab === "Documentos" && (
-        <DocumentosClient initialDocuments={documents} employees={[]} fixedEmployeeId={employee.id} canCreate={canCreate} />
+        <DocumentosClient
+          initialDocuments={documents}
+          employees={[]}
+          fixedEmployeeId={employee.id}
+          canCreate={canCreate}
+          isGrupoNordMode={isGrupoNordMode}
+        />
       )}
 
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Editar colaborador" widthClass="max-w-2xl">

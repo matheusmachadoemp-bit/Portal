@@ -51,11 +51,14 @@ export function PontoEletronicoClient({
   employees,
   fixedEmployeeId,
   canCreate = true,
+  isGrupoNordMode = true,
 }: {
   initialEntries: TimeEntryDTO[];
   employees: { id: string; name: string; setor: string }[];
   fixedEmployeeId?: string;
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [showForm, setShowForm] = useState(false);
@@ -248,8 +251,9 @@ export function PontoEletronicoClient({
       </div>
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          registrar ou importar o ponto.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para registrar ou importar o ponto."
+            : "Seu perfil de permissão não permite registrar ou importar o ponto neste módulo."}
         </p>
       )}
 

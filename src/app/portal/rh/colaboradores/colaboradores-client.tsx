@@ -111,6 +111,7 @@ export function ColaboradoresClient({
   totalOcorrencias,
   canCreate = true,
   showLoja = false,
+  isGrupoNordMode = true,
 }: {
   initialEmployees: EmployeeDTO[];
   turnover: number;
@@ -119,6 +120,8 @@ export function ColaboradoresClient({
   totalOcorrencias: number;
   canCreate?: boolean;
   showLoja?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [showForm, setShowForm] = useState(false);
@@ -408,8 +411,9 @@ export function ColaboradoresClient({
       </div>
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          cadastrar ou editar colaboradores.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para cadastrar ou editar colaboradores."
+            : "Seu perfil de permissão não permite cadastrar ou editar colaboradores neste módulo."}
         </p>
       )}
       {importResult && (
