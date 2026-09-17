@@ -1,16 +1,51 @@
 import { prisma } from "@/lib/prisma";
 import { notifyUser } from "@/lib/tarefas-server";
-import type { LojaNordTransactionKind } from "@prisma/client";
+import type { LojaNordTransactionKind, Prisma } from "@prisma/client";
 
 export type LojaNordActionResult = { ok: true } | { ok: false; error: string };
 
-/** Saldo atual do colaborador — sempre a soma assinada do ledger, nunca um campo cacheado. */
-export async function getSaldoAtual(userId: string): Promise<number> {
-  const agg = await prisma.lojaNordPointTransaction.aggregate({
+type TxClient = Prisma.TransactionClient;
+/** Cliente Prisma "normal" ou o `tx` de uma transação em andamento — ver `getSaldoAtual`. */
+type PrismaOrTx = typeof prisma | TxClient;
+
+/**
+ * Saldo atual do colaborador — sempre a soma assinada do ledger, nunca um
+ * campo cacheado. Passe `tx` (o cliente de uma transação em andamento) para
+ * reconferir o saldo com garantia atômica depois de `travarSaldoLojaNord`.
+ */
+export async function getSaldoAtual(userId: string, client: PrismaOrTx = prisma): Promise<number> {
+  const agg = await client.lojaNordPointTransaction.aggregate({
     where: { userId },
     _sum: { pontos: true },
   });
   return agg._sum.pontos ?? 0;
+}
+
+/**
+ * Trava (advisory lock do Postgres, com escopo da própria transação —
+ * liberado sozinho no commit/rollback, sem precisar de código para
+ * destravar) a concorrência de débito de pontos de UM colaborador no Loja
+ * Nord.
+ *
+ * Existe porque o saldo aqui nunca é um campo armazenado (é sempre a soma do
+ * ledger `LojaNordPointTransaction`), então não dá pra usar um `updateMany`
+ * condicional num campo "saldo" como se faz com o estoque do brinde
+ * (`LojaNordReward.estoque`, protegido por `where: { estoque: { gte: 1 } }`).
+ * Toda operação que debita pontos deve, DENTRO da mesma transação: (1)
+ * chamar esta função primeiro — ela serializa dois débitos simultâneos do
+ * mesmo colaborador (um espera o outro terminar, commit ou rollback, antes
+ * de prosseguir); (2) só então reconferir o saldo com
+ * `getSaldoAtual(userId, tx)`, agora garantido livre de corrida. Usada por
+ * `criarResgate` (achado #180) e `lancarAjusteManual` (mesmo tipo de falha
+ * encontrada no mesmo arquivo, corrigida junto).
+ */
+async function travarSaldoLojaNord(tx: TxClient, userId: string): Promise<void> {
+  // `pg_advisory_xact_lock` retorna `void` — o driver (adapter-pg) não
+  // consegue deserializar uma coluna `void` via `$queryRaw` ("Failed to
+  // deserialize column of type 'void'"). O `::text` é só para dar um tipo
+  // deserializável à coluna de retorno; não usamos o valor, só o efeito
+  // colateral de travar (a função já bloqueia até conseguir o lock).
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('loja_nord_saldo'), hashtext(${userId}))::text`;
 }
 
 /** Total de pontos já ganhos (positivos) ao longo da vida — base do nível de reconhecimento, não cai ao resgatar. */
@@ -104,6 +139,16 @@ export async function criarResgate(params: {
   const status = reward.exigeAprovacao ? "AGUARDANDO_APROVACAO" : "APROVADO";
 
   const redemption = await prisma.$transaction(async (tx) => {
+    // O cheque de saldo acima (fora da transação) é só a resposta rápida do
+    // caso comum. A garantia de verdade é esta aqui: trava a concorrência
+    // por usuário e reconfere o saldo já dentro da transação, mesma ideia do
+    // `updateMany` condicional do estoque logo abaixo — se dois resgates
+    // quase simultâneos chegarem aqui, o segundo só prossegue depois que o
+    // primeiro terminar (commit ou rollback) e vai ver o saldo já debitado.
+    await travarSaldoLojaNord(tx, userId);
+    const saldoAtual = await getSaldoAtual(userId, tx);
+    if (saldoAtual < reward.pontos) throw new Error("SALDO_INSUFICIENTE");
+
     if (reward.estoque !== null) {
       const updated = await tx.lojaNordReward.updateMany({
         where: { id: rewardId, estoque: { gte: 1 } },
@@ -130,11 +175,13 @@ export async function criarResgate(params: {
 
     return created;
   }).catch((err) => {
-    if (err instanceof Error && err.message === "SEM_ESTOQUE") return null;
+    if (err instanceof Error && err.message === "SEM_ESTOQUE") return "SEM_ESTOQUE" as const;
+    if (err instanceof Error && err.message === "SALDO_INSUFICIENTE") return "SALDO_INSUFICIENTE" as const;
     throw err;
   });
 
-  if (!redemption) return { ok: false, error: "Brinde sem estoque disponível." };
+  if (redemption === "SEM_ESTOQUE") return { ok: false, error: "Brinde sem estoque disponível." };
+  if (redemption === "SALDO_INSUFICIENTE") return { ok: false, error: "Saldo de pontos insuficiente." };
 
   await notifyUser(
     userId,
@@ -304,13 +351,31 @@ export async function lancarAjusteManual(params: {
   const pontos = sinal * params.pontos;
 
   if (sinal < 0) {
+    // Mesma resposta rápida (fora da transação) do resgate — a garantia
+    // atômica de verdade é o bloco abaixo.
     const saldo = await getSaldoAtual(userId);
     if (saldo + pontos < 0) return { ok: false, error: "Este ajuste deixaria o saldo do colaborador negativo." };
   }
 
-  await prisma.lojaNordPointTransaction.create({
-    data: { userId, empresaId, kind, pontos, origem: "Gerente", descricao, justificativa, criadoPorId },
+  const saldoInsuficiente = await prisma.$transaction(async (tx) => {
+    if (sinal < 0) {
+      // Mesma proteção de `criarResgate` (achado #180): trava a concorrência
+      // por usuário e reconfere o saldo dentro da transação antes de
+      // decidir, para que dois ajustes negativos (ou um ajuste e um resgate)
+      // quase simultâneos não passem os dois pelo cheque de fora e deixem o
+      // saldo negativo — contrariando o invariante já documentado acima.
+      await travarSaldoLojaNord(tx, userId);
+      const saldoAtual = await getSaldoAtual(userId, tx);
+      if (saldoAtual + pontos < 0) return true;
+    }
+
+    await tx.lojaNordPointTransaction.create({
+      data: { userId, empresaId, kind, pontos, origem: "Gerente", descricao, justificativa, criadoPorId },
+    });
+    return false;
   });
+
+  if (saldoInsuficiente) return { ok: false, error: "Este ajuste deixaria o saldo do colaborador negativo." };
 
   await notifyUser(
     userId,

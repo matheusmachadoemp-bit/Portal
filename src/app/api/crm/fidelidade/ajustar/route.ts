@@ -31,15 +31,36 @@ export async function POST(req: Request) {
   const cashback = Number(body.cashback) || 0;
   const sinal = tipo === "GANHO" ? 1 : -1;
 
-  const account = await prisma.loyaltyAccount.upsert({
-    where: { clienteId: cliente.id },
-    update: { pontos: { increment: pontos * sinal }, cashback: { increment: cashback * sinal } },
-    create: { empresaId: cliente.empresaId, clienteId: cliente.id, pontos: pontos * sinal, cashback: cashback * sinal },
+  // Ajuste manual de STAFF (diferente do resgate self-service de prêmio do
+  // Loja Nord, achado #180): decisão consciente de manter a flexibilidade de
+  // deixar o saldo negativo em vez de bloquear com erro duro — pode ser
+  // intencional (ex.: corrigir/zerar para baixo um saldo de cliente que
+  // estava errado), e quem aciona isso é sempre um funcionário com permissão
+  // de `canEdit`, nunca o próprio cliente. Em vez de bloquear, avisamos
+  // claramente no retorno quando o resultado fica negativo (campo
+  // `warning`), para a tela mostrar um aviso — ver observação no relatório
+  // final sobre a tela hoje não ler nenhum campo desta resposta.
+  const account = await prisma.$transaction(async (tx) => {
+    const acc = await tx.loyaltyAccount.upsert({
+      where: { clienteId: cliente.id },
+      update: { pontos: { increment: pontos * sinal }, cashback: { increment: cashback * sinal } },
+      create: { empresaId: cliente.empresaId, clienteId: cliente.id, pontos: pontos * sinal, cashback: cashback * sinal },
+    });
+
+    await tx.loyaltyTransaction.create({
+      data: { accountId: acc.id, tipo, pontos, cashback, descricao: body.descricao ?? null },
+    });
+
+    return acc;
   });
 
-  await prisma.loyaltyTransaction.create({
-    data: { accountId: account.id, tipo, pontos, cashback, descricao: body.descricao ?? null },
-  });
+  const saldosNegativos: string[] = [];
+  if (account.pontos < 0) saldosNegativos.push(`pontos (${account.pontos})`);
+  if (account.cashback < 0) saldosNegativos.push(`cashback (R$ ${account.cashback.toFixed(2)})`);
+  const warning =
+    saldosNegativos.length > 0
+      ? `Atenção: este ajuste deixou o saldo de ${saldosNegativos.join(" e ")} do cliente negativo.`
+      : null;
 
-  return NextResponse.json({ account });
+  return NextResponse.json({ account, warning });
 }
