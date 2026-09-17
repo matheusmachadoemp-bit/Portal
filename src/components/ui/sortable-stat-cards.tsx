@@ -104,7 +104,11 @@ export function SortableCardGrid({
   for (const c of items) if (!orderedKeys.includes(c.key)) orderedKeys.push(c.key);
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    // `id` fixa o valor usado no `aria-describedby` dos cards arrastáveis (dnd-kit).
+    // Sem isso, o dnd-kit gera esse id a partir de um contador global incremental,
+    // que conta de forma diferente no servidor e no navegador (hydration mismatch).
+    // storageKey já é único por página, então serve como id estável e determinístico.
+    <DndContext id={storageKey} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={orderedKeys} strategy={rectSortingStrategy}>
         <div className={className}>
           {orderedKeys.map((key) => {
