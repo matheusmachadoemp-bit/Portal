@@ -28,6 +28,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
 
+  // Mesma checagem do POST /api/checklist/templates (corrigida na #170): nunca deixa
+  // editar um checklist para nome vazio (o título aparece na Agenda do dia e em toda
+  // listagem) nem para lista de itens vazia (um checklist sem item não tem o que ser
+  // respondido) — o cliente já bloqueia os dois casos (ver checklist-client.tsx, função
+  // `submit()` compartilhada entre criar e editar), mas a API precisa repetir a checagem
+  // para quem chamar a rota direto.
+  const name = String(body.name || "").trim();
+  if (!name) {
+    return NextResponse.json({ error: "Informe o nome do checklist." }, { status: 400 });
+  }
+  const incomingItens: Record<string, unknown>[] = Array.isArray(body.itens) ? body.itens : [];
+  if (incomingItens.length === 0) {
+    return NextResponse.json({ error: "Adicione ao menos um item ao checklist." }, { status: 400 });
+  }
+
   // Responsável/substituto precisam ter acesso a esta loja — mesma validação de
   // POST /api/checklist/templates, aplicada também na edição.
   const idsToCheck = [body.responsavelId, body.substitutoId].filter((v): v is string => !!v);
@@ -42,7 +57,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const weekdayData = Object.fromEntries(WEEKDAYS.map((d) => [d, Boolean(body[d])]));
-  const incomingItens: Record<string, unknown>[] = body.itens || [];
 
   const existingItens = await prisma.checklistItemTemplate.findMany({
     where: { templateId: id },
@@ -101,7 +115,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     prisma.checklistTemplate.update({
       where: { id, empresaId: empresa.id },
       data: {
-        name: body.name,
+        name,
         description: body.description || null,
         setor: body.setor,
         categoria: body.categoria || null,
