@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
@@ -172,6 +173,29 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (id === user.id) {
     return NextResponse.json({ error: "Você não pode excluir seu próprio usuário." }, { status: 400 });
   }
-  await prisma.user.delete({ where: { id } });
+  try {
+    await prisma.user.delete({ where: { id } });
+  } catch (e) {
+    // Dezenas de relações obrigatórias apontam pra User com `onDelete: Restrict` — não só
+    // Sale.createdById / SalesEntry.createdById / MarketingEntry.createdById (anotados de
+    // propósito, ver #168), mas também Task.createdById, Purchase.createdById,
+    // Chamado.solicitanteId, FileItem.uploadedById e mais de 50 outras no schema. Qualquer
+    // uma delas faz o Prisma lançar PrismaClientKnownRequestError (P2003) ao tentar excluir
+    // o usuário — sem essa checagem a rota devolvia um 500 sem corpo (mesmo estilo de
+    // tratamento do e-mail duplicado, P2002, acima). A mensagem não cita uma tabela
+    // específica de propósito: não dá pra saber qual das dezenas de relações foi a
+    // responsável sem inspecionar o erro em detalhe, e citar a tabela errada confundiria
+    // mais do que ajudaria.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      return NextResponse.json(
+        {
+          error:
+            "Não é possível excluir este usuário porque ele tem registros vinculados no sistema (vendas, lançamentos, tarefas, compras, arquivos etc.). Desative o usuário em vez de excluir.",
+        },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
   return NextResponse.json({ ok: true });
 }
