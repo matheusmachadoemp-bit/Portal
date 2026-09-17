@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, FormError } from "@/components/ui/modal";
@@ -33,6 +33,15 @@ export function ConfiguracoesClient({
   const [novaCategoria, setNovaCategoria] = useState({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingCategoria, setSavingCategoria] = useState(false);
+  // Conta uma "sessão" do modal de nova categoria, incrementada toda vez que
+  // ele é fechado. Serve pra uma resposta tardia do POST (chegando depois que
+  // o usuário já fechou — e talvez reaberto — o modal) saber se ainda faz
+  // sentido fechar/resetar o formulário atual, sem descartar a resposta
+  // inteira (se a criação deu certo no servidor, a categoria é real e precisa
+  // aparecer na lista de qualquer forma) nem atrapalhar uma tentativa nova
+  // que o usuário já tenha começado depois de reabrir.
+  const categoriaFormSessionRef = useRef(0);
 
   const somaPesos = weights.reduce((a, b) => a + b, 0);
 
@@ -62,19 +71,52 @@ export function ConfiguracoesClient({
   async function criarCategoria() {
     if (!novaCategoria.key || !novaCategoria.name) return;
     setError(null);
-    const res = await fetch("/api/producao/categorias", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(novaCategoria),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Não foi possível criar a categoria.");
-      return;
+    setSavingCategoria(true);
+    const session = categoriaFormSessionRef.current;
+    try {
+      const res = await fetch("/api/producao/categorias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(novaCategoria),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        // Só mostra o erro se ninguém fechou o modal desde que esse pedido
+        // começou — se o usuário já fechou (Esc/backdrop/X), não existe mais
+        // um lugar "certo" pra essa mensagem aparecer (era o achado original:
+        // ela vazava pra dentro de "Peso por dia da semana"), e também não
+        // queremos atrapalhar uma tentativa nova iniciada depois de reabrir.
+        if (categoriaFormSessionRef.current === session) {
+          setError(data.error ?? "Não foi possível criar a categoria.");
+        }
+        return;
+      }
+      const data = await res.json();
+      // A categoria foi criada de verdade no servidor — isso precisa
+      // refletir na lista mesmo que o modal já tenha sido fechado nesse
+      // meio-tempo (diferente do erro, um sucesso tardio não pode ser
+      // descartado, senão a categoria existe no banco mas some da tela).
+      setCategorias((c) => [...c, data.categoria]);
+      if (categoriaFormSessionRef.current === session) {
+        setShowCategoriaForm(false);
+        setNovaCategoria({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
+      }
+    } catch {
+      if (categoriaFormSessionRef.current === session) {
+        setError("Não foi possível criar a categoria.");
+      }
+    } finally {
+      setSavingCategoria(false);
     }
-    const data = await res.json();
-    setCategorias((c) => [...c, data.categoria]);
+  }
+
+  function fecharCategoriaForm() {
+    categoriaFormSessionRef.current += 1;
     setShowCategoriaForm(false);
+    setError(null);
+    // Limpa o rascunho também — senão o modal reabre pré-preenchido com os
+    // mesmos dados, o que convida a criar sem querer uma categoria duplicada
+    // (o servidor não bloqueia nome repetido, só gera outra "key").
     setNovaCategoria({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
   }
 
@@ -152,7 +194,7 @@ export function ConfiguracoesClient({
         </>
       )}
 
-      <Modal open={showCategoriaForm} onClose={() => setShowCategoriaForm(false)} title="Nova categoria de produção">
+      <Modal open={showCategoriaForm} onClose={fecharCategoriaForm} title="Nova categoria de produção">
         <div className="space-y-3">
           <FormError message={error} />
           <label className="block">
@@ -165,8 +207,12 @@ export function ConfiguracoesClient({
           </label>
           <IconPicker value={novaCategoria.icon} onChange={(icon) => setNovaCategoria({ ...novaCategoria, icon })} />
           <ColorPicker value={novaCategoria.color} onChange={(color) => setNovaCategoria({ ...novaCategoria, color })} />
-          <button onClick={criarCategoria} className="w-full bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5">
-            Criar categoria
+          <button
+            onClick={criarCategoria}
+            disabled={savingCategoria}
+            className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            {savingCategoria ? "Criando..." : "Criar categoria"}
           </button>
         </div>
       </Modal>
