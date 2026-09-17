@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/integracoes/saipos/sync",
-      "schedule": "0 9 * * *"
+      "schedule": "30 5 * * *"
     },
     {
       "path": "/api/integracoes/meta-ads/sync",
