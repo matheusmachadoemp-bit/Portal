@@ -248,6 +248,23 @@ model Empresa {
   metaAdsLastSyncAt              DateTime?
   metaAdsInstagramAccountId      String?
   metaAdsInstagramUsername       String?
+  /// Credenciais OAuth2 (client_credentials) da API de Parceiro do iFood — ver
+  /// `src/lib/ifood-client.ts`. Diferente da Saipos/Meta Ads (um único token
+  /// colado pelo usuário), o iFood exige um par clientId/clientSecret: o
+  /// clientId identifica o aplicativo (não é segredo, comparável a um
+  /// usuário — fica em texto puro, como `saiposLojaId`/`metaAdsAdAccountId`)
+  /// e o clientSecret é trocado por um accessToken de curta duração (~6h) a
+  /// cada sincronização. Nome com sufixo `Cipher` de propósito (mesma lição
+  /// documentada em `20260908140000_renomeia_course_senha_para_senha_cipher`):
+  /// deixa explícito, só pelo nome da coluna, que o conteúdo é criptografado
+  /// (`encryptSecret`/`decryptSecret` de `src/lib/vault.ts`, igual
+  /// `saiposApiToken`/`metaAdsAccessToken`) — nunca gravar texto puro aqui.
+  ifoodClientId                  String?
+  ifoodClientSecretCipher        String?
+  ifoodMerchantId                String?
+  ifoodMerchantName              String?
+  ifoodSyncEnabled               Boolean   @default(false)
+  ifoodLastSyncAt                DateTime?
   createdAt                      DateTime  @default(now())
   updatedAt                      DateTime  @updatedAt
 
@@ -311,6 +328,8 @@ model Empresa {
   employeeDocuments                  EmployeeDocument[]
   saiposSales                        SaiposSale[]
   saiposSyncLogs                     SaiposSyncLog[]
+  ifoodOrders                        IfoodOrder[]
+  ifoodSyncLogs                      IfoodSyncLog[]
   metaAdsInsights                    MetaAdsInsight[]
   metaAdsSyncLogs                    MetaAdsSyncLog[]
   tasks                              Task[]
@@ -536,6 +555,57 @@ model SaiposSale {
 }
 
 model SaiposSyncLog {
+  id            String    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  status        String
+  recordsSynced Int       @default(0)
+  errorMessage  String?
+
+  @@index([empresaId, startedAt])
+}
+
+// ---------------------------------------------------------------------------
+// IFOOD — pedidos importados da API de Parceiro do iFood (módulo Financial,
+// endpoint de vendas por período). FASE 1 da integração (só staging, mesmo
+// primeiro passo que a Saipos deu em `20260813150000_saipos_integration`):
+// só grava aqui, cru + campos-resumo já mapeados — nenhuma linha em
+// Sale/SaleItem/SalesEntry ainda. A normalização pra essas tabelas (como
+// `syncSalesFromSaipos`/`syncSalesEntriesFromSaipos` fazem a partir de
+// SaiposSale) fica pra uma fase seguinte, depois de validar o mapeamento
+// contra pedidos reais. Ver `src/lib/ifood-client.ts` para as notas sobre
+// quais endpoints já foram confirmados contra a documentação oficial do
+// iFood e qual ponto ainda depende de confirmação com a API real.
+// ---------------------------------------------------------------------------
+
+model IfoodOrder {
+  id             String        @id @default(cuid())
+  empresaId      String
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  /// Identificador do pedido na API do iFood (campo `id`/`orderId`, a
+  /// confirmar — ver `toIfoodOrderData` em `src/lib/ifood-mapper.ts`).
+  ifoodOrderId   String
+  /// Loja no iFood (`Empresa.ifoodMerchantId`) que gerou o pedido — repetido
+  /// aqui (mesmo já estando implícito por `empresaId`) só para auditoria,
+  /// mesmo raciocínio de guardar `raw` inteiro: barato de manter, útil se um
+  /// dia uma única credencial cobrir mais de uma loja do grupo.
+  merchantId     String
+  orderDate      DateTime
+  channel        SaleChannel   @default(DELIVERY)
+  platform       SalePlatform  @default(IFOOD)
+  formaPagamento PaymentMethod @default(OUTRO)
+  valorTotal     Float         @default(0)
+  cancelado      Boolean       @default(false)
+  raw            Json?
+  createdAt      DateTime      @default(now())
+
+  @@unique([empresaId, ifoodOrderId])
+  @@index([empresaId, orderDate])
+}
+
+model IfoodSyncLog {
   id            String    @id @default(cuid())
   empresaId     String
   empresa       Empresa   @relation(fields: [empresaId], references: [id])

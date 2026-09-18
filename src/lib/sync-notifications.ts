@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { createNotifications } from "@/lib/notifications";
 
-export type SyncIntegration = "SAIPOS" | "META_ADS";
+export type SyncIntegration = "SAIPOS" | "META_ADS" | "IFOOD";
 
 const INTEGRATION_LABEL: Record<SyncIntegration, string> = {
   SAIPOS: "Saipos",
   META_ADS: "Meta Ads",
+  IFOOD: "iFood",
 };
 
 // Acima disso, preferimos resumir a mandar um bloco de erro técnico ilegível
@@ -69,22 +70,19 @@ async function countConsecutiveFailures(integration: SyncIntegration, empresaId:
   let skip = 0;
 
   while (true) {
+    const pageArgs = {
+      where: { empresaId },
+      orderBy: { startedAt: "desc" } as const,
+      skip,
+      take: FAILURE_COUNT_PAGE_SIZE,
+      select: { status: true } as const,
+    };
     const rows =
       integration === "SAIPOS"
-        ? await prisma.saiposSyncLog.findMany({
-            where: { empresaId },
-            orderBy: { startedAt: "desc" },
-            skip,
-            take: FAILURE_COUNT_PAGE_SIZE,
-            select: { status: true },
-          })
-        : await prisma.metaAdsSyncLog.findMany({
-            where: { empresaId },
-            orderBy: { startedAt: "desc" },
-            skip,
-            take: FAILURE_COUNT_PAGE_SIZE,
-            select: { status: true },
-          });
+        ? await prisma.saiposSyncLog.findMany(pageArgs)
+        : integration === "META_ADS"
+          ? await prisma.metaAdsSyncLog.findMany(pageArgs)
+          : await prisma.ifoodSyncLog.findMany(pageArgs);
 
     if (rows.length === 0) return count;
 
@@ -100,8 +98,9 @@ async function countConsecutiveFailures(integration: SyncIntegration, empresaId:
 
 /**
  * Notifica os administradores do sistema quando uma sincronização automática
- * (Saipos ou Meta Ads) falha — pra ninguém descobrir só quando reparar que
- * os números de vendas/tráfego pago no portal estão desatualizados.
+ * (Saipos, Meta Ads ou iFood) falha — pra ninguém descobrir só quando
+ * reparar que os números de vendas/tráfego pago no portal estão
+ * desatualizados.
  *
  * Vai só pra quem tem cargo ADMINISTRADOR ("dono" do sistema): é uma falha
  * de infraestrutura/integração, não algo operacional de uma loja específica

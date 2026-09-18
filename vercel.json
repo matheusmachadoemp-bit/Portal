@@ -5,6 +5,10 @@
       "schedule": "30 5 * * *"
     },
     {
+      "path": "/api/integracoes/ifood/sync",
+      "schedule": "45 5 * * *"
+    },
+    {
       "path": "/api/integracoes/meta-ads/sync",
       "schedule": "0 9 * * *"
     },
