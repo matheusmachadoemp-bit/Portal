@@ -355,7 +355,7 @@ export function DeliveryClient({
                   setFechamentoModalOpen(false);
                 }}
                 disabled={saving}
-                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
               >
                 {saving ? "Salvando..." : current ? "Salvar alterações" : "Salvar fechamento do período"}
               </button>
