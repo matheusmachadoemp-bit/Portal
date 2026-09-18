@@ -41,13 +41,16 @@ export type TaskDTO = {
   _count?: { comments: number; attachments: number };
 };
 
+/** Presets de prazo (dueDate) do filtro de período de Tarefas — sempre olhando pra frente, diferente do padrão "rolling" (passado) do resto do Portal. */
+export type TaskPeriodKey = "" | "hoje" | "amanha" | "semana" | "proxima-semana" | "mes" | "personalizado";
+
 export type TaskFilters = {
   empresaId: string;
   sectorKey: string;
   responsavelId: string;
   status: string;
   priority: string;
-  periodo: string;
+  periodo: TaskPeriodKey;
   from: string;
   to: string;
   q: string;

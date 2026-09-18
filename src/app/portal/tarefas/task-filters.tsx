@@ -1,10 +1,11 @@
 "use client";
 
 import { Search, X } from "lucide-react";
+import { PeriodFilterBar, type PeriodFilterOption } from "@/components/ui/period-filter";
 import { TASK_SECTORS, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/lib/tarefas";
-import { EMPTY_FILTERS, type EmpresaOption, type TaskFilters, type UserOption } from "./types";
+import { EMPTY_FILTERS, type EmpresaOption, type TaskFilters, type TaskPeriodKey, type UserOption } from "./types";
 
-const PERIOD_OPTIONS = [
+const PERIOD_OPTIONS: PeriodFilterOption<TaskPeriodKey>[] = [
   { key: "", label: "Qualquer período" },
   { key: "hoje", label: "Hoje" },
   { key: "amanha", label: "Amanhã" },
@@ -31,6 +32,10 @@ export function TaskFiltersBar({
     onChange({ ...filters, [key]: value });
   }
 
+  function applyPeriodo(key: TaskPeriodKey, from?: string, to?: string) {
+    onChange({ ...filters, periodo: key, from: from ?? "", to: to ?? "" });
+  }
+
   const hasActiveFilters = JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS);
 
   return (
@@ -42,6 +47,17 @@ export function TaskFiltersBar({
           onChange={(e) => set("q", e.target.value)}
           placeholder="Buscar tarefa..."
           className="w-full bg-nord-panel border border-nord-border rounded-lg pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-nord-blue"
+        />
+      </div>
+
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Período</p>
+        <PeriodFilterBar
+          periodo={filters.periodo}
+          onApply={applyPeriodo}
+          options={PERIOD_OPTIONS}
+          initialCustomFrom={filters.from}
+          initialCustomTo={filters.to}
         />
       </div>
 
@@ -92,21 +108,6 @@ export function TaskFiltersBar({
             </option>
           ))}
         </select>
-
-        <select value={filters.periodo} onChange={(e) => set("periodo", e.target.value)} className="filter-select">
-          {PERIOD_OPTIONS.map((p) => (
-            <option key={p.key} value={p.key}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-
-        {filters.periodo === "personalizado" && (
-          <>
-            <input type="date" value={filters.from} onChange={(e) => set("from", e.target.value)} className="filter-select" />
-            <input type="date" value={filters.to} onChange={(e) => set("to", e.target.value)} className="filter-select" />
-          </>
-        )}
 
         {hasActiveFilters && (
           <button
