@@ -11,6 +11,7 @@ import {
   FechamentoDoMesSection,
   FechamentoDoMesEditor,
   useFechamentoDoMes,
+  indicatorAccentColor,
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
@@ -43,12 +44,16 @@ type Metrics = { npsPercent: number | null; faturamentoValor: number; ticketMedi
 type MelhorVendedor = { nome: string | null; valor: number | null };
 type Comentario = { nome: string; comentario: string; nota: number };
 
+// `icon` só é usado pelos cards de exibição abaixo (mesmo badge colorido do
+// "Fechamento do mês"/"Melhor vendedor do mês") — os 5 campos, chaves e
+// lógica de NPS detalhado continuam exatamente os mesmos, só ganharam um
+// ícone pra não destoar visualmente do resto da tela.
 const NPS_DETALHADO_FIELDS = [
-  { key: "npsQualidadeProduto", label: "Qualidade do Produto" },
-  { key: "npsAtendimento", label: "Atendimento" },
-  { key: "npsAmbiente", label: "Ambiente" },
-  { key: "npsRodizio", label: "Rodízio" },
-  { key: "npsTempoEspera", label: "Tempo de Espera" },
+  { key: "npsQualidadeProduto", label: "Qualidade do Produto", icon: "Pizza" },
+  { key: "npsAtendimento", label: "Atendimento", icon: "Handshake" },
+  { key: "npsAmbiente", label: "Ambiente", icon: "Armchair" },
+  { key: "npsRodizio", label: "Rodízio", icon: "RefreshCw" },
+  { key: "npsTempoEspera", label: "Tempo de Espera", icon: "Hourglass" },
 ] as const;
 
 function buildForm(m?: Meeting | null) {
@@ -428,15 +433,26 @@ export function SalaoClient({
 
       <Section title="NPS detalhado por categoria">
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          {NPS_DETALHADO_FIELDS.map((f) => (
-            <div key={f.key} className="nord-card p-3 flex flex-col gap-1.5">
-              <span className="text-xs text-nord-gray">{f.label}</span>
-              <span className="text-lg font-semibold text-white">{form[f.key] || "-"}</span>
-              <span className="text-[11px] text-nord-gray">
-                Mês anterior: {anterior?.[f.key] != null ? anterior[f.key] : "-"}
-              </span>
-            </div>
-          ))}
+          {NPS_DETALHADO_FIELDS.map((f, index) => {
+            const color = indicatorAccentColor(index);
+            return (
+              <div key={f.key} className="nord-card p-3 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${color}22` }}
+                  >
+                    <DynamicIcon name={f.icon} size={14} style={{ color }} />
+                  </div>
+                  <span className="text-xs text-nord-gray truncate">{f.label}</span>
+                </div>
+                <span className="text-lg font-semibold text-white">{form[f.key] || "-"}</span>
+                <span className="text-[11px] text-nord-gray">
+                  Mês anterior: {anterior?.[f.key] != null ? anterior[f.key] : "-"}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </Section>
 
@@ -571,7 +587,7 @@ export function SalaoClient({
                   setFechamentoModalOpen(false);
                 }}
                 disabled={saving}
-                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2 px-4"
+                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
               >
                 {saving ? "Salvando..." : current ? "Salvar alterações" : "Salvar fechamento do período"}
               </button>

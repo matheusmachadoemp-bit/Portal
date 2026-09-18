@@ -20,11 +20,18 @@ import type { ReuniaoCustomIndicatorDTO } from "@/lib/reuniao-server";
  * em cada uma.
  *
  * A Reunião Gerente nasceu antes deste componente existir e mantém sua
- * própria implementação inline (o modal dela também pede um segundo valor —
- * "Resultado do período" — por indicador, algo que as outras 4 telas não
- * têm); não foi migrada para não arriscar regressão numa tela que já estava
- * no ar. As próximas 4 (Salão, Cozinha, Delivery, Liderança) já nascem
- * usando este componente.
+ * própria implementação inline (replicada manualmente aqui em vez de
+ * importada, pra não arriscar regressão numa tela que já estava no ar) — mas
+ * hoje as duas versões são visualmente equivalentes (mesmas classes, mesmo
+ * ícone em badge colorido, mesma grade, mesmo modal de editar), então
+ * qualquer ajuste visual feito aqui precisa ser espelhado manualmente em
+ * gerente-client.tsx pra não fazer as duas telas divergirem de novo. Histórico:
+ * até a seção "Resultado do período" ser removida do modal do Gerente (ver
+ * comentário de `buildForm` em gerente-client.tsx), o modal de lá pedia um
+ * segundo valor por indicador que as outras 4 telas não tinham — isso não é
+ * mais verdade, a diferença entre as duas implementações é só o arquivo, não
+ * mais o visual nem os campos. As próximas 4 (Salão, Cozinha, Delivery,
+ * Liderança) já nascem usando este componente.
  */
 
 export type FechamentoIndicator = ReuniaoCustomIndicatorDTO;
