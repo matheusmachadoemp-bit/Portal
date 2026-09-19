@@ -1,0 +1,17 @@
+-- Backfill de dado (sem alteração de schema): metas de Gerência criadas ANTES
+-- da regra de "responsável sempre = Gerente" (ver GERENCIA_RESPONSAVEL em
+-- src/lib/goals.ts, aplicado em POST/PATCH /api/metas a partir de
+-- b1a3871 "Metas > Gerência: formulário simplificado...") ainda carregam o
+-- texto livre antigo digitado no formulário (ex.: "Gerente Nord", valor usado
+-- pelo prisma/seed.ts) — essas linhas só seriam corrigidas na próxima vez que
+-- alguém editasse aquela meta específica pela tela, deixando o banco num
+-- estado misto até lá. Este UPDATE alinha de uma vez todas as metas de
+-- categoria GERENCIA já existentes, sem esperar edição manual uma a uma.
+--
+-- Filtro por category = 'GERENCIA' é essencial: metas das outras 5 categorias
+-- (SALAO, COZINHA, DELIVERY, MARKETING, ADMINISTRATIVO) continuam com
+-- responsável de texto livre normalmente e não podem ser tocadas aqui.
+--
+-- Naturalmente idempotente (UPDATE ... WHERE responsavel != 'Gerente' não tem
+-- efeito nenhum numa segunda execução, já que a condição deixa de casar).
+UPDATE "Goal" SET "responsavel" = 'Gerente' WHERE "category" = 'GERENCIA' AND "responsavel" != 'Gerente';

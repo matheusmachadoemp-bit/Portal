@@ -8,6 +8,7 @@ import { buildVisibilityResolver } from "@/lib/permissions";
 import { getMenuCategories } from "@/lib/menu-categories";
 import { PushRegistration } from "@/components/push-registration";
 import { IosInstallBanner } from "@/components/ios-install-banner";
+import { PushPermissionBanner } from "@/components/push-permission-banner";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -54,6 +55,7 @@ export default async function PortalLayout({ children }: { children: React.React
     <MobileSidebarProvider>
       <PushRegistration />
       <IosInstallBanner />
+      <PushPermissionBanner />
       <div className="flex min-h-screen w-full bg-nord-black">
         <Sidebar
           initialCategories={categories}
