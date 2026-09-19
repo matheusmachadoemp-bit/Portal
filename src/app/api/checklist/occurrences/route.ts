@@ -59,19 +59,17 @@ export async function GET(req: Request) {
   // computeOccurrenceStatus só preserva NAO_REALIZADO se ele já estava
   // setado, nunca o atribui (ver src/lib/checklist.ts). Sem essa chamada
   // aqui, quem faz essa correção de status é só o cron (GET
-  // /api/checklist/escalations/run) — e o cron só processa ocorrências de
-  // HOJE (dateKey = spDateKey(), sem parâmetro), nunca revisita uma data
-  // passada.
+  // /api/checklist/escalations/run) — e o cron processa ocorrências de HOJE
+  // mais os `ESCALATION_LOOKBACK_DAYS` dias anteriores (ver comentário em
+  // src/app/api/checklist/escalations/run/route.ts), não só o dia atual.
   //
   // Sob cron saudável isso não muda nada na prática: pra ocorrências de
   // hoje, o cron corrige o status dentro de ~5 min, antes de "virar
-  // passado". Mas se o cron ficar indisponível durante a janela em que uma
+  // passado". Se o cron ficar indisponível durante a janela em que uma
   // ocorrência cruza o limiar de NAO_REALIZADO, ela fica presa em ATRASADO
-  // para sempre — não existe mais nenhuma rota nem cron que revisite dias
-  // passados para corrigir isso. Lacuna aceita conscientemente por enquanto
-  // (baixo risco, mesmo padrão já em vigor na página antes desta mudança);
-  // o fix de verdade (cron passar a revisitar dias anteriores) é uma task
-  // separada.
+  // até a próxima execução saudável do cron revisitar aquele dia (dentro da
+  // janela de `ESCALATION_LOOKBACK_DAYS`) — só continuaria presa pra sempre
+  // se o cron ficasse indisponível por mais tempo que essa janela.
 
   // Mesmo critério da página (server component): quem só executa (sem
   // canCreate na subcategoria "checklist") só pode ver os checklists dos
