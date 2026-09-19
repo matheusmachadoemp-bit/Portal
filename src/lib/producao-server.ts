@@ -93,25 +93,54 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
     // Desconta os insumos crus da ficha do item produzido (seção 30) —
     // mesmo padrão de saída de estoque já usado em perdas/movimentos: nunca
     // deixa o estoque ficar negativo, só zera.
-    if (quantidadeProduzida > 0) {
+    //
+    // Otimização (achado #182): em vez de 1 leitura + 1 update + 1 create por
+    // insumo (3N idas ao banco), busca o estoque de TODOS os insumos da
+    // ficha de uma vez (1 leitura) e agrupa os StockMovement num único
+    // createMany (1 escrita) — sobra só o `ingredient.update` em loop (N
+    // escritas, uma por insumo), que foi mantido individual de propósito:
+    // Prisma não tem "update em lote com valor por linha" nativo, e um
+    // UPDATE em SQL bruto aqui arriscaria corromper estoque por um erro de
+    // sintaxe/mapeamento — não vale o risco numa tarefa de baixa prioridade.
+    // O mapa `estoqueMap` é atualizado a cada iteração para preservar o
+    // mesmo comportamento "em cascata" de antes: se dois insumos da ficha
+    // apontarem pro mesmo ingrediente, o segundo consumo continua partindo
+    // do saldo já descontado pelo primeiro, exatamente como no loop
+    // sequencial original.
+    if (quantidadeProduzida > 0 && item.ingredientes.length > 0) {
+      const ingredientIds = Array.from(new Set(item.ingredientes.map((linha) => linha.ingredientId)));
+      const ingredientesAtuais = await tx.ingredient.findMany({
+        where: { id: { in: ingredientIds } },
+        select: { id: true, estoqueAtual: true },
+      });
+      const estoqueMap = new Map(ingredientesAtuais.map((ing) => [ing.id, ing.estoqueAtual]));
+
+      const movimentos: Prisma.StockMovementCreateManyInput[] = [];
+
       for (const linha of item.ingredientes) {
         const consumo = quantidadeProduzida * linha.quantidadeUsada;
         if (consumo <= 0) continue;
-        const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: linha.ingredientId }, select: { estoqueAtual: true } });
-        const estoqueApos = Math.max(0, ingredient.estoqueAtual - consumo);
+        const estoqueAntes = estoqueMap.get(linha.ingredientId);
+        if (estoqueAntes === undefined) {
+          throw new Error(`Insumo ${linha.ingredientId} não encontrado ao finalizar produção.`);
+        }
+        const estoqueApos = Math.max(0, estoqueAntes - consumo);
+        estoqueMap.set(linha.ingredientId, estoqueApos);
         await tx.ingredient.update({ where: { id: linha.ingredientId }, data: { estoqueAtual: estoqueApos } });
-        await tx.stockMovement.create({
-          data: {
-            ingredientId: linha.ingredientId,
-            empresaId: order.empresaId,
-            type: "SAIDA",
-            quantidade: consumo,
-            estoqueApos,
-            motivo: `Consumo em produção — ${item.name}`,
-            origin: "CONSUMO_INTERNO",
-            createdById: userId,
-          },
+        movimentos.push({
+          ingredientId: linha.ingredientId,
+          empresaId: order.empresaId,
+          type: "SAIDA",
+          quantidade: consumo,
+          estoqueApos,
+          motivo: `Consumo em produção — ${item.name}`,
+          origin: "CONSUMO_INTERNO",
+          createdById: userId,
         });
+      }
+
+      if (movimentos.length > 0) {
+        await tx.stockMovement.createMany({ data: movimentos });
       }
     }
 
