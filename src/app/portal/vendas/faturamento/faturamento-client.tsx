@@ -135,74 +135,74 @@ export function FaturamentoClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Download size={13} /> Exportar relatório
-        </button>
-      </div>
-
       <div className="nord-card p-4 space-y-4">
-        <div className="flex flex-wrap gap-6">
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Período</p>
-            <div className="flex flex-wrap gap-1.5">
-              {PERIOD_OPTIONS.map((c) => (
-                <button
-                  key={c.key}
-                  onClick={() => setPeriodKey(c.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    periodKey === c.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
-                  }`}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-            {periodKey === "personalizado" && (
-              <div className="flex items-center gap-2 mt-2">
-                <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
-                <span className="text-xs text-nord-gray">até</span>
-                <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="flex flex-wrap gap-6">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Período</p>
+              <div className="flex flex-wrap gap-1.5">
+                {PERIOD_OPTIONS.map((c) => (
+                  <button
+                    key={c.key}
+                    onClick={() => setPeriodKey(c.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      periodKey === c.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
+              {periodKey === "personalizado" && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
+                  <span className="text-xs text-nord-gray">até</span>
+                  <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
+                </div>
+              )}
+            </div>
 
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Canal de venda</p>
-            <div className="flex flex-wrap gap-1.5">
-              {CHANNEL_CHIPS.map((c) => (
-                <button
-                  key={c.key || "todos"}
-                  onClick={() => setChannel(c.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    channel === c.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
-                  }`}
-                >
-                  {c.label}
-                </button>
-              ))}
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Canal de venda</p>
+              <div className="flex flex-wrap gap-1.5">
+                {CHANNEL_CHIPS.map((c) => (
+                  <button
+                    key={c.key || "todos"}
+                    onClick={() => setChannel(c.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      channel === c.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Plataforma</p>
+              <div className="flex flex-wrap gap-1.5">
+                {PLATFORM_CHIPS.map((c) => (
+                  <button
+                    key={c.key || "todas"}
+                    onClick={() => setPlatform(c.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      platform === c.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Plataforma</p>
-            <div className="flex flex-wrap gap-1.5">
-              {PLATFORM_CHIPS.map((c) => (
-                <button
-                  key={c.key || "todas"}
-                  onClick={() => setPlatform(c.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    platform === c.key ? "bg-nord-blue text-white" : "border border-nord-border text-nord-gray hover:text-white"
-                  }`}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <button
+            onClick={handleExport}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium shrink-0"
+          >
+            <Download size={13} /> Exportar relatório
+          </button>
         </div>
       </div>
 
