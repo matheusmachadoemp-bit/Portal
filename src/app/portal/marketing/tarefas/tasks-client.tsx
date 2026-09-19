@@ -169,7 +169,12 @@ export function TasksClient({
       </div>
 
       {view === "kanban" ? (
+        // `id` fixo: só existe uma instância de DndContext nesta tela hoje, mas fixar
+        // evita depender do contador automático do dnd-kit (compartilhado com outras
+        // telas), que pode divergir entre servidor e cliente — mesma causa do achado
+        // #186 (sortable-stat-cards.tsx).
         <DndContext
+          id="marketing-tarefas-kanban"
           sensors={sensors}
           onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
           onDragEnd={handleDragEnd}
