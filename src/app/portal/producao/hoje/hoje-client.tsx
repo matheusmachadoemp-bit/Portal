@@ -103,7 +103,7 @@ export function HojeClient({
             className="input pl-8"
           />
         </div>
-        <select value={categoriaFilter} onChange={(e) => setCategoriaFilter(e.target.value)} className="input w-auto">
+        <select value={categoriaFilter} onChange={(e) => setCategoriaFilter(e.target.value)} className="input-sm">
           <option value="">Todas as categorias</option>
           {categorias.map((c) => (
             <option key={c.id} value={c.id}>
@@ -111,7 +111,7 @@ export function HojeClient({
             </option>
           ))}
         </select>
-        <select value={responsavelFilter} onChange={(e) => setResponsavelFilter(e.target.value)} className="input w-auto">
+        <select value={responsavelFilter} onChange={(e) => setResponsavelFilter(e.target.value)} className="input-sm">
           <option value="">Todos os responsáveis</option>
           {teamMembers.map((u) => (
             <option key={u.id} value={u.id}>
