@@ -403,7 +403,11 @@ export function ProdutosClient({
               + adicionar ingrediente
             </button>
           </div>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleLineDragEnd}>
+          {/* `id` fixo: só existe uma instância de DndContext nesta tela hoje (um modal de
+              produto aberto por vez), mas fixar evita depender do contador automático do
+              dnd-kit (compartilhado com outras telas), que pode divergir entre servidor e
+              cliente — mesma causa do achado #186 (sortable-stat-cards.tsx). */}
+          <DndContext id="ficha-tecnica-produto-ingredientes" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleLineDragEnd}>
             <SortableContext items={lines.map((l) => l.key)} strategy={verticalListSortingStrategy}>
               <div className="space-y-2">
                 {lines.map((line) => (
