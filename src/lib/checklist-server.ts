@@ -198,14 +198,16 @@ function escalationMessage(
 /**
  * Notifica donos/gerentes toda vez que um funcionário conclui um checklist
  * — no prazo ou atrasado. A conclusão atrasada é a parte que mais importa:
- * `processChecklistEscalations` roda 1x por dia à noite (ver vercel.json) e
- * já ignora qualquer ocorrência com `completedAt` preenchido (não recalcula
- * níveis de cobrança pra quem já concluiu), então um checklist concluído
- * poucos minutos atrasado — antes de cruzar os limiares de cobrança
- * (avisoAtrasoResponsavelMinutos/alertaCriticoMinutos) — nunca gerava
- * nenhum aviso por conta própria. Esta função fecha essa lacuna e também
- * avisa nas conclusões no prazo, disparando na hora, direto do endpoint de
- * conclusão.
+ * `processChecklistEscalations` roda a cada poucos minutos (GitHub Actions,
+ * ver .github/workflows/checklist-escalations.yml, mais o cron diário do
+ * Vercel como reforço — ver vercel.json) mas só reavalia ocorrências ainda
+ * em aberto: uma vez com `completedAt` preenchido, `dueEscalationLevels`
+ * não gera mais nenhum nível de cobrança pra ela (não recalcula níveis pra
+ * quem já concluiu). Então um checklist concluído poucos minutos atrasado
+ * — antes de cruzar o limiar de `avisoAtrasoResponsavelMinutos`/
+ * `alertaCriticoMinutos` — nunca gerava nenhum aviso por conta própria.
+ * Esta função fecha essa lacuna e também avisa nas conclusões no prazo,
+ * disparando na hora, direto do endpoint de conclusão.
  */
 export async function notifyChecklistCompletion(occurrenceId: string) {
   const o = await prisma.checklistOccurrence.findUnique({

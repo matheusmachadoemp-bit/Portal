@@ -163,7 +163,7 @@ function emptyForm() {
     exigirObservacaoProblema: false,
     cobrancaAtiva: true,
     avisoAntesMinutos: "30",
-    avisoAtrasoResponsavelMinutos: "10",
+    avisoAtrasoResponsavelMinutos: "15",
     alertaCriticoMinutos: "30",
     naoRealizadoMinutos: "60",
     itens: [] as { id?: string; title: string; orientacao: string; tipo: string; obrigatorio: boolean; fotoObrigatoria: boolean }[],

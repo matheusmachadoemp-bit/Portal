@@ -2,15 +2,25 @@ name: Cobrança automática de checklist
 
 # A cobrança de checklist (avisos de "perto do prazo", "atrasado", "não
 # realizado" — ver processChecklistEscalations em src/lib/checklist-server.ts)
-# já roda 1x por dia via Vercel Cron (ver vercel.json), mas o plano Hobby do
-# Vercel só permite 1 execução diária por cron. Sem outro gatilho, esses
-# avisos só saíam quando alguém abria a tela de Checklist (que recalcula a
-# cobrança ao carregar) — daí notificações "não chegando" fora dessa tela.
-# Mesmo padrão já usado em keep-alive.yml: GitHub Actions aceita intervalos
-# curtos de graça.
+# roda 1x por dia via Vercel Cron (ver vercel.json, mantido como reforço —
+# o Hobby do Vercel só permite 1 execução diária por cron, então sozinho
+# ele deixaria os avisos "atrasados" chegarem só à noite) e, desde #239,
+# também aqui a cada poucos minutos via GitHub Actions (mesmo padrão já
+# usado em keep-alive.yml: GitHub Actions aceita intervalos curtos de
+# graça, diferente do cron nativo do Vercel Hobby).
+#
+# Frequência 5 min (era 15 min): o limiar "atraso do responsável"
+# (avisoAtrasoResponsavelMinutos) passou a ser 15 minutos pra todo
+# checklist — com um cron de 15 em 15 min, o pior caso de atraso pra
+# notificar chegava perto de 30 min (15 min de limiar + até 15 min até o
+# próximo tick) em vez dos 15 min pedidos. Em 5 em 5 min o pior caso cai
+# pra ~20 min, bem mais perto da intenção original. GET
+# /api/checklist/escalations/run é idempotente (ChecklistEscalationLog
+# garante uma notificação por ocorrência+nível+destinatário), então rodar
+# com mais frequência nunca duplica aviso.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 jobs:

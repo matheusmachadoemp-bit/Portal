@@ -134,7 +134,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         exigirObservacaoProblema: Boolean(body.exigirObservacaoProblema),
         cobrancaAtiva: body.cobrancaAtiva ?? true,
         avisoAntesMinutos: Number(body.avisoAntesMinutos) || 30,
-        avisoAtrasoResponsavelMinutos: Number(body.avisoAtrasoResponsavelMinutos) || 10,
+        avisoAtrasoResponsavelMinutos: Number(body.avisoAtrasoResponsavelMinutos) || 15,
         alertaCriticoMinutos: Number(body.alertaCriticoMinutos) || 30,
         naoRealizadoMinutos: Number(body.naoRealizadoMinutos) || 60,
       },
