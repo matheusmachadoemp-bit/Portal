@@ -1428,10 +1428,11 @@ model ChecklistTemplate {
   fotoChecklist            ChecklistPhotoRequirement @default(SEM_FOTO)
   exigirObservacaoProblema Boolean                   @default(false)
 
-  // Cobrança automática (configurada, motor de escalonamento em etapa futura)
+  // Cobrança automática — motor de escalonamento em src/lib/checklist-server.ts
+  // (processChecklistEscalations), disparado por GET /api/checklist/escalations/run.
   cobrancaAtiva                 Boolean @default(true)
   avisoAntesMinutos             Int     @default(30)
-  avisoAtrasoResponsavelMinutos Int     @default(10)
+  avisoAtrasoResponsavelMinutos Int     @default(15)
   alertaCriticoMinutos          Int     @default(30)
   naoRealizadoMinutos           Int     @default(60)
 
