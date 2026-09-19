@@ -200,17 +200,47 @@ export async function criarResgate(params: {
   return { ok: true, redemptionId: redemption.id };
 }
 
-/** Cancela um resgate ainda não aprovado (o próprio colaborador) e devolve os pontos. */
+/**
+ * Cancela um resgate ainda não aprovado (o próprio colaborador) e devolve os pontos.
+ *
+ * O `findUnique` abaixo é só a resposta rápida do caso comum (recurso não encontrado,
+ * não é dono, ou já não está mais aguardando aprovação). A garantia de verdade contra
+ * corrida (achado #196: duplo clique, ou o colaborador cancelando bem na hora em que
+ * um gerente aprova/recusa o mesmo resgate) é o `updateMany` condicional dentro da
+ * transação abaixo — só quem realmente conseguir mudar a linha (`count === 1`)
+ * prossegue para estornar os pontos/repor o estoque; quem perder a corrida
+ * (`count === 0`) recebe o mesmo erro amigável, sem duplicar nada. Mesmo padrão do
+ * `updateMany` condicional já usado para o estoque em `criarResgate`.
+ */
 export async function cancelarResgate(redemptionId: string, userId: string): Promise<LojaNordActionResult> {
   const redemption = await prisma.lojaNordRedemption.findUnique({ where: { id: redemptionId }, include: { reward: true } });
   if (!redemption || redemption.userId !== userId) return { ok: false, error: "Resgate não encontrado." };
   if (redemption.status !== "AGUARDANDO_APROVACAO") return { ok: false, error: "Só é possível cancelar resgates aguardando aprovação." };
 
-  await estornarResgate(redemption.id, redemption.userId, redemption.empresaId, redemption.pontos, redemption.reward.nome, redemption.rewardId, "CANCELADO");
+  const processado = await prisma.$transaction(async (tx) => {
+    const updated = await tx.lojaNordRedemption.updateMany({
+      where: { id: redemptionId, status: "AGUARDANDO_APROVACAO" },
+      data: { status: "CANCELADO" },
+    });
+    if (updated.count === 0) return false;
+
+    await estornarResgate(tx, redemption.id, redemption.userId, redemption.empresaId, redemption.pontos, redemption.reward.nome, redemption.rewardId);
+    return true;
+  });
+
+  if (!processado) return { ok: false, error: "Só é possível cancelar resgates aguardando aprovação." };
   return { ok: true };
 }
 
-/** Aprova um resgate (gerente/proprietário). `empresasPermitidas` são as lojas que quem está aprovando pode gerenciar. */
+/**
+ * Aprova um resgate (gerente/proprietário). `empresasPermitidas` são as lojas que quem
+ * está aprovando pode gerenciar.
+ *
+ * Sem estorno/estoque envolvidos aqui, então o `updateMany` condicional sozinho (uma
+ * única instrução SQL, já atômica por natureza) é suficiente como ponto de corte contra
+ * corrida — não precisa de `$transaction` como `cancelarResgate`/`recusarResgate`. Ver
+ * nota de `cancelarResgate` sobre o achado #196.
+ */
 export async function aprovarResgate(
   redemptionId: string,
   aprovadoPorId: string,
@@ -224,10 +254,11 @@ export async function aprovarResgate(
   }
   if (redemption.status !== "AGUARDANDO_APROVACAO") return { ok: false, error: "Este resgate já foi processado." };
 
-  await prisma.lojaNordRedemption.update({
-    where: { id: redemptionId },
+  const updated = await prisma.lojaNordRedemption.updateMany({
+    where: { id: redemptionId, status: "AGUARDANDO_APROVACAO" },
     data: { status: "APROVADO", aprovadoPorId, dataPrevista: dataPrevista ?? null },
   });
+  if (updated.count === 0) return { ok: false, error: "Este resgate já foi processado." };
 
   await notifyUser(
     redemption.userId,
@@ -239,7 +270,11 @@ export async function aprovarResgate(
   return { ok: true };
 }
 
-/** Recusa um resgate (gerente/proprietário) — exige justificativa e devolve os pontos. `empresasPermitidas` são as lojas que quem está recusando pode gerenciar. */
+/**
+ * Recusa um resgate (gerente/proprietário) — exige justificativa e devolve os pontos.
+ * `empresasPermitidas` são as lojas que quem está recusando pode gerenciar. Ver nota de
+ * `cancelarResgate` sobre o `updateMany` condicional contra corrida (achado #196).
+ */
 export async function recusarResgate(
   redemptionId: string,
   aprovadoPorId: string,
@@ -254,11 +289,18 @@ export async function recusarResgate(
   }
   if (redemption.status !== "AGUARDANDO_APROVACAO") return { ok: false, error: "Este resgate já foi processado." };
 
-  await prisma.lojaNordRedemption.update({
-    where: { id: redemptionId },
-    data: { status: "RECUSADO", aprovadoPorId, motivoRecusa: motivo },
+  const processado = await prisma.$transaction(async (tx) => {
+    const updated = await tx.lojaNordRedemption.updateMany({
+      where: { id: redemptionId, status: "AGUARDANDO_APROVACAO" },
+      data: { status: "RECUSADO", aprovadoPorId, motivoRecusa: motivo },
+    });
+    if (updated.count === 0) return false;
+
+    await estornarResgate(tx, redemption.id, redemption.userId, redemption.empresaId, redemption.pontos, redemption.reward.nome, redemption.rewardId);
+    return true;
   });
-  await estornarResgate(redemption.id, redemption.userId, redemption.empresaId, redemption.pontos, redemption.reward.nome, redemption.rewardId, null);
+
+  if (!processado) return { ok: false, error: "Este resgate já foi processado." };
 
   await notifyUser(
     redemption.userId,
@@ -270,38 +312,48 @@ export async function recusarResgate(
   return { ok: true };
 }
 
-/** Devolve os pontos de um resgate recusado/cancelado e repõe o estoque. Se `overrideStatus` vier, também atualiza o status (usado pelo cancelamento). */
+/**
+ * Devolve os pontos de um resgate recusado/cancelado e repõe o estoque do brinde (se
+ * rastreado). SEMPRE chamada de dentro da mesma transação (`tx`) cujo primeiro passo já
+ * usou `updateMany` condicional (`where: { id, status: "AGUARDANDO_APROVACAO" }`) para
+ * garantir, atomicamente, que só uma chamada processa este resgate — nunca chamar fora
+ * desse padrão (ver achado #196: chamar isto mais de uma vez para o mesmo resgate
+ * duplica os pontos devolvidos e o estoque reposto). Também não recebe mais
+ * `overrideStatus`: quem muda o status agora é sempre o `updateMany` do chamador, no
+ * mesmo passo atômico que decide quem "venceu" a corrida — nunca esta função.
+ */
 async function estornarResgate(
+  tx: TxClient,
   redemptionId: string,
   userId: string,
   empresaId: string,
   pontos: number,
   rewardName: string,
-  rewardId: string,
-  overrideStatus: "CANCELADO" | null
+  rewardId: string
 ) {
-  await prisma.$transaction(async (tx) => {
-    if (overrideStatus) {
-      await tx.lojaNordRedemption.update({ where: { id: redemptionId }, data: { status: overrideStatus } });
-    }
-    await tx.lojaNordPointTransaction.create({
-      data: {
-        userId,
-        empresaId,
-        kind: "ESTORNO",
-        pontos,
-        origem: "Loja Nord",
-        descricao: `Estorno: ${rewardName}`,
-        redemptionId,
-      },
-    });
-    const reward = await tx.lojaNordReward.findUnique({ where: { id: rewardId }, select: { estoque: true } });
-    if (reward?.estoque !== null && reward?.estoque !== undefined) {
-      await tx.lojaNordReward.update({ where: { id: rewardId }, data: { estoque: { increment: 1 } } });
-    }
+  await tx.lojaNordPointTransaction.create({
+    data: {
+      userId,
+      empresaId,
+      kind: "ESTORNO",
+      pontos,
+      origem: "Loja Nord",
+      descricao: `Estorno: ${rewardName}`,
+      redemptionId,
+    },
   });
+  const reward = await tx.lojaNordReward.findUnique({ where: { id: rewardId }, select: { estoque: true } });
+  if (reward?.estoque !== null && reward?.estoque !== undefined) {
+    await tx.lojaNordReward.update({ where: { id: rewardId }, data: { estoque: { increment: 1 } } });
+  }
 }
 
+/**
+ * Marca um resgate aprovado como disponível para retirada (gerente/proprietário).
+ * Risco de corrida bem mais baixo que cancelar/aprovar/recusar (não mexe em pontos nem
+ * estoque, só evita notificação duplicada num duplo clique) — mas protegido com o mesmo
+ * `updateMany` condicional, já que o custo é o mesmo.
+ */
 export async function marcarDisponivel(redemptionId: string, empresasPermitidas?: string[]): Promise<LojaNordActionResult> {
   const redemption = await prisma.lojaNordRedemption.findUnique({ where: { id: redemptionId }, include: { reward: true } });
   if (!redemption) return { ok: false, error: "Resgate não encontrado." };
@@ -310,7 +362,12 @@ export async function marcarDisponivel(redemptionId: string, empresasPermitidas?
   }
   if (redemption.status !== "APROVADO") return { ok: false, error: "Só é possível marcar como disponível um resgate aprovado." };
 
-  await prisma.lojaNordRedemption.update({ where: { id: redemptionId }, data: { status: "DISPONIVEL_RETIRADA" } });
+  const updated = await prisma.lojaNordRedemption.updateMany({
+    where: { id: redemptionId, status: "APROVADO" },
+    data: { status: "DISPONIVEL_RETIRADA" },
+  });
+  if (updated.count === 0) return { ok: false, error: "Só é possível marcar como disponível um resgate aprovado." };
+
   await notifyUser(
     redemption.userId,
     "LOJA_NORD_BRINDE_DISPONIVEL",
@@ -321,6 +378,7 @@ export async function marcarDisponivel(redemptionId: string, empresasPermitidas?
   return { ok: true };
 }
 
+/** Confirma a entrega de um brinde (gerente/proprietário). Mesma proteção/racional de `marcarDisponivel`. */
 export async function confirmarEntrega(redemptionId: string, empresasPermitidas?: string[]): Promise<LojaNordActionResult> {
   const redemption = await prisma.lojaNordRedemption.findUnique({ where: { id: redemptionId }, include: { reward: true } });
   if (!redemption) return { ok: false, error: "Resgate não encontrado." };
@@ -329,7 +387,12 @@ export async function confirmarEntrega(redemptionId: string, empresasPermitidas?
   }
   if (redemption.status !== "DISPONIVEL_RETIRADA") return { ok: false, error: "Este resgate ainda não está disponível para retirada." };
 
-  await prisma.lojaNordRedemption.update({ where: { id: redemptionId }, data: { status: "ENTREGUE" } });
+  const updated = await prisma.lojaNordRedemption.updateMany({
+    where: { id: redemptionId, status: "DISPONIVEL_RETIRADA" },
+    data: { status: "ENTREGUE" },
+  });
+  if (updated.count === 0) return { ok: false, error: "Este resgate ainda não está disponível para retirada." };
+
   await notifyUser(redemption.userId, "LOJA_NORD_BRINDE_ENTREGUE", "Brinde entregue", `"${redemption.reward.nome}" foi entregue. Aproveite!`, null);
   return { ok: true };
 }
