@@ -335,6 +335,7 @@ export function DashboardClient({
       </div>
 
       <TaskModal
+        key={showTaskModal ? (editingTask?.id ?? "novo") : "closed"}
         open={showTaskModal}
         onClose={() => setShowTaskModal(false)}
         onSaved={() => {

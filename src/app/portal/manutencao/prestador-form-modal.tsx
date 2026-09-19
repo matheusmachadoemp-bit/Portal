@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Modal, FormError } from "@/components/ui/modal";
 import type { PrestadorDTO } from "./types";
 
@@ -21,6 +21,24 @@ const emptyForm = () => ({
   active: true,
 });
 
+function formFromPrestador(prestador?: PrestadorDTO | null) {
+  if (!prestador) return emptyForm();
+  return {
+    nome: prestador.nome,
+    nomeContato: prestador.nomeContato ?? "",
+    especialidade: prestador.especialidade ?? "",
+    telefone: prestador.telefone ?? "",
+    whatsapp: prestador.whatsapp ?? "",
+    email: prestador.email ?? "",
+    documento: prestador.documento ?? "",
+    endereco: prestador.endereco ?? "",
+    empresaIds: prestador.empresaIds,
+    avaliacao: prestador.avaliacao != null ? String(prestador.avaliacao) : "",
+    observacoes: prestador.observacoes ?? "",
+    active: prestador.active,
+  };
+}
+
 export function PrestadorFormModal({
   open,
   onClose,
@@ -34,32 +52,12 @@ export function PrestadorFormModal({
   prestador?: PrestadorDTO | null;
   empresas: EmpresaOption[];
 }) {
-  const [form, setForm] = useState(emptyForm());
+  // Sem efeito de sincronização: quem chama este modal remonta o
+  // componente (via `key`) toda vez que ele abre, então o estado nasce
+  // certo direto do prestador recebido.
+  const [form, setForm] = useState(() => formFromPrestador(prestador));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    if (prestador) {
-      setForm({
-        nome: prestador.nome,
-        nomeContato: prestador.nomeContato ?? "",
-        especialidade: prestador.especialidade ?? "",
-        telefone: prestador.telefone ?? "",
-        whatsapp: prestador.whatsapp ?? "",
-        email: prestador.email ?? "",
-        documento: prestador.documento ?? "",
-        endereco: prestador.endereco ?? "",
-        empresaIds: prestador.empresaIds,
-        avaliacao: prestador.avaliacao != null ? String(prestador.avaliacao) : "",
-        observacoes: prestador.observacoes ?? "",
-        active: prestador.active,
-      });
-    } else {
-      setForm(emptyForm());
-    }
-    setError(null);
-  }, [open, prestador]);
 
   function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: ReturnType<typeof emptyForm>[K]) {
     setForm((f) => ({ ...f, [key]: value }));
