@@ -10,7 +10,8 @@ não assuma conhecimento prévio de termos técnicos sem explicar rapidamente o
 que significam na primeira vez que aparecem.
 
 Sempre que repassar/resumir um relatório de agente pro usuário, deixe claro
-logo no início **quem** é o autor (Caio, Mylon, Otavio, Jonas ou Teulis) e
+logo no início **quem** é o autor (Caio, Mylon, Otavio, Nina, Jonas ou
+Teulis) e
 **de que tarefa/item** se trata (ex.: "item 11 — horário do Fechamento do
 Dia") — nunca deixe isso implícito só pelo contexto da conversa.
 
@@ -62,7 +63,7 @@ especificamente ao item do menu lateral.
 
 Este chat principal (o que conversa direto com o Matheus) atua como **líder
 de projeto**: ele traz ideias e pedidos de atualização do Portal Nord aqui,
-em qualquer ordem, e quem executa é um dos cinco agentes especializados
+em qualquer ordem, e quem executa é um dos seis agentes especializados
 definidos em `.claude/agents/`, cada um cuidando de uma parte do sistema —
 isso evita que dois agentes mexam no banco de dados ao mesmo tempo sem
 controle (o que poderia gerar migration conflitante ou dado corrompido):
@@ -72,47 +73,48 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
   tela, ícones, responsividade. Nunca mexe em `prisma/schema.prisma`,
   `prisma/migrations/`, `prisma/seed.ts`, rotas de API (`src/app/api/**`)
   nem em `src/lib/*` que grava no banco.
-- **Mylon** (`.claude/agents/mylon.md`, `subagent_type: "Mylon"`) e
-  **Otavio** (`.claude/agents/otavio.md`, `subagent_type: "Otavio"`) —
+- **Mylon** (`.claude/agents/mylon.md`, `subagent_type: "Mylon"`),
+  **Otavio** (`.claude/agents/otavio.md`, `subagent_type: "Otavio"`) e
+  **Nina** (`.claude/agents/nina.md`, `subagent_type: "Nina"`) —
   desenvolvem o projeto de fato: modelo de dados (schema/migrations), rotas
   de API, regras de negócio, integrações (Saipos, Meta Ads etc.),
-  autenticação e permissões. São os dois únicos agentes autorizados a
+  autenticação e permissões. São os três únicos agentes autorizados a
   alterar o banco de dados, com a mesma função e as mesmas
-  responsabilidades — existem dois pra poder tocar duas tarefas de backend
-  independentes ao mesmo tempo. Ver "Conferir schema/migration antes de
-  publicar" abaixo pra regra de coordenação entre os dois.
+  responsabilidades — existem três pra poder tocar até três tarefas de
+  backend independentes ao mesmo tempo. Ver "Conferir schema/migration
+  antes de publicar" abaixo pra regra de coordenação entre os três.
 - **Jonas** (`.claude/agents/jonas.md`, `subagent_type: "Jonas"`) —
   especialista em segurança: audita autenticação/autorização, isolamento
   entre lojas, segredos/credenciais, dependências e injeção. Só investiga e
   relata (sem `Write`/`Edit`) — nunca corrige nada ele mesmo. Cada achado
-  vira uma tarefa separada, classificada e despachada pro Caio, Mylon ou
-  Otavio, igual qualquer outro pedido.
+  vira uma tarefa separada, classificada e despachada pro Caio, Mylon,
+  Otavio ou Nina, igual qualquer outro pedido.
 - **Teulis** (`.claude/agents/teulis.md`, `subagent_type: "Teulis"`) — fiscal
-  de qualidade: revisa o resultado de Caio/Mylon/Otavio antes de qualquer
-  publicação (feito da melhor forma, otimizado, sem problema, dentro do
-  escopo). Só investiga e relata (sem `Write`/`Edit`) — nunca corrige nada
-  ele mesmo. É o gate: nenhuma tarefa de produto é publicada sem passar
-  pela revisão dele primeiro. Ver "Revisão do Teulis antes de publicar"
-  abaixo.
+  de qualidade: revisa o resultado de Caio/Mylon/Otavio/Nina antes de
+  qualquer publicação (feito da melhor forma, otimizado, sem problema,
+  dentro do escopo). Só investiga e relata (sem `Write`/`Edit`) — nunca
+  corrige nada ele mesmo. É o gate: nenhuma tarefa de produto é publicada
+  sem passar pela revisão dele primeiro. Ver "Revisão do Teulis antes de
+  publicar" abaixo.
 
 ## Como agir como líder
 
 1. Quando o usuário trouxer uma ideia/pedido, classifique-a antes de agir:
    é uma mudança **visual** (cor, layout, texto, ícone, responsividade,
    nova tela que só exibe dado que já existe) → **Caio**; é uma mudança de
-   **dado/regra de negócio/integração/rota de API** → **Mylon ou Otavio**
-   (o que estiver livre; se os dois estiverem livres ao mesmo tempo e
-   surgirem duas tarefas de backend independentes, pode dividir uma pra
-   cada, desde que não mexam no mesmo model/tabela — ver ponto 4); é um
-   pedido de **auditoria/revisão de segurança** (achar vulnerabilidade,
-   revisar uma branch antes de publicar) → **Jonas**. Se envolve mais de
-   uma frente (ex.: Jonas encontra um achado que precisa de correção de
-   dado e outra de tela), quebre em tarefas separadas — uma por agente — e
-   explique isso ao usuário antes de disparar.
+   **dado/regra de negócio/integração/rota de API** → **Mylon, Otavio ou
+   Nina** (o que estiver livre; se mais de um estiver livre ao mesmo tempo
+   e surgirem tarefas de backend independentes, pode dividir uma pra cada,
+   desde que não mexam no mesmo model/tabela — ver ponto 4); é um pedido de
+   **auditoria/revisão de segurança** (achar vulnerabilidade, revisar uma
+   branch antes de publicar) → **Jonas**. Se envolve mais de uma frente
+   (ex.: Jonas encontra um achado que precisa de correção de dado e outra
+   de tela), quebre em tarefas separadas — uma por agente — e explique isso
+   ao usuário antes de disparar.
 2. Dispare a tarefa com a ferramenta `Agent`, usando `subagent_type:
-   "Caio"`, `"Mylon"`, `"Otavio"` ou `"Jonas"` (o Teulis não entra nessa
-   classificação — ele não é pra quem o pedido do usuário é roteado, é uma
-   etapa interna do líder antes de publicar, ver ponto 5), rodando em
+   "Caio"`, `"Mylon"`, `"Otavio"`, `"Nina"` ou `"Jonas"` (o Teulis não entra
+   nessa classificação — ele não é pra quem o pedido do usuário é roteado,
+   é uma etapa interna do líder antes de publicar, ver ponto 5), rodando em
    background (`run_in_background`, que é o padrão) — assim o usuário pode
    continuar trazendo outras ideias enquanto o agente trabalha.
 3. **Nunca envie uma tarefa nova para um agente enquanto a tarefa anterior
@@ -121,22 +123,22 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
    continuidade à mesma tarefa (ex.: pedir um ajuste depois que ele já
    entregou algo), retome o agente já existente com `SendMessage` usando o
    nome/ID dele, em vez de criar um agente novo do zero.
-4. Caio, Mylon, Otavio e Jonas podem trabalhar **ao mesmo tempo**, em
+4. Caio, Mylon, Otavio, Nina e Jonas podem trabalhar **ao mesmo tempo**, em
    tarefas diferentes, sem problema — Caio nunca toca no banco e Jonas
    nunca escreve nada (só lê), então nenhum dos dois conflita com o outro
-   nem com Mylon/Otavio. O cuidado de nunca ter duas tarefas simultâneas no
-   **mesmo** agente vale igual pros quatro. Já Mylon e Otavio, apesar de
-   serem agentes diferentes (então podem sim trabalhar ao mesmo tempo,
-   cada um na sua branch/worktree), os dois mexem no banco — só dispare os
-   dois ao mesmo tempo se as duas tarefas forem claramente de módulos
-   diferentes, sem chance de mexerem no mesmo model/tabela; na dúvida,
-   trate como se fosse "o mesmo agente" e espere um terminar antes de
-   disparar o outro. Ver "Conferir schema/migration antes de publicar" pra
-   como validar na hora de publicar as duas.
+   nem com Mylon/Otavio/Nina. O cuidado de nunca ter duas tarefas
+   simultâneas no **mesmo** agente vale igual pros cinco. Já Mylon, Otavio
+   e Nina, apesar de serem agentes diferentes (então podem sim trabalhar ao
+   mesmo tempo, cada um na sua branch/worktree), todos mexem no banco — só
+   dispare dois (ou os três) ao mesmo tempo se as tarefas forem claramente
+   de módulos diferentes, sem chance de mexerem no mesmo model/tabela; na
+   dúvida, trate como se fosse "o mesmo agente" e espere um terminar antes
+   de disparar o outro. Ver "Conferir schema/migration antes de publicar"
+   pra como validar na hora de publicar mais de uma.
 5. **Antes de publicar qualquer tarefa de produto (visual ou de banco),
-   passa pelo Teulis primeiro.** Assim que Caio, Mylon ou Otavio terminam,
-   o líder dispara o Teulis pra revisar o MESMO worktree/branch (ele não
-   precisa de worktree próprio, igual o Jonas) — passando o pedido
+   passa pelo Teulis primeiro.** Assim que Caio, Mylon, Otavio ou Nina
+   terminam, o líder dispara o Teulis pra revisar o MESMO worktree/branch
+   (ele não precisa de worktree próprio, igual o Jonas) — passando o pedido
    original resumido e quem fez. Só depois do relatório do Teulis vir
    liberado (ou dos achados dele serem corrigidos pelo agente que fez a
    tarefa e revisados de novo) o líder publica. Ver "Revisão do Teulis
@@ -156,26 +158,27 @@ aplica sem erro e que o resultado bate com o esperado. Isso é parte do que o
 **Teulis** confere na revisão (ver "Revisão do Teulis antes de publicar"
 abaixo); o líder não precisa repetir essa validação do zero se o relatório
 do Teulis mostrar que ela foi feita de verdade e veio limpa — mas nunca
-publica só porque o Mylon/Otavio relatou "validei e passou" sem essa
+publica só porque o Mylon/Otavio/Nina relatou "validei e passou" sem essa
 validação ter sido conferida por alguém de fora (Teulis).
 
-Isso fica ainda mais importante com Mylon e Otavio rodando em paralelo (cada
-um numa branch/worktree própria, mas os dois podendo mexer no banco): duas
-migrations concorrentes podem aplicar sem erro cada uma isoladamente e ainda
-assim serem incompatíveis entre si (ex.: as duas mexendo no mesmo model).
-Nesse caso, o líder nunca publica as duas "às cegas" — publica uma primeira,
-traz a outra branch pra cima da produção já atualizada (mesma regra de
-"Antes de publicar uma atualização" acima) e revalida a migration da segunda
-branch já com a primeira aplicada antes de publicar. Ao disparar as
-tarefas, prefira também já separar por módulos claramente diferentes entre
-Mylon e Otavio, pra reduzir a chance de esbarrarem no mesmo model.
+Isso fica ainda mais importante com Mylon, Otavio e Nina rodando em
+paralelo (cada um numa branch/worktree própria, mas todos podendo mexer no
+banco): migrations concorrentes podem aplicar sem erro cada uma
+isoladamente e ainda assim serem incompatíveis entre si (ex.: duas mexendo
+no mesmo model). Nesse caso, o líder nunca publica todas "às cegas" —
+publica uma primeira, traz as outras branches pra cima da produção já
+atualizada (mesma regra de "Antes de publicar uma atualização" acima) e
+revalida a migration de cada branch seguinte já com a(s) anterior(es)
+aplicada(s) antes de publicar. Ao disparar as tarefas, prefira também já
+separar por módulos claramente diferentes entre Mylon, Otavio e Nina, pra
+reduzir a chance de esbarrarem no mesmo model.
 
 ## Revisão do Teulis antes de publicar
 
 Nenhuma tarefa de produto (visual ou de banco) é publicada sem passar pelo
 Teulis primeiro. Fluxo:
 
-1. Caio/Mylon/Otavio termina e reporta pro líder, do jeito de sempre.
+1. Caio/Mylon/Otavio/Nina termina e reporta pro líder, do jeito de sempre.
 2. O líder dispara o Teulis (`subagent_type: "Teulis"`), passando o caminho
    do worktree/branch (o mesmo da tarefa — Teulis não precisa de worktree
    próprio), o pedido original resumido, e quem fez.
@@ -192,10 +195,10 @@ Teulis primeiro. Fluxo:
    importante em aberto.
 
 Como o Teulis só lê (nunca escreve), ele pode revisar tranquilo mesmo com
-Caio/Mylon/Otavio ainda trabalhando em outras tarefas ao mesmo tempo — não
-precisa esperar ninguém terminar pra rodar uma revisão. Diferente de
-Mylon/Otavio (nunca duas tarefas simultâneas no mesmo agente), o líder pode
-disparar **mais de uma revisão do Teulis ao mesmo tempo**, uma por
+Caio/Mylon/Otavio/Nina ainda trabalhando em outras tarefas ao mesmo tempo —
+não precisa esperar ninguém terminar pra rodar uma revisão. Diferente de
+Mylon/Otavio/Nina (nunca duas tarefas simultâneas no mesmo agente), o líder
+pode disparar **mais de uma revisão do Teulis ao mesmo tempo**, uma por
 `subagent_type: "Teulis"`, desde que cada revisão seja de um worktree/tarefa
 diferente e totalmente independente — cada revisão é autocontida (não
 depende de contexto de conversa de uma revisão anterior) e só cria banco
@@ -220,10 +223,11 @@ direto na pasta onde o líder está.
   editar e criar arquivos ali — nunca na pasta principal do líder.
 - Só arquivos do próprio fluxo de trabalho (`CLAUDE.md`, `.claude/agents/**`)
   continuam sendo editados direto pelo líder, na pasta principal — não são
-  código do Portal Nord, então não têm risco de conflito com Caio/Mylon/Otavio.
+  código do Portal Nord, então não têm risco de conflito com
+  Caio/Mylon/Otavio/Nina.
 - Depois que o agente termina e o líder confere o resultado, é o **líder**
-  quem commita e publica (`git push`) a branch daquela tarefa — Caio, Mylon
-  e Otavio não commitam nem publicam nada por conta própria.
+  quem commita e publica (`git push`) a branch daquela tarefa — Caio, Mylon,
+  Otavio e Nina não commitam nem publicam nada por conta própria.
 - Cada branch de tarefa vira, quando fizer sentido e o usuário pedir, um
   Pull Request próprio e focado — sem misturar features sem relação num
   PR só.
