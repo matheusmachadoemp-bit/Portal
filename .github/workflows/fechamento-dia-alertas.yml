@@ -1,0 +1,43 @@
+name: Aviso de Fechamento do Dia não enviado no prazo
+
+# Avisa o dono (usuários ADMINISTRADOR) quando um FechamentoCargo não envia o Fechamento do Dia
+# até o prazo (ver processFechamentoAlertas em src/lib/fechamento-server.ts). O prazo é o
+# `FechamentoCargo.horarioLimite` de cada cargo — hoje "00:00" (meia-noite de São Paulo) para
+# todos os cargos cadastrados, ver prisma/seed.ts e a migration
+# 20260915130000_fechamento_dia_ajuste_horario_dias — então "logo depois da virada do dia" é
+# quando este aviso precisa sair.
+#
+# Roda 1x por dia via Vercel Cron (ver vercel.json, mantido como reforço adicional) e, desde
+# agora, também aqui a cada poucos minutos via GitHub Actions — mesmo padrão já usado em
+# checklist-escalations.yml e manutencao-chamados-atrasados.yml: GitHub Actions aceita intervalos
+# curtos de graça, diferente do cron nativo do Vercel Hobby, que só permite 1 execução diária por
+# cron E não garante disparar exatamente no minuto agendado (foi exatamente essa falta de garantia
+# que fez o aviso de "Fechamento do Dia não enviado no prazo" não chegar até 00h01 num dia real —
+# o único disparo diário simplesmente não é confiável perto de um horário específico).
+#
+# Frequência 5 min (igual ao Checklist, não os 15 min da Manutenção): o prazo aqui é um instante
+# fixo e específico (a virada da meia-noite), mais parecido com o limiar apertado do Checklist do
+# que com o acompanhamento sem prazo fixo da Manutenção — e 5 min é o menor intervalo que o cron
+# nativo do GitHub Actions aceita. GET /api/fechamento-dia/alertas/run reavalia em tempo real, a
+# cada chamada, se o fechamento de ontem venceu (não depende de rodar num minuto exato) e o status
+# ATRASADO permanece verdadeiro o dia inteiro até a virada seguinte — então mesmo que o tick das
+# 00h00 (topo da hora, o horário de maior risco de atraso do runner do GitHub, conforme a própria
+# documentação do GitHub Actions) atrase ou falhe, o tick seguinte às 00h05 ainda pega o aviso bem
+# dentro da folga de "até 00h01" pedida. GET /api/fechamento-dia/alertas/run é idempotente
+# (FechamentoEscalationLog garante um único aviso por dono+submissão), então rodar com essa
+# frequência nunca duplica aviso.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a rota de aviso do Fechamento do Dia
+        run: |
+          curl -sS -o /dev/null -w "status=%{http_code}\n" \
+            --max-time 30 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.portalnord.com.br/api/fechamento-dia/alertas/run"
