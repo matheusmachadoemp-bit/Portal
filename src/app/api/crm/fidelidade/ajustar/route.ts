@@ -29,6 +29,15 @@ export async function POST(req: Request) {
   const tipo: "GANHO" | "RESGATE" = body.tipo === "RESGATE" ? "RESGATE" : "GANHO";
   const pontos = Number(body.pontos) || 0;
   const cashback = Number(body.cashback) || 0;
+  if (pontos < 0 || cashback < 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Pontos e cashback devem ser valores positivos — use o campo Tipo (Ganho/Gasto) pra definir a direção do ajuste.",
+      },
+      { status: 400 }
+    );
+  }
   const sinal = tipo === "GANHO" ? 1 : -1;
 
   // Ajuste manual de STAFF (diferente do resgate self-service de prêmio do
