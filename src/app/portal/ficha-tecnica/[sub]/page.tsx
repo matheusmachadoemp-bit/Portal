@@ -21,6 +21,7 @@ const SUB_MAP: Record<string, { category: string; label: string }> = {
   burgers: { category: "BURGER", label: "Burgers" },
   bebidas: { category: "BEBIDA", label: "Bebidas" },
   drinks: { category: "DRINK", label: "Drinks" },
+  sobremesas: { category: "SOBREMESA", label: "Sobremesas" },
 };
 
 export default async function FichaTecnicaSubPage({ params }: { params: Promise<{ sub: string }> }) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Upload as UploadIcon, X } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
@@ -28,6 +28,29 @@ const emptyForm = () => ({
   observacoes: "",
 });
 
+function formFromEquipamento(equipamento?: EquipamentoDTO | null) {
+  if (!equipamento) return emptyForm();
+  return {
+    nome: equipamento.nome,
+    fotoUrl: equipamento.fotoUrl ?? "",
+    setor: equipamento.setor,
+    localizacao: equipamento.localizacao ?? "",
+    categoria: equipamento.categoria,
+    marca: equipamento.marca ?? "",
+    modelo: equipamento.modelo ?? "",
+    numeroSerie: equipamento.numeroSerie ?? "",
+    dataCompra: equipamento.dataCompra ? equipamento.dataCompra.slice(0, 10) : "",
+    valorCompra: equipamento.valorCompra != null ? String(equipamento.valorCompra) : "",
+    fornecedor: equipamento.fornecedor ?? "",
+    numeroNotaFiscal: equipamento.numeroNotaFiscal ?? "",
+    garantiaAte: equipamento.garantiaAte ? equipamento.garantiaAte.slice(0, 10) : "",
+    vidaUtilEstimadaMeses: equipamento.vidaUtilEstimadaMeses != null ? String(equipamento.vidaUtilEstimadaMeses) : "",
+    frequenciaManutencao: equipamento.frequenciaManutencao,
+    prestadorRecomendado: equipamento.prestadorRecomendado ?? "",
+    observacoes: equipamento.observacoes ?? "",
+  };
+}
+
 export function EquipamentoFormModal({
   open,
   onClose,
@@ -39,40 +62,15 @@ export function EquipamentoFormModal({
   onSaved: () => void;
   equipamento?: EquipamentoDTO | null;
 }) {
-  const [form, setForm] = useState(emptyForm());
+  // O formulário nasce direto a partir do equipamento recebido (sem efeito
+  // pra sincronizar depois). Quem chama este modal remonta o componente
+  // (via `key`) toda vez que ele abre, então este estado inicial já é
+  // suficiente pra cobrir criar, editar e reabrir o modal mais tarde.
+  const [form, setForm] = useState(() => formFromEquipamento(equipamento));
   const [anexos, setAnexos] = useState<AnexoDraft[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    if (equipamento) {
-      setForm({
-        nome: equipamento.nome,
-        fotoUrl: equipamento.fotoUrl ?? "",
-        setor: equipamento.setor,
-        localizacao: equipamento.localizacao ?? "",
-        categoria: equipamento.categoria,
-        marca: equipamento.marca ?? "",
-        modelo: equipamento.modelo ?? "",
-        numeroSerie: equipamento.numeroSerie ?? "",
-        dataCompra: equipamento.dataCompra ? equipamento.dataCompra.slice(0, 10) : "",
-        valorCompra: equipamento.valorCompra != null ? String(equipamento.valorCompra) : "",
-        fornecedor: equipamento.fornecedor ?? "",
-        numeroNotaFiscal: equipamento.numeroNotaFiscal ?? "",
-        garantiaAte: equipamento.garantiaAte ? equipamento.garantiaAte.slice(0, 10) : "",
-        vidaUtilEstimadaMeses: equipamento.vidaUtilEstimadaMeses != null ? String(equipamento.vidaUtilEstimadaMeses) : "",
-        frequenciaManutencao: equipamento.frequenciaManutencao,
-        prestadorRecomendado: equipamento.prestadorRecomendado ?? "",
-        observacoes: equipamento.observacoes ?? "",
-      });
-    } else {
-      setForm(emptyForm());
-    }
-    setAnexos([]);
-    setError(null);
-  }, [open, equipamento]);
 
   function set<K extends keyof ReturnType<typeof emptyForm>>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
