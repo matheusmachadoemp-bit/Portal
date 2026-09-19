@@ -974,14 +974,20 @@ export function ChecklistClient({
             <div className="space-y-2">
               {form.itens.map((item, idx) => (
                 <div key={idx} className="rounded-lg border border-nord-border p-3 space-y-2">
+                  <input
+                    value={item.title}
+                    onChange={(e) => updateItem(idx, { title: e.target.value })}
+                    placeholder="Título do item"
+                    className="input"
+                  />
                   <div className="flex items-center gap-2">
                     <input
-                      value={item.title}
-                      onChange={(e) => updateItem(idx, { title: e.target.value })}
-                      placeholder="Título do item"
+                      value={item.orientacao}
+                      onChange={(e) => updateItem(idx, { orientacao: e.target.value })}
+                      placeholder="Orientação (opcional)"
                       className="input flex-1"
                     />
-                    <select value={item.tipo} onChange={(e) => updateItem(idx, { tipo: e.target.value })} className="input w-auto">
+                    <select value={item.tipo} onChange={(e) => updateItem(idx, { tipo: e.target.value })} className="input input-compact">
                       {Object.entries(ITEM_TYPE_LABEL).map(([k, v]) => (
                         <option key={k} value={k}>
                           {v}
@@ -989,12 +995,6 @@ export function ChecklistClient({
                       ))}
                     </select>
                   </div>
-                  <input
-                    value={item.orientacao}
-                    onChange={(e) => updateItem(idx, { orientacao: e.target.value })}
-                    placeholder="Orientação (opcional)"
-                    className="input"
-                  />
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-3">
                       <label className="flex items-center gap-1.5 text-xs text-nord-gray">
