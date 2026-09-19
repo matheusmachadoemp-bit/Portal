@@ -63,6 +63,7 @@ export function InsumosClient({
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [priceAlert, setPriceAlert] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -147,8 +148,14 @@ export function InsumosClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/ficha-tecnica/insumos/${confirmDeleteId}`, { method: "DELETE" });
+    const res = await fetch(`/api/ficha-tecnica/insumos/${confirmDeleteId}`, { method: "DELETE" });
     setConfirmDeleteId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error ?? "Não foi possível excluir o insumo.");
+      return;
+    }
+    setDeleteError(null);
     refresh();
   }
 
@@ -203,6 +210,12 @@ export function InsumosClient({
         <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-nord-blue/10 border border-nord-blue/30">
           <AlertTriangle size={14} className="text-nord-blue-light mt-0.5 shrink-0" />
           <p className="text-xs text-nord-blue-light">{priceAlert}</p>
+        </div>
+      )}
+      {deleteError && (
+        <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
+          <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+          <p className="text-xs text-nord-danger">{deleteError}</p>
         </div>
       )}
 
@@ -303,7 +316,13 @@ export function InsumosClient({
                             <button onClick={() => openEdit(i)} className="text-nord-gray hover:text-white">
                               <Pencil size={14} />
                             </button>
-                            <button onClick={() => setConfirmDeleteId(i.id)} className="text-nord-gray hover:text-nord-danger">
+                            <button
+                              onClick={() => {
+                                setDeleteError(null);
+                                setConfirmDeleteId(i.id);
+                              }}
+                              className="text-nord-gray hover:text-nord-danger"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -387,7 +406,7 @@ export function InsumosClient({
       <ConfirmDialog
         open={!!confirmDeleteId}
         title="Excluir insumo"
-        message="Tem certeza que deseja excluir este insumo? Ele será removido de todas as fichas técnicas."
+        message="Tem certeza que deseja excluir este insumo? Essa ação não pode ser desfeita. Se ele estiver em uso em alguma ficha técnica, compra, perda, transferência ou contagem de estoque, a exclusão será bloqueada e você poderá desativá-lo em vez de excluir."
         onConfirm={doDelete}
         onCancel={() => setConfirmDeleteId(null)}
         confirmLabel="Excluir"
