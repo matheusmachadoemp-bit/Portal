@@ -58,6 +58,10 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
   const percentGeral = total ? (concluidas / total) * 100 : 0;
 
   const proximasDeAtingir = filtered.filter((g) => g.status === "EM_RISCO");
+  // Modo consolidado (ex.: "Grupo Nord") pode listar metas de mais de uma loja ao mesmo
+  // tempo — só nesse caso vale a pena mostrar a loja ao lado do responsável, senão é
+  // redundante (o usuário já sabe que está vendo só uma loja).
+  const proximasMultiLoja = new Set(proximasDeAtingir.map((g) => g.empresaNome)).size > 1;
 
   const bySector = GOAL_CATEGORIES.map((cat) => {
     const items = filtered.filter((g) => g.category === cat);
@@ -76,6 +80,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
     () => [...filtered].sort((a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)).slice(0, 8),
     [filtered]
   );
+  const rankingMultiLoja = useMemo(() => new Set(ranking.map((g) => g.empresaNome)).size > 1, [ranking]);
 
   return (
     <div className="space-y-6">
@@ -146,6 +151,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
                 <p className="text-white text-sm font-medium">{g.name}</p>
                 <p className="text-xs text-nord-gray mb-2">
                   {g.responsavel} · {GOAL_CATEGORY_LABEL[g.category as GoalCategoryKey]}
+                  {proximasMultiLoja && ` · ${g.empresaNome}`}
                 </p>
                 <ProgressBar percent={pct(g.valorRealizado, g.valorMeta)} color="#f59e0b" />
                 <p className="text-[11px] text-nord-warning mt-1">{pct(g.valorRealizado, g.valorMeta).toFixed(0)}% atingido</p>
@@ -191,7 +197,11 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-white text-xs font-medium truncate">
-                      {g.name} <span className="text-nord-gray font-normal">— {g.responsavel}</span>
+                      {g.name}{" "}
+                      <span className="text-nord-gray font-normal">
+                        — {g.responsavel}
+                        {rankingMultiLoja && ` · ${g.empresaNome}`}
+                      </span>
                     </p>
                     <Badge tone={GOAL_STATUS_TONE[g.status]}>{GOAL_STATUS_LABEL[g.status]}</Badge>
                   </div>
