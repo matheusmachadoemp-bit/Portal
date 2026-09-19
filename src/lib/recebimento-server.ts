@@ -185,13 +185,25 @@ async function loadManagers(empresaId: string) {
 /**
  * Notifica gerente(s) da loja + quem criou o pedido (comprador responsável) quando um
  * recebimento é finalizado com divergência. Uma Notification por destinatário, sem duplicar.
+ *
+ * `resumo.divergencias`/`impactoFinanceiro` só existem na conferência item a item (link público
+ * de recebimento, `POST .../responder/[token]/finalizar` — sabe exatamente quantos produtos
+ * divergiram e o valor da nota informado para comparar com o valor do pedido). O registro direto
+ * de recebimento (tela interna, `POST /api/estoque/recebimento`) marca só o(s) tipo(s) de
+ * divergência do pedido inteiro, sem granularidade por produto nem valor de nota para comparar —
+ * nesse caso passe `null` nesses dois campos e use `tipos` (rótulos já traduzidos) para a
+ * mensagem ainda dizer qual foi o problema, em vez de inventar um número que a rota não tem
+ * como saber.
  */
-export async function notifyReceivingDivergence(purchase: {
-  id: string;
-  empresaId: string;
-  createdById: string;
-  supplier: { razaoSocial: string; nomeFantasia: string | null };
-}, resumo: { totalItens: number; divergencias: number; impactoFinanceiro: number }) {
+export async function notifyReceivingDivergence(
+  purchase: {
+    id: string;
+    empresaId: string;
+    createdById: string;
+    supplier: { razaoSocial: string; nomeFantasia: string | null };
+  },
+  resumo: { totalItens: number; divergencias: number | null; impactoFinanceiro: number | null; tipos?: string[] }
+) {
   const managers = await loadManagers(purchase.empresaId);
   const recipientIds = [...new Set([purchase.createdById, ...managers.map((m) => m.id)])];
   if (recipientIds.length === 0) return;
@@ -199,7 +211,17 @@ export async function notifyReceivingDivergence(purchase: {
   const supplierName = purchase.supplier.nomeFantasia ?? purchase.supplier.razaoSocial;
   const numero = purchase.id.slice(-5).toUpperCase();
   const title = "Divergência no recebimento";
-  const body = `Pedido #${numero} — ${supplierName}: ${resumo.divergencias} de ${resumo.totalItens} produto(s) com divergência. Impacto financeiro estimado: ${resumo.impactoFinanceiro >= 0 ? "+" : ""}${resumo.impactoFinanceiro.toFixed(2)}.`;
+  const detalhe =
+    resumo.divergencias != null
+      ? `${resumo.divergencias} de ${resumo.totalItens} produto(s) com divergência`
+      : resumo.tipos && resumo.tipos.length > 0
+        ? `recebido com divergência (${resumo.tipos.join(", ")})`
+        : `recebido com divergência`;
+  const impacto =
+    resumo.impactoFinanceiro != null
+      ? ` Impacto financeiro estimado: ${resumo.impactoFinanceiro >= 0 ? "+" : ""}${resumo.impactoFinanceiro.toFixed(2)}.`
+      : "";
+  const body = `Pedido #${numero} — ${supplierName}: ${detalhe}.${impacto}`;
 
   await createNotifications(
     recipientIds.map((userId) => ({
@@ -208,6 +230,42 @@ export async function notifyReceivingDivergence(purchase: {
       title,
       body,
       priority: "ATENCAO",
+      purchaseId: purchase.id,
+      url: "/portal/estoque/recebimento",
+    }))
+  );
+}
+
+/**
+ * Par de `notifyReceivingDivergence` para o caso "sem problema": notifica gerente(s) da loja +
+ * quem criou o pedido quando um recebimento é finalizado sem nenhuma divergência. Mesmo critério
+ * de destinatários e mesmo padrão "uma Notification por destinatário, sem duplicar".
+ */
+export async function notifyReceivingCompleted(
+  purchase: {
+    id: string;
+    empresaId: string;
+    createdById: string;
+    supplier: { razaoSocial: string; nomeFantasia: string | null };
+  },
+  resumo: { totalItens: number }
+) {
+  const managers = await loadManagers(purchase.empresaId);
+  const recipientIds = [...new Set([purchase.createdById, ...managers.map((m) => m.id)])];
+  if (recipientIds.length === 0) return;
+
+  const supplierName = purchase.supplier.nomeFantasia ?? purchase.supplier.razaoSocial;
+  const numero = purchase.id.slice(-5).toUpperCase();
+  const title = "Recebimento concluído";
+  const body = `Pedido #${numero} — ${supplierName}: recebido sem divergências (${resumo.totalItens} produto(s) conferido(s)).`;
+
+  await createNotifications(
+    recipientIds.map((userId) => ({
+      userId,
+      type: "RECEBIMENTO_CONCLUIDO",
+      title,
+      body,
+      priority: "INFORMACAO",
       purchaseId: purchase.id,
       url: "/portal/estoque/recebimento",
     }))

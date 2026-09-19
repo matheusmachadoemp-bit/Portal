@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeGoalStatus } from "@/lib/goals";
+import { computeGoalStatus, GERENCIA_RESPONSAVEL, GOAL_CATEGORY_ROUTE } from "@/lib/goals";
+import { formatNumber } from "@/lib/calc";
 import { hasModulePermission } from "@/lib/authz";
+import { getStoreManagers } from "@/lib/manutencao-server";
+import { createNotifications } from "@/lib/notifications";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -66,6 +69,13 @@ export async function POST(req: Request) {
 
   const valorMeta = valorMetaNum;
   const endDate = new Date(body.endDate);
+  const category = body.category;
+
+  // Metas > Gerência: "responsável" nunca é um texto livre digitado no
+  // formulário (ver GERENCIA_RESPONSAVEL em src/lib/goals.ts) — forçado
+  // aqui no servidor, não só escondendo o campo na tela, para que um POST
+  // direto na API (sem passar pelo formulário) também respeite a regra.
+  const responsavel = category === "GERENCIA" ? GERENCIA_RESPONSAVEL : body.responsavel;
 
   // `valorRealizado` nunca é aceito na criação: toda meta nova começa
   // zerada e só sobe através dos lançamentos semanais (ver
@@ -75,8 +85,8 @@ export async function POST(req: Request) {
     data: {
       empresaId: empresa.id,
       name: body.name,
-      category: body.category,
-      responsavel: body.responsavel,
+      category,
+      responsavel,
       description: body.description || null,
       indicador: body.indicador || null,
       valorMeta,
@@ -91,6 +101,35 @@ export async function POST(req: Request) {
     },
     include: { attachments: true, weeklyUpdates: true },
   });
+
+  // Pedido: toda meta nova de Gerência avisa (sino + push, ver
+  // createNotifications) o(s) gerente(s) responsável(is) pela loja — só
+  // esta categoria, porque só ela tem um "responsável" resolvido para
+  // pessoas de verdade (GERENTE da loja + ADMINISTRADOR/GESTOR, mesmo
+  // critério de getStoreManagers já usado por processGoalAlerts para a
+  // meta não atingida). As outras 5 categorias guardam `responsavel` como
+  // texto livre digitado à mão, sem vínculo confiável com um usuário do
+  // Portal — tentar "adivinhar" esse vínculo por nome poderia notificar a
+  // pessoa errada (nome duplicado) ou ninguém (sem correspondência), então
+  // ficou fora do escopo aqui. Quem criou a própria meta não recebe aviso
+  // sobre a própria ação (mesmo padrão já usado em outras notificações do
+  // Portal, ex.: POST /api/tarefas/[id]/comprovar).
+  if (category === "GERENCIA") {
+    const managerIds = (await getStoreManagers(empresa.id)).filter((id) => id !== session.user.id);
+    if (managerIds.length > 0) {
+      await createNotifications(
+        managerIds.map((userId) => ({
+          userId,
+          type: "META_NOVA",
+          title: "Nova meta de Gerência",
+          body: `${goal.name} — meta de ${formatNumber(valorMeta)} ${goal.unidade}.`,
+          priority: "INFORMACAO" as const,
+          goalId: goal.id,
+          url: `/portal/metas/${GOAL_CATEGORY_ROUTE.GERENCIA}`,
+        }))
+      );
+    }
+  }
 
   return NextResponse.json({ goal });
 }

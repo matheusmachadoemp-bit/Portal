@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { computeGoalStatus, weeksInGoalPeriod } from "@/lib/goals";
+import { computeGoalStatus, GERENCIA_RESPONSAVEL, weeksInGoalPeriod } from "@/lib/goals";
 import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -51,12 +51,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // Metas > Gerência: "responsável" é sempre GERENCIA_RESPONSAVEL, nunca o
+  // texto que vier no body — mesma regra e mesmo motivo do POST
+  // /api/metas (ver comentário lá). Usa a categoria resultante desta edição
+  // (a nova, se enviada; senão a que a meta já tinha), não só `body.category`,
+  // para cobrir tanto uma meta que já é de Gerência quanto uma que está
+  // sendo movida para Gerência agora.
+  const category = body.category ?? existing.category;
+  const responsavel = category === "GERENCIA" ? GERENCIA_RESPONSAVEL : (body.responsavel ?? undefined);
+
   const goal = await prisma.goal.update({
     where: { id },
     data: {
       name: body.name ?? undefined,
       category: body.category ?? undefined,
-      responsavel: body.responsavel ?? undefined,
+      responsavel,
       description: body.description ?? undefined,
       indicador: body.indicador ?? undefined,
       valorMeta,

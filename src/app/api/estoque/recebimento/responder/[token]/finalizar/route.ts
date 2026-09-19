@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { loadPurchaseByToken, logPurchaseEvent, notifyReceivingDivergence, receivingState } from "@/lib/recebimento-server";
+import {
+  loadPurchaseByToken,
+  logPurchaseEvent,
+  notifyReceivingCompleted,
+  notifyReceivingDivergence,
+  receivingState,
+} from "@/lib/recebimento-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -106,6 +112,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       purchaseId: purchase!.id,
       empresaId: purchase!.empresaId,
       action: "Gerente notificado sobre divergência",
+      userId: purchase!.responsavelRecebimentoId,
+    });
+  } else {
+    await notifyReceivingCompleted(purchase!, { totalItens: purchase!.items.length });
+    await logPurchaseEvent({
+      purchaseId: purchase!.id,
+      empresaId: purchase!.empresaId,
+      action: "Gerente notificado sobre recebimento concluído",
       userId: purchase!.responsavelRecebimentoId,
     });
   }
