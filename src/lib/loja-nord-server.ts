@@ -127,15 +127,6 @@ export async function criarResgate(params: {
   const saldo = await getSaldoAtual(userId);
   if (saldo < reward.pontos) return { ok: false, error: "Saldo de pontos insuficiente." };
 
-  if (reward.limitePorColaborador !== null) {
-    const jaResgatados = await prisma.lojaNordRedemption.count({
-      where: { userId, rewardId, status: { notIn: ["RECUSADO", "CANCELADO"] } },
-    });
-    if (jaResgatados >= reward.limitePorColaborador) {
-      return { ok: false, error: "Você já atingiu o limite de resgates para este brinde." };
-    }
-  }
-
   const status = reward.exigeAprovacao ? "AGUARDANDO_APROVACAO" : "APROVADO";
 
   const redemption = await prisma.$transaction(async (tx) => {
@@ -148,6 +139,19 @@ export async function criarResgate(params: {
     await travarSaldoLojaNord(tx, userId);
     const saldoAtual = await getSaldoAtual(userId, tx);
     if (saldoAtual < reward.pontos) throw new Error("SALDO_INSUFICIENTE");
+
+    // Mesma proteção do saldo acima, agora para o limite por colaborador: a
+    // contagem só é confiável DEPOIS do lock — antes dele, dois resgates
+    // quase simultâneos do mesmo colaborador pro mesmo brinde podiam ler a
+    // mesma contagem antes de qualquer um commitar e os dois passarem,
+    // furando o `limitePorColaborador`. O lock já serializa por `userId`,
+    // então basta reconferir aqui dentro (sem lock adicional).
+    if (reward.limitePorColaborador !== null) {
+      const jaResgatados = await tx.lojaNordRedemption.count({
+        where: { userId, rewardId, status: { notIn: ["RECUSADO", "CANCELADO"] } },
+      });
+      if (jaResgatados >= reward.limitePorColaborador) throw new Error("LIMITE_ATINGIDO");
+    }
 
     if (reward.estoque !== null) {
       const updated = await tx.lojaNordReward.updateMany({
@@ -177,11 +181,13 @@ export async function criarResgate(params: {
   }).catch((err) => {
     if (err instanceof Error && err.message === "SEM_ESTOQUE") return "SEM_ESTOQUE" as const;
     if (err instanceof Error && err.message === "SALDO_INSUFICIENTE") return "SALDO_INSUFICIENTE" as const;
+    if (err instanceof Error && err.message === "LIMITE_ATINGIDO") return "LIMITE_ATINGIDO" as const;
     throw err;
   });
 
   if (redemption === "SEM_ESTOQUE") return { ok: false, error: "Brinde sem estoque disponível." };
   if (redemption === "SALDO_INSUFICIENTE") return { ok: false, error: "Saldo de pontos insuficiente." };
+  if (redemption === "LIMITE_ATINGIDO") return { ok: false, error: "Você já atingiu o limite de resgates para este brinde." };
 
   await notifyUser(
     userId,
