@@ -36,7 +36,6 @@ export default async function TarefasPage() {
     getSelectableTeamMembers(empresaIds),
   ]);
 
-  const now = Date.now();
   const serialized = tasks.map((t) => ({
     ...t,
     startDate: t.startDate ? t.startDate.toISOString() : null,
@@ -45,7 +44,11 @@ export default async function TarefasPage() {
     updatedAt: t.updatedAt.toISOString(),
     completedAt: t.completedAt ? t.completedAt.toISOString() : null,
     checklist: t.checklist.map((c) => ({ ...c, doneAt: c.doneAt ? c.doneAt.toISOString() : null })),
-    overdue: !!t.dueDate && t.status !== "CONCLUIDA" && t.dueDate.getTime() < now,
+    // "Atrasada" depende da hora atual (Date.now()), que não pode ser calculada
+    // aqui dentro (Server Component precisa ser puro). Só serializamos o dado
+    // bruto (dueDate/status); quem calcula de verdade é o TarefasClient, no
+    // navegador, sempre com a hora mais atual.
+    overdue: false,
   }));
 
   const empresas = ctx ? (ctx.mode === "single" ? [ctx.empresa] : ctx.empresas) : [];

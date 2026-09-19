@@ -248,6 +248,7 @@ export function EquipamentoDetailClient({
       )}
 
       <EquipamentoFormModal
+        key={showEdit ? equipamento.id : "closed"}
         open={showEdit}
         onClose={() => setShowEdit(false)}
         equipamento={equipamento}

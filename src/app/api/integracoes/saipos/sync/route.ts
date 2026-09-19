@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { syncEmpresaSaiposSales } from "@/lib/saipos-sync";
+import { hasModulePermission } from "@/lib/authz";
 
 const DEFAULT_SYNC_WINDOW_DAYS = 2;
 
@@ -18,6 +19,12 @@ export async function POST() {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json({ error: "Sem permissão para sincronizar." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "configuracoes", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite sincronizar o Saipos." },
+      { status: 403 }
+    );
   }
 
   const empresa = await requireActiveSingleEmpresa();
