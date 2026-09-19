@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Gift, Sparkles } from "lucide-react";
+import { Plus, Gift, Sparkles, AlertTriangle, X } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
@@ -46,6 +46,7 @@ export function FidelidadeClient({
   const [clienteSelecionado, setClienteSelecionado] = useState<{ id: string; nome: string } | null>(null);
   const [ajusteForm, setAjusteForm] = useState({ tipo: "GANHO", pontos: "", cashback: "", descricao: "" });
   const [saving, setSaving] = useState(false);
+  const [ajusteWarning, setAjusteWarning] = useState<string | null>(null);
 
   async function salvarConfig() {
     await fetch("/api/crm/fidelidade/config", {
@@ -94,7 +95,8 @@ export function FidelidadeClient({
   async function salvarAjuste() {
     if (!clienteSelecionado) return;
     setSaving(true);
-    await fetch("/api/crm/fidelidade/ajustar", {
+    setAjusteWarning(null);
+    const res = await fetch("/api/crm/fidelidade/ajustar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -105,17 +107,33 @@ export function FidelidadeClient({
         descricao: ajusteForm.descricao,
       }),
     });
+    const data: { warning?: string | null } | null = await res.json().catch(() => null);
     setSaving(false);
     setShowAjustar(false);
     setClienteSelecionado(null);
     setBusca("");
     setResultados([]);
     setAjusteForm({ tipo: "GANHO", pontos: "", cashback: "", descricao: "" });
+    if (data?.warning) setAjusteWarning(data.warning);
     router.refresh();
   }
 
   return (
     <div className="space-y-6">
+      {ajusteWarning && (
+        <div className="flex items-start gap-2 text-xs bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2 text-nord-warning">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <p className="flex-1">{ajusteWarning}</p>
+          <button
+            onClick={() => setAjusteWarning(null)}
+            className="text-nord-warning/70 hover:text-nord-warning shrink-0"
+            aria-label="Fechar aviso"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <SortableStatCards
         storageKey="crm-fidelidade-kpi-order"
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
