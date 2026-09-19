@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -25,6 +26,7 @@ type DashboardData = {
 
 export function ManutencaoDashboardClient({ data }: { data: DashboardData }) {
   const { kpis } = data;
+  const router = useRouter();
 
   return (
     <div className="space-y-6">
@@ -67,7 +69,7 @@ export function ManutencaoDashboardClient({ data }: { data: DashboardData }) {
               {data.chamadosRecentes.map((c) => (
                 <tr
                   key={c.id}
-                  onClick={() => (window.location.href = `/portal/manutencao/chamados/${c.id}`)}
+                  onClick={() => router.push(`/portal/manutencao/chamados/${c.id}`)}
                   className="border-b border-nord-border/50 hover:bg-white/5 cursor-pointer"
                 >
                   <td className="py-2 pr-4 text-white font-mono text-xs">{c.protocolo}</td>
