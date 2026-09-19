@@ -8,6 +8,7 @@ export const PRODUCT_CATEGORY_LABEL: Record<string, string> = {
   BURGER: "Burgers",
   BEBIDA: "Bebidas",
   DRINK: "Drinks",
+  SOBREMESA: "Sobremesas",
 };
 
 export type IngredientForCalc = {
