@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { logPurchaseEvent } from "@/lib/recebimento-server";
+import { logPurchaseEvent, notifyReceivingCompleted, notifyReceivingDivergence } from "@/lib/recebimento-server";
+import { RECEIVING_DIVERGENCE_LABEL } from "@/lib/estoque";
 
 export async function GET() {
   const session = await auth();
@@ -127,6 +128,34 @@ export async function POST(req: Request) {
     action: houveDivergencia ? "Recebimento finalizado com divergência" : "Recebimento finalizado",
     userId: session.user.id,
   });
+
+  // Notifica gerente(s) da loja + quem criou o pedido do resultado do recebimento — mesmo
+  // aviso que já existia (mas só era disparado) no fluxo do link público de recebimento.
+  if (houveDivergencia) {
+    const tipos = Array.isArray(body.divergencias)
+      ? body.divergencias.map((key: string) => RECEIVING_DIVERGENCE_LABEL[key] ?? key)
+      : [];
+    await notifyReceivingDivergence(purchase, {
+      totalItens: purchase.items.length,
+      divergencias: null,
+      impactoFinanceiro: null,
+      tipos,
+    });
+    await logPurchaseEvent({
+      purchaseId: purchase.id,
+      empresaId: purchase.empresaId,
+      action: "Gerente notificado sobre divergência",
+      userId: session.user.id,
+    });
+  } else {
+    await notifyReceivingCompleted(purchase, { totalItens: purchase.items.length });
+    await logPurchaseEvent({
+      purchaseId: purchase.id,
+      empresaId: purchase.empresaId,
+      action: "Gerente notificado sobre recebimento concluído",
+      userId: session.user.id,
+    });
+  }
 
   return NextResponse.json({ receiving, houveDivergencia });
 }
