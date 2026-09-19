@@ -3970,29 +3970,41 @@ model Equipamento {
 }
 
 model Chamado {
-  id               String            @id @default(cuid())
-  sequence         Int               @default(autoincrement())
-  protocolo        String            @unique
-  titulo           String
-  descricao        String
-  empresaId        String
-  empresa          Empresa           @relation(fields: [empresaId], references: [id])
-  setor            String
-  localEspecifico  String?
-  categoria        ChamadoCategoria  @default(OUTRO)
-  equipamentoId    String?
-  equipamento      Equipamento?      @relation(fields: [equipamentoId], references: [id])
-  prioridade       ChamadoPrioridade @default(MEDIA)
-  status           ChamadoStatus     @default(ABERTO)
-  solicitanteId    String
-  solicitante      User              @relation("ChamadoSolicitante", fields: [solicitanteId], references: [id])
-  responsavelId    String?
-  responsavel      User?             @relation("ChamadoResponsavel", fields: [responsavelId], references: [id])
-  prazo            DateTime?
-  descricaoSolucao String?
-  resolvidoEm      DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  sequence           Int               @default(autoincrement())
+  protocolo          String            @unique
+  titulo             String
+  descricao          String
+  empresaId          String
+  empresa            Empresa           @relation(fields: [empresaId], references: [id])
+  setor              String
+  localEspecifico    String?
+  categoria          ChamadoCategoria  @default(OUTRO)
+  equipamentoId      String?
+  equipamento        Equipamento?      @relation(fields: [equipamentoId], references: [id])
+  prioridade         ChamadoPrioridade @default(MEDIA)
+  status             ChamadoStatus     @default(ABERTO)
+  solicitanteId      String
+  solicitante        User              @relation("ChamadoSolicitante", fields: [solicitanteId], references: [id])
+  responsavelId      String?
+  responsavel        User?             @relation("ChamadoResponsavel", fields: [responsavelId], references: [id])
+  prazo              DateTime?
+  descricaoSolucao   String?
+  resolvidoEm        DateTime?
+  /// Quando o aviso de "chamado atrasado" (processChamadoAtrasoAlertas, @/lib/manutencao-server.ts)
+  /// foi disparado — idempotência da checagem periódica de atraso (GET /api/manutencao/chamados/alertas/run,
+  /// GitHub Actions .github/workflows/manutencao-chamados-atrasados.yml): null = ainda não avisado (ou
+  /// nunca ficou atrasado); a checagem só processa chamados com prazo vencido, status ativo e este
+  /// campo nulo, e preenche com o instante do aviso assim que notifica. Diferente do Checklist
+  /// (ChecklistEscalationLog) e do Fechamento do Dia (FechamentoEscalationLog), aqui não há vários
+  /// níveis de escalonamento nem vários destinatários possíveis por linha — é uma única transição
+  /// booleana ("ainda não atrasado" -> "atrasado"), então um campo direto no próprio Chamado é
+  /// suficiente, sem precisar de uma tabela de log à parte. É zerado de volta pra null (permitindo
+  /// um novo aviso futuro) sempre que o prazo muda ou o chamado é reaberto depois de
+  /// resolvido/cancelado — ver PATCH /api/manutencao/chamados/[id].
+  atrasoNotificadoEm DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   comentarios           ChamadoComentario[]
   anexos                ManutencaoAnexo[]
@@ -4005,6 +4017,10 @@ model Chamado {
   @@index([empresaId, status])
   @@index([empresaId, prioridade])
   @@index([equipamentoId])
+  // Suporta tanto a checagem de atraso (prazo < now(), atrasoNotificadoEm IS NULL) quanto o KPI
+  // "manutenções atrasadas" do dashboard (getManutencaoDashboardData, @/lib/manutencao.ts), que já
+  // filtra por prazo < now() sem nenhum índice hoje.
+  @@index([prazo])
 }
 
 model ChamadoComentario {

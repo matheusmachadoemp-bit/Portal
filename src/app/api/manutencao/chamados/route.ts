@@ -10,6 +10,7 @@ import {
 import {
   MANAGER_ROLES,
   generateChamadoProtocolo,
+  getManutencaoDonoIds,
   getManutencaoNotificacaoDestinatarios,
   getStoreManagers,
   isValidBlobUrl,
@@ -160,9 +161,9 @@ export async function POST(req: Request) {
     // Cada usuário recebe no máximo um aviso de "novo chamado" por chamado
     // aberto: quem abriu nunca é notificado do próprio chamado, e alguém que
     // já foi notificado como responsável (ou como gestor, no caso de
-    // prioridade urgente) não é notificado de novo por também estar
-    // configurado como destinatário fixo (Manutenção > Configurações >
-    // Notificações).
+    // prioridade urgente, ou como dono do sistema) não é notificado de novo
+    // por também estar configurado como destinatário fixo (Manutenção >
+    // Configurações > Notificações).
     const jaNotificados = new Set<string>([session.user.id]);
 
     if (chamado.responsavelId) {
@@ -180,8 +181,8 @@ export async function POST(req: Request) {
     if (chamado.prioridade === "URGENTE") {
       const managers = await getStoreManagers(empresa.id);
       for (const userId of managers) {
+        if (jaNotificados.has(userId)) continue;
         jaNotificados.add(userId);
-        if (userId === session.user.id) continue;
         await notifyManutencaoUser(
           userId,
           "CHAMADO_URGENTE",
@@ -190,6 +191,23 @@ export async function POST(req: Request) {
           chamado.id
         );
       }
+    }
+
+    // "O dono" (todo usuário ativo com cargo ADMINISTRADOR) é sempre notificado de todo chamado
+    // novo, de qualquer prioridade e qualquer loja — diferente do bloco de gestores acima (só
+    // dispara para URGENTE) e da lista configurada abaixo (opt-in, loja por loja, sem ninguém
+    // garantido por padrão). Ver getManutencaoDonoIds (@/lib/manutencao-server.ts).
+    const donoIds = await getManutencaoDonoIds();
+    for (const userId of donoIds) {
+      if (jaNotificados.has(userId)) continue;
+      jaNotificados.add(userId);
+      await notifyManutencaoUser(
+        userId,
+        "NOVO_CHAMADO",
+        "Novo chamado de manutenção",
+        `Novo chamado de manutenção aberto: "${chamado.titulo}" (${chamado.protocolo}).`,
+        chamado.id
+      );
     }
 
     const destinatariosConfigurados = await getManutencaoNotificacaoDestinatarios(empresa.id);
