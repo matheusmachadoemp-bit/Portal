@@ -8,6 +8,7 @@ import { upload } from "@vercel/blob/client";
 import { logoutAction } from "@/app/actions/logout";
 import { sanitizeFileName } from "@/lib/upload";
 import { formatNumber } from "@/lib/calc";
+import { activatePushSubscription, getPushSupportState } from "@/lib/push-subscription";
 import { ChangePasswordModal } from "./change-password-modal";
 
 export type UserProfile = {
@@ -42,21 +43,6 @@ function UserAvatar({ name, avatarUrl, size }: { name: string; avatarUrl: string
 
 const PANEL_WIDTH = 288; // w-72
 const PANEL_MARGIN = 8;
-
-/**
- * Converte a chave pública VAPID — que chega em base64url via
- * `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — em `Uint8Array`. `PushManager.subscribe`
- * exige `applicationServerKey` em bytes, não a string em si; esta é a
- * implementação padrão usada em qualquer exemplo de Web Push.
- */
-function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const output = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; i++) output[i] = rawData.charCodeAt(i);
-  return output;
-}
 
 type PushTestSubscriptionResult = {
   endpoint: string;
@@ -198,32 +184,10 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
     setNotifChecking(true);
     setNotifMessage(null);
     setTestMessage(null);
-    if (
-      typeof window === "undefined" ||
-      !("Notification" in window) ||
-      !("serviceWorker" in navigator) ||
-      !("PushManager" in window)
-    ) {
-      setNotifSupported(false);
-      setNotifOn(false);
-      setNotifChecking(false);
-      return;
-    }
-    setNotifSupported(true);
-    if (Notification.permission !== "granted") {
-      setNotifOn(false);
-      setNotifChecking(false);
-      return;
-    }
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      setNotifOn(!!subscription);
-    } catch {
-      setNotifOn(false);
-    } finally {
-      setNotifChecking(false);
-    }
+    const state = await getPushSupportState();
+    setNotifSupported(state.supported);
+    setNotifOn(state.subscribed);
+    setNotifChecking(false);
   }, []);
 
   useEffect(() => {
@@ -269,61 +233,14 @@ export function UserMenu({ user }: { user: UserProfile | null }) {
       return;
     }
 
-    if (Notification.permission === "denied") {
-      setNotifMessage(
-        "As notificações estão bloqueadas para o Portal neste navegador. Libere manualmente nas configurações do site (ou do celular) para ativar."
-      );
-      return;
-    }
-
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!publicKey) {
-      setNotifMessage("Notificações push não estão disponíveis neste ambiente.");
-      return;
-    }
-
     setNotifBusy(true);
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setNotifMessage(
-          permission === "denied"
-            ? "Permissão negada. Para ativar depois, libere notificações para o Portal nas configurações do navegador."
-            : "Permissão não concedida — tente novamente quando quiser ativar."
-        );
-        return;
-      }
-
-      const registration = await navigator.serviceWorker.ready;
-      let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        });
-      }
-
-      const keys = subscription.toJSON().keys;
-      if (!keys?.p256dh || !keys?.auth) {
-        setNotifMessage("Não foi possível concluir a ativação (dados da assinatura incompletos).");
-        return;
-      }
-
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint: subscription.endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }),
-      });
-      if (!res.ok) {
-        setNotifMessage("Não foi possível concluir a ativação agora. Tente novamente em instantes.");
-        return;
-      }
+    const result = await activatePushSubscription();
+    if (result.ok) {
       setNotifOn(true);
-    } catch {
-      setNotifMessage("Não foi possível ativar as notificações agora. Tente novamente em instantes.");
-    } finally {
-      setNotifBusy(false);
+    } else {
+      setNotifMessage(result.error);
     }
+    setNotifBusy(false);
   }
 
   /** Dispara `POST /api/push/test` e mostra o resultado real na tela — ver

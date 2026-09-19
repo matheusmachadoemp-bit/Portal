@@ -261,7 +261,13 @@ export function Sidebar({
       )}
 
       <div className="flex-1 overflow-y-auto nord-scrollbar px-2 py-3">
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
+        {/* `id` fixo: sem ele o dnd-kit gera o aria-describedby a partir de um contador
+            global incremental (compartilhado entre TODOS os DndContext da página), que
+            diverge entre servidor e cliente e dispara hydration mismatch — a Sidebar
+            monta esse DndContext em toda página autenticada, então esse mismatch
+            aconteceria quase sempre. Mesma causa/correção do achado #186
+            (sortable-stat-cards.tsx). */}
+        <DndContext id="sidebar-categorias" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCategoryDragEnd}>
           <SortableContext items={filtered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
             <ul className="space-y-1">
               {filtered.map((cat) => (
@@ -499,7 +505,11 @@ function CategoryRow({
       </div>
 
       {!collapsed && expanded && hasSubs && (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSubDragEnd}>
+        // `id` único por categoria (cat.id é estável; o índice da lista não seria):
+        // o usuário pode expandir várias categorias ao mesmo tempo, cada uma montando
+        // seu próprio DndContext — dar um id estável a cada uma segue a recomendação
+        // do dnd-kit e evita depender do contador automático compartilhado.
+        <DndContext id={`sidebar-subcategorias-${cat.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSubDragEnd}>
           <SortableContext items={cat.subcategories.map((s) => s.id)} strategy={verticalListSortingStrategy}>
             <ul className="ml-6 mt-0.5 space-y-0.5 border-l border-nord-border pl-2">
               {cat.subcategories.map((sub) => (
