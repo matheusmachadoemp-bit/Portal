@@ -221,57 +221,57 @@ export function AcompanhamentoClient({ initialResult, initialFilters }: { initia
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-        >
-          <Download size={13} /> Exportar relatório
-        </button>
-      </div>
-
       <div className="nord-card p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-end gap-2">
+              <label className="block">
+                <span className="block text-[10px] text-nord-blue-light mb-1">Data A Inicial</span>
+                <input type="date" value={filters.fromA} onChange={(e) => updateFilter({ fromA: e.target.value })} className="input !w-auto" />
+              </label>
+              <label className="block">
+                <span className="block text-[10px] text-nord-blue-light mb-1">Data A Final</span>
+                <input type="date" value={filters.toA} onChange={(e) => updateFilter({ toA: e.target.value })} className="input !w-auto" />
+              </label>
+            </div>
+            <span className="text-xs font-bold text-nord-gray pb-2">vs</span>
+            <div className="flex items-end gap-2">
+              <label className="block">
+                <span className="block text-[10px] text-nord-warning mb-1">Data B Inicial</span>
+                <input type="date" value={filters.fromB} onChange={(e) => updateFilter({ fromB: e.target.value })} className="input !w-auto" />
+              </label>
+              <label className="block">
+                <span className="block text-[10px] text-nord-warning mb-1">Data B Final</span>
+                <input type="date" value={filters.toB} onChange={(e) => updateFilter({ toB: e.target.value })} className="input !w-auto" />
+              </label>
+            </div>
             <label className="block">
-              <span className="block text-[10px] text-nord-blue-light mb-1">Data A Inicial</span>
-              <input type="date" value={filters.fromA} onChange={(e) => updateFilter({ fromA: e.target.value })} className="input !w-auto" />
+              <span className="block text-[10px] text-nord-gray mb-1">Turno</span>
+              <select value={filters.turno} onChange={(e) => updateFilter({ turno: e.target.value as Turno | "" })} className="input !w-auto">
+                <option value="">Todos os turnos</option>
+                <option value="ALMOCO">{TURNO_LABEL.ALMOCO} (até 17h)</option>
+                <option value="JANTAR">{TURNO_LABEL.JANTAR} (após 17h)</option>
+              </select>
             </label>
             <label className="block">
-              <span className="block text-[10px] text-nord-blue-light mb-1">Data A Final</span>
-              <input type="date" value={filters.toA} onChange={(e) => updateFilter({ toA: e.target.value })} className="input !w-auto" />
+              <span className="block text-[10px] text-nord-gray mb-1">Plataforma</span>
+              <select value={filters.platform} onChange={(e) => updateFilter({ platform: e.target.value as SalePlatform | "" })} className="input !w-auto">
+                <option value="">Todas</option>
+                {Object.entries(SALE_PLATFORM_LABEL).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
-          <span className="text-xs font-bold text-nord-gray pb-2">vs</span>
-          <div className="flex items-end gap-2">
-            <label className="block">
-              <span className="block text-[10px] text-nord-warning mb-1">Data B Inicial</span>
-              <input type="date" value={filters.fromB} onChange={(e) => updateFilter({ fromB: e.target.value })} className="input !w-auto" />
-            </label>
-            <label className="block">
-              <span className="block text-[10px] text-nord-warning mb-1">Data B Final</span>
-              <input type="date" value={filters.toB} onChange={(e) => updateFilter({ toB: e.target.value })} className="input !w-auto" />
-            </label>
-          </div>
-          <label className="block">
-            <span className="block text-[10px] text-nord-gray mb-1">Turno</span>
-            <select value={filters.turno} onChange={(e) => updateFilter({ turno: e.target.value as Turno | "" })} className="input !w-auto">
-              <option value="">Todos os turnos</option>
-              <option value="ALMOCO">{TURNO_LABEL.ALMOCO} (até 17h)</option>
-              <option value="JANTAR">{TURNO_LABEL.JANTAR} (após 17h)</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="block text-[10px] text-nord-gray mb-1">Plataforma</span>
-            <select value={filters.platform} onChange={(e) => updateFilter({ platform: e.target.value as SalePlatform | "" })} className="input !w-auto">
-              <option value="">Todas</option>
-              {Object.entries(SALE_PLATFORM_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
+
+          <button
+            onClick={handleExport}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium shrink-0"
+          >
+            <Download size={13} /> Exportar relatório
+          </button>
         </div>
         <p className="text-xs text-nord-gray mt-3">
           Comparando <strong className="text-nord-blue-light">Data A: {filters.fromA} a {filters.toA}</strong> vs{" "}
