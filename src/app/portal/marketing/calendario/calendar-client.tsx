@@ -228,6 +228,7 @@ export function CalendarClient({
       )}
 
       <TaskModal
+        key={showModal ? (editingTask?.id ?? "novo") : "closed"}
         open={showModal}
         onClose={() => setShowModal(false)}
         onSaved={() => {

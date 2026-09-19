@@ -143,6 +143,7 @@ export function PrestadoresClient({
       </div>
 
       <PrestadorFormModal
+        key={showModal ? (editing?.id ?? "novo") : "closed"}
         open={showModal}
         onClose={() => setShowModal(false)}
         prestador={editing}

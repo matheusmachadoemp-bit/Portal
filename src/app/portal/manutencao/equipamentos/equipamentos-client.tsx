@@ -116,6 +116,7 @@ export function EquipamentosClient({ initialEquipamentos, canCreate }: { initial
       </div>
 
       <EquipamentoFormModal
+        key={showModal ? "novo" : "closed"}
         open={showModal}
         onClose={() => setShowModal(false)}
         onSaved={() => {
