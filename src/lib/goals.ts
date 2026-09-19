@@ -29,6 +29,37 @@ export const GOAL_CATEGORY_ROUTE: Record<GoalCategoryKey, string> = {
   ADMINISTRATIVO: "administrativo",
 };
 
+/**
+ * Metas > Gerência: formulário simplificado — "Responsável" deixa de ser
+ * digitado (pedido: "Responsável vai ser sempre o gerente, pois a meta é de
+ * gerente") e passa a ser sempre este texto fixo, aplicado tanto no
+ * formulário (metas-client.tsx) quanto forçado no servidor (POST/PATCH
+ * /api/metas), pra nunca depender só da tela esconder o campo.
+ *
+ * Decisão: texto fixo "Gerente" (papel/cargo), não o nome de uma pessoa
+ * específica — porque uma loja pode ter mais de um usuário com cargo
+ * GERENTE (ou nenhum, se ainda não cadastrado), e porque quem cria a meta
+ * nem sempre é o próprio gerente (pode ser um ADMINISTRADOR/GESTOR
+ * definindo a meta para a loja). Gravar um nome específico exigiria
+ * escolher 1 entre N gerentes (ou concatenar vários, o que não cabe bem no
+ * campo — ver `<p className="truncate">{g.responsavel}</p>` no card da
+ * meta) e ficaria desatualizado se o gerente da loja mudar. Quem
+ * efetivamente recebe a notificação de meta nova (ver POST /api/metas) é
+ * resolvido à parte, por cargo (GERENTE da loja + ADMINISTRADOR/GESTOR),
+ * não a partir deste texto.
+ */
+export const GERENCIA_RESPONSAVEL = "Gerente";
+
+/**
+ * Indicadores fixos do formulário de "Nova meta" de Gerência (pedido:
+ * "deixar fixo 3 indicadores relacionados, CMV, Checklist e Faturamento,
+ * ter a opção de escrever caso precise de um novo"). `Goal.indicador`
+ * continua sendo um `String?` livre no banco — esta lista só guia a UI
+ * (select com opção "Outro" liberando texto livre); não é um enum do
+ * Prisma, então não precisa de migration pra crescer.
+ */
+export const GERENCIA_INDICADORES = ["CMV", "Checklist", "Faturamento"] as const;
+
 export const GOAL_STATUS_LABEL: Record<string, string> = {
   NAO_INICIADA: "Não iniciada",
   EM_ANDAMENTO: "Em andamento",
@@ -62,9 +93,37 @@ export function monthToDateRange(month: string): { startDate: string; endDate: s
   };
 }
 
+/**
+ * Extrai "YYYY-MM" de uma data. Os dois formatos de entrada são tratados de
+ * propósito de forma diferente — não é um descuido:
+ *
+ * - `string` (o formato em que toda data de `Goal` chega do `GET
+ *   /api/metas`, já serializada em JSON): essa data foi originalmente
+ *   codificada por `monthToDateRange` como "YYYY-MM-01"/"YYYY-MM-DD", uma
+ *   string SEM horário — pela especificação do JavaScript, uma string de
+ *   data "pura" (sem horário) é sempre interpretada como meia-noite UTC na
+ *   hora de virar `Date` (tanto no `POST`/`PATCH /api/metas`, no servidor,
+ *   quanto aqui no navegador). Por isso, pra reverter essa codificação e
+ *   recuperar o mesmo "YYYY-MM" original, usamos os getters UTC
+ *   (`getUTCFullYear`/`getUTCMonth`) — getters locais aqui fariam a conta
+ *   variar com o fuso horário de quem está vendo a tela: num fuso atrás de
+ *   UTC (ex.: Brasil, UTC-3), meia-noite UTC do dia 1 vira ~21h do dia 31 do
+ *   mês ANTERIOR em hora local, e uma meta recém-criada para o mês corrente
+ *   passava a "pertencer" ao mês anterior assim que voltava do servidor —
+ *   sumindo da listagem do mês corrente (`goalsOfMonth`) imediatamente após
+ *   ser criada. Esse era o bug relatado: "crio uma meta nova e ela não
+ *   aparece em Metas".
+ * - `Date` (usado só por `currentMonth()`, com `new Date()` = "agora"): aqui
+ *   o que importa é o mês corrente no calendário LOCAL de quem está vendo a
+ *   tela (ex.: `mesFiltro`/`form.mes` default em metas-client.tsx), então os
+ *   getters locais continuam certos — nunca troque este ramo para UTC.
+ */
 export function dateToMonth(date: string | Date): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  if (typeof date === "string") {
+    const d = new Date(date);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function currentMonth(): string {

@@ -10,6 +10,8 @@ import { formatNumber, growth, pct } from "@/lib/calc";
 import {
   currentMonth,
   dateToMonth,
+  GERENCIA_INDICADORES,
+  GERENCIA_RESPONSAVEL,
   GOAL_CATEGORY_LABEL,
   GOAL_STATUS_LABEL,
   GOAL_STATUS_TONE,
@@ -63,6 +65,11 @@ const emptyForm = {
 
 function goalsOfMonth(goals: GoalDTO[], month: string) {
   return goals.filter((g) => dateToMonth(g.startDate) === month);
+}
+
+/** Indicador de Gerência é um dos 3 fixos (CMV/Checklist/Faturamento) ou "Outro" (texto livre). */
+function isGerenciaIndicadorFixo(value: string): boolean {
+  return (GERENCIA_INDICADORES as readonly string[]).includes(value);
 }
 
 function kpisOf(list: GoalDTO[]) {
@@ -166,6 +173,14 @@ export function MetasClient({
   const [weekObs, setWeekObs] = useState<Record<number, string>>({});
   const [savingWeek, setSavingWeek] = useState<number | null>(null);
 
+  // Metas > Gerência tem um formulário simplificado (ver PR): sem
+  // descrição/plano de ação/observações, responsável fixo (não digitado) e
+  // indicador restrito a 3 opções + "Outro". As outras 5 categorias
+  // continuam exatamente como eram.
+  const isGerencia = category === "GERENCIA";
+  const [indicadorManualEntry, setIndicadorManualEntry] = useState(false);
+  const showIndicadorInput = isGerencia && (indicadorManualEntry || (!!form.indicador && !isGerenciaIndicadorFixo(form.indicador)));
+
   const filtered = useMemo(() => (mesFiltro ? goalsOfMonth(goals, mesFiltro) : goals), [goals, mesFiltro]);
 
   const ranked = useMemo(
@@ -203,15 +218,17 @@ export function MetasClient({
 
   function openNew() {
     setEditing(null);
-    setForm({ ...emptyForm, mes: mesFiltro || currentMonth() });
+    setIndicadorManualEntry(false);
+    setForm({ ...emptyForm, mes: mesFiltro || currentMonth(), responsavel: isGerencia ? GERENCIA_RESPONSAVEL : "" });
     setShowForm(true);
   }
 
   function openEdit(g: GoalDTO) {
     setEditing(g);
+    setIndicadorManualEntry(false);
     setForm({
       name: g.name,
-      responsavel: g.responsavel,
+      responsavel: isGerencia ? GERENCIA_RESPONSAVEL : g.responsavel,
       description: g.description ?? "",
       indicador: g.indicador ?? "",
       valorMeta: String(g.valorMeta),
@@ -539,10 +556,63 @@ export function MetasClient({
             </Field>
           </div>
           <Field label="Responsável">
-            <input value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} className="input" />
+            {isGerencia ? (
+              <>
+                <div className="input flex items-center text-nord-gray cursor-not-allowed select-none">{GERENCIA_RESPONSAVEL}</div>
+                <p className="text-[11px] text-nord-gray mt-1">Meta de Gerência: responsável é sempre o gerente da loja.</p>
+              </>
+            ) : (
+              <input value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} className="input" />
+            )}
           </Field>
           <Field label="Indicador relacionado">
-            <input value={form.indicador} onChange={(e) => setForm({ ...form, indicador: e.target.value })} className="input" />
+            {isGerencia ? (
+              showIndicadorInput ? (
+                <>
+                  <input
+                    value={form.indicador}
+                    onChange={(e) => setForm({ ...form, indicador: e.target.value })}
+                    className="input"
+                    placeholder="Digite o indicador"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIndicadorManualEntry(false);
+                      setForm({ ...form, indicador: "" });
+                    }}
+                    className="text-[11px] text-nord-blue-light hover:underline mt-1"
+                  >
+                    Usar indicador da lista
+                  </button>
+                </>
+              ) : (
+                <select
+                  value={form.indicador}
+                  onChange={(e) => {
+                    if (e.target.value === "__outro__") {
+                      setIndicadorManualEntry(true);
+                      setForm({ ...form, indicador: "" });
+                    } else {
+                      setForm({ ...form, indicador: e.target.value });
+                    }
+                  }}
+                  className="input"
+                >
+                  <option value="" disabled>
+                    Selecione o indicador
+                  </option>
+                  {GERENCIA_INDICADORES.map((i) => (
+                    <option key={i} value={i}>
+                      {i}
+                    </option>
+                  ))}
+                  <option value="__outro__">Outro (digitar)</option>
+                </select>
+              )
+            ) : (
+              <input value={form.indicador} onChange={(e) => setForm({ ...form, indicador: e.target.value })} className="input" />
+            )}
           </Field>
           <Field label="Valor da meta">
             <input type="number" value={form.valorMeta} onChange={(e) => setForm({ ...form, valorMeta: e.target.value })} className="input" />
@@ -560,21 +630,25 @@ export function MetasClient({
               <input value={form.bonificacao} onChange={(e) => setForm({ ...form, bonificacao: e.target.value })} className="input" />
             </Field>
           </div>
-          <div className="col-span-2">
-            <Field label="Descrição">
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input min-h-14" />
-            </Field>
-          </div>
-          <div className="col-span-2">
-            <Field label="Plano de ação">
-              <textarea value={form.planoDeAcao} onChange={(e) => setForm({ ...form, planoDeAcao: e.target.value })} className="input min-h-14" />
-            </Field>
-          </div>
-          <div className="col-span-2">
-            <Field label="Observações">
-              <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} className="input min-h-14" />
-            </Field>
-          </div>
+          {!isGerencia && (
+            <>
+              <div className="col-span-2">
+                <Field label="Descrição">
+                  <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input min-h-14" />
+                </Field>
+              </div>
+              <div className="col-span-2">
+                <Field label="Plano de ação">
+                  <textarea value={form.planoDeAcao} onChange={(e) => setForm({ ...form, planoDeAcao: e.target.value })} className="input min-h-14" />
+                </Field>
+              </div>
+              <div className="col-span-2">
+                <Field label="Observações">
+                  <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} className="input min-h-14" />
+                </Field>
+              </div>
+            </>
+          )}
         </div>
         <button
           onClick={submit}
