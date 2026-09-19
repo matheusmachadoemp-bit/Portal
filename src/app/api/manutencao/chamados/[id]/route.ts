@@ -5,6 +5,7 @@ import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empres
 import { CHAMADO_STATUS_LABEL } from "@/lib/manutencao";
 import {
   MANAGER_ROLES,
+  getManutencaoDonoIds,
   getStoreManagers,
   logChamadoHistorico,
   notifyManutencaoUser,
@@ -99,6 +100,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const wasDraft = existing.status === "RASCUNHO";
   const isSendingDraft = wasDraft && body.status && body.status !== "RASCUNHO";
 
+  const novoPrazo = body.prazo !== undefined ? (body.prazo ? new Date(body.prazo) : null) : undefined;
+
   const data: Record<string, unknown> = {
     titulo: body.titulo ?? undefined,
     descricao: body.descricao ?? undefined,
@@ -109,11 +112,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     prioridade: body.prioridade ?? undefined,
     status: body.status ?? undefined,
     responsavelId: body.responsavelId !== undefined ? body.responsavelId || null : undefined,
-    prazo: body.prazo !== undefined ? (body.prazo ? new Date(body.prazo) : null) : undefined,
+    prazo: novoPrazo,
     descricaoSolucao: body.descricaoSolucao !== undefined ? body.descricaoSolucao || null : undefined,
   };
   if (body.status === "RESOLVIDO" && existing.status !== "RESOLVIDO") {
     data.resolvidoEm = new Date();
+  }
+
+  // Zera o aviso de "chamado atrasado" (processChamadoAtrasoAlertas, @/lib/manutencao-server.ts)
+  // sempre que o motivo que o tornaria obsoleto acontece aqui: o prazo mudou (o atraso avisado
+  // era em cima do prazo antigo — um novo prazo merece ser reavaliado do zero, podendo gerar um
+  // novo aviso se também for perdido) ou o chamado estava resolvido/cancelado e foi reaberto
+  // (a checagem periódica ignora RESOLVIDO/CANCELADO, então um chamado reaberto com prazo já
+  // vencido nunca mais seria reavaliado sem isso). Sem esse reset, `atrasoNotificadoEm` continua
+  // preenchido para sempre e o chamado nunca mais gera um aviso de atraso, mesmo que volte a se
+  // enquadrar de verdade.
+  const prazoMudou = novoPrazo !== undefined && (novoPrazo?.getTime() ?? null) !== (existing.prazo?.getTime() ?? null);
+  const statusTerminal = ["RESOLVIDO", "CANCELADO"];
+  const foiReaberto =
+    !!body.status && statusTerminal.includes(existing.status) && !statusTerminal.includes(body.status);
+  if (prazoMudou || foiReaberto) {
+    data.atrasoNotificadoEm = null;
   }
 
   const chamado = await prisma.chamado.update({ where: { id }, data });
@@ -130,19 +149,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (isSendingDraft) {
-    if (chamado.responsavelId && chamado.responsavelId !== session.user.id) {
-      await notifyManutencaoUser(
-        chamado.responsavelId,
-        "NOVO_CHAMADO",
-        "Novo chamado de manutenção",
-        `Você foi definido como responsável pelo chamado "${chamado.titulo}" (${chamado.protocolo}).`,
-        chamado.id
-      );
+    // Enviar um rascunho é a mesma situação de "chamado novo" de POST /api/manutencao/chamados
+    // (o chamado só passa a existir de verdade pra quem não é gestão a partir daqui) — mesma
+    // dedupe (jaNotificados) pra ninguém receber aviso duplicado por se enquadrar em mais de um
+    // grupo (ex.: um ADMINISTRADOR que também é o responsável, ou também conta como gestor no
+    // caso urgente).
+    const jaNotificados = new Set<string>([session.user.id]);
+
+    if (chamado.responsavelId) {
+      jaNotificados.add(chamado.responsavelId);
+      if (chamado.responsavelId !== session.user.id) {
+        await notifyManutencaoUser(
+          chamado.responsavelId,
+          "NOVO_CHAMADO",
+          "Novo chamado de manutenção",
+          `Você foi definido como responsável pelo chamado "${chamado.titulo}" (${chamado.protocolo}).`,
+          chamado.id
+        );
+      }
     }
     if (chamado.prioridade === "URGENTE") {
       const managers = await getStoreManagers(chamado.empresaId);
       for (const userId of managers) {
-        if (userId === session.user.id) continue;
+        if (jaNotificados.has(userId)) continue;
+        jaNotificados.add(userId);
         await notifyManutencaoUser(
           userId,
           "CHAMADO_URGENTE",
@@ -151,6 +181,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           chamado.id
         );
       }
+    }
+
+    // "O dono" (todo usuário ativo com cargo ADMINISTRADOR) é sempre notificado, qualquer
+    // prioridade — mesma garantia de POST /api/manutencao/chamados. Ver getManutencaoDonoIds
+    // (@/lib/manutencao-server.ts).
+    const donoIds = await getManutencaoDonoIds();
+    for (const userId of donoIds) {
+      if (jaNotificados.has(userId)) continue;
+      jaNotificados.add(userId);
+      await notifyManutencaoUser(
+        userId,
+        "NOVO_CHAMADO",
+        "Novo chamado de manutenção",
+        `Novo chamado de manutenção aberto: "${chamado.titulo}" (${chamado.protocolo}).`,
+        chamado.id
+      );
     }
   }
 
