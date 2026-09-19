@@ -260,14 +260,14 @@ export function CalendarioClient({
         title="Calendário preventivo"
         action={
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <select className="input text-xs py-1" value={setorFilter} onChange={(e) => setSetorFilter(e.target.value)}>
+            <select className="input-sm" value={setorFilter} onChange={(e) => setSetorFilter(e.target.value)}>
               <option value="">Todos os setores</option>
               {setores.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
             {view === "lista" && (
-              <select className="input text-xs py-1" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupKey)}>
+              <select className="input-sm" value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupKey)}>
                 <option value="data">Agrupar por data</option>
                 <option value="equipamento">Agrupar por equipamento</option>
                 <option value="loja">Agrupar por loja</option>
