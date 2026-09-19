@@ -139,7 +139,13 @@ export function ChamadosClient({
       </div>
 
       {view === "kanban" ? (
-        <DndContext sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={handleDragEnd}>
+        // `id` fixo: só existe uma instância de DndContext nesta tela hoje, mas fixar
+        // evita depender do contador automático do dnd-kit (compartilhado com outras
+        // telas), que pode divergir entre servidor e cliente — mesma causa do achado
+        // #186 (sortable-stat-cards.tsx). Arquivo encontrado durante o achado #194
+        // (não estava na lista original de 3 telas, mas segue o mesmo padrão do
+        // Kanban de Tarefas do Marketing).
+        <DndContext id="manutencao-chamados-kanban" sensors={sensors} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={handleDragEnd}>
           <div className="flex gap-3 overflow-x-auto nord-scrollbar pb-2">
             {KANBAN_GROUPS.map((group) => (
               <KanbanColumn
