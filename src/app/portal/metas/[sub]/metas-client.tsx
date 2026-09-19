@@ -122,8 +122,6 @@ function buildWeeklyReportText(
     "",
     `Concluídas: ${kpis.concluidas}`,
     `Em andamento: ${kpis.emAndamento}`,
-    `Atrasadas: ${kpis.atrasadas}`,
-    `Média de conclusão: ${kpis.mediaConclusao.toFixed(0)}%`,
   ];
 
   if (metas.length > 0) {
