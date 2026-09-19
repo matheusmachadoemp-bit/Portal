@@ -5,7 +5,7 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { cmvPercent, productTotalCost, PRODUCT_CATEGORY_LABEL } from "@/lib/ficha";
-import { cmvRealValor, cmvTeoricoPercentCatalogo, valorComprasNoPeriodo, valorEstoqueEm } from "@/lib/cmv";
+import { cmvRealValor, cmvTeoricoPercentCatalogo, valorComprasNoPeriodo, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
 import { CmvCharts } from "./charts";
 import { startOfDay, subDays } from "date-fns";
 import { auth } from "@/auth";
@@ -26,19 +26,40 @@ export default async function CmvPage() {
   const now = new Date();
   const periodStart = startOfDay(subDays(now, 30));
 
-  const [products, ingredients, movements, salesEntries] = await Promise.all([
+  // Limites de cada dia da série (calculados antes do Promise.all pra saber
+  // de quais instantes precisamos o "valor do estoque nesse momento" —
+  // ver snapshotsEstoqueEmDatas abaixo).
+  const dayBoundaries = Array.from({ length: DIAS_SERIE }).map((_, idx) => {
+    const day = startOfDay(subDays(now, DIAS_SERIE - 1 - idx));
+    const nextDay = startOfDay(subDays(now, DIAS_SERIE - 2 - idx));
+    const end = idx === DIAS_SERIE - 1 ? now : nextDay;
+    return { day, end };
+  });
+  const snapshotDates = [periodStart, now, ...dayBoundaries.flatMap((d) => [d.day, d.end])];
+
+  const [products, ingredients, snapshots, movements, salesEntries] = await Promise.all([
     prisma.product.findMany({
       where: { empresaId: { in: empresaIds } },
       include: { ingredients: { include: { ingredient: true } } },
     }),
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } } }),
+    // Valor do estoque em cada instante (hoje, início do período e cada dia
+    // da série) resolvido no banco, 1 query indexada por data distinta —
+    // ver snapshotsEstoqueEmDatas/valorEstoqueDeSnapshot em @/lib/cmv.
+    snapshotsEstoqueEmDatas(prisma, empresaIds, snapshotDates),
+    // valorComprasNoPeriodo (chamada abaixo pro período inteiro e pra cada
+    // dia da série) só soma o que cai dentro de [periodStart, now] — todo
+    // dia da série está contido nesse intervalo, então trazer só essa
+    // janela do banco não muda nenhum resultado.
     prisma.stockMovement.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, createdAt: { gte: periodStart, lte: now } },
       orderBy: { createdAt: "desc" },
       select: { ingredientId: true, type: true, quantidade: true, estoqueApos: true, createdAt: true },
     }),
     prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: periodStart } } }),
   ]);
+
+  const estoqueEm = (at: Date) => valorEstoqueDeSnapshot(ingredients, snapshots.get(at.getTime())!);
 
   const productsWithCost = products.map((p) => ({ ...p, totalCost: productTotalCost(p.ingredients) }));
   const cmvTeoricoPercent = cmvTeoricoPercentCatalogo(productsWithCost);
@@ -49,8 +70,8 @@ export default async function CmvPage() {
       .reduce((sum, s) => sum + s.faturamentoDelivery + s.faturamentoSalao, 0);
 
   const faturamentoMes = faturamentoNoPeriodo(periodStart, now);
-  const estoqueInicial = valorEstoqueEm(ingredients, movements, periodStart);
-  const estoqueFinal = valorEstoqueEm(ingredients, movements, now);
+  const estoqueInicial = estoqueEm(periodStart);
+  const estoqueFinal = estoqueEm(now);
   const compras = valorComprasNoPeriodo(ingredients, movements, periodStart, now);
   const cmvRealValorPeriodo = cmvRealValor(estoqueInicial, compras, estoqueFinal);
   const cmvRealPercent = faturamentoMes ? (cmvRealValorPeriodo / faturamentoMes) * 100 : 0;
@@ -60,13 +81,10 @@ export default async function CmvPage() {
   const diferencaValor = cmvRealValorPeriodo - cmvTeoricoValorPeriodo;
   const divergenciaAlta = Math.abs(diferencaPP) > DIVERGENCIA_ALERTA_PP;
 
-  const dailySeries = Array.from({ length: DIAS_SERIE }).map((_, idx) => {
-    const day = startOfDay(subDays(now, DIAS_SERIE - 1 - idx));
-    const nextDay = startOfDay(subDays(now, DIAS_SERIE - 2 - idx));
-    const end = idx === DIAS_SERIE - 1 ? now : nextDay;
+  const dailySeries = dayBoundaries.map(({ day, end }) => {
     const faturamentoDia = faturamentoNoPeriodo(day, end);
-    const estoqueInicioDia = valorEstoqueEm(ingredients, movements, day);
-    const estoqueFimDia = valorEstoqueEm(ingredients, movements, end);
+    const estoqueInicioDia = estoqueEm(day);
+    const estoqueFimDia = estoqueEm(end);
     const comprasDia = valorComprasNoPeriodo(ingredients, movements, day, end);
     const realValorDia = cmvRealValor(estoqueInicioDia, comprasDia, estoqueFimDia);
     return {

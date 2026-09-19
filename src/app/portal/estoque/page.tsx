@@ -4,7 +4,7 @@ import { EstoqueDashboardClient } from "./dashboard/dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { ingredientCostPerUnit } from "@/lib/estoque";
 import { productTotalCost } from "@/lib/ficha";
-import { cmvRealValor, cmvTeoricoPercentCatalogo, valorComprasNoPeriodo, valorEstoqueEm } from "@/lib/cmv";
+import { cmvRealValor, cmvTeoricoPercentCatalogo, valorComprasNoPeriodo, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
 import { addDays, startOfWeek, subDays, subWeeks } from "date-fns";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -32,16 +32,49 @@ export default async function EstoquePage() {
         ? ctx.empresas.reduce((s, e) => s + e.metaCmvPercent, 0) / ctx.empresas.length
         : 30;
 
-  // valorEstoqueEm() só olha até WEEKS_SERIE semanas atrás (a mais antiga
-  // usada na série do gráfico); antes disso ela já cai no fallback de usar
-  // o estoque atual do ingrediente. Não precisamos buscar o histórico
-  // completo de movimentações, só essa janela (com folga).
-  const movementsSince = subDays(now, WEEKS_SERIE * 7 + 7);
+  // Limites de cada semana do gráfico (calculados antes do Promise.all —
+  // precisamos deles tanto pra saber quais instantes consultar no snapshot
+  // de estoque quanto pra saber até onde a janela de movimentações "no
+  // período" (cards/alertas abaixo) precisa voltar).
+  const weekBoundaries = Array.from({ length: WEEKS_SERIE }).map((_, idx) => {
+    const weekStart = startOfWeek(subWeeks(now, WEEKS_SERIE - 1 - idx), { weekStartsOn: 1 });
+    const weekEnd = idx === WEEKS_SERIE - 1 ? now : startOfWeek(subWeeks(now, WEEKS_SERIE - 2 - idx), { weekStartsOn: 1 });
+    return { weekStart, weekEnd };
+  });
+  // O gráfico semanal (WEEKS_SERIE semanas) alcança mais pra trás do que o
+  // período de PERIOD_DAYS dias usado pelos cards/alertas — a janela de
+  // movimentações "no período" buscada no banco precisa cobrir a mais
+  // antiga das duas, senão as primeiras semanas do gráfico (e
+  // valorComprasNoPeriodo pra elas) ficam sem movimentação mais antiga que
+  // ainda precisam somar. Essa janela NÃO precisa mais de margem extra tipo
+  // "+7 dias" (como antes) porque ela só alimenta somas por período
+  // (valorComprasNoPeriodo/movementsInPeriod) — o valor do estoque num
+  // instante (antes: valorEstoqueEm alimentado por esta mesma lista, o que
+  // causava o bug abaixo) agora vem de snapshotsEstoqueEmDatas, que busca a
+  // última movimentação de cada insumo direto no banco, não importa a
+  // distância.
+  const earliestPeriodStart = weekBoundaries.reduce((min, w) => (w.weekStart < min ? w.weekStart : min), since);
+  const snapshotDates = [since, now, ...weekBoundaries.flatMap((w) => [w.weekStart, w.weekEnd])];
 
-  const [ingredients, movements, products, losses, purchases, pendingCounts, divergenciasAbertas, salesEntries] = await Promise.all([
+  const [ingredients, snapshots, movements, products, losses, purchases, pendingCounts, divergenciasAbertas, salesEntries] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
+    // Valor do estoque em cada instante (início/fim do período de
+    // PERIOD_DAYS dias e de cada semana do gráfico) resolvido no banco, 1
+    // query indexada por data distinta — ver
+    // snapshotsEstoqueEmDatas/valorEstoqueDeSnapshot em @/lib/cmv. Corrige
+    // um bug de dado (não só performance): o valorEstoqueEm(ingredients,
+    // movements, at) que existia aqui antes dependia da janela de
+    // `movements` ter, pra CADA insumo, uma movimentação dentro dela — um
+    // insumo de baixo giro (nada nos últimos ~2 meses, mas com histórico
+    // mais antigo) caía no fallback errado (estoqueAtual de HOJE, em vez do
+    // valor real na data consultada) sempre que existisse alguma
+    // movimentação mais recente (dentro ou fora da janela) puxando o
+    // estoqueAtual pra um valor diferente do daquela data. snapshotsEstoqueEmDatas
+    // não tem esse limite: sempre busca a última movimentação de cada
+    // insumo até a data, não importa a distância.
+    snapshotsEstoqueEmDatas(prisma, empresaIds, snapshotDates),
     prisma.stockMovement.findMany({
-      where: { empresaId: { in: empresaIds }, createdAt: { gte: movementsSince } },
+      where: { empresaId: { in: empresaIds }, createdAt: { gte: earliestPeriodStart } },
       include: { ingredient: { select: { id: true, name: true, unidade: true, estoqueMinimo: true } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -57,6 +90,8 @@ export default async function EstoquePage() {
       where: { empresaId: { in: empresaIds }, date: { gte: startOfWeek(subWeeks(now, WEEKS_SERIE), { weekStartsOn: 1 }) } },
     }),
   ]);
+
+  const estoqueEm = (at: Date) => valorEstoqueDeSnapshot(ingredients, snapshots.get(at.getTime())!);
 
   const movementsInPeriod = movements.filter((m) => m.createdAt >= since);
 
@@ -105,8 +140,8 @@ export default async function EstoquePage() {
     .filter((r) => r.date >= since)
     .reduce((sum, r) => sum + r.faturamentoDelivery + r.faturamentoSalao, 0);
 
-  const estoqueInicial = valorEstoqueEm(ingredients, movements, since);
-  const estoqueFinal = valorEstoqueEm(ingredients, movements, now);
+  const estoqueInicial = estoqueEm(since);
+  const estoqueFinal = estoqueEm(now);
   const comprasPeriodo = valorComprasNoPeriodo(ingredients, movements, since, now);
   const cmvRealValorPeriodo = cmvRealValor(estoqueInicial, comprasPeriodo, estoqueFinal);
   const cmvRealPercent = faturamentoNoPeriodo ? (cmvRealValorPeriodo / faturamentoNoPeriodo) * 100 : 0;
@@ -117,11 +152,9 @@ export default async function EstoquePage() {
   const valorCompras = purchases.reduce((sum, p) => sum + p.items.reduce((s, it) => s + it.valorTotal, 0), 0);
 
   // faturamento por semana (aproximado a partir das vendas diárias agregadas)
-  const evolucaoCmv = Array.from({ length: WEEKS_SERIE }).map((_, idx) => {
-    const weekStart = startOfWeek(subWeeks(now, WEEKS_SERIE - 1 - idx), { weekStartsOn: 1 });
-    const weekEnd = idx === WEEKS_SERIE - 1 ? now : startOfWeek(subWeeks(now, WEEKS_SERIE - 2 - idx), { weekStartsOn: 1 });
-    const inicioSemana = valorEstoqueEm(ingredients, movements, weekStart);
-    const fimSemana = valorEstoqueEm(ingredients, movements, weekEnd);
+  const evolucaoCmv = weekBoundaries.map(({ weekStart, weekEnd }) => {
+    const inicioSemana = estoqueEm(weekStart);
+    const fimSemana = estoqueEm(weekEnd);
     const comprasSemana = valorComprasNoPeriodo(ingredients, movements, weekStart, weekEnd);
     const realValor = cmvRealValor(inicioSemana, comprasSemana, fimSemana);
     const faturamentoSemana = salesEntries
