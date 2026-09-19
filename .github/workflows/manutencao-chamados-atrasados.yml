@@ -1,0 +1,30 @@
+name: Aviso de chamado de manutenção atrasado
+
+# Avisa o responsável e o dono (ADMINISTRADOR) quando um chamado de manutenção passa do prazo
+# (ver processChamadoAtrasoAlertas em src/lib/manutencao-server.ts) — pedido do usuário: "caso o
+# chamado entre em manutenções atrasadas, chegar uma notificação também". Roda a cada 15 minutos
+# via GitHub Actions (mesmo padrão já usado em checklist-escalations.yml e keep-alive.yml: GitHub
+# Actions aceita intervalos curtos de graça, diferente do cron nativo do Vercel Hobby, que só
+# permite 1 execução diária por cron) e, como reforço, 1x por dia via Vercel Cron (ver
+# vercel.json). Diferente do Checklist (limiar de 15 min e pior caso de ~20-30 min visando um
+# requisito específico apertado), aqui não há um prazo tão sensível pedido — 15 min de intervalo
+# já deixa o pior caso bem próximo do momento real em que o chamado cruza para atrasado.
+#
+# GET /api/manutencao/chamados/alertas/run é idempotente (o campo Chamado.atrasoNotificadoEm
+# garante um único aviso por chamado, até o prazo mudar ou o chamado ser reaberto), então rodar
+# com essa frequência nunca duplica aviso.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a rota de aviso de chamado atrasado
+        run: |
+          curl -sS -o /dev/null -w "status=%{http_code}\n" \
+            --max-time 30 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.portalnord.com.br/api/manutencao/chamados/alertas/run"

@@ -25,6 +25,33 @@ function formatDueDate(dueDate: string | null, dueTime: string | null): string {
   return dueTime ? `${date} ${dueTime}` : date;
 }
 
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
+  if (field !== sortField) return <ArrowUpDown size={11} className="text-nord-gray/50" />;
+  return sortDir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />;
+}
+
+function Th({
+  field,
+  children,
+  sortField,
+  sortDir,
+  toggleSort,
+}: {
+  field: SortField;
+  children: React.ReactNode;
+  sortField: SortField;
+  sortDir: SortDir;
+  toggleSort: (field: SortField) => void;
+}) {
+  return (
+    <th className="py-2 pr-4">
+      <button onClick={() => toggleSort(field)} className="flex items-center gap-1 hover:text-white">
+        {children} <SortIcon field={field} sortField={sortField} sortDir={sortDir} />
+      </button>
+    </th>
+  );
+}
+
 export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: TaskDTO) => void }) {
   const [sortField, setSortField] = useState<SortField>("dueDate");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -67,21 +94,6 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
     return copy;
   }, [tasks, sortField, sortDir]);
 
-  function SortIcon({ field }: { field: SortField }) {
-    if (field !== sortField) return <ArrowUpDown size={11} className="text-nord-gray/50" />;
-    return sortDir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />;
-  }
-
-  function Th({ field, children }: { field: SortField; children: React.ReactNode }) {
-    return (
-      <th className="py-2 pr-4">
-        <button onClick={() => toggleSort(field)} className="flex items-center gap-1 hover:text-white">
-          {children} <SortIcon field={field} />
-        </button>
-      </th>
-    );
-  }
-
   if (tasks.length === 0) {
     return <p className="text-sm text-nord-gray py-8 text-center">Nenhuma tarefa encontrada com os filtros atuais.</p>;
   }
@@ -91,12 +103,22 @@ export function TaskTable({ tasks, onOpen }: { tasks: TaskDTO[]; onOpen: (task: 
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
-            <Th field="title">Tarefa</Th>
+            <Th field="title" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort}>
+              Tarefa
+            </Th>
             <th className="py-2 pr-4">Responsável</th>
-            <Th field="sectorKey">Setor</Th>
-            <Th field="dueDate">Prazo</Th>
-            <Th field="priority">Prioridade</Th>
-            <Th field="status">Status</Th>
+            <Th field="sectorKey" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort}>
+              Setor
+            </Th>
+            <Th field="dueDate" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort}>
+              Prazo
+            </Th>
+            <Th field="priority" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort}>
+              Prioridade
+            </Th>
+            <Th field="status" sortField={sortField} sortDir={sortDir} toggleSort={toggleSort}>
+              Status
+            </Th>
             <th className="py-2 pr-4" />
           </tr>
         </thead>

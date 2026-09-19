@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma, ChamadoCategoria, ChamadoPrioridade, ChamadoStatus } from "@prisma/client";
+import type { NotificationPriority, Prisma, ChamadoCategoria, ChamadoPrioridade, ChamadoStatus } from "@prisma/client";
 import { createNotification } from "@/lib/notifications";
 
 export const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
@@ -76,13 +76,15 @@ export async function notifyManutencaoUser(
   type: string,
   title: string,
   body: string | null,
-  chamadoId: string | null
+  chamadoId: string | null,
+  priority?: NotificationPriority | null
 ): Promise<void> {
   await createNotification({
     userId,
     type,
     title,
     body,
+    priority: priority ?? null,
     chamadoId,
     url: chamadoId ? `/portal/manutencao/chamados/${chamadoId}` : "/portal/manutencao",
   });
@@ -101,6 +103,21 @@ export async function getStoreManagers(empresaId: string): Promise<string[]> {
     select: { id: true },
   });
   return users.map((u) => u.id);
+}
+
+/**
+ * Ids de todos os usuários ativos com cargo ADMINISTRADOR — "o dono" do sistema, mesma
+ * equivalência já usada em outras notificações do Portal (ver `notifySyncFailure` em
+ * @/lib/sync-notifications.ts e `processFechamentoAlertas` em @/lib/fechamento-server.ts).
+ * Diferente de `getStoreManagers` (GESTOR/GERENTE também contam, e GERENTE só entra se tiver
+ * acesso àquela loja específica), aqui é sempre TODO ADMINISTRADOR ativo, de qualquer loja —
+ * usado para garantir que o dono seja notificado de todo chamado novo e de todo chamado que
+ * entra em atraso, independente de configuração manual (ManutencaoNotificacaoDestinatario) ou
+ * de prioridade.
+ */
+export async function getManutencaoDonoIds(): Promise<string[]> {
+  const donos = await prisma.user.findMany({ where: { role: "ADMINISTRADOR", active: true }, select: { id: true } });
+  return donos.map((d) => d.id);
 }
 
 export type StoreUserOption = { id: string; name: string; email: string; role: string };
@@ -343,4 +360,81 @@ export async function getManutencaoDashboardData(empresaIds: string[], filtros: 
     proximasManutencoesList,
     equipamentosCriticos,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Cron de atraso — pedido do usuário: "caso o chamado entre em manutenções atrasadas, chegar
+// uma notificação também" (ver GET /api/manutencao/chamados/alertas/run, chamado periodicamente
+// pelo GitHub Actions — .github/workflows/manutencao-chamados-atrasados.yml — com o Vercel Cron
+// diário como reforço, ver vercel.json; mesmo padrão de .github/workflows/checklist-escalations.yml).
+// ---------------------------------------------------------------------------
+
+/**
+ * Processa a checagem de "chamado atrasado": para cada `Chamado` com `prazo` vencido, status
+ * ainda ativo (fora de RESOLVIDO/CANCELADO) e que ainda não foi avisado (`atrasoNotificadoEm`
+ * nulo), notifica o responsável (se tiver) e "o dono" (usuários `role: "ADMINISTRADOR"`, ver
+ * `getManutencaoDonoIds`) e marca o chamado como avisado.
+ *
+ * Diferente do Checklist (`processChecklistEscalations`, @/lib/checklist-server.ts), que tem uma
+ * escada de vários níveis de escalonamento com destinatários diferentes por nível, o pedido aqui
+ * é só UM aviso — "ficou atrasado, avisa o responsável e o dono" — mesma natureza do que
+ * `processFechamentoAlertas` (@/lib/fechamento-server.ts) já faz para o Fechamento do Dia. Por
+ * isso a idempotência usa um campo direto em `Chamado` (`atrasoNotificadoEm`) em vez de uma
+ * tabela de log à parte (`ChecklistEscalationLog`/`FechamentoEscalationLog`) — não há múltiplos
+ * níveis nem destinatários variáveis por execução que justifiquem uma linha por
+ * chamado+tipo+destinatário; um timestamp único já garante que aquele chamado nunca dispara o
+ * aviso duas vezes. O campo é zerado de volta pra null (permitindo um novo aviso futuro) sempre
+ * que o prazo muda ou o chamado é reaberto depois de resolvido/cancelado — ver
+ * PATCH /api/manutencao/chamados/[id].
+ */
+export async function processChamadoAtrasoAlertas(): Promise<{ notified: number; chamadosAtrasados: number }> {
+  const now = new Date();
+
+  const chamados = await prisma.chamado.findMany({
+    where: {
+      prazo: { lt: now },
+      status: { notIn: ["RESOLVIDO", "CANCELADO"] },
+      atrasoNotificadoEm: null,
+      // Mesmo filtro de `processFechamentoAlertas` (@/lib/fechamento-server.ts) — uma loja
+      // desativada nunca aparece em nenhuma tela (getUserEmpresas/getActiveEmpresaContext,
+      // @/lib/empresa.ts, sempre filtram active: true), então um chamado dela não deveria gerar
+      // aviso de atraso pra ninguém.
+      empresa: { active: true },
+    },
+    select: {
+      id: true,
+      titulo: true,
+      protocolo: true,
+      responsavelId: true,
+      empresa: { select: { name: true } },
+    },
+  });
+  if (chamados.length === 0) return { notified: 0, chamadosAtrasados: 0 };
+
+  const donoIds = await getManutencaoDonoIds();
+
+  let notified = 0;
+  for (const chamado of chamados) {
+    const recipientIds = new Set<string>(donoIds);
+    if (chamado.responsavelId) recipientIds.add(chamado.responsavelId);
+
+    if (recipientIds.size > 0) {
+      const title = "Chamado de manutenção atrasado";
+      const body = `O chamado "${chamado.titulo}" (${chamado.protocolo}) passou do prazo — ${chamado.empresa.name}.`;
+
+      await Promise.all(
+        [...recipientIds].map((userId) =>
+          notifyManutencaoUser(userId, "CHAMADO_ATRASADO", title, body, chamado.id, "ATENCAO")
+        )
+      );
+      notified += recipientIds.size;
+    }
+
+    // Marca como avisado mesmo se não havia ninguém pra notificar (ex.: sem responsável e,
+    // hipoteticamente, nenhum ADMINISTRADOR ativo) — evita reprocessar o mesmo chamado a cada
+    // execução do cron para sempre; volta a ser reavaliado normalmente se o prazo for alterado.
+    await prisma.chamado.update({ where: { id: chamado.id }, data: { atrasoNotificadoEm: now } });
+  }
+
+  return { notified, chamadosAtrasados: chamados.length };
 }
