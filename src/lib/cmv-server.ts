@@ -1,16 +1,30 @@
 import { prisma } from "@/lib/prisma";
-import { breakdownMovimentacoesNoPeriodo, cmvRealValor, valorEstoqueEm, cmvTeoricoPercentCatalogo } from "@/lib/cmv";
+import {
+  breakdownMovimentacoesNoPeriodo,
+  cmvRealValor,
+  snapshotEstoqueEm,
+  valorEstoqueDeSnapshot,
+  cmvTeoricoPercentCatalogo,
+} from "@/lib/cmv";
 import { productTotalCost, cmvPercent, PRODUCT_CATEGORY_LABEL } from "@/lib/ficha";
 
 export async function computeCmvReal(empresaIds: string[], from: Date, to: Date) {
-  const [ingredients, movements, salesEntries] = await Promise.all([
+  const [ingredients, snapshotInicial, snapshotFinal, movements, salesEntries] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } } }),
-    prisma.stockMovement.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { createdAt: "desc" } }),
+    snapshotEstoqueEm(prisma, empresaIds, from),
+    snapshotEstoqueEm(prisma, empresaIds, to),
+    // breakdownMovimentacoesNoPeriodo só soma o que cai dentro de [from, to]
+    // (mesmo filtro que ela já aplicava em JS) — trazer só essa janela do
+    // banco não muda o resultado, só evita carregar o histórico inteiro.
+    prisma.stockMovement.findMany({
+      where: { empresaId: { in: empresaIds }, createdAt: { gte: from, lte: to } },
+      orderBy: { createdAt: "desc" },
+    }),
     prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: from, lte: to } } }),
   ]);
 
-  const estoqueInicial = valorEstoqueEm(ingredients, movements, from);
-  const estoqueFinal = valorEstoqueEm(ingredients, movements, to);
+  const estoqueInicial = valorEstoqueDeSnapshot(ingredients, snapshotInicial);
+  const estoqueFinal = valorEstoqueDeSnapshot(ingredients, snapshotFinal);
   const breakdown = breakdownMovimentacoesNoPeriodo(ingredients, movements, from, to);
   const compras = breakdown.compras;
   const custoConsumido = cmvRealValor(

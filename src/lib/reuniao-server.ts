@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { breakdownMovimentacoesNoPeriodo, cmvRealValor, valorEstoqueEm } from "@/lib/cmv";
+import { breakdownMovimentacoesNoPeriodo, cmvRealValor, snapshotEstoqueEm, valorEstoqueDeSnapshot } from "@/lib/cmv";
 import { safeDiv } from "@/lib/calc";
 import { periodoRange } from "@/lib/reuniao";
 
@@ -10,16 +10,21 @@ import { periodoRange } from "@/lib/reuniao";
 export async function computeCozinhaMetrics(empresaId: string, periodo: string) {
   const { start, end } = periodoRange(periodo);
 
-  const [ingredients, movements, salesEntries, losses] = await Promise.all([
+  const [ingredients, snapshotInicial, snapshotFinal, movementsNoPeriodo, salesEntries, losses] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId } }),
-    prisma.stockMovement.findMany({ where: { empresaId }, orderBy: { createdAt: "desc" } }),
+    snapshotEstoqueEm(prisma, [empresaId], start),
+    snapshotEstoqueEm(prisma, [empresaId], end),
+    // breakdownMovimentacoesNoPeriodo só soma o que cai dentro de [start, end]
+    // (mesmo filtro que ela já aplicava em JS) — trazer só essa janela do
+    // banco não muda o resultado, só evita carregar o histórico inteiro.
+    prisma.stockMovement.findMany({ where: { empresaId, createdAt: { gte: start, lte: end } }, orderBy: { createdAt: "desc" } }),
     prisma.salesEntry.findMany({ where: { empresaId, date: { gte: start, lt: end } } }),
     prisma.loss.aggregate({ where: { empresaId, data: { gte: start, lt: end } }, _sum: { valorEstimado: true } }),
   ]);
 
-  const estoqueInicial = valorEstoqueEm(ingredients, movements, start);
-  const estoqueFinal = valorEstoqueEm(ingredients, movements, end);
-  const breakdown = breakdownMovimentacoesNoPeriodo(ingredients, movements, start, end);
+  const estoqueInicial = valorEstoqueDeSnapshot(ingredients, snapshotInicial);
+  const estoqueFinal = valorEstoqueDeSnapshot(ingredients, snapshotFinal);
+  const breakdown = breakdownMovimentacoesNoPeriodo(ingredients, movementsNoPeriodo, start, end);
   const custoConsumido = cmvRealValor(
     estoqueInicial + breakdown.transferenciasRecebidas,
     breakdown.compras - breakdown.transferenciasEnviadas - breakdown.devolucoes + breakdown.ajustes,
