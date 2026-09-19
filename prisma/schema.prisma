@@ -2301,6 +2301,18 @@ model StockMovement {
 
   @@index([ingredientId])
   @@index([empresaId, createdAt])
+  /// Suporta o `DISTINCT ON ("ingredientId") ... ORDER BY "ingredientId", "createdAt" DESC`
+  /// usado por `snapshotEstoqueEm`/`snapshotsEstoqueEmDatas` (src/lib/cmv.ts) para
+  /// reconstruir o estoque de cada insumo numa data específica. Sem este índice
+  /// composto (ingredientId + createdAt DESC, nessa ordem), o Postgres não tinha
+  /// como evitar um Seq Scan + sort em disco para resolver o DISTINCT ON — os
+  /// dois índices acima não servem, pois nenhum tem as duas colunas juntas nessa
+  /// ordem. Achado #220 do backlog (sugestão do Teulis na revisão do PR #325):
+  /// testado com dado sintético (60 mil linhas) e confirmado que reduz o plano de
+  /// Seq Scan+sort (~63ms) para Index Scan direto (~24ms) nesse volume. Aditivo —
+  /// não substitui os dois índices acima, que continuam servindo outras consultas
+  /// (busca simples por insumo; busca por loja+data).
+  @@index([ingredientId, createdAt(sort: Desc)])
 }
 
 model Product {
