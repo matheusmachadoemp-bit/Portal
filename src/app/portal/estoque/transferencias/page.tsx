@@ -14,7 +14,8 @@ export default async function TransferenciasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageEstoque;
 
   const [transfers, empresas, ingredients] = await Promise.all([
     prisma.transfer.findMany({

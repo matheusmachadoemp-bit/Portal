@@ -77,6 +77,26 @@ export const GOAL_STATUS_TONE: Record<string, "default" | "success" | "warning" 
 };
 
 /**
+ * Direção de uma meta — o que "progredir" significa (ver enum
+ * `GoalDirection` em prisma/schema.prisma):
+ * - MAXIMIZAR (padrão): realizado MAIOR é melhor (vender mais, faturar mais).
+ * - MINIMIZAR: realizado MENOR é melhor (ex.: CMV, % de cancelamento,
+ *   turnover) — o objetivo é ficar EM OU ABAIXO do valor da meta.
+ *
+ * Union de string literal (não `Record<string, ...>`) de propósito — assim
+ * bate estruturalmente com o enum `GoalDirection` gerado pelo Prisma sem
+ * precisar de cast ao gravar `Goal.direcao` (mesmo motivo de
+ * `GoalCategoryKey`, logo acima).
+ */
+export const GOAL_DIRECTIONS = ["MAXIMIZAR", "MINIMIZAR"] as const;
+export type GoalDirectionKey = (typeof GOAL_DIRECTIONS)[number];
+
+export const GOAL_DIRECTION_LABEL: Record<GoalDirectionKey, string> = {
+  MAXIMIZAR: "Quanto maior, melhor",
+  MINIMIZAR: "Quanto menor, melhor",
+};
+
+/**
  * Toda meta vale por um mês inteiro (dia 1 ao último dia). Esses helpers
  * convertem entre o "YYYY-MM" do seletor de mês e as datas de início/fim
  * que o Goal guarda no banco.
@@ -157,19 +177,149 @@ export function weekDayRange(weekNumber: number, totalDays: number): { startDay:
 const NEAR_TARGET_THRESHOLD = 90;
 
 /**
+ * Metas com unidade "%" são acompanhadas pela MÉDIA dos `GoalWeeklyUpdate`
+ * já lançados, não pela soma (ver `computeValorRealizado` em
+ * src/lib/goals-server.ts): somar percentuais de semanas diferentes não tem
+ * significado (5 semanas de ~30% cada não é "150%" de nada). Qualquer outra
+ * unidade (R$, un., kg, min etc.) é cumulativa e soma normalmente — mesma
+ * regra usada tanto para calcular `Goal.valorRealizado` quanto, aqui, para
+ * `computeGoalStatus` saber se o resultado já pode ser considerado
+ * definitivo antes do fim do período (ver comentário longo lá embaixo).
+ */
+export function isAverageGoalUnit(unidade: string): boolean {
+  return unidade === "%";
+}
+
+/**
+ * "Percentual de progresso" de uma meta — a MESMA conta usada tanto para
+ * decidir o status (`computeGoalStatus`) quanto para a barra de progresso/
+ * "% concluído"/texto do relatório de WhatsApp na tela (metas-client.tsx),
+ * de propósito: os dois nunca podem se contradizer (ex.: badge "Concluída"
+ * com a barra em 40%).
+ *
+ * - MAXIMIZAR (comportamento de sempre): `realizado/meta * 100` — quanto
+ *   mais alto o realizado, mais perto (ou além) de 100%.
+ * - MINIMIZAR: fórmula espelhada EM TORNO da meta, não "realizado/meta"
+ *   invertido — ficar exatamente em cima da meta vale 100% (bateu o limite
+ *   certinho); ficar ABAIXO da meta vale MAIS que 100% (sobrou folga: ex.
+ *   CMV com meta 30% e realizado 20% -> 133%); ficar ACIMA da meta vale
+ *   MENOS que 100%, podendo passar de 0% e ficar negativo quanto mais
+ *   estourar o limite. Essa fórmula é o que faz o limiar de "EM_RISCO"
+ *   (>=90%) continuar fazendo sentido pros dois lados sem precisar de
+ *   nenhum caso especial: pra MINIMIZAR, percent>=90 equivale a
+ *   `realizado <= meta * 1,1..` — "perto o bastante de voltar a ficar
+ *   dentro do limite".
+ *
+ * `valorRealizado <= 0` (nenhum lançamento ainda) SEMPRE vale 0% de
+ * progresso, nas duas direções — checado antes de aplicar a fórmula acima.
+ * Pra MAXIMIZAR isso já acontecia sozinho (`0/meta*100 = 0`), mas pra
+ * MINIMIZAR a fórmula espelhada devolveria 200% ("sobrou o dobro de
+ * folga") pra um valor que na verdade significa "sem dado nenhum ainda" —
+ * exatamente o estado inicial de toda meta MINIMIZAR recém-criada (ex.:
+ * CMV antes do primeiro lançamento semanal). Sem esta guarda, uma meta
+ * assim nasceria com a barra/anel de progresso em 100%, no topo do
+ * ranking e contando como "100% concluída" no KPI de média por setor,
+ * mesmo com o status (`computeGoalStatus`) corretamente mostrando "Não
+ * iniciada" — os dois cálculos precisam concordar. Esta função é
+ * compartilhada por toda tela que mostra progresso de meta (ver
+ * metas-client.tsx, metas-overview-client.tsx, portal/inicio/page.tsx),
+ * então a correção vale pras três de uma vez.
+ */
+export function goalProgressPercent(
+  valorRealizado: number,
+  valorMeta: number,
+  direcao: GoalDirectionKey = "MAXIMIZAR"
+): number {
+  if (valorMeta <= 0) return 0;
+  if (valorRealizado <= 0) return 0;
+  if (direcao === "MINIMIZAR") {
+    return ((2 * valorMeta - valorRealizado) / valorMeta) * 100;
+  }
+  return (valorRealizado / valorMeta) * 100;
+}
+
+/**
  * A meta muda de status automaticamente conforme o progresso e o prazo —
  * ver seção 1 do escopo (o status nunca é escolhido manualmente).
+ *
+ * Direção (`direcao`) e agregação (`unidade` — soma vs. média, ver
+ * `isAverageGoalUnit`) são dois eixos INDEPENDENTES/composáveis, não uma
+ * simples inversão de sinal. O que muda entre eles é quando um resultado
+ * pode ser considerado DEFINITIVO antes do fim do período
+ * (`endDate`) — CONCLUIDA cedo só é seguro quando o valor atual não pode
+ * mais "piorar" com lançamentos futuros:
+ *
+ * - MAXIMIZAR + SOMA (ex.: "vender 1350 bebidas no mês" — comportamento de
+ *   sempre, sem nenhuma mudança aqui): a soma só cresce (cada semana nova
+ *   só ADICIONA), então bater a meta (percent >= 100) é irreversível — só
+ *   tende a melhorar dali pra frente. CONCLUIDA imediatamente faz sentido.
+ * - MAXIMIZAR + MÉDIA (ex.: uma taxa de conversão média que soma "%" e
+ *   quanto maior melhor): a média NÃO é irreversível — uma semana ruim mais
+ *   pra frente pode derrubar uma média que hoje já parece ter batido a
+ *   meta. Por isso, mesmo sendo MAXIMIZAR, uma meta de média só vira
+ *   CONCLUIDA (ou NAO_ATINGIDA) quando o período realmente termina — antes
+ *   disso, no máximo EM_RISCO/EM_ANDAMENTO.
+ * - MINIMIZAR + MÉDIA (ex.: CMV — o exemplo que motivou esta mudança):
+ *   mesma razão do item acima (média nunca é definitiva cedo), então
+ *   também só resolve em CONCLUIDA/NAO_ATINGIDA no fim do período. Uma
+ *   meta de CMV com média de 20% na semana 2 (abaixo da meta de 30%, ótimo)
+ *   NÃO vira CONCLUIDA cedo — uma semana ruim na 3 ou 4 ainda pode empurrar
+ *   a média de volta pra cima da meta.
+ * - MINIMIZAR + SOMA (ex.: "gastar no máximo X reais no mês" — um teto
+ *   cumulativo): parece simétrico ao primeiro caso (MAXIMIZAR + SOMA), mas
+ *   NÃO é — nesse caso a soma também só cresce, então o lado que fica
+ *   "travado" (irreversível) é o RUIM (já estourou o teto, gasto já
+ *   aconteceu, não tem como "desgastar"), não o bom: estar dentro do teto
+ *   HOJE não garante nada sobre o total no fim do mês, já que mais semanas
+ *   de gasto ainda podem vir. Ou seja, "já bateu o alvo" (está dentro do
+ *   teto) aqui NÃO é motivo pra CONCLUIDA cedo — ainda que o caso "espelho"
+ *   (estourou o teto cedo) fosse tecnicamente definitivo/irreversível,
+ *   optei por não adiantar NAO_ATINGIDA antes do prazo pra nenhuma
+ *   combinação: o resto do app (texto "Prazo encerrado sem atingir a meta"
+ *   nos alertas da tela, `processGoalAlerts` em goals-server.ts) já assume
+ *   que NAO_ATINGIDA só acontece depois que `endDate` passa, e quebrar essa
+ *   premissa é um escopo maior do que o pedido aqui.
+ *
+ * Resumindo: CONCLUIDA antes do prazo SÓ acontece pra MAXIMIZAR + SOMA
+ * (exatamente o caso que já existia). As outras 3 combinações continuam
+ * em EM_ANDAMENTO/EM_RISCO até `endDate`, e só então (nunca antes) o
+ * resultado final decide entre CONCLUIDA e NAO_ATINGIDA.
  */
 export function computeGoalStatus(
   valorRealizado: number,
   valorMeta: number,
   endDate: Date,
-  now: Date = new Date()
+  now: Date = new Date(),
+  direcao: GoalDirectionKey = "MAXIMIZAR",
+  unidade: string = "R$"
 ): keyof typeof GOAL_STATUS_LABEL {
-  const percent = valorMeta > 0 ? (valorRealizado / valorMeta) * 100 : 0;
-  if (percent >= 100) return "CONCLUIDA";
-  if (now.getTime() > endDate.getTime()) return "NAO_ATINGIDA";
+  const percent = goalProgressPercent(valorRealizado, valorMeta, direcao);
+  const prazoEncerrado = now.getTime() > endDate.getTime();
+  // Só a combinação "de sempre" (MAXIMIZAR + cumulativa) pode travar em
+  // CONCLUIDA antes do prazo — ver racional completo no comentário acima.
+  const podeConcluirCedo = direcao === "MAXIMIZAR" && !isAverageGoalUnit(unidade);
+
+  if (prazoEncerrado) {
+    // Período fechado: o resultado é definitivo pra qualquer combinação —
+    // não existe mais "cedo demais".
+    return percent >= 100 ? "CONCLUIDA" : "NAO_ATINGIDA";
+  }
+  // "Nada foi lançado ainda" precisa ser checado ANTES do `percent >= 100`
+  // abaixo, não depois — sem isso, com `percent` já zerado pra este caso
+  // (ver a guarda `valorRealizado <= 0` dentro de `goalProgressPercent`),
+  // o código cairia direto no `return "EM_ANDAMENTO"` lá embaixo em vez de
+  // reconhecer que não há dado nenhum ainda. Esta checagem aqui não existe
+  // mais pra "consertar" o valor de `percent` (isso já é responsabilidade
+  // de `goalProgressPercent`) — existe pra decidir NAO_INICIADA especificamente,
+  // que é uma classificação de status, não um valor de percentual.
+  if (valorRealizado <= 0) return "NAO_INICIADA";
+  if (percent >= 100) {
+    if (podeConcluirCedo) return "CONCLUIDA";
+    // Já bateu/passou o alvo, mas ainda não é definitivo (média, ou soma
+    // MINIMIZAR só dentro do teto) — continua "em andamento" até o prazo
+    // decidir de vez.
+    return "EM_ANDAMENTO";
+  }
   if (percent >= NEAR_TARGET_THRESHOLD) return "EM_RISCO";
-  if (valorRealizado > 0) return "EM_ANDAMENTO";
-  return "NAO_INICIADA";
+  return "EM_ANDAMENTO";
 }

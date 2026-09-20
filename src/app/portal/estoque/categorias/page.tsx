@@ -16,6 +16,14 @@ export default async function CategoriasPage() {
     include: { _count: { select: { ingredients: true } } },
   });
 
+  // StockCategory não tem empresaId (é um cadastro global, compartilhado por
+  // todas as lojas) e a API /api/estoque/categorias não exige loja específica
+  // ativa para criar/editar — diferente das outras telas de Estoque, aqui não
+  // faz sentido travar por "ctx?.mode === 'single'": travaria uma ação que a
+  // API aceitaria normalmente em modo Grupo Nord. Só a permissão de verdade
+  // importa.
+  const canCreate = await hasModulePermission(session.user.id, "estoque", "canCreate");
+
   return (
     <PageContainer title="Estoque" subtitle="Categorias">
       <div className="space-y-6">
@@ -31,6 +39,7 @@ export default async function CategoriasPage() {
             active: c.active,
             produtos: c._count.ingredients,
           }))}
+          canCreate={canCreate}
         />
       </div>
     </PageContainer>

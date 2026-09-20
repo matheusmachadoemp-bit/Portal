@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
-import * as XLSX from "xlsx";
 import type { ProductCategory } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
+import { readWorkbookRows } from "@/lib/xlsx-import";
 
 const INSERT_CHUNK_SIZE = 1000;
 
@@ -44,12 +44,6 @@ function mapCategoria(raw: string): ProductCategory | null {
   return null;
 }
 
-function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, raw: true, defval: "" });
-}
-
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -83,7 +77,7 @@ export async function POST(req: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   let rows: (string | number)[][];
   try {
-    rows = rowsFromWorkbook(buffer);
+    rows = await readWorkbookRows(buffer);
   } catch {
     return NextResponse.json({ error: "Não foi possível ler o arquivo. Confira se é um .xlsx válido." }, { status: 400 });
   }

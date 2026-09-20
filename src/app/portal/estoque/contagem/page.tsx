@@ -14,7 +14,8 @@ export default async function ContagemEstoquePage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageEstoque;
 
   const [semanais, mensais] = await Promise.all([
     prisma.stockCount.findMany({

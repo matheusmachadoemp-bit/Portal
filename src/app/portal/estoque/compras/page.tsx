@@ -14,7 +14,8 @@ export default async function ComprasPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageEstoque;
 
   const [purchases, suppliers, ingredients] = await Promise.all([
     prisma.purchase.findMany({

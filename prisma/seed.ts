@@ -105,6 +105,7 @@ const CATEGORIES = [
       { key: "ponto-eletronico", name: "Ponto Eletrônico", icon: "Clock" },
       { key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" },
       { key: "ferias", name: "Férias", icon: "Palmtree" },
+      { key: "escala-folgas", name: "Escala de Folgas", icon: "CalendarDays" },
       { key: "uniformes", name: "Uniformes", icon: "Shirt" },
       { key: "documentos", name: "Documentos", icon: "FolderOpen" },
       { key: "pesquisa-satisfacao", name: "Pesquisa de Satisfação", icon: "Smile" },
@@ -1127,9 +1128,20 @@ async function main() {
           valorMeta: 25,
           valorRealizado: 29,
           unidade: "min",
+          // "Reduzir" no nome já entrega: quanto MENOS minutos por mesa,
+          // melhor — ver enum GoalDirection/computeGoalStatus em
+          // src/lib/goals.ts.
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
-          status: "EM_RISCO",
+          // `status` é sempre um valor fixo aqui (o seed não chama
+          // `computeGoalStatus`, só ilustra estados variados pra
+          // demonstração/telas) — mas precisa BATER com o que a função de
+          // verdade calcularia pra este valorRealizado/valorMeta/direcao,
+          // senão um ambiente novo já nasce parecendo ter uma regressão.
+          // 29min de realizado numa meta MINIMIZAR de 25min -> percent
+          // ~84% (< 90% do limiar de EM_RISCO) -> EM_ANDAMENTO.
+          status: "EM_ANDAMENTO",
           createdById: admin.id,
         },
         {
@@ -1141,9 +1153,16 @@ async function main() {
           valorMeta: 30,
           valorRealizado: 32,
           unidade: "%",
+          // Exemplo que motivou o campo `direcao`: CMV é "quanto menor,
+          // melhor", e unidade "%" já faz `valorRealizado` ser uma MÉDIA
+          // entre as semanas lançadas (ver isAverageGoalUnit em
+          // src/lib/goals.ts), não uma soma.
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
-          status: "EM_ANDAMENTO",
+          // 32% de realizado numa meta MINIMIZAR de 30% -> percent ~93%
+          // (>= 90% do limiar) -> EM_RISCO (ver nota de `status` acima).
+          status: "EM_RISCO",
           createdById: admin.id,
         },
         {
@@ -1155,9 +1174,15 @@ async function main() {
           valorMeta: 35,
           valorRealizado: 33,
           unidade: "min",
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
-          status: "CONCLUIDA",
+          // 33min de realizado numa meta MINIMIZAR de 35min -> percent
+          // ~106% (>= 100%), mas MINIMIZAR + soma não conclui cedo (só
+          // MAXIMIZAR + soma pode, ver computeGoalStatus) -> EM_ANDAMENTO,
+          // não CONCLUIDA, enquanto o período (mês corrente) ainda não
+          // terminou (ver nota de `status` acima).
+          status: "EM_ANDAMENTO",
           createdById: admin.id,
         },
         {
@@ -1183,8 +1208,12 @@ async function main() {
           valorMeta: 35,
           valorRealizado: 37,
           unidade: "%",
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
+          // 37% de realizado numa meta MINIMIZAR de 35% -> percent ~94%
+          // (>= 90% do limiar) -> EM_RISCO (ver nota de `status` na 1ª
+          // meta MINIMIZAR deste bloco, "Reduzir tempo de atendimento").
           status: "EM_RISCO",
           createdById: admin.id,
         },
@@ -2263,6 +2292,47 @@ async function main() {
 
     await prisma.employeeCargo.createMany({ data: [...cargosCatalogo.values()], skipDuplicates: true });
     await prisma.employeeSetor.createMany({ data: [...setoresCatalogo.values()], skipDuplicates: true });
+
+    // --- Escala de Folgas: catálogo de tipos de folga (DayOffType, global) ---
+    // "Férias"/"Afastamento" são reservados (isSystem = true): aparecem na lista do modal
+    // "Adicionar folga", mas ao serem escolhidos a rota grava em Vacation/Absence, não em
+    // DayOffEntry — ver comentário no bloco "RH — ESCALA DE FOLGAS" em schema.prisma. `update: {}`
+    // de propósito: depois do primeiro seed, nome/cor são customizáveis pelo admin/RH na tela de
+    // configuração (fase futura) — rodar o seed de novo nunca deve reverter uma customização.
+    const DAY_OFF_TYPES: {
+      key: string;
+      nome: string;
+      kind: "FOLGA" | "FERIAS" | "AFASTAMENTO";
+      cor: string;
+      ordem: number;
+      isSystem?: boolean;
+    }[] = [
+      { key: "folga-semanal", nome: "Folga Semanal", kind: "FOLGA", cor: "#2952E3", ordem: 0 },
+      { key: "folga-do-mes", nome: "Folga do Mês", kind: "FOLGA", cor: "#8b5cf6", ordem: 1 },
+      { key: "banco-de-horas", nome: "Banco de Horas", kind: "FOLGA", cor: "#0ea5e9", ordem: 2 },
+      { key: "compensacao", nome: "Compensação", kind: "FOLGA", cor: "#14b8a6", ordem: 3 },
+      { key: "ferias", nome: "Férias", kind: "FERIAS", cor: "#f59e0b", ordem: 4, isSystem: true },
+      { key: "afastamento", nome: "Afastamento", kind: "AFASTAMENTO", cor: "#ef4444", ordem: 5, isSystem: true },
+    ];
+    for (const t of DAY_OFF_TYPES) {
+      await prisma.dayOffType.upsert({
+        where: { key: t.key },
+        update: {},
+        create: { key: t.key, nome: t.nome, kind: t.kind, cor: t.cor, ordem: t.ordem, isSystem: t.isSystem ?? false },
+      });
+    }
+
+    // --- Escala de Folgas: cobertura mínima por setor (SectorCoverageConfig) ---
+    // Nasce zerada/desativada pra cada setor já cadastrado (mesmo Map `setoresCatalogo` acima) —
+    // existe a linha pronta pra configurar na tela, mas nada é validado (nenhum aviso de
+    // cobertura insuficiente aparece) até o RH/admin definir um mínimo de verdade e ativar.
+    for (const { empresaId, nome: setor } of setoresCatalogo.values()) {
+      await prisma.sectorCoverageConfig.upsert({
+        where: { empresaId_setor: { empresaId, setor } },
+        update: {},
+        create: { empresaId, setor, quantidadeMinima: 0, ativo: false },
+      });
+    }
   }
 
   console.log("Seed concluído.");

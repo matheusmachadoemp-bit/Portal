@@ -406,7 +406,7 @@ export function InsumosClient({
       <ConfirmDialog
         open={!!confirmDeleteId}
         title="Excluir insumo"
-        message="Tem certeza que deseja excluir este insumo? Essa ação não pode ser desfeita. Se ele estiver em uso em alguma ficha técnica, compra, perda, transferência ou contagem de estoque, a exclusão será bloqueada e você poderá desativá-lo em vez de excluir."
+        message="Tem certeza que deseja excluir este insumo? Essa ação não pode ser desfeita. Se ele estiver em uso em alguma ficha técnica, ou tiver histórico de compra, perda, transferência, contagem ou movimentação de estoque, a exclusão será bloqueada e você poderá desativá-lo em vez de excluir."
         onConfirm={doDelete}
         onCancel={() => setConfirmDeleteId(null)}
         confirmLabel="Excluir"

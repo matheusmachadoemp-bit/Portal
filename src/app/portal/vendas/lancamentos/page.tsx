@@ -15,7 +15,8 @@ export default async function LancamentosPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  const canManageVendas = await hasModulePermission(session.user.id, "vendas", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageVendas;
   const range = resolveRollingPeriod("mes-atual");
 
   const [sales, products, employees] = await Promise.all([

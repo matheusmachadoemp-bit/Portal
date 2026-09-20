@@ -105,6 +105,14 @@ model User {
   occurrences                        Occurrence[]                        @relation("OccurrenceCreatedBy")
   rhFinanceEntries                   EmployeeFinanceEntry[]              @relation("RhFinanceCreatedBy")
   vacationsCreated                   Vacation[]                          @relation("VacationCreatedBy")
+  absencesCreated                    Absence[]                           @relation("AbsenceCreatedBy")
+  schedulePeriodsPublicadas          SchedulePeriod[]                    @relation("SchedulePeriodPublicadoPor")
+  dayOffEntriesCreated               DayOffEntry[]                       @relation("DayOffEntryCreatedBy")
+  dayOffEntriesAutorizadas           DayOffEntry[]                       @relation("DayOffEntryAutorizadoPor")
+  shiftSwapRequestsSolicitados       ShiftSwapRequest[]                  @relation("SwapSolicitante")
+  shiftSwapRequestsRecebidos         ShiftSwapRequest[]                  @relation("SwapDestinatario")
+  shiftSwapRequestsAprovados         ShiftSwapRequest[]                  @relation("SwapAprovador")
+  scheduleChangeLogsAlterados        ScheduleChangeLog[]                 @relation("ScheduleChangeLogAlteradoPor")
   uniformDeliveriesCreated           UniformDelivery[]                   @relation("UniformCreatedBy")
   employeeDocumentsCreated           EmployeeDocument[]                  @relation("EmployeeDocumentCreatedBy")
   payables                           Payable[]
@@ -358,6 +366,13 @@ model Empresa {
   fechamentoOcorrencias              FechamentoOcorrencia[]
   employeeCargos                     EmployeeCargo[]
   employeeSetores                    EmployeeSetor[]
+  absences                           Absence[]
+  storeClosedWeekdays                StoreClosedWeekday[]
+  sectorCoverageConfigs              SectorCoverageConfig[]
+  schedulePeriods                    SchedulePeriod[]
+  dayOffEntries                      DayOffEntry[]
+  shiftSwapRequests                  ShiftSwapRequest[]
+  scheduleChangeLogs                 ScheduleChangeLog[]
 }
 
 model UserEmpresaAccess {
@@ -1258,37 +1273,54 @@ enum GoalStatus {
   NAO_ATINGIDA
 }
 
+/// Direção de uma meta — define o que "progredir" significa:
+/// - MAXIMIZAR (padrão): realizado MAIOR é melhor (vender mais, faturar
+///   mais). Comportamento de sempre, preservado pelo `@default` abaixo pra
+///   toda meta já cadastrada antes deste campo existir.
+/// - MINIMIZAR: realizado MENOR é melhor (ex.: CMV, % de cancelamento,
+///   turnover) — o objetivo é ficar EM OU ABAIXO do valor da meta, não
+///   acima. Ver `computeGoalStatus`/`goalProgressPercent` em
+///   src/lib/goals.ts pra como isso muda o cálculo de status e de
+///   progresso (não é só "inverter o sinal" — ver comentário lá).
+enum GoalDirection {
+  MAXIMIZAR
+  MINIMIZAR
+}
+
 model Goal {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   empresaId      String
-  empresa        Empresa      @relation(fields: [empresaId], references: [id])
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
   name           String
   category       GoalCategory
   responsavel    String
   description    String?
   indicador      String?
-  valorMeta      Float        @default(0)
-  /// Cache calculado: sempre igual à soma de `GoalWeeklyUpdate.valor` desta
-  /// meta (ver `recomputeGoalRealizado` em src/lib/goals-server.ts) — não é
-  /// mais editado diretamente por nenhuma rota. Mantido como coluna própria
-  /// (em vez de um SUM em toda leitura) porque várias telas/rotas já leem
-  /// `Goal.valorRealizado` direto (painel "Progresso das metas" da Início,
-  /// "Minha rotina de hoje", o job de alerta de meta não atingida) e não
-  /// precisam saber nada sobre lançamentos semanais para continuar
-  /// funcionando sem alteração.
-  valorRealizado Float        @default(0)
-  unidade        String       @default("R$")
+  valorMeta      Float         @default(0)
+  /// Cache calculado: soma (metas cumulativas) ou média (metas em "%" —
+  /// ver `isAverageGoalUnit` em src/lib/goals.ts) de `GoalWeeklyUpdate.valor`
+  /// desta meta (ver `computeValorRealizado`/`recomputeGoalRealizado` em
+  /// src/lib/goals-server.ts) — não é mais editado diretamente por nenhuma
+  /// rota. Mantido como coluna própria (em vez de recalcular em toda
+  /// leitura) porque várias telas/rotas já leem `Goal.valorRealizado` direto
+  /// (painel "Progresso das metas" da Início, "Minha rotina de hoje", o job
+  /// de alerta de meta não atingida) e não precisam saber nada sobre
+  /// lançamentos semanais para continuar funcionando sem alteração.
+  valorRealizado Float         @default(0)
+  unidade        String        @default("R$")
+  /// Ver enum `GoalDirection` acima.
+  direcao        GoalDirection @default(MAXIMIZAR)
   startDate      DateTime
   endDate        DateTime
   bonificacao    String?
-  status         GoalStatus   @default(NAO_INICIADA)
+  status         GoalStatus    @default(NAO_INICIADA)
   observacoes    String?
   planoDeAcao    String?
   createdById    String
-  createdBy      User         @relation(fields: [createdById], references: [id])
-  alertaEnviado  Boolean      @default(false)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdBy      User          @relation(fields: [createdById], references: [id])
+  alertaEnviado  Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   attachments   GoalAttachment[]
   notifications Notification[]
@@ -1633,6 +1665,9 @@ model Employee {
   uniformDeliveries       UniformDelivery[]
   documents               EmployeeDocument[]
   satisfactionInvitations SatisfactionInvitation[]
+  absences                Absence[]
+  dayOffEntries           DayOffEntry[]
+  scheduleChangeLogs      ScheduleChangeLog[]
 
   @@index([empresaId])
 }
@@ -1850,6 +1885,262 @@ model Vacation {
 
   @@index([employeeId])
   @@index([empresaId, periodoAquisitivoInicio])
+}
+
+// ---------------------------------------------------------------------------
+// RH — AFASTAMENTOS
+//
+// Até aqui "afastamento" só existia como `Employee.status = AFASTADO` — um flag solto, sem data
+// de início/fim, motivo ou histórico (achado registrado na investigação da Escala de Folgas).
+// `Absence` nasce com o mesmo desenho de `Vacation` (datas + status própria) de propósito: dá ao
+// afastamento a mesma estrutura que férias já tem, e vira a fonte de dado que a Escala de Folgas
+// lê pro calendário (nunca duplica em DayOffEntry, mesmo racional já usado pra Vacation/férias).
+// ---------------------------------------------------------------------------
+
+enum AbsenceStatus {
+  PLANEJADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+model Absence {
+  id          String        @id @default(cuid())
+  employeeId  String
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId   String
+  empresa     Empresa       @relation(fields: [empresaId], references: [id])
+  dataInicio  DateTime
+  dataFim     DateTime? // nulo = afastamento em aberto, sem previsão de retorno ainda
+  motivo      String?
+  status      AbsenceStatus @default(PLANEJADO)
+  observacao  String?
+  createdById String
+  createdBy   User          @relation("AbsenceCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([employeeId])
+  @@index([empresaId, dataInicio])
+}
+
+// ---------------------------------------------------------------------------
+// RH — ESCALA DE FOLGAS
+//
+// Calendário visual de folgas da equipe (RH > Escala de Folgas). Desenhado na investigação
+// registrada nesta mesma sessão (proposta revisada e aprovada pelo líder antes desta migração).
+//
+// `DayOffType` é GLOBAL (sem empresaId) — vocabulário igual nas duas lojas do Grupo Nord ("folga
+// semanal"/"férias"/"banco de horas" significam a mesma coisa em qualquer loja), diferente de
+// `EmployeeCargo`/`EmployeeSetor` (que variam por tipo de operação) — mesmo racional já usado por
+// `FinancialCategory`. As 2 linhas reservadas (`kind` FERIAS/AFASTAMENTO, `isSystem = true`)
+// existem só pra aparecer na lista de tipos do modal "Adicionar folga": ao serem escolhidas, a
+// rota grava em `Vacation`/`Absence` (não em `DayOffEntry`) — nunca duplica dado. Só linhas
+// `kind = FOLGA` geram `DayOffEntry` de verdade; a tela de administração só cria/edita/exclui
+// linhas `kind = FOLGA` (as 2 reservadas nascem só pelo seed).
+//
+// `SchedulePeriod` é RASCUNHO enquanto a escala do mês está sendo montada e vira PUBLICADA só
+// depois que o gerente confirma — colaborador comum só enxerga `DayOffEntry` de um mês já
+// PUBLICADA (Administrador/Gerente/Líder enxergam RASCUNHO também). Nasce sozinha (upsert) na
+// primeira folga cadastrada pra aquele mês/loja, não precisa ser criada à mão antes.
+//
+// "Banco de horas" aqui é só mais um `DayOffType` (rótulo) — não cruza com o cálculo já existente
+// em `src/lib/rh-helpers.ts` (que só soma `TimeEntry.horasTrabalhadas` na hora de exibir, nunca
+// persiste um saldo). Validar "o colaborador tem saldo suficiente pra essa folga" fica pra uma
+// fase futura, fora do escopo desta.
+// ---------------------------------------------------------------------------
+
+enum DayOffTypeKind {
+  FOLGA
+  FERIAS
+  AFASTAMENTO
+}
+
+model DayOffType {
+  id        String         @id @default(cuid())
+  key       String         @unique
+  nome      String
+  kind      DayOffTypeKind @default(FOLGA)
+  cor       String         @default("#2952E3")
+  isSystem  Boolean        @default(false)
+  ativo     Boolean        @default(true)
+  ordem     Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  dayOffEntries DayOffEntry[]
+}
+
+/// Dia fixo da semana em que a loja não funciona (ex.: terça = loja fechada) — nesse dia o
+/// calendário mostra "LOJA FECHADA" pra todo mundo, sem precisar de folga individual cadastrada.
+/// `weekday`: 0 = domingo .. 6 = sábado, mesmo vocabulário de `ProductionWeekdayWeight`/
+/// `spWeekday` (src/lib/checklist.ts). Mais de um dia fechado por loja é permitido.
+model StoreClosedWeekday {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  weekday   Int
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([empresaId, weekday])
+  @@index([empresaId])
+}
+
+/// Quantidade mínima recomendada de colaboradores escalados por setor+loja — usada pra validar
+/// (com aviso, nunca bloqueando) a criação de uma folga nova e pro card "Cobertura por setor".
+/// `setor` é texto livre (mesmo valor de `Employee.setor`/`EmployeeSetor.nome`), não FK — mesmo
+/// motivo já documentado em `Employee.cargo`/`.setor`: setor já é validado contra `EmployeeSetor`
+/// na origem, uma FK aqui duplicaria essa validação sem ganho real.
+model SectorCoverageConfig {
+  id               String   @id @default(cuid())
+  empresaId        String
+  empresa          Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  setor            String
+  quantidadeMinima Int      @default(0)
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([empresaId, setor])
+  @@index([empresaId])
+}
+
+enum SchedulePeriodStatus {
+  RASCUNHO
+  PUBLICADA
+}
+
+model SchedulePeriod {
+  id             String               @id @default(cuid())
+  empresaId      String
+  empresa        Empresa              @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  mesReferencia  DateTime // dia 1 do mês, 00:00 America/Sao_Paulo (spStartOfDay)
+  status         SchedulePeriodStatus @default(RASCUNHO)
+  publicadoPorId String?
+  publicadoPor   User?                @relation("SchedulePeriodPublicadoPor", fields: [publicadoPorId], references: [id])
+  publicadoEm    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  dayOffEntries DayOffEntry[]
+  notifications Notification[]
+
+  @@unique([empresaId, mesReferencia])
+  @@index([empresaId])
+}
+
+/// Uma folga de um colaborador num dia específico (1 linha por colaborador+dia, mesmo padrão de
+/// `TimeEntry`). `autorizadoPorId`/`autorizadoEm` só são preenchidos quando a folga é salva apesar
+/// de deixar o setor abaixo da cobertura mínima configurada (`SectorCoverageConfig`) — o aviso
+/// nunca bloqueia o salvamento (pedido explícito do usuário), só registra quem autorizou mesmo
+/// assim.
+model DayOffEntry {
+  id               String         @id @default(cuid())
+  empresaId        String
+  empresa          Empresa        @relation(fields: [empresaId], references: [id])
+  employeeId       String
+  employee         Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  schedulePeriodId String
+  schedulePeriod   SchedulePeriod @relation(fields: [schedulePeriodId], references: [id])
+  dayOffTypeId     String
+  dayOffType       DayOffType     @relation(fields: [dayOffTypeId], references: [id])
+  date             DateTime
+  observacao       String?
+  autorizadoPorId  String?
+  autorizadoPor    User?          @relation("DayOffEntryAutorizadoPor", fields: [autorizadoPorId], references: [id])
+  autorizadoEm     DateTime?
+  createdById      String
+  createdBy        User           @relation("DayOffEntryCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  changeLogs       ScheduleChangeLog[]
+  swapSolicitante  ShiftSwapRequest[]  @relation("SwapSolicitanteEntry")
+  swapDestinatario ShiftSwapRequest[]  @relation("SwapDestinatarioEntry")
+  notifications    Notification[]
+
+  @@unique([employeeId, date])
+  @@index([empresaId, date])
+  @@index([schedulePeriodId])
+  @@index([dayOffTypeId])
+}
+
+enum ShiftSwapRequestStatus {
+  SOLICITADA
+  ACEITA_DESTINATARIO
+  RECUSADA_DESTINATARIO
+  APROVADA_GERENTE
+  REPROVADA_GERENTE
+  CANCELADA
+}
+
+/// Solicitação de troca de folga entre 2 colaboradores: solicitante pede -> destinatário aceita/
+/// recusa -> se aceitar, vai pro gerente aprovar/reprovar -> só aí o calendário atualiza de
+/// verdade (a troca em si — mexer nas 2 `DayOffEntry` — só acontece na aprovação do gerente, nunca
+/// antes). `solicitanteId`/`destinatarioId`/`aprovadorId` referenciam `User` (não `Employee`):
+/// quem interage com esse fluxo precisa estar logado pra aceitar/recusar/aprovar, mesmo racional
+/// já usado no Fechamento do Dia (`FechamentoTipoResposta.COLABORADOR` referencia `User` — "todo
+/// colaborador tem login" foi decisão do usuário) — um `Employee` sem `User` vinculado não
+/// participa de troca.
+model ShiftSwapRequest {
+  id                  String                 @id @default(cuid())
+  empresaId           String
+  empresa             Empresa                @relation(fields: [empresaId], references: [id])
+  solicitanteId       String
+  solicitante         User                   @relation("SwapSolicitante", fields: [solicitanteId], references: [id])
+  solicitanteEntryId  String
+  solicitanteEntry    DayOffEntry            @relation("SwapSolicitanteEntry", fields: [solicitanteEntryId], references: [id])
+  destinatarioId      String
+  destinatario        User                   @relation("SwapDestinatario", fields: [destinatarioId], references: [id])
+  destinatarioEntryId String
+  destinatarioEntry   DayOffEntry            @relation("SwapDestinatarioEntry", fields: [destinatarioEntryId], references: [id])
+  status              ShiftSwapRequestStatus @default(SOLICITADA)
+  motivo              String?
+  respondidoEm        DateTime?
+  motivoRecusa        String?
+  aprovadorId         String?
+  aprovador           User?                  @relation("SwapAprovador", fields: [aprovadorId], references: [id])
+  aprovadoEm          DateTime?
+  motivoReprovacao    String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  notifications Notification[]
+
+  @@index([empresaId, status])
+  @@index([solicitanteId])
+  @@index([destinatarioId])
+}
+
+/// Histórico estruturado de alteração de folga DEPOIS que a escala do mês já foi publicada:
+/// "nunca sobrescreve silenciosamente". Uma linha por criação/edição/cancelamento de
+/// `DayOffEntry` ocorrida com o `SchedulePeriod` correspondente já em PUBLICADA — enquanto ainda
+/// RASCUNHO, editar/cancelar não gera log (é só montagem normal da escala, ver
+/// `src/lib/escala-folgas-server.ts` na Fase 3). `dayOffEntryId` é nulável com `onDelete: SetNull`
+/// de propósito: se a folga original for cancelada depois, o histórico sobrevive (os campos de
+/// snapshot abaixo já guardam o que importa).
+model ScheduleChangeLog {
+  id               String       @id @default(cuid())
+  empresaId        String
+  empresa          Empresa      @relation(fields: [empresaId], references: [id])
+  employeeId       String
+  employee         Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  dayOffEntryId    String?
+  dayOffEntry      DayOffEntry? @relation(fields: [dayOffEntryId], references: [id], onDelete: SetNull)
+  acao             String // "CRIACAO" | "EDICAO" | "CANCELAMENTO"
+  tipoAnteriorNome String?
+  dataAnterior     DateTime?
+  tipoNovoNome     String?
+  dataNova         DateTime?
+  motivo           String?
+  alteradoPorId    String
+  alteradoPor      User         @relation("ScheduleChangeLogAlteradoPor", fields: [alteradoPorId], references: [id])
+  createdAt        DateTime     @default(now())
+
+  @@index([employeeId])
+  @@index([empresaId, createdAt])
+  @@index([dayOffEntryId])
 }
 
 // ---------------------------------------------------------------------------
@@ -2282,7 +2573,15 @@ enum StockMovementType {
 model StockMovement {
   id            String            @id @default(cuid())
   ingredientId  String
-  ingredient    Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  /// `onDelete: Restrict` (não `Cascade`) de propósito, igual às tabelas irmãs
+  /// (`ProductIngredient`, `PurchaseItem`, `Loss`, `TransferItem`,
+  /// `StockCountItem`) — ver o comentário na rota DELETE de
+  /// `src/app/api/ficha-tecnica/insumos/[id]/route.ts`. Achado: excluir um
+  /// insumo com histórico de movimentação de estoque mas sem nenhuma outra
+  /// relação Restrict (ex.: um insumo vendido direto como item, nunca usado
+  /// como ingrediente de ficha técnica) retornava 200 OK e apagava esse
+  /// histórico em cascata, silenciosamente, sem avisar ninguém.
+  ingredient    Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
   empresaId     String
   empresa       Empresa           @relation(fields: [empresaId], references: [id])
   type          StockMovementType
@@ -3830,6 +4129,15 @@ model Notification {
   purchase               Purchase?             @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   fechamentoOcorrenciaId String?
   fechamentoOcorrencia   FechamentoOcorrencia? @relation(fields: [fechamentoOcorrenciaId], references: [id], onDelete: Cascade)
+  /// Escala de Folgas (RH) — escala publicada / mês seguinte não publicado ainda.
+  schedulePeriodId       String?
+  schedulePeriod         SchedulePeriod?       @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  /// Escala de Folgas (RH) — lembrete de folga amanhã / conflito de escala.
+  dayOffEntryId          String?
+  dayOffEntry            DayOffEntry?          @relation(fields: [dayOffEntryId], references: [id], onDelete: Cascade)
+  /// Escala de Folgas (RH) — solicitação/aceite/recusa/aprovação/reprovação de troca de folga.
+  shiftSwapRequestId     String?
+  shiftSwapRequest       ShiftSwapRequest?     @relation(fields: [shiftSwapRequestId], references: [id], onDelete: Cascade)
   read                   Boolean               @default(false)
   createdAt              DateTime              @default(now())
 
