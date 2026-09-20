@@ -60,11 +60,14 @@ export function LancamentosClient({
   products,
   employees,
   canCreate,
+  isGrupoNordMode,
 }: {
   initialSales: SaleDTO[];
   products: ProductOption[];
   employees: EmployeeOption[];
   canCreate: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode: boolean;
 }) {
   const [sales, setSales] = useState(initialSales);
   const [showForm, setShowForm] = useState(false);
@@ -208,7 +211,9 @@ export function LancamentosClient({
     >
       {!canCreate && (
         <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas."
+            : "Seu perfil de permissão não permite lançar vendas neste módulo."}
         </p>
       )}
 

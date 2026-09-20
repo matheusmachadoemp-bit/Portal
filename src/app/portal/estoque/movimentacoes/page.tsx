@@ -45,7 +45,12 @@ export default async function MovimentacoesPage() {
   return (
     <PageContainer title="Estoque" subtitle="Movimentações">
       <div className="space-y-6">
-        <MovimentacoesClient initialMovements={serializedMovements} ingredients={serializedIngredients} canCreate={canCreate} />
+        <MovimentacoesClient
+          initialMovements={serializedMovements}
+          ingredients={serializedIngredients}
+          canCreate={canCreate}
+          isGrupoNordMode={ctx?.mode !== "single"}
+        />
       </div>
     </PageContainer>
   );

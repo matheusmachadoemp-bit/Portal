@@ -54,6 +54,7 @@ export default async function LancamentosPage() {
           products={products.map((p) => ({ id: p.id, name: p.name, category: p.category, precoVenda: p.precoVenda }))}
           employees={employees.map((e) => ({ id: e.id, name: e.name }))}
           canCreate={canCreate}
+          isGrupoNordMode={ctx?.mode !== "single"}
         />
       </div>
     </PageContainer>

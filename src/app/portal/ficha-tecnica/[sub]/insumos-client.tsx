@@ -51,11 +51,14 @@ export function InsumosClient({
   categories,
   suppliers,
   canCreate = true,
+  isGrupoNordMode = true,
 }: {
   initialIngredients: IngredientDTO[];
   categories: CategoryDTO[];
   suppliers: SupplierDTO[];
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
 }) {
   const [ingredients, setIngredients] = useState(initialIngredients);
   const [showForm, setShowForm] = useState(false);
@@ -202,8 +205,9 @@ export function InsumosClient({
     >
       {!canCreate && (
         <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          cadastrar ou editar insumos.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para cadastrar ou editar insumos."
+            : "Seu perfil de permissão não permite cadastrar ou editar insumos neste módulo."}
         </p>
       )}
       {priceAlert && (

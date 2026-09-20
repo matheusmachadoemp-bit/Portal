@@ -29,10 +29,13 @@ export function MovimentacoesClient({
   initialMovements,
   ingredients,
   canCreate,
+  isGrupoNordMode,
 }: {
   initialMovements: MovementDTO[];
   ingredients: IngredientOption[];
   canCreate: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode: boolean;
 }) {
   const [movements, setMovements] = useState(initialMovements);
   const [ingredientFilter, setIngredientFilter] = useState("");
@@ -110,8 +113,9 @@ export function MovimentacoesClient({
     >
       {!canCreate && (
         <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          registrar movimentações.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para registrar movimentações."
+            : "Seu perfil de permissão não permite registrar movimentações neste módulo."}
         </p>
       )}
 
