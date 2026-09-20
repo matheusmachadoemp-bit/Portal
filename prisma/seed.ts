@@ -1127,9 +1127,20 @@ async function main() {
           valorMeta: 25,
           valorRealizado: 29,
           unidade: "min",
+          // "Reduzir" no nome já entrega: quanto MENOS minutos por mesa,
+          // melhor — ver enum GoalDirection/computeGoalStatus em
+          // src/lib/goals.ts.
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
-          status: "EM_RISCO",
+          // `status` é sempre um valor fixo aqui (o seed não chama
+          // `computeGoalStatus`, só ilustra estados variados pra
+          // demonstração/telas) — mas precisa BATER com o que a função de
+          // verdade calcularia pra este valorRealizado/valorMeta/direcao,
+          // senão um ambiente novo já nasce parecendo ter uma regressão.
+          // 29min de realizado numa meta MINIMIZAR de 25min -> percent
+          // ~84% (< 90% do limiar de EM_RISCO) -> EM_ANDAMENTO.
+          status: "EM_ANDAMENTO",
           createdById: admin.id,
         },
         {
@@ -1141,9 +1152,16 @@ async function main() {
           valorMeta: 30,
           valorRealizado: 32,
           unidade: "%",
+          // Exemplo que motivou o campo `direcao`: CMV é "quanto menor,
+          // melhor", e unidade "%" já faz `valorRealizado` ser uma MÉDIA
+          // entre as semanas lançadas (ver isAverageGoalUnit em
+          // src/lib/goals.ts), não uma soma.
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
-          status: "EM_ANDAMENTO",
+          // 32% de realizado numa meta MINIMIZAR de 30% -> percent ~93%
+          // (>= 90% do limiar) -> EM_RISCO (ver nota de `status` acima).
+          status: "EM_RISCO",
           createdById: admin.id,
         },
         {
@@ -1155,9 +1173,15 @@ async function main() {
           valorMeta: 35,
           valorRealizado: 33,
           unidade: "min",
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
-          status: "CONCLUIDA",
+          // 33min de realizado numa meta MINIMIZAR de 35min -> percent
+          // ~106% (>= 100%), mas MINIMIZAR + soma não conclui cedo (só
+          // MAXIMIZAR + soma pode, ver computeGoalStatus) -> EM_ANDAMENTO,
+          // não CONCLUIDA, enquanto o período (mês corrente) ainda não
+          // terminou (ver nota de `status` acima).
+          status: "EM_ANDAMENTO",
           createdById: admin.id,
         },
         {
@@ -1183,8 +1207,12 @@ async function main() {
           valorMeta: 35,
           valorRealizado: 37,
           unidade: "%",
+          direcao: "MINIMIZAR",
           startDate: start,
           endDate: end,
+          // 37% de realizado numa meta MINIMIZAR de 35% -> percent ~94%
+          // (>= 90% do limiar) -> EM_RISCO (ver nota de `status` na 1ª
+          // meta MINIMIZAR deste bloco, "Reduzir tempo de atendimento").
           status: "EM_RISCO",
           createdById: admin.id,
         },

@@ -29,6 +29,7 @@ export default async function MetasOverviewPage() {
     valorMeta: g.valorMeta,
     valorRealizado: g.valorRealizado,
     unidade: g.unidade,
+    direcao: g.direcao,
     startDate: g.startDate.toISOString(),
     endDate: g.endDate.toISOString(),
     bonificacao: g.bonificacao,

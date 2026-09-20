@@ -1258,37 +1258,54 @@ enum GoalStatus {
   NAO_ATINGIDA
 }
 
+/// Direção de uma meta — define o que "progredir" significa:
+/// - MAXIMIZAR (padrão): realizado MAIOR é melhor (vender mais, faturar
+///   mais). Comportamento de sempre, preservado pelo `@default` abaixo pra
+///   toda meta já cadastrada antes deste campo existir.
+/// - MINIMIZAR: realizado MENOR é melhor (ex.: CMV, % de cancelamento,
+///   turnover) — o objetivo é ficar EM OU ABAIXO do valor da meta, não
+///   acima. Ver `computeGoalStatus`/`goalProgressPercent` em
+///   src/lib/goals.ts pra como isso muda o cálculo de status e de
+///   progresso (não é só "inverter o sinal" — ver comentário lá).
+enum GoalDirection {
+  MAXIMIZAR
+  MINIMIZAR
+}
+
 model Goal {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   empresaId      String
-  empresa        Empresa      @relation(fields: [empresaId], references: [id])
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
   name           String
   category       GoalCategory
   responsavel    String
   description    String?
   indicador      String?
-  valorMeta      Float        @default(0)
-  /// Cache calculado: sempre igual à soma de `GoalWeeklyUpdate.valor` desta
-  /// meta (ver `recomputeGoalRealizado` em src/lib/goals-server.ts) — não é
-  /// mais editado diretamente por nenhuma rota. Mantido como coluna própria
-  /// (em vez de um SUM em toda leitura) porque várias telas/rotas já leem
-  /// `Goal.valorRealizado` direto (painel "Progresso das metas" da Início,
-  /// "Minha rotina de hoje", o job de alerta de meta não atingida) e não
-  /// precisam saber nada sobre lançamentos semanais para continuar
-  /// funcionando sem alteração.
-  valorRealizado Float        @default(0)
-  unidade        String       @default("R$")
+  valorMeta      Float         @default(0)
+  /// Cache calculado: soma (metas cumulativas) ou média (metas em "%" —
+  /// ver `isAverageGoalUnit` em src/lib/goals.ts) de `GoalWeeklyUpdate.valor`
+  /// desta meta (ver `computeValorRealizado`/`recomputeGoalRealizado` em
+  /// src/lib/goals-server.ts) — não é mais editado diretamente por nenhuma
+  /// rota. Mantido como coluna própria (em vez de recalcular em toda
+  /// leitura) porque várias telas/rotas já leem `Goal.valorRealizado` direto
+  /// (painel "Progresso das metas" da Início, "Minha rotina de hoje", o job
+  /// de alerta de meta não atingida) e não precisam saber nada sobre
+  /// lançamentos semanais para continuar funcionando sem alteração.
+  valorRealizado Float         @default(0)
+  unidade        String        @default("R$")
+  /// Ver enum `GoalDirection` acima.
+  direcao        GoalDirection @default(MAXIMIZAR)
   startDate      DateTime
   endDate        DateTime
   bonificacao    String?
-  status         GoalStatus   @default(NAO_INICIADA)
+  status         GoalStatus    @default(NAO_INICIADA)
   observacoes    String?
   planoDeAcao    String?
   createdById    String
-  createdBy      User         @relation(fields: [createdById], references: [id])
-  alertaEnviado  Boolean      @default(false)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdBy      User          @relation(fields: [createdById], references: [id])
+  alertaEnviado  Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   attachments   GoalAttachment[]
   notifications Notification[]
@@ -2282,7 +2299,15 @@ enum StockMovementType {
 model StockMovement {
   id            String            @id @default(cuid())
   ingredientId  String
-  ingredient    Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  /// `onDelete: Restrict` (não `Cascade`) de propósito, igual às tabelas irmãs
+  /// (`ProductIngredient`, `PurchaseItem`, `Loss`, `TransferItem`,
+  /// `StockCountItem`) — ver o comentário na rota DELETE de
+  /// `src/app/api/ficha-tecnica/insumos/[id]/route.ts`. Achado: excluir um
+  /// insumo com histórico de movimentação de estoque mas sem nenhuma outra
+  /// relação Restrict (ex.: um insumo vendido direto como item, nunca usado
+  /// como ingrediente de ficha técnica) retornava 200 OK e apagava esse
+  /// histórico em cascata, silenciosamente, sem avisar ninguém.
+  ingredient    Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
   empresaId     String
   empresa       Empresa           @relation(fields: [empresaId], references: [id])
   type          StockMovementType

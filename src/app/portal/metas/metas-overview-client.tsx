@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Award, ChevronRight, Trophy } from "lucide-react";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { pct } from "@/lib/calc";
 import {
   dateToMonth,
   GOAL_CATEGORIES,
@@ -13,7 +12,9 @@ import {
   GOAL_CATEGORY_ROUTE,
   GOAL_STATUS_LABEL,
   GOAL_STATUS_TONE,
+  goalProgressPercent,
   type GoalCategoryKey,
+  type GoalDirectionKey,
 } from "@/lib/goals";
 
 type GoalDTO = {
@@ -24,12 +25,24 @@ type GoalDTO = {
   valorMeta: number;
   valorRealizado: number;
   unidade: string;
+  direcao: string;
   startDate: string;
   endDate: string;
   bonificacao: string | null;
   status: string;
   empresaNome: string;
 };
+
+/**
+ * "% concluído" de uma meta considerando a direção dela — mesma lógica (e
+ * mesmo motivo) do helper `goalPercent` em metas-client.tsx: uma meta
+ * MINIMIZAR (ex.: CMV) que está indo bem não pode aparecer com progresso
+ * baixo só porque o número "realizado" é baixo. Ver `goalProgressPercent`
+ * em src/lib/goals.ts.
+ */
+function goalPercent(g: Pick<GoalDTO, "valorRealizado" | "valorMeta" | "direcao">): number {
+  return goalProgressPercent(g.valorRealizado, g.valorMeta, g.direcao as GoalDirectionKey);
+}
 
 export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
   const [setor, setSetor] = useState("");
@@ -66,7 +79,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
   const bySector = GOAL_CATEGORIES.map((cat) => {
     const items = filtered.filter((g) => g.category === cat);
     const avgPercent = items.length
-      ? items.reduce((sum, g) => sum + pct(g.valorRealizado, g.valorMeta), 0) / items.length
+      ? items.reduce((sum, g) => sum + Math.max(0, Math.min(goalPercent(g), 100)), 0) / items.length
       : 0;
     return {
       category: cat,
@@ -76,10 +89,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
     };
   });
 
-  const ranking = useMemo(
-    () => [...filtered].sort((a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)).slice(0, 8),
-    [filtered]
-  );
+  const ranking = useMemo(() => [...filtered].sort((a, b) => goalPercent(b) - goalPercent(a)).slice(0, 8), [filtered]);
   const rankingMultiLoja = useMemo(() => new Set(ranking.map((g) => g.empresaNome)).size > 1, [ranking]);
 
   return (
@@ -146,17 +156,20 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
       {proximasDeAtingir.length > 0 && (
         <Section title={`Próximas de atingir (${proximasDeAtingir.length})`}>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {proximasDeAtingir.map((g) => (
-              <div key={g.id} className="rounded-lg border border-nord-warning/40 bg-nord-warning/5 p-3">
-                <p className="text-white text-sm font-medium">{g.name}</p>
-                <p className="text-xs text-nord-gray mb-2">
-                  {g.responsavel} · {GOAL_CATEGORY_LABEL[g.category as GoalCategoryKey]}
-                  {proximasMultiLoja && ` · ${g.empresaNome}`}
-                </p>
-                <ProgressBar percent={pct(g.valorRealizado, g.valorMeta)} color="#f59e0b" />
-                <p className="text-[11px] text-nord-warning mt-1">{pct(g.valorRealizado, g.valorMeta).toFixed(0)}% atingido</p>
-              </div>
-            ))}
+            {proximasDeAtingir.map((g) => {
+              const percent = Math.max(0, Math.min(100, goalPercent(g)));
+              return (
+                <div key={g.id} className="rounded-lg border border-nord-warning/40 bg-nord-warning/5 p-3">
+                  <p className="text-white text-sm font-medium">{g.name}</p>
+                  <p className="text-xs text-nord-gray mb-2">
+                    {g.responsavel} · {GOAL_CATEGORY_LABEL[g.category as GoalCategoryKey]}
+                    {proximasMultiLoja && ` · ${g.empresaNome}`}
+                  </p>
+                  <ProgressBar percent={percent} color="#f59e0b" />
+                  <p className="text-[11px] text-nord-warning mt-1">{percent.toFixed(0)}% atingido</p>
+                </div>
+              );
+            })}
           </div>
         </Section>
       )}
@@ -188,7 +201,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
       <Section title="Ranking de metas">
         <div className="space-y-2">
           {ranking.map((g, idx) => {
-            const percent = pct(g.valorRealizado, g.valorMeta);
+            const percent = Math.max(0, Math.min(100, goalPercent(g)));
             return (
               <div key={g.id} className="flex items-center gap-3 rounded-lg border border-nord-border/60 p-2.5">
                 <span className="w-6 text-center text-xs font-semibold text-nord-gray shrink-0">
