@@ -288,20 +288,6 @@ export function AcompanhamentoClient({ initialResult, initialFilters }: { initia
         <SortableCardGrid storageKey="vendas-acompanhamento-compare-order" className="grid grid-cols-1 md:grid-cols-3 gap-4" items={compareItems} />
       </Section>
 
-      <style jsx global>{`
-        .input {
-          background: var(--nord-panel);
-          border: 1px solid var(--nord-border);
-          border-radius: 8px;
-          padding: 8px 12px;
-          color: white;
-          font-size: 13px;
-          outline: none;
-        }
-        .input:focus {
-          border-color: var(--nord-blue);
-        }
-      `}</style>
     </div>
   );
 }

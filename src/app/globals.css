@@ -85,27 +85,55 @@ select option {
   scrollbar-color: var(--nord-border) var(--nord-panel);
 }
 
-.input {
-  width: 100%;
-  background: var(--nord-panel);
-  border: 1px solid var(--nord-border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: white;
-  font-size: 13px;
-  outline: none;
-  color-scheme: dark;
+/* .input mora dentro de @layer components (o próprio "@import tailwindcss"
+   no topo deste arquivo já declara a ordem "theme, base, components,
+   utilities" — components vem ANTES de utilities nessa ordem). Isso importa
+   porque, no Tailwind v4, quem decide a prioridade entre regras é a ordem
+   dos layers, não a ordem/especificidade normal do CSS: uma classe utilitária
+   do Tailwind (w-56, w-auto, pl-8, text-xs...), que vive em @layer utilities,
+   sempre vence uma regra de um layer anterior como este, então
+   className="input w-56" agora aplica a largura de verdade.
+   Antes esta regra ficava FORA de qualquer @layer — e CSS sem layer sempre
+   vence @layer utilities (prioridade máxima, ainda maior que utilities),
+   então nenhum utilitário combinado com "input" tinha efeito de verdade: o
+   campo sempre renderizava a 100% de largura (e, dentro de uma barra de
+   filtros flex, isso empurrava o campo seguinte pra linha de baixo, já que
+   um item com 100% do espaço não deixa nada ao lado dele). Esse bug afetava
+   ~22 telas do sistema. Antes de mover pra dentro do layer, alguns lugares
+   contornavam isso com "!w-56"/"!w-auto" (o "!" do Tailwind gera
+   "!important", que sempre vence não importa o layer) — essas correções
+   pontuais continuam funcionando normalmente e não precisam ser revertidas,
+   só deixaram de ser necessárias em código novo.
+   Importante: className="input" sozinho (sem nenhum utilitário conflitante)
+   continua 100% inalterado por essa mudança — width:100% (e todo o resto)
+   segue aplicando normalmente nos centenas de campos de modal/formulário
+   que dependem disso, porque não há nenhuma classe utilitária disputando a
+   mesma propriedade nesses casos. */
+@layer components {
+  .input {
+    width: 100%;
+    background: var(--nord-panel);
+    border: 1px solid var(--nord-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: white;
+    font-size: 13px;
+    outline: none;
+    color-scheme: dark;
+  }
+  .input:focus {
+    border-color: var(--nord-blue);
+  }
+  .input::placeholder {
+    color: var(--nord-gray);
+    opacity: 0.7;
+  }
 }
-.input:focus {
-  border-color: var(--nord-blue);
-}
-.input::placeholder {
-  color: var(--nord-gray);
-  opacity: 0.7;
-}
-/* .input define width:100%, o que vence a utilidade w-auto do Tailwind quando
-   combinadas (ex.: "input w-auto") — use esta classe junto de "input" para
-   um campo com largura de conteúdo dentro de uma linha flex. */
+/* .input-compact continua fora de qualquer @layer (CSS sem layer sempre
+   vence @layer components), então continua vencendo o width:100% de .input
+   nos lugares que já a usam. Hoje isso também já aconteceria só com a
+   utilidade "w-auto" do Tailwind (ver comentário acima) — esta classe
+   segue disponível como atalho equivalente, sem precisar repetir "w-auto". */
 .input-compact {
   width: auto;
 }
