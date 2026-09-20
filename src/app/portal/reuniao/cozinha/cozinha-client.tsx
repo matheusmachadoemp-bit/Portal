@@ -36,6 +36,18 @@ function formToPayload(periodo: string, form: ReturnType<typeof buildForm>) {
   return { periodo, ...form };
 }
 
+// Tempo Pedido e Organização e Limpeza não têm mais input no modal "Fechamento do mês"
+// (seção "Resultado do período" removida a pedido do usuário), mas continuam inicializados
+// aqui a partir do registro já salvo: eles ainda aparecem (somente leitura) na tabela
+// "Histórico de reuniões" mais abaixo e entram no comparativo do PDF exportado (ver
+// `tempoValor`/`organizacaoValor` e `historico()` em `exportPdf`). Também mantém o mesmo
+// round-trip "congelado" das telas irmãs (Salão/Delivery/Gerente): a rota POST
+// /api/reuniao/cozinha grava explicitamente `null` quando o campo vem ausente/vazio no
+// `create` (registro novo); no `update` de um registro já existente ela passa `undefined`
+// nesse caso, que o Prisma trata como "não mexer nessa coluna" — ou seja, aqui o risco de
+// null-ar retroativamente um valor de mês anterior é menor que em Gerente/Salão/Delivery,
+// mas continuamos sempre reenviando o valor atual por consistência (é um no-op seguro) e
+// para cobrir também o caminho de criação de um registro novo.
 function buildForm(m?: Meeting | null) {
   return {
     tempoPedidoMinutos: m?.tempoPedidoMinutos != null ? String(m.tempoPedidoMinutos) : "",
@@ -297,32 +309,11 @@ export function CozinhaClient({
           widthClass="max-w-2xl"
         >
           <div className="space-y-5">
-            <div>
-              <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Tempo Pedido (min)</span>
-                  <input
-                    type="number"
-                    value={form.tempoPedidoMinutos}
-                    onChange={(e) => setForm({ ...form, tempoPedidoMinutos: e.target.value })}
-                    placeholder="minutos"
-                    className="input"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Organização e Limpeza (%)</span>
-                  <input
-                    type="number"
-                    value={form.organizacaoPercent}
-                    onChange={(e) => setForm({ ...form, organizacaoPercent: e.target.value })}
-                    placeholder="%"
-                    className="input"
-                  />
-                </label>
-              </div>
-            </div>
-
+            {/* Seção "Resultado do período" (Tempo Pedido + Organização e Limpeza) removida a
+                pedido do usuário — aparecia sempre vazia no modal. Os valores continuam
+                aparecendo, só que somente leitura, na tabela "Histórico de reuniões" mais
+                abaixo na tela (fora do modal) — ver comentário de `buildForm` acima para como
+                esses 2 campos continuam "congelados" no round-trip do `submit()`. */}
             <FechamentoDoMesEditor fdm={fdm} />
 
             <div className="flex items-center justify-between pt-2 border-t border-nord-border">

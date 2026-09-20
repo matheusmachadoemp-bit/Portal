@@ -336,13 +336,14 @@ export function MetasProximoMesSection({ mp, canDelete }: { mp: MetasProximoMesS
             </label>
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Destinatário</span>
-              <input
-                type="text"
+              <select
                 value={mp.newForm.destinatario}
                 onChange={(e) => mp.setNewForm({ ...mp.newForm, destinatario: e.target.value })}
-                placeholder="Equipe"
                 className="input"
-              />
+              >
+                <option value="Equipe">Equipe</option>
+                <option value="Individual">Individual</option>
+              </select>
             </label>
           </div>
           <button
@@ -394,13 +395,14 @@ export function MetasProximoMesSection({ mp, canDelete }: { mp: MetasProximoMesS
             </label>
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Destinatário</span>
-              <input
-                type="text"
+              <select
                 value={mp.editForm.destinatario}
                 onChange={(e) => mp.setEditForm({ ...mp.editForm, destinatario: e.target.value })}
-                placeholder="Equipe"
                 className="input"
-              />
+              >
+                <option value="Equipe">Equipe</option>
+                <option value="Individual">Individual</option>
+              </select>
             </label>
           </div>
           <button
