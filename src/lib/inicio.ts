@@ -12,7 +12,7 @@ import {
 import { loadChecklistOccurrencesDoDia } from "@/lib/checklist-server";
 import { isTaskOverdue, effectiveTaskStatus } from "@/lib/tarefas";
 import { generateDueTaskOccurrences } from "@/lib/tarefas-server";
-import { computeGoalStatus, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE } from "@/lib/goals";
+import { computeGoalStatus, goalProgressPercent, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE, type GoalDirectionKey } from "@/lib/goals";
 
 // ---------------------------------------------------------------------------
 // Perfil da Tela de Início — mapeia o enum `Role` (login/permissões) para o
@@ -313,15 +313,26 @@ function describePrazoText(alvo: Date, now: Date): string {
  * decorrido vs. % da meta já atingida. Usada tanto pelo alerta do gestor
  * quanto pela meta individual do colaborador na rotina — a mesma conta
  * pedida na Fase 1b para os dois casos.
+ *
+ * `percentMeta` é `goalProgressPercent` (src/lib/goals.ts), não mais a
+ * divisão crua `valorRealizado/valorMeta*100` — precisa considerar
+ * `direcao` pelo mesmo motivo do resto do módulo Metas: pra uma meta
+ * MINIMIZAR (ex.: CMV), realizado BAIXO é bom (deveria contar como "no
+ * ritmo"/"perto de bater") e realizado ALTO é ruim (deveria contar como
+ * "abaixo do ritmo"), o oposto da divisão crua. Como `goalProgressPercent`
+ * já normaliza isso (>=100 sempre significa "bateu ou passou o alvo",
+ * pras duas direções), a comparação `percentMeta < percentTempo` abaixo
+ * funciona sem nenhum caso especial extra — nunca foi preciso reescrever
+ * a lógica de "ritmo" em si, só trocar de onde `percentMeta` vem.
  */
 export function goalPace(
-  goal: { valorMeta: number; valorRealizado: number; startDate: Date; endDate: Date },
+  goal: { valorMeta: number; valorRealizado: number; startDate: Date; endDate: Date; direcao: GoalDirectionKey },
   now: Date = new Date()
 ): { percentTempo: number; percentMeta: number; abaixoDoRitmo: boolean } {
   const totalMs = goal.endDate.getTime() - goal.startDate.getTime();
   const elapsedMs = now.getTime() - goal.startDate.getTime();
   const percentTempo = totalMs > 0 ? Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100)) : 100;
-  const percentMeta = goal.valorMeta > 0 ? (goal.valorRealizado / goal.valorMeta) * 100 : 0;
+  const percentMeta = goalProgressPercent(goal.valorRealizado, goal.valorMeta, goal.direcao);
   return { percentTempo, percentMeta, abaixoDoRitmo: percentMeta < percentTempo };
 }
 
@@ -505,7 +516,7 @@ export async function loadRotinaMetas(
       setor: GOAL_CATEGORY_LABEL[g.category] ?? g.category,
       responsavel: nomeUsuario,
       prioridade: null,
-      status: computeGoalStatus(g.valorRealizado, g.valorMeta, g.endDate, now),
+      status: computeGoalStatus(g.valorRealizado, g.valorMeta, g.endDate, now, g.direcao, g.unidade),
       prazo: g.endDate.toISOString(),
       atrasado,
       pontos: null,

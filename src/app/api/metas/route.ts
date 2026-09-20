@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { computeGoalStatus, GERENCIA_RESPONSAVEL, GOAL_CATEGORY_ROUTE } from "@/lib/goals";
+import { computeGoalStatus, GERENCIA_RESPONSAVEL, GOAL_CATEGORY_ROUTE, type GoalDirectionKey } from "@/lib/goals";
 import { formatNumber } from "@/lib/calc";
 import { hasModulePermission } from "@/lib/authz";
 import { getStoreManagers } from "@/lib/manutencao-server";
@@ -68,8 +68,14 @@ export async function POST(req: Request) {
   }
 
   const valorMeta = valorMetaNum;
+  const unidade = body.unidade || "R$";
   const endDate = new Date(body.endDate);
   const category = body.category;
+
+  // Whitelist explícito (em vez de confiar direto em `body.direcao`, um
+  // `any` vindo do JSON) — qualquer valor que não seja exatamente
+  // "MINIMIZAR" cai no default MAXIMIZAR, o mesmo default do schema.
+  const direcao: GoalDirectionKey = body.direcao === "MINIMIZAR" ? "MINIMIZAR" : "MAXIMIZAR";
 
   // Metas > Gerência: "responsável" nunca é um texto livre digitado no
   // formulário (ver GERENCIA_RESPONSAVEL em src/lib/goals.ts) — forçado
@@ -90,11 +96,12 @@ export async function POST(req: Request) {
       description: body.description || null,
       indicador: body.indicador || null,
       valorMeta,
-      unidade: body.unidade || "R$",
+      unidade,
+      direcao,
       startDate: new Date(body.startDate),
       endDate,
       bonificacao: body.bonificacao || null,
-      status: computeGoalStatus(0, valorMeta, endDate) as never,
+      status: computeGoalStatus(0, valorMeta, endDate, new Date(), direcao, unidade) as never,
       observacoes: body.observacoes || null,
       planoDeAcao: body.planoDeAcao || null,
       createdById: session.user.id,
