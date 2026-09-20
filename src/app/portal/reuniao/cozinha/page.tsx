@@ -53,6 +53,7 @@ export default async function ReuniaoCozinhaPage() {
         initialCustomIndicators={customIndicators}
         periodo={periodo}
         canCreate={canCreate}
+        isGrupoNordMode={ctx?.mode !== "single"}
         canDeleteMetas={canDeleteMetas}
         empresaName={ctx?.mode === "single" ? ctx.empresa.name : "Grupo Nord"}
       />
