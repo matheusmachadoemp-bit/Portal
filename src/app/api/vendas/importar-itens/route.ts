@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
-import * as XLSX from "xlsx";
 import { hasModulePermission } from "@/lib/authz";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
+import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 
 const INSERT_CHUNK_SIZE = 1000;
 
@@ -19,7 +19,7 @@ function normalizeText(value?: string | null): string {
 
 function parseBrDate(raw: string | number): Date | null {
   if (typeof raw === "number") {
-    const parsed = XLSX.SSF.parse_date_code(raw);
+    const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
     return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
   }
@@ -28,12 +28,6 @@ function parseBrDate(raw: string | number): Date | null {
   if (!br) return null;
   const year = br[3].length === 2 ? Number(`20${br[3]}`) : Number(br[3]);
   return new Date(Date.UTC(year, Number(br[2]) - 1, Number(br[1])));
-}
-
-function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, raw: true, defval: "" });
 }
 
 type CategoryChild = { name: string; qty: number; valor: number };
@@ -105,7 +99,7 @@ export async function POST(req: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   let rows: (string | number)[][];
   try {
-    rows = rowsFromWorkbook(buffer);
+    rows = await readWorkbookRows(buffer);
   } catch {
     return NextResponse.json({ error: "Não foi possível ler o arquivo. Confira se é um .xlsx válido." }, { status: 400 });
   }
