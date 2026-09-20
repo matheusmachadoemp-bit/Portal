@@ -1,6 +1,14 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { spStartOfDay, spWeekday } from "@/lib/checklist";
-import { computeCoverage, monthReferenceKey, utcDayBounds, type CoverageResult } from "@/lib/escala-folgas";
+import {
+  computeCoverage,
+  coversDateKey,
+  enumerateDateKeys,
+  monthReferenceKey,
+  utcDayBounds,
+  type CoverageResult,
+} from "@/lib/escala-folgas";
 
 /**
  * Escala de Folgas (RH) — helpers server-side (Prisma). Ver `@/lib/escala-folgas` para os
@@ -30,6 +38,36 @@ export async function isStoreClosedWeekday(empresaId: string, weekday: number): 
 }
 
 /**
+ * `where` Prisma pra `Vacation` cobrindo QUALQUER dia entre `fromKey` e `toKey` (inclusive) —
+ * robusto a qualquer convenção de meia-noite usada pra gravar `dataInicio`/`dataFim` (ver
+ * `utcDayBounds`, 3º bug de fuso achado pela revisão do Teulis: comparar contra um instante único
+ * sub-contava o último dia de toda férias). Chame com `fromKey === toKey` pra checar um único dia
+ * (é o que `listIndisponiveisNoSetor` faz) — compartilhado com `getCalendarioDias` (agregador de
+ * calendário da Fase 2), que passa um intervalo de verdade, pra não duplicar esta lógica em 2
+ * lugares.
+ */
+function vacationOverlapsRangeWhere(fromKey: string, toKey: string): Prisma.VacationWhereInput {
+  const { start: rangeStart } = utcDayBounds(fromKey);
+  const { end: rangeEnd } = utcDayBounds(toKey);
+  return {
+    status: { in: ["APROVADA", "EM_ANDAMENTO"] },
+    dataInicio: { lte: rangeEnd },
+    dataFim: { gte: rangeStart },
+  };
+}
+
+/** Mesma ideia de `vacationOverlapsRangeWhere`, pra `Absence` (`dataFim` nulo = em aberto). */
+function absenceOverlapsRangeWhere(fromKey: string, toKey: string): Prisma.AbsenceWhereInput {
+  const { start: rangeStart } = utcDayBounds(fromKey);
+  const { end: rangeEnd } = utcDayBounds(toKey);
+  return {
+    status: { in: ["PLANEJADO", "EM_ANDAMENTO"] },
+    dataInicio: { lte: rangeEnd },
+    OR: [{ dataFim: null }, { dataFim: { gte: rangeStart } }],
+  };
+}
+
+/**
  * Ids de colaboradores ATIVOS de `setor`+`empresaId` já indisponíveis em `dateKey` — soma
  * `DayOffEntry` (folga já cadastrada), `Vacation` (férias aprovadas/em andamento cobrindo a data)
  * e `Absence` (afastamento planejado/em andamento cobrindo a data), sem duplicar dado entre elas.
@@ -37,15 +75,9 @@ export async function isStoreClosedWeekday(empresaId: string, weekday: number): 
  * usado ao reavaliar a cobertura de uma folga já existente (edição), pra não contar a folga antiga
  * dele contra ele mesmo.
  *
- * NOTA (pendência sinalizada na revisão do Teulis, decisão de sequenciamento do líder — não é pra
- * resolver nesta fase): esta função só devolve IDS pra contar (cobertura de setor), não os
- * registros completos pra EXIBIR num calendário. Ainda não existe nenhum endpoint que junte
- * DayOffEntry + Vacation + Absence + StoreClosedWeekday num resultado único pronto pra tela
- * (ex.: "quem está de folga hoje", com nome/tipo/cor por pessoa) — isso é o agregador que a Fase 2
- * (calendário do Caio) vai precisar, e ainda não foi construído. Quando for a hora, o mais
- * provável é um novo endpoint de leitura (`GET /api/rh/escala-folgas/calendario` ou parecido) que
- * chama as 4 fontes pro período pedido e devolve já mesclado — não uma expansão desta função aqui,
- * que existe só pro cálculo de cobertura.
+ * Só devolve IDs pra CONTAR (cobertura de setor) — pra EXIBIR num calendário (nome, tipo, cor,
+ * várias datas de uma vez), ver `getCalendarioDias` logo abaixo (o agregador da Fase 2, que
+ * reaproveita `vacationOverlapsRangeWhere`/`absenceOverlapsRangeWhere` em vez de duplicar).
  */
 export async function listIndisponiveisNoSetor(
   empresaId: string,
@@ -55,13 +87,6 @@ export async function listIndisponiveisNoSetor(
 ): Promise<Set<string>> {
   const day = spStartOfDay(dateKey);
   const employeeFilter = { setor, status: "ATIVO" as const };
-
-  // `Vacation`/`Absence.dataInicio`/`.dataFim` guardam uma DATA, não um instante — e podem ter
-  // sido gravados com convenção de "meia-noite" diferente da usada aqui (ver `utcDayBounds`, 3º
-  // bug de fuso achado pela revisão do Teulis: comparar contra `day` — um instante único —
-  // sub-contava o último dia de toda férias/afastamento). `dayStart`/`dayEnd` cobrem o dia inteiro
-  // em UTC, então funcionam não importa qual convenção o campo usa.
-  const { start: dayStart, end: dayEnd } = utcDayBounds(dateKey);
 
   const [entries, vacations, absences] = await Promise.all([
     prisma.dayOffEntry.findMany({
@@ -74,23 +99,11 @@ export async function listIndisponiveisNoSetor(
       select: { employeeId: true },
     }),
     prisma.vacation.findMany({
-      where: {
-        empresaId,
-        status: { in: ["APROVADA", "EM_ANDAMENTO"] },
-        dataInicio: { lte: dayEnd },
-        dataFim: { gte: dayStart },
-        employee: employeeFilter,
-      },
+      where: { empresaId, ...vacationOverlapsRangeWhere(dateKey, dateKey), employee: employeeFilter },
       select: { employeeId: true },
     }),
     prisma.absence.findMany({
-      where: {
-        empresaId,
-        status: { in: ["PLANEJADO", "EM_ANDAMENTO"] },
-        dataInicio: { lte: dayEnd },
-        OR: [{ dataFim: null }, { dataFim: { gte: dayStart } }],
-        employee: employeeFilter,
-      },
+      where: { empresaId, ...absenceOverlapsRangeWhere(dateKey, dateKey), employee: employeeFilter },
       select: { employeeId: true },
     }),
   ]);
@@ -142,4 +155,164 @@ export async function resolveOwnSetor(userId: string): Promise<string | null> {
     select: { employee: { select: { setor: true } } },
   });
   return user?.employee?.setor ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Agregador de calendário (Fase 2) — junta as 4 fontes de indisponibilidade (DayOffEntry,
+// Vacation, Absence, StoreClosedWeekday) num resultado único por dia, pronto pra uma tela de
+// calendário/visão semanal/visão por colaborador consumir sem N+1 de requisições. Usado por
+// `GET /api/rh/escala-folgas/calendario`.
+// ---------------------------------------------------------------------------
+
+export type CalendarioFonte = "DAY_OFF" | "VACATION" | "ABSENCE";
+
+/** Cor/nome/ícone já resolvidos — igual pros 3 tipos de indisponibilidade "de pessoa" (não pra
+ *  loja fechada, que não é uma pessoa). Férias/Afastamento usam as 2 linhas RESERVADAS do
+ *  catálogo `DayOffType` (`kind` FERIAS/AFASTAMENTO, ver seed) — mesma cor/nome que o resto do
+ *  Portal já usa pra identificar cada tipo, sem inventar uma paleta paralela só pro calendário. */
+export type CalendarioDayOffType = { id: string; key: string; nome: string; cor: string; kind: string };
+
+export type CalendarioIndisponivel = {
+  employeeId: string;
+  employeeName: string;
+  setor: string;
+  cargo: string;
+  photoUrl: string | null;
+  empresaId: string;
+  fonte: CalendarioFonte;
+  /** Id do `DayOffEntry`/`Vacation`/`Absence` de origem — pra tela linkar/abrir o registro. */
+  sourceId: string;
+  dayOffType: CalendarioDayOffType;
+  observacao: string | null;
+};
+
+export type CalendarioDia = {
+  date: string;
+  weekday: number;
+  /** Lojas fechadas nesse dia (dia fixo da semana, `StoreClosedWeekday`) — SEMPRE a loja inteira,
+   *  nunca filtrado por setor (loja fechada não é um conceito de setor). Vazio na maioria dos dias. */
+  lojasFechadas: { empresaId: string; empresaName: string }[];
+  indisponiveis: CalendarioIndisponivel[];
+};
+
+const RESERVED_TYPE_FALLBACK: Record<"FERIAS" | "AFASTAMENTO", CalendarioDayOffType> = {
+  FERIAS: { id: "", key: "ferias", nome: "Férias", cor: "#f59e0b", kind: "FERIAS" },
+  AFASTAMENTO: { id: "", key: "afastamento", nome: "Afastamento", cor: "#ef4444", kind: "AFASTAMENTO" },
+};
+
+/**
+ * Monta o calendário agregado de `fromKey` a `toKey` (inclusive) pras lojas de `empresaIds`,
+ * opcionalmente restrito a um `setor`. Só 6 queries no total (nenhuma por dia/por colaborador —
+ * a montagem dia a dia acontece em memória, sobre os resultados já carregados), então o custo não
+ * cresce com o tamanho do período pedido além do volume de dado real.
+ *
+ * Diferente de `listIndisponiveisNoSetor` (usada pra cobertura), aqui NÃO filtra colaborador por
+ * `status: "ATIVO"` de propósito: o calendário também serve pra olhar um período passado (quem
+ * estava de folga mês passado), e um colaborador desligado depois não deve sumir do histórico —
+ * mesmo comportamento que `GET /api/rh/escala-folgas/entries` já tinha antes desta fase.
+ */
+export async function getCalendarioDias(params: {
+  empresaIds: string[];
+  fromKey: string;
+  toKey: string;
+  setor?: string | null;
+}): Promise<CalendarioDia[] | null> {
+  const { empresaIds, fromKey, toKey, setor } = params;
+  const dateKeys = enumerateDateKeys(fromKey, toKey);
+  if (!dateKeys || empresaIds.length === 0) return null;
+
+  const employeeFilter: Prisma.EmployeeWhereInput = setor ? { setor } : {};
+
+  const [entries, vacations, absences, closedWeekdays, reservedTypes, empresas] = await Promise.all([
+    prisma.dayOffEntry.findMany({
+      where: {
+        empresaId: { in: empresaIds },
+        date: { gte: spStartOfDay(fromKey), lte: spStartOfDay(toKey) },
+        employee: employeeFilter,
+      },
+      include: {
+        employee: { select: { id: true, name: true, setor: true, cargo: true, photoUrl: true } },
+        dayOffType: { select: { id: true, key: true, nome: true, cor: true, kind: true } },
+      },
+    }),
+    prisma.vacation.findMany({
+      where: { empresaId: { in: empresaIds }, ...vacationOverlapsRangeWhere(fromKey, toKey), employee: employeeFilter },
+      include: { employee: { select: { id: true, name: true, setor: true, cargo: true, photoUrl: true } } },
+    }),
+    prisma.absence.findMany({
+      where: { empresaId: { in: empresaIds }, ...absenceOverlapsRangeWhere(fromKey, toKey), employee: employeeFilter },
+      include: { employee: { select: { id: true, name: true, setor: true, cargo: true, photoUrl: true } } },
+    }),
+    prisma.storeClosedWeekday.findMany({ where: { empresaId: { in: empresaIds }, ativo: true } }),
+    // Sem filtro de `ativo`: mesmo que o admin desative "Férias"/"Afastamento" pro cadastro de
+    // folga nova (item que fica só disponível via /api/rh/vacations e /api/rh/absences mesmo
+    // assim, ver POST /api/rh/escala-folgas/entries), o rótulo/cor continua valendo pra registros
+    // já existentes — desativar não é a mesma coisa que apagar.
+    prisma.dayOffType.findMany({ where: { kind: { in: ["FERIAS", "AFASTAMENTO"] } } }),
+    prisma.empresa.findMany({ where: { id: { in: empresaIds } }, select: { id: true, name: true } }),
+  ]);
+
+  const feriasType = reservedTypes.find((t) => t.kind === "FERIAS") ?? RESERVED_TYPE_FALLBACK.FERIAS;
+  const afastamentoType = reservedTypes.find((t) => t.kind === "AFASTAMENTO") ?? RESERVED_TYPE_FALLBACK.AFASTAMENTO;
+  const empresaNameById = new Map(empresas.map((e) => [e.id, e.name]));
+  const closedWeekdaySet = new Set(closedWeekdays.map((c) => `${c.empresaId}:${c.weekday}`));
+
+  return dateKeys.map((date) => {
+    const weekday = spWeekday(date);
+    const dayInstant = spStartOfDay(date).getTime();
+
+    const lojasFechadas = empresaIds
+      .filter((id) => closedWeekdaySet.has(`${id}:${weekday}`))
+      .map((id) => ({ empresaId: id, empresaName: empresaNameById.get(id) ?? "" }));
+
+    const indisponiveis: CalendarioIndisponivel[] = [];
+
+    for (const e of entries) {
+      if (e.date.getTime() !== dayInstant) continue;
+      indisponiveis.push({
+        employeeId: e.employeeId,
+        employeeName: e.employee.name,
+        setor: e.employee.setor,
+        cargo: e.employee.cargo,
+        photoUrl: e.employee.photoUrl,
+        empresaId: e.empresaId,
+        fonte: "DAY_OFF",
+        sourceId: e.id,
+        dayOffType: e.dayOffType,
+        observacao: e.observacao,
+      });
+    }
+    for (const v of vacations) {
+      if (!coversDateKey(v.dataInicio, v.dataFim, date)) continue;
+      indisponiveis.push({
+        employeeId: v.employeeId,
+        employeeName: v.employee.name,
+        setor: v.employee.setor,
+        cargo: v.employee.cargo,
+        photoUrl: v.employee.photoUrl,
+        empresaId: v.empresaId,
+        fonte: "VACATION",
+        sourceId: v.id,
+        dayOffType: feriasType,
+        observacao: v.observacao,
+      });
+    }
+    for (const a of absences) {
+      if (!coversDateKey(a.dataInicio, a.dataFim, date)) continue;
+      indisponiveis.push({
+        employeeId: a.employeeId,
+        employeeName: a.employee.name,
+        setor: a.employee.setor,
+        cargo: a.employee.cargo,
+        photoUrl: a.employee.photoUrl,
+        empresaId: a.empresaId,
+        fonte: "ABSENCE",
+        sourceId: a.id,
+        dayOffType: afastamentoType,
+        observacao: a.motivo || a.observacao,
+      });
+    }
+
+    return { date, weekday, lojasFechadas, indisponiveis };
+  });
 }
