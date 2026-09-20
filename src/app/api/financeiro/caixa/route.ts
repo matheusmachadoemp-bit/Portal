@@ -4,9 +4,19 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
+// BUG-004b: mesma checagem de cargo já usada nas rotas irmãs de RH (`/api/rh/employees`,
+// `/api/rh/finance`, desde o commit f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de
+// Permissão padrão "Funcionário" (financeiro:canView=true de fábrica) conseguia chamar este GET
+// direto (fora da tela, que já foi corrigida no BUG-004) e listar todas as movimentações de caixa
+// da empresa.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver o Financeiro." },
