@@ -14,7 +14,13 @@ export default async function ProdutosPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  // canCreate aqui checa o módulo "ficha-tecnica", não "estoque": o formulário desta
+  // tela (ProdutosClient) cria/edita via /api/ficha-tecnica/insumos, que é protegida
+  // por "ficha-tecnica" canCreate/canEdit — precisa bater com o módulo que a API de
+  // escrita realmente usa, senão o botão aparece pra quem a API vai recusar (ou some
+  // pra quem a API aceitaria).
+  const canManageFichaTecnica = await hasModulePermission(session.user.id, "ficha-tecnica", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageFichaTecnica;
 
   const [ingredients, categories, suppliers] = await Promise.all([
     prisma.ingredient.findMany({

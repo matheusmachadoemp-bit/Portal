@@ -13,6 +13,7 @@ export default async function ConfiguracoesEstoquePage() {
   }
 
   const ctx = await getActiveEmpresaContext();
+  const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canEdit");
 
   // Só as lojas que o usuário logado pode acessar (`getUserEmpresas` já
   // aplica a regra de acesso total para ADMINISTRADOR/GESTOR e a lista de
@@ -33,7 +34,7 @@ export default async function ConfiguracoesEstoquePage() {
           key={ctx?.mode === "single" ? ctx.empresa.id : "grupo"}
           empresas={empresas}
           activeEmpresaId={ctx?.mode === "single" ? ctx.empresa.id : null}
-          canEdit={ctx?.mode === "single"}
+          canEdit={ctx?.mode === "single" && canManageEstoque}
         />
       </div>
     </PageContainer>

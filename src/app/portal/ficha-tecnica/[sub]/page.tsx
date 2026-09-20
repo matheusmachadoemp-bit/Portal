@@ -33,7 +33,8 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   const { sub } = await params;
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  const canManageFichaTecnica = await hasModulePermission(session.user.id, "ficha-tecnica", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageFichaTecnica;
 
   const allProducts = await prisma.product.findMany({
     where: { empresaId: { in: empresaIds }, precoVenda: { gt: 0 } },

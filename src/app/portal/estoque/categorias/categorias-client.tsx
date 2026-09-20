@@ -22,7 +22,13 @@ type Category = {
 
 const emptyForm = { id: "", name: "", color: "#2952E3", icon: "Boxes", setor: "", metaPerdaPercent: "2", periodicidadeContagem: "SEMANAL" };
 
-export function CategoriasClient({ initialCategories }: { initialCategories: Category[] }) {
+export function CategoriasClient({
+  initialCategories,
+  canCreate,
+}: {
+  initialCategories: Category[];
+  canCreate: boolean;
+}) {
   const [categories, setCategories] = useState(initialCategories);
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
@@ -48,6 +54,7 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
   }
 
   function openEdit(c: Category) {
+    if (!canCreate) return;
     setForm({
       id: c.id,
       name: c.name,
@@ -86,6 +93,7 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
   }
 
   async function toggleActive(c: Category) {
+    if (!canCreate) return;
     await fetch(`/api/estoque/categorias/${c.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -100,7 +108,7 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
       action={
         <Toolbar
           onRefresh={refresh}
-          onAdd={() => { setForm(emptyForm); setError(null); setShowForm(true); }}
+          onAdd={canCreate ? () => { setForm(emptyForm); setError(null); setShowForm(true); } : undefined}
           addLabel="Nova categoria"
         />
       }
@@ -110,7 +118,8 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
           <button
             key={c.id}
             onClick={() => openEdit(c)}
-            className={`nord-card p-4 text-left space-y-2 hover:border-nord-blue transition ${!c.active ? "opacity-50" : ""}`}
+            disabled={!canCreate}
+            className={`nord-card p-4 text-left space-y-2 transition ${!c.active ? "opacity-50" : ""} ${canCreate ? "hover:border-nord-blue" : "cursor-default"}`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -129,14 +138,16 @@ export function CategoriasClient({ initialCategories }: { initialCategories: Cat
               <span>Meta de perda: {c.metaPerdaPercent}%</span>
               <span>{c.periodicidadeContagem === "MENSAL" ? "Contagem mensal" : "Contagem semanal"}</span>
             </div>
-            <div className="pt-1 flex justify-end">
-              <span
-                onClick={(e) => { e.stopPropagation(); toggleActive(c); }}
-                className="text-[11px] text-nord-blue-light hover:underline"
-              >
-                {c.active ? "Desativar" : "Ativar"}
-              </span>
-            </div>
+            {canCreate && (
+              <div className="pt-1 flex justify-end">
+                <span
+                  onClick={(e) => { e.stopPropagation(); toggleActive(c); }}
+                  className="text-[11px] text-nord-blue-light hover:underline"
+                >
+                  {c.active ? "Desativar" : "Ativar"}
+                </span>
+              </div>
+            )}
           </button>
         ))}
       </div>
