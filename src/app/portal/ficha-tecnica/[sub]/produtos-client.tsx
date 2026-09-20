@@ -84,12 +84,15 @@ export function ProdutosClient({
   ingredientOptions,
   category,
   canCreate = true,
+  isGrupoNordMode = true,
   taxaIfoodPadrao,
 }: {
   initialProducts: ProductDTO[];
   ingredientOptions: IngredientOption[];
   category: string;
   canCreate?: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode?: boolean;
   taxaIfoodPadrao: number;
 }) {
   const [products, setProducts] = useState(initialProducts);
@@ -257,8 +260,9 @@ export function ProdutosClient({
     >
       {!canCreate && (
         <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
-          cadastrar ou editar fichas técnicas.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para cadastrar ou editar fichas técnicas."
+            : "Seu perfil de permissão não permite cadastrar ou editar fichas técnicas neste módulo."}
         </p>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
