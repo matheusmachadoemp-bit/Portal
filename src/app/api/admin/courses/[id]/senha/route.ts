@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/vault";
+import { hasModulePermission } from "@/lib/authz";
 
 // Revela a senha de login da plataforma externa de um curso específico, sob
 // demanda (mesmo espírito do GET /api/admin/vault/[id]?action=VIEW do
@@ -13,6 +14,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json(
       { error: "Sem permissão para acessar a senha do curso." },
+      { status: 403 }
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "administrativo", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite acessar a senha do curso." },
       { status: 403 }
     );
   }

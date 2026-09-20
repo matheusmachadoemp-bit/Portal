@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -8,6 +9,12 @@ export async function GET(req: Request) {
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json(
       { error: "Sem permissão para acessar os arquivos." },
+      { status: 403 }
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "administrativo", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite acessar os arquivos." },
       { status: 403 }
     );
   }
@@ -30,6 +37,12 @@ export async function POST(req: Request) {
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json(
       { error: "Sem permissão para cadastrar arquivos." },
+      { status: 403 }
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "administrativo", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite cadastrar arquivos." },
       { status: 403 }
     );
   }
