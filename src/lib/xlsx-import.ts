@@ -51,20 +51,27 @@ export function parseExcelDateCode(v: number): ExcelDateParts | null {
     }
   }
 
-  // Dias "fantasmas" do bug do Excel: 29/02/1900 não existe de verdade (1900 não foi bissexto),
-  // mas o Excel grava assim mesmo por compatibilidade com o Lotus 1-2-3.
-  if (date === 60) return { y: 1900, m: 2, d: 29, H: 0, M: 0, S: 0 };
-  if (date === 0) return { y: 1900, m: 1, d: 0, H: 0, M: 0, S: 0 };
-  if (date > 60) --date;
-
-  const base = new Date(Date.UTC(1900, 0, 1));
-  base.setUTCDate(base.getUTCDate() + date - 1);
-
+  // H/M/S vêm sempre da fração de dia (time) calculada acima, pra qualquer valor de "date" —
+  // precisa ser calculado ANTES dos dois "dias fantasmas" abaixo (não depois, como uma versão
+  // anterior desta função fazia por engano): uma célula só de HORA, sem parte de data (ex.: "08:00"
+  // digitado numa célula formatada como hora, sem data — comum nas colunas de entrada/saída do
+  // Ponto Eletrônico) vira serial 0.3333..., que cai exatamente no branch "date === 0" — mas tem
+  // horário de verdade, que não pode virar 00:00 só porque não tem data.
   const S = time % 60;
   time = Math.floor(time / 60);
   const M = time % 60;
   time = Math.floor(time / 60);
   const H = time;
+
+  // Dias "fantasmas" do bug do Excel: 29/02/1900 não existe de verdade (1900 não foi bissexto),
+  // mas o Excel grava assim mesmo por compatibilidade com o Lotus 1-2-3. Só a parte de DATA (y/m/d)
+  // é especial aqui — a parte de HORA (H/M/S) vale igual, calculada acima.
+  if (date === 60) return { y: 1900, m: 2, d: 29, H, M, S };
+  if (date === 0) return { y: 1900, m: 1, d: 0, H, M, S };
+  if (date > 60) --date;
+
+  const base = new Date(Date.UTC(1900, 0, 1));
+  base.setUTCDate(base.getUTCDate() + date - 1);
 
   return { y: base.getUTCFullYear(), m: base.getUTCMonth() + 1, d: base.getUTCDate(), H, M, S };
 }
