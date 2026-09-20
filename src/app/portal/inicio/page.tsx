@@ -13,6 +13,7 @@ import { AlertTriangle, ArrowRight, Store } from "lucide-react";
 import { StoreSwitcher } from "@/components/sidebar/store-switcher";
 import { empresaIdsForContext, getActiveEmpresaContext, GRUPO_SENTINEL, type EmpresaSummary } from "@/lib/empresa";
 import { perfilInicioForRole, perfilPodeVerPainelGerencial } from "@/lib/inicio";
+import { goalProgressPercent } from "@/lib/goals";
 import { GerencialDashboardClient } from "./gerencial-dashboard-client";
 
 // ---------------------------------------------------------------------------
@@ -541,7 +542,10 @@ async function InicioClassico({ userId }: { userId: string | null }) {
           <div className="space-y-3">
             {d.goals.length === 0 && <p className="text-sm text-nord-gray">Nenhuma meta em aberto.</p>}
             {d.goals.map((g) => {
-              const percent = pct(g.valorRealizado, g.valorMeta);
+              // Direção-aware (ver goalProgressPercent em src/lib/goals.ts) —
+              // mesma conta usada na tela de Metas, pra uma meta MINIMIZAR
+              // (ex.: CMV) indo bem não aparecer com progresso baixo aqui.
+              const percent = Math.max(0, Math.min(100, goalProgressPercent(g.valorRealizado, g.valorMeta, g.direcao)));
               return (
                 <div key={g.id} className="flex items-center gap-4">
                   <div className="w-40 shrink-0">

@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getUserEmpresas } from "@/lib/empresa";
 import { prisma } from "@/lib/prisma";
-import { pct } from "@/lib/calc";
 import { differenceInCalendarDays } from "date-fns";
 import { perfilInicioForRole, perfilPodeVerAlertas, goalPace } from "@/lib/inicio";
-import { currentMonth, monthToDateRange, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
+import { currentMonth, monthToDateRange, goalProgressPercent, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
 
 /**
  * "Progresso das metas" (card da Tela de Início) — só estes 5 setores
@@ -82,7 +81,7 @@ export async function GET(req: Request) {
 
         return {
           setor: GOAL_CATEGORY_LABEL[categoria],
-          percentual: pct(g.valorRealizado, g.valorMeta),
+          percentual: goalProgressPercent(g.valorRealizado, g.valorMeta, g.direcao),
           meta: g.valorMeta,
           realizado: g.valorRealizado,
           status,

@@ -14,7 +14,8 @@ export default async function FornecedoresPage() {
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const canCreate = ctx?.mode === "single";
+  const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  const canCreate = ctx?.mode === "single" && canManageEstoque;
 
   const suppliers = await prisma.supplier.findMany({
     where: { empresaId: { in: empresaIds } },

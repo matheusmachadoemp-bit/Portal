@@ -1,24 +1,29 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle, Award, CalendarCheck2, MessageCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle, Award, CalendarCheck2, MessageCircle, Copy, CheckCheck } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { RadialProgress } from "@/components/ui/radial-progress";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
-import { formatNumber, growth, pct } from "@/lib/calc";
+import { formatNumber, growth } from "@/lib/calc";
 import {
   currentMonth,
   dateToMonth,
   GERENCIA_INDICADORES,
   GERENCIA_RESPONSAVEL,
   GOAL_CATEGORY_LABEL,
+  GOAL_DIRECTIONS,
+  GOAL_DIRECTION_LABEL,
   GOAL_STATUS_LABEL,
   GOAL_STATUS_TONE,
+  goalProgressPercent,
+  isAverageGoalUnit,
   monthToDateRange,
   weekDayRange,
   weeksInGoalPeriod,
   type GoalCategoryKey,
+  type GoalDirectionKey,
 } from "@/lib/goals";
 import { periodoLabel, previousPeriodo } from "@/lib/reuniao";
 import { differenceInCalendarDays } from "date-fns";
@@ -40,6 +45,7 @@ type GoalDTO = {
   valorMeta: number;
   valorRealizado: number;
   unidade: string;
+  direcao: string;
   startDate: string;
   endDate: string;
   bonificacao: string | null;
@@ -57,6 +63,7 @@ const emptyForm = {
   indicador: "",
   valorMeta: "",
   unidade: "R$",
+  direcao: "MAXIMIZAR" as GoalDirectionKey,
   mes: currentMonth(),
   bonificacao: "",
   observacoes: "",
@@ -72,12 +79,26 @@ function isGerenciaIndicadorFixo(value: string): boolean {
   return (GERENCIA_INDICADORES as readonly string[]).includes(value);
 }
 
+/**
+ * "% concluído" de uma meta considerando a direção dela (ver
+ * `goalProgressPercent` em src/lib/goals.ts) — usado em TODO lugar da tela
+ * que hoje mostraria "realizado/meta*100" (barra de progresso, radial,
+ * ordenação, KPI de média, texto do relatório de WhatsApp), pra nunca ter
+ * dois pesos: uma meta MINIMIZAR (ex.: CMV) que está indo bem não pode
+ * aparecer com progresso baixo só porque o número "realizado" é baixo.
+ */
+function goalPercent(g: Pick<GoalDTO, "valorRealizado" | "valorMeta" | "direcao">): number {
+  return goalProgressPercent(g.valorRealizado, g.valorMeta, g.direcao as GoalDirectionKey);
+}
+
 function kpisOf(list: GoalDTO[]) {
   const total = list.length;
   const concluidas = list.filter((g) => g.status === "CONCLUIDA").length;
   const emAndamento = list.filter((g) => g.status === "EM_ANDAMENTO" || g.status === "EM_RISCO").length;
   const atrasadas = list.filter((g) => g.status === "NAO_ATINGIDA").length;
-  const mediaConclusao = total ? list.reduce((s, g) => s + Math.min(pct(g.valorRealizado, g.valorMeta), 100), 0) / total : 0;
+  const mediaConclusao = total
+    ? list.reduce((s, g) => s + Math.max(0, Math.min(goalPercent(g), 100)), 0) / total
+    : 0;
   return { total, concluidas, emAndamento, atrasadas, mediaConclusao };
 }
 
@@ -127,7 +148,7 @@ function buildWeeklyReportText(
   if (metas.length > 0) {
     linhas.push("", "Metas do período:");
     metas.forEach((g) => {
-      const percent = pct(g.valorRealizado, g.valorMeta);
+      const percent = goalPercent(g);
       const semanaUpdate = g.weeklyUpdates.find((w) => w.weekNumber === semana.weekNumber);
       linhas.push(
         `• ${g.name}: ${formatNumber(g.valorRealizado)}/${formatNumber(g.valorMeta)} ${g.unidade} (${percent.toFixed(0)}%) — ${GOAL_STATUS_LABEL[g.status]}`
@@ -165,6 +186,7 @@ export function MetasClient({
   const [attachName, setAttachName] = useState("");
   const [attachUrl, setAttachUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
 
   const [weeklyGoal, setWeeklyGoal] = useState<GoalDTO | null>(null);
   const [weekValues, setWeekValues] = useState<Record<number, string>>({});
@@ -181,10 +203,7 @@ export function MetasClient({
 
   const filtered = useMemo(() => (mesFiltro ? goalsOfMonth(goals, mesFiltro) : goals), [goals, mesFiltro]);
 
-  const ranked = useMemo(
-    () => [...filtered].sort((a, b) => pct(b.valorRealizado, b.valorMeta) - pct(a.valorRealizado, a.valorMeta)),
-    [filtered]
-  );
+  const ranked = useMemo(() => [...filtered].sort((a, b) => goalPercent(b) - goalPercent(a)), [filtered]);
 
   const baseMonth = mesFiltro || currentMonth();
   const prevMonth = previousPeriodo(baseMonth);
@@ -202,6 +221,24 @@ export function MetasClient({
     curr,
     semanaAtual
   );
+
+  /**
+   * Copia o mesmo texto do botão "Enviar por WhatsApp" para a área de
+   * transferência. `navigator.clipboard` pode não existir em contexto
+   * não-seguro (HTTP) — o try/catch cobre esse caso e qualquer outra
+   * rejeição (ex.: permissão negada), mostrando feedback de erro em vez de
+   * falhar em silêncio.
+   */
+  async function copyReportText() {
+    try {
+      await navigator.clipboard.writeText(relatorioSemanalTexto);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("error");
+    } finally {
+      setTimeout(() => setCopyStatus("idle"), 1500);
+    }
+  }
 
   async function refresh() {
     const res = await fetch(`/api/metas?category=${category}`);
@@ -231,6 +268,7 @@ export function MetasClient({
       indicador: g.indicador ?? "",
       valorMeta: String(g.valorMeta),
       unidade: g.unidade,
+      direcao: g.direcao === "MINIMIZAR" ? "MINIMIZAR" : ("MAXIMIZAR" as GoalDirectionKey),
       mes: dateToMonth(g.startDate),
       bonificacao: g.bonificacao ?? "",
       observacoes: g.observacoes ?? "",
@@ -362,6 +400,26 @@ export function MetasClient({
           >
             <MessageCircle size={13} /> Enviar por WhatsApp
           </a>
+          <button
+            type="button"
+            onClick={copyReportText}
+            className="btn-outline"
+            title="Copiar o desempenho semanal deste setor (mesmo texto do WhatsApp)"
+          >
+            {copyStatus === "copied" ? (
+              <>
+                <CheckCheck size={13} className="text-nord-success" /> <span className="text-nord-success">Copiado!</span>
+              </>
+            ) : copyStatus === "error" ? (
+              <>
+                <AlertTriangle size={13} className="text-nord-danger" /> <span className="text-nord-danger">Erro ao copiar</span>
+              </>
+            ) : (
+              <>
+                <Copy size={13} /> Copiar
+              </>
+            )}
+          </button>
           {canCreate && (
             <button
               onClick={openNew}
@@ -425,7 +483,7 @@ export function MetasClient({
                 {ranked.map((g) => (
                   <div key={g.id} className="flex flex-col items-center gap-1">
                     <RadialProgress
-                      percent={pct(g.valorRealizado, g.valorMeta)}
+                      percent={goalPercent(g)}
                       color={g.status === "CONCLUIDA" ? "#22c55e" : g.status === "NAO_ATINGIDA" ? "#ef4444" : "#1464F4"}
                       label={g.name}
                     />
@@ -480,7 +538,11 @@ export function MetasClient({
       <Section title={`Metas — ${GOAL_CATEGORY_LABEL[category as GoalCategoryKey] ?? category}`}>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {ranked.map((g) => {
-            const percent = pct(g.valorRealizado, g.valorMeta);
+            // Clampado em [0, 100] pra bater com o número que a RadialProgress
+            // já mostra pra essa mesma meta no card acima (também clampada
+            // internamente) — sem isso, uma meta MINIMIZAR indo muito bem (ou
+            // muito mal) mostraria números diferentes nas duas seções da tela.
+            const percent = Math.max(0, Math.min(100, goalPercent(g)));
             return (
               <div
                 key={g.id}
@@ -504,7 +566,7 @@ export function MetasClient({
                   <div className="h-2 rounded-full bg-nord-border overflow-hidden">
                     <div
                       className="h-full rounded-full"
-                      style={{ width: `${Math.min(100, percent)}%`, backgroundColor: percent >= 100 ? "#22c55e" : "#1464F4" }}
+                      style={{ width: `${percent}%`, backgroundColor: percent >= 100 ? "#22c55e" : "#1464F4" }}
                     />
                   </div>
                   <p className="text-[11px] text-nord-gray mt-1">{percent.toFixed(0)}% concluído</p>
@@ -619,6 +681,26 @@ export function MetasClient({
             <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" />
           </Field>
           <div className="col-span-2">
+            <Field label="Direção da meta">
+              <select
+                value={form.direcao}
+                onChange={(e) => setForm({ ...form, direcao: e.target.value as GoalDirectionKey })}
+                className="input"
+              >
+                {GOAL_DIRECTIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {GOAL_DIRECTION_LABEL[d]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-nord-gray mt-1">
+                {form.direcao === "MINIMIZAR"
+                  ? "Ex.: CMV — ficar abaixo do valor da meta é o resultado bom."
+                  : "Ex.: vendas, faturamento — ficar acima do valor da meta é o resultado bom."}
+              </p>
+            </Field>
+          </div>
+          <div className="col-span-2">
             <Field label="Mês de vigência">
               <input type="month" value={form.mes} onChange={(e) => setForm({ ...form, mes: e.target.value })} className="input" />
             </Field>
@@ -680,13 +762,17 @@ export function MetasClient({
         {weeklyGoal && (
           <div className="space-y-3">
             <div className="rounded-lg border border-nord-border bg-nord-panel px-3 py-2.5 flex items-center justify-between">
-              <span className="text-xs text-nord-gray">Total somado até agora</span>
+              <span className="text-xs text-nord-gray">
+                {isAverageGoalUnit(weeklyGoal.unidade) ? "Média até agora" : "Total somado até agora"}
+              </span>
               <span className="text-sm text-white font-semibold">
                 {formatNumber(weeklyGoal.valorRealizado)} / {formatNumber(weeklyGoal.valorMeta)} {weeklyGoal.unidade}
               </span>
             </div>
             <p className="text-[11px] text-nord-gray">
-              Lance o valor de cada semana do mês — o sistema soma tudo automaticamente até o fim do período.
+              {isAverageGoalUnit(weeklyGoal.unidade)
+                ? "Lance o valor de cada semana do mês — o sistema calcula a média automaticamente entre as semanas lançadas."
+                : "Lance o valor de cada semana do mês — o sistema soma tudo automaticamente até o fim do período."}
             </p>
             <div className="space-y-2">
               {Array.from({ length: weeklyTotalSemanas }, (_, i) => i + 1).map((weekNumber) => {

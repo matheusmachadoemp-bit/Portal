@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
-import * as XLSX from "xlsx";
 import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
+import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 
 const SALE_INSERT_CHUNK_SIZE = 1000;
 
@@ -104,7 +104,7 @@ function mapPagamento(raw: string): PaymentMethod {
 
 function parseDateFlexible(raw: string | number): Date | null {
   if (typeof raw === "number") {
-    const parsed = XLSX.SSF.parse_date_code(raw);
+    const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
     return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
   }
@@ -134,7 +134,7 @@ function parseOrderDate(raw: string | number): Date | null {
 /** Extrai data e hora completas de "Data da venda" (dd/mm/aaaa HH:MM) — usada no registro de cada venda. */
 function parseOrderDateTime(raw: string | number): Date | null {
   if (typeof raw === "number") {
-    const parsed = XLSX.SSF.parse_date_code(raw);
+    const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
     return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H ?? 0, parsed.M ?? 0, parsed.S ?? 0));
   }
@@ -165,12 +165,6 @@ function rowsFromCsvText(text: string): string[][] {
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0)
     .map((line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, "")));
-}
-
-function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, raw: true, defval: "" });
 }
 
 type DayAggregate = {
@@ -225,7 +219,7 @@ export async function POST(req: Request) {
 
   let rows: (string | number)[][];
   try {
-    rows = isSpreadsheet ? rowsFromWorkbook(buffer) : rowsFromCsvText(buffer.toString("utf-8"));
+    rows = isSpreadsheet ? await readWorkbookRows(buffer) : rowsFromCsvText(buffer.toString("utf-8"));
   } catch {
     return NextResponse.json({ error: "Não foi possível ler o arquivo. Confira se é um .xlsx ou .csv válido." }, { status: 400 });
   }
