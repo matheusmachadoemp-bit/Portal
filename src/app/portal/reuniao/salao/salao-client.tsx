@@ -56,6 +56,16 @@ const NPS_DETALHADO_FIELDS = [
   { key: "npsTempoEspera", label: "Tempo de Espera", icon: "Hourglass" },
 ] as const;
 
+// Os 5 campos de nota (Qualidade do Produto, Atendimento, Ambiente, Rodízio, Tempo de
+// Espera) não têm mais input no modal "Fechamento do mês" (seção "Resultado do período"
+// removida a pedido do usuário — sempre apareciam vazios), mas continuam inicializados aqui
+// a partir do registro já salvo: (1) a seção "NPS detalhado por categoria", fora do modal,
+// ainda exibe esses valores (agora congelados) e a comparação com o mês anterior; (2) a rota
+// POST /api/reuniao/salao trata qualquer um desses campos ausente no body como "grava null"
+// (ver route.ts) — se o form parasse de incluí-los, salvar o modal por qualquer outro motivo
+// (ex.: só um indicador do "Fechamento do mês") apagaria retroativamente uma nota já lançada
+// em um mês anterior. Mesmo padrão usado na Reunião Gerente para turnoverPercent/
+// faltasAtrasosAtestados/checklistOperacionalPercent (ver gerente-client.tsx).
 function buildForm(m?: Meeting | null) {
   return {
     npsQualidadeProduto: m?.npsQualidadeProduto != null ? String(m.npsQualidadeProduto) : "",
@@ -67,6 +77,16 @@ function buildForm(m?: Meeting | null) {
   };
 }
 
+// `quantidade`/`meta`/`premiacao` por produto também não têm mais input no modal (as tabelas
+// "Produto / Quantidade vendida", dentro de "Resultado do período", e "Metas e premiação por
+// produto" foram removidas junto, mesmo print do usuário). Diferente dos 5 campos acima, a
+// rota POST /api/reuniao/salao NÃO apaga metas existentes quando `produtoMetas` vem vazio/
+// ausente: ela faz um upsert por item do array que vier no body (ver route.ts, loop em torno
+// de `salaoProductGoal.upsert`) — item que não vier simplesmente não é tocado, sem risco de
+// null-ar nada. Mesmo assim, `produtoForm` continua populado a partir do registro salvo (e o
+// `submit()` continua enviando-o) porque a seção "Metas de vendas por produto", fora do modal,
+// e o cálculo de `premiacaoTotal` seguem lendo esse estado — sem nenhum input escrevendo nele,
+// fica congelado no valor carregado da API (reenviá-lo em cada save é só um no-op seguro).
 function buildProdutoForm(m?: Meeting | null) {
   const byProduto = new Map((m?.produtoMetas ?? []).map((p) => [p.produto, p]));
   return SALAO_PRODUTOS_PADRAO.map((produto) => {
@@ -479,95 +499,16 @@ export function SalaoClient({
           open={fechamentoModalOpen}
           onClose={() => setFechamentoModalOpen(false)}
           title={`Fechamento do mês — ${periodoLabel(selectedPeriodo)}`}
-          widthClass="max-w-3xl"
+          widthClass="max-w-2xl"
         >
           <div className="space-y-5">
-            <div>
-              <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-                {NPS_DETALHADO_FIELDS.map((f) => (
-                  <label key={f.key} className="block">
-                    <span className="block text-xs text-nord-gray mb-1">{f.label}</span>
-                    <input
-                      type="number"
-                      value={form[f.key]}
-                      onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
-                      className="input"
-                      placeholder="nota"
-                    />
-                  </label>
-                ))}
-              </div>
-              <div className="overflow-x-auto nord-scrollbar">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-white border-b border-nord-border">
-                      <th className="py-2 px-3">Produto</th>
-                      <th className="py-2 px-3">Quantidade vendida</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {produtoForm.map((p, i) => (
-                      <tr key={p.produto} className="border-b border-nord-border/50">
-                        <td className="py-2 px-3 text-white">{p.produto}</td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="number"
-                            value={p.quantidade}
-                            onChange={(e) =>
-                              setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, quantidade: e.target.value } : x)))
-                            }
-                            className="input"
-                            placeholder="un."
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-white text-sm font-medium mb-3">Metas e premiação por produto</h4>
-              <div className="overflow-x-auto nord-scrollbar">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-white border-b border-nord-border">
-                      <th className="py-2 px-3">Produto</th>
-                      <th className="py-2 px-3">Meta (un.)</th>
-                      <th className="py-2 px-3">Premiação (R$)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {produtoForm.map((p, i) => (
-                      <tr key={p.produto} className="border-b border-nord-border/50">
-                        <td className="py-2 px-3 text-white">{p.produto}</td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="number"
-                            value={p.meta}
-                            onChange={(e) => setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, meta: e.target.value } : x)))}
-                            className="input"
-                          />
-                        </td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="number"
-                            value={p.premiacao}
-                            onChange={(e) =>
-                              setProdutoForm((prev) => prev.map((x, idx) => (idx === i ? { ...x, premiacao: e.target.value } : x)))
-                            }
-                            className="input"
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
+            {/* Seção "Resultado do período" (5 notas de NPS detalhado + tabela "Produto /
+                Quantidade vendida") e seção "Metas e premiação por produto" (tabela Produto/
+                Meta/Premiação) removidas a pedido do usuário — apareciam sempre vazias/pouco
+                usadas no modal. Os valores continuam sendo exibidos, só que somente leitura,
+                nas seções "Metas de vendas por produto" e "NPS detalhado por categoria" mais
+                abaixo na tela (fora do modal) — ver `buildForm`/`buildProdutoForm` acima para
+                como esses campos continuam "congelados" no round-trip do `submit()`. */}
             <FechamentoDoMesEditor fdm={fdm} />
 
             <div className="flex items-center justify-between pt-2 border-t border-nord-border">
