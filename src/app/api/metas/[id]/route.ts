@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { computeGoalStatus, GERENCIA_RESPONSAVEL, weeksInGoalPeriod } from "@/lib/goals";
+import { computeGoalStatus, GERENCIA_RESPONSAVEL, weeksInGoalPeriod, type GoalDirectionKey } from "@/lib/goals";
+import { computeValorRealizado } from "@/lib/goals-server";
 import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,11 +24,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
 
   const valorMeta = body.valorMeta !== undefined ? Number(body.valorMeta) : existing.valorMeta;
+  const unidade: string = body.unidade ?? existing.unidade;
+  // Whitelist explícito (em vez de confiar direto em `body.direcao`) —
+  // `undefined` quando o body não manda o campo (edição parcial: mantém o
+  // valor já salvo), "MAXIMIZAR"/"MINIMIZAR" só quando o body manda
+  // exatamente um desses dois; qualquer outro valor é ignorado (mantém o
+  // que já estava).
+  const direcaoBody: GoalDirectionKey | undefined =
+    body.direcao === "MINIMIZAR" ? "MINIMIZAR" : body.direcao === "MAXIMIZAR" ? "MAXIMIZAR" : undefined;
+  const direcao: GoalDirectionKey = direcaoBody ?? existing.direcao;
   // `valorRealizado` nunca é aceito aqui (mesmo que o body envie um) — é
-  // sempre um cache da soma dos lançamentos semanais (ver
+  // sempre um cache da soma/média dos lançamentos semanais (ver
   // src/app/api/metas/[id]/semanas/route.ts e recomputeGoalRealizado em
   // src/lib/goals-server.ts), nunca editado direto na definição da meta.
-  const valorRealizado = existing.valorRealizado;
+  // Única exceção: se esta edição está MUDANDO a unidade (ex.: "R$" -> "%"),
+  // o tipo de agregação muda junto (soma vira média ou vice-versa — ver
+  // isAverageGoalUnit em src/lib/goals.ts), e o valor em cache ficaria
+  // mentindo até o próximo lançamento semanal — por isso recalculamos aqui
+  // também sempre que a unidade muda.
+  const valorRealizado =
+    body.unidade !== undefined && body.unidade !== existing.unidade
+      ? await computeValorRealizado(id, unidade)
+      : existing.valorRealizado;
   const startDate = body.startDate ? new Date(body.startDate) : existing.startDate;
   const endDate = body.endDate ? new Date(body.endDate) : existing.endDate;
 
@@ -69,11 +87,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       description: body.description ?? undefined,
       indicador: body.indicador ?? undefined,
       valorMeta,
+      // Só grava `valorRealizado` quando ele foi de fato recalculado acima
+      // (mudança de unidade) — nos outros casos é `existing.valorRealizado`,
+      // e gravar de novo o mesmo valor seria só um no-op inofensivo, mas
+      // `undefined` deixa mais explícito que esta rota normalmente não mexe
+      // nesse campo.
+      valorRealizado: body.unidade !== undefined && body.unidade !== existing.unidade ? valorRealizado : undefined,
       unidade: body.unidade ?? undefined,
+      direcao: direcaoBody,
       startDate: body.startDate ? startDate : undefined,
       endDate,
       bonificacao: body.bonificacao ?? undefined,
-      status: computeGoalStatus(valorRealizado, valorMeta, endDate) as never,
+      status: computeGoalStatus(valorRealizado, valorMeta, endDate, new Date(), direcao, unidade) as never,
       observacoes: body.observacoes ?? undefined,
       planoDeAcao: body.planoDeAcao ?? undefined,
     },
