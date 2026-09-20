@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Trophy, Pencil, FileDown, Star, Quote, Trash2 } from "lucide-react";
-import { Section, Badge } from "@/components/ui/stat-card";
+import { Pencil, FileDown, Quote, Trash2 } from "lucide-react";
+import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { statusOf } from "@/components/reuniao/indicator-card";
@@ -11,12 +11,11 @@ import {
   FechamentoDoMesSection,
   FechamentoDoMesEditor,
   useFechamentoDoMes,
-  indicatorAccentColor,
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, previousPeriodo, resolveComparePeriodos, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
+import { periodoLabel, periodoShortLabel, resolveComparePeriodos, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
 
 type ProdutoMeta = { produto: string; quantidade: number | null; meta: number; premiacao: number };
 
@@ -43,18 +42,6 @@ type Meeting = {
 type Metrics = { npsPercent: number | null; faturamentoValor: number; ticketMedioValor: number | null };
 type MelhorVendedor = { nome: string | null; valor: number | null };
 type Comentario = { nome: string; comentario: string; nota: number };
-
-// `icon` só é usado pelos cards de exibição abaixo (mesmo badge colorido do
-// "Fechamento do mês"/"Melhor vendedor do mês") — os 5 campos, chaves e
-// lógica de NPS detalhado continuam exatamente os mesmos, só ganharam um
-// ícone pra não destoar visualmente do resto da tela.
-const NPS_DETALHADO_FIELDS = [
-  { key: "npsQualidadeProduto", label: "Qualidade do Produto", icon: "Pizza" },
-  { key: "npsAtendimento", label: "Atendimento", icon: "Handshake" },
-  { key: "npsAmbiente", label: "Ambiente", icon: "Armchair" },
-  { key: "npsRodizio", label: "Rodízio", icon: "RefreshCw" },
-  { key: "npsTempoEspera", label: "Tempo de Espera", icon: "Hourglass" },
-] as const;
 
 // Os 5 campos de nota (Qualidade do Produto, Atendimento, Ambiente, Rodízio, Tempo de
 // Espera) não têm mais input no modal "Fechamento do mês" (seção "Resultado do período"
@@ -116,7 +103,6 @@ export function SalaoClient({
   initialMeetings,
   initialCurrent,
   initialMetrics,
-  initialMelhorVendedor,
   initialComentarios,
   initialCustomIndicators,
   periodo,
@@ -127,6 +113,11 @@ export function SalaoClient({
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
   initialMetrics: Metrics;
+  /** Não é mais desestruturada acima (a seção "Melhor vendedor do mês" saiu da
+   * tela, pedido do usuário — sempre aparecia vazia). O tipo continua exigindo
+   * essa prop porque `page.tsx` ainda calcula e passa `initialMelhorVendedor`
+   * (não mexemos no servidor); removê-la do tipo quebraria a chamada de
+   * `<SalaoClient>` em page.tsx com uma prop "desconhecida". */
   initialMelhorVendedor: MelhorVendedor;
   initialComentarios: Comentario[];
   initialCustomIndicators: FechamentoIndicator[];
@@ -141,7 +132,6 @@ export function SalaoClient({
   const [selectedPeriodo, setSelectedPeriodo] = useState(periodo);
   const [current, setCurrent] = useState(initialCurrent);
   const [metrics, setMetrics] = useState(initialMetrics);
-  const [melhorVendedor, setMelhorVendedor] = useState(initialMelhorVendedor);
   const [comentarios, setComentarios] = useState(initialComentarios);
   const [form, setForm] = useState(buildForm(initialCurrent));
   const [produtoForm, setProdutoForm] = useState(buildProdutoForm(initialCurrent));
@@ -171,7 +161,6 @@ export function SalaoClient({
         if (cancelled) return;
         setCurrent(data.current);
         setMetrics(data.metrics);
-        setMelhorVendedor(data.melhorVendedor);
         setComentarios(data.comentarios);
         setForm(buildForm(data.current));
         setProdutoForm(buildProdutoForm(data.current));
@@ -193,12 +182,6 @@ export function SalaoClient({
     }
     return total;
   }, [produtoForm]);
-
-  function anteriorMeeting() {
-    return meetings.find((m) => m.periodo === previousPeriodo(selectedPeriodo)) ?? null;
-  }
-
-  const anteriorParaComparacao = anteriorMeeting();
 
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
@@ -300,7 +283,6 @@ export function SalaoClient({
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
-    setMelhorVendedor(data.melhorVendedor);
     setComentarios(data.comentarios);
     fdm.sync(fdmToken, data.customIndicators ?? []);
   }
@@ -331,7 +313,6 @@ export function SalaoClient({
     setForm(buildForm(m));
     setProdutoForm(buildProdutoForm(m));
     setMetrics({ npsPercent: m.npsPercent, faturamentoValor: m.faturamentoValor ?? 0, ticketMedioValor: m.ticketMedioValor });
-    setMelhorVendedor({ nome: m.melhorVendedorNome, valor: m.melhorVendedorValor });
     setFechamentoModalOpen(true);
   }
 
@@ -355,8 +336,6 @@ export function SalaoClient({
       setDeleting(false);
     }
   }
-
-  const anterior = anteriorParaComparacao;
 
   return (
     <div className="space-y-6">
@@ -382,99 +361,16 @@ export function SalaoClient({
         </div>
       </div>
 
-      {premiacaoTotal > 0 && (
-        <div className="nord-card p-4 flex items-center gap-3 bg-amber-950/10 border-amber-900/40">
-          <Trophy size={20} className="text-amber-400 shrink-0" />
-          <span className="text-sm text-white">
-            Premiação total do mês: <strong>{formatCurrency(premiacaoTotal)}</strong>
-          </span>
-        </div>
-      )}
-
       {canCreate && <FechamentoDoMesSection indicators={fdm.customIndicators} onEditClick={() => setFechamentoModalOpen(true)} />}
 
-      <Section title="Melhor vendedor do mês">
-        {melhorVendedor.nome ? (
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
-              <Star size={20} className="text-amber-400" />
-            </div>
-            <div>
-              <p className="text-white font-medium">{melhorVendedor.nome}</p>
-              <p className="text-xs text-nord-gray">{formatCurrency(melhorVendedor.valor ?? 0)} em vendas no período</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-nord-gray">Nenhuma venda por garçom registrada nesse período.</p>
-        )}
-      </Section>
-
-      <Section title="Metas de vendas por produto">
-        <div className="overflow-x-auto nord-scrollbar">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-white border-b border-nord-border">
-                <th className="py-2 px-3">Produto</th>
-                <th className="py-2 px-3">Quantidade</th>
-                <th className="py-2 px-3">Meta</th>
-                <th className="py-2 px-3">Status</th>
-                <th className="py-2 px-3">Premiação (R$)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {produtoForm.map((p) => {
-                const qtd = p.quantidade === "" ? null : Number(p.quantidade);
-                const metaValor = Number(p.meta) || 0;
-                const bateu = qtd === null || metaValor <= 0 ? null : qtd >= metaValor;
-                return (
-                  <tr key={p.produto} className="border-b border-nord-border/50">
-                    <td className="py-2 px-3 text-white">{p.produto}</td>
-                    <td className="py-2 px-3">
-                      <span className="text-nord-gray">{qtd ?? "-"}</span>
-                    </td>
-                    <td className="py-2 px-3">
-                      <span className="text-nord-gray">{formatNumber(Number(p.meta) || 0, 0)} un.</span>
-                    </td>
-                    <td className="py-2 px-3">
-                      <Badge tone={bateu === null ? "default" : bateu ? "success" : "warning"}>
-                        {bateu === null ? "Sem dado" : bateu ? "Meta batida" : "Abaixo da meta"}
-                      </Badge>
-                    </td>
-                    <td className="py-2 px-3">
-                      <span className="text-amber-400">{formatCurrency(Number(p.premiacao) || 0)}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Section>
-
-      <Section title="NPS detalhado por categoria">
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          {NPS_DETALHADO_FIELDS.map((f, index) => {
-            const color = indicatorAccentColor(index);
-            return (
-              <div key={f.key} className="nord-card p-3 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${color}22` }}
-                  >
-                    <DynamicIcon name={f.icon} size={14} style={{ color }} />
-                  </div>
-                  <span className="text-xs text-nord-gray truncate">{f.label}</span>
-                </div>
-                <span className="text-lg font-semibold text-white">{form[f.key] || "-"}</span>
-                <span className="text-[11px] text-nord-gray">
-                  Mês anterior: {anterior?.[f.key] != null ? anterior[f.key] : "-"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </Section>
+      {/* Banner "Premiação total do mês", seção "Melhor vendedor do mês", seção "Metas de
+          vendas por produto" e seção "NPS detalhado por categoria" removidas da tela a pedido
+          do usuário (prints mostrando a seção de vendedor e a de NPS sempre vazias/"-").
+          `premiacaoTotal` e `produtoForm` continuam calculados/populados normalmente — ainda
+          alimentam o PDF exportado em `exportPdf()` (premiação total + linha "Meta: {produto}"
+          por produto) e o `submit()` continua enviando `produtoForm` pra não apagar retroativamente
+          metas já salvas (ver comentários em `buildProdutoForm` acima). A coluna "Premiação total"
+          do histórico mais abaixo (`meetingPremiacaoTotal`) também não mudou. */}
 
       {comentarios.length > 0 && (
         <Section title="Comentários de clientes em destaque">
@@ -504,11 +400,13 @@ export function SalaoClient({
           <div className="space-y-5">
             {/* Seção "Resultado do período" (5 notas de NPS detalhado + tabela "Produto /
                 Quantidade vendida") e seção "Metas e premiação por produto" (tabela Produto/
-                Meta/Premiação) removidas a pedido do usuário — apareciam sempre vazias/pouco
-                usadas no modal. Os valores continuam sendo exibidos, só que somente leitura,
-                nas seções "Metas de vendas por produto" e "NPS detalhado por categoria" mais
-                abaixo na tela (fora do modal) — ver `buildForm`/`buildProdutoForm` acima para
-                como esses campos continuam "congelados" no round-trip do `submit()`. */}
+                Meta/Premiação) já tinham sido removidas do modal antes (apareciam sempre vazias/
+                pouco usadas). As seções de exibição somente-leitura que ainda mostravam esses
+                valores fora do modal ("Metas de vendas por produto" e "NPS detalhado por
+                categoria") também saíram da tela agora, mesmo motivo (prints do usuário
+                mostrando tudo vazio/"-") — ver `buildForm`/`buildProdutoForm` acima: os dois
+                estados continuam intactos (alimentam o PDF em `exportPdf()` e evitam apagar
+                dado salvo no `submit()`), só pararam de ter qualquer exibição na tela. */}
             <FechamentoDoMesEditor fdm={fdm} />
 
             <div className="flex items-center justify-between pt-2 border-t border-nord-border">
