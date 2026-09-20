@@ -63,6 +63,7 @@ export function CozinhaClient({
   initialCustomIndicators,
   periodo,
   canCreate,
+  isGrupoNordMode,
   canDeleteMetas,
   empresaName,
 }: {
@@ -72,6 +73,8 @@ export function CozinhaClient({
   initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode: boolean;
   /** Controla só o botão de excluir do card "Metas de [próximo mês]" — ver
    * canDeleteMetas em gerente/page.tsx (mesmo critério, `canDelete` no módulo "reuniao"). */
   canDeleteMetas: boolean;
@@ -289,13 +292,16 @@ export function CozinhaClient({
         </div>
       </div>
 
-      {/* Sem loja específica selecionada (visão consolidada "Grupo Nord"), a reunião não
-          tem o que mostrar aqui — mesmo padrão de aviso já usado em gerente-client.tsx e
-          lideranca-client.tsx (reaproveitado aqui em vez de inventar um texto novo). */}
+      {/* !canCreate aqui tem 2 motivos possíveis (diferente de gerente/lideranca/delivery/salao,
+          onde canCreate é só isSingle): visão consolidada "Grupo Nord" (sem loja específica
+          selecionada) ou falta de permissão real (canEdit) numa loja única — ver comentário de
+          `canCreate` em page.tsx. isGrupoNordMode escolhe a mensagem certa, mesmo padrão do
+          item #255 (ex.: movimentacoes-client.tsx, insumos-client.tsx). */}
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e
-          editar o fechamento do mês desta reunião.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e editar o fechamento do mês desta reunião."
+            : "Seu perfil de permissão não permite ver ou editar o fechamento do mês desta reunião."}
         </p>
       )}
 
