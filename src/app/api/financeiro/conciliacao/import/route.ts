@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import * as XLSX from "xlsx";
+import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 
 const HEADER_ALIASES: Record<string, string> = {
   data: "data",
@@ -28,7 +28,7 @@ function normalizeHeader(h: string): string {
 
 function parseDateFlexible(raw: string | number): Date | null {
   if (typeof raw === "number") {
-    const parsed = XLSX.SSF.parse_date_code(raw);
+    const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
     return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
   }
@@ -59,12 +59,6 @@ function rowsFromCsvText(text: string): string[][] {
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0)
     .map((line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, "")));
-}
-
-function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, raw: true, defval: "" });
 }
 
 export async function POST(req: Request) {
@@ -101,7 +95,7 @@ export async function POST(req: Request) {
 
   let rows: (string | number)[][];
   if (isSpreadsheet) {
-    rows = rowsFromWorkbook(buffer);
+    rows = await readWorkbookRows(buffer);
   } else {
     rows = rowsFromCsvText(buffer.toString("utf-8"));
   }

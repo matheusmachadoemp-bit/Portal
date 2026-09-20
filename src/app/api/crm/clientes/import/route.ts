@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import * as XLSX from "xlsx";
+import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 
 // Vercel mata a função em 10s por padrão — um arquivo com centenas/milhares
 // de linhas processadas uma a uma facilmente estoura isso. Com as operações
@@ -70,7 +70,7 @@ function normalizeHeader(h: string): string {
 
 function parseDateFlexible(raw: string | number): Date | null {
   if (typeof raw === "number") {
-    const parsed = XLSX.SSF.parse_date_code(raw);
+    const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
     return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
   }
@@ -120,12 +120,6 @@ function rowsFromCsvText(text: string): string[][] {
     .map((line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, "")));
 }
 
-function rowsFromWorkbook(buffer: Buffer): (string | number)[][] {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, raw: true, defval: "" });
-}
-
 // Processa uma lista de promises em lotes concorrentes, em vez de uma a uma
 // (lento demais para arquivos grandes) ou todas de uma vez (satura o pool
 // de conexões do banco).
@@ -163,7 +157,7 @@ export async function POST(req: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const isSpreadsheet = /\.xlsx?$/i.test(file.name);
 
-  const rows = isSpreadsheet ? rowsFromWorkbook(buffer) : rowsFromCsvText(buffer.toString("utf-8"));
+  const rows = isSpreadsheet ? await readWorkbookRows(buffer) : rowsFromCsvText(buffer.toString("utf-8"));
 
   if (rows.length < 2) {
     return NextResponse.json({ error: "Arquivo vazio ou sem linhas de dados." }, { status: 400 });

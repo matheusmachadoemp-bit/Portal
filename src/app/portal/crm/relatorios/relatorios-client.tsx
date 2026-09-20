@@ -24,11 +24,19 @@ function exportCsv(report: ReportDef) {
 }
 
 async function exportExcel(report: ReportDef) {
-  const XLSX = await import("xlsx");
-  const sheet = XLSX.utils.aoa_to_sheet([report.headers, ...report.rows]);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet, report.title.slice(0, 31));
-  XLSX.writeFile(wb, `${report.key}.xlsx`);
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(report.title.slice(0, 31));
+  worksheet.addRows([report.headers, ...report.rows]);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${report.key}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function RelatoriosClient({ reports }: { reports: ReportDef[] }) {
