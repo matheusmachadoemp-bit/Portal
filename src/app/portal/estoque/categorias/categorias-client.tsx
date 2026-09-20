@@ -25,9 +25,11 @@ const emptyForm = { id: "", name: "", color: "#2952E3", icon: "Boxes", setor: ""
 export function CategoriasClient({
   initialCategories,
   canCreate,
+  canEdit,
 }: {
   initialCategories: Category[];
   canCreate: boolean;
+  canEdit: boolean;
 }) {
   const [categories, setCategories] = useState(initialCategories);
   const [form, setForm] = useState(emptyForm);
@@ -54,7 +56,7 @@ export function CategoriasClient({
   }
 
   function openEdit(c: Category) {
-    if (!canCreate) return;
+    if (!canEdit) return;
     setForm({
       id: c.id,
       name: c.name,
@@ -70,10 +72,11 @@ export function CategoriasClient({
 
   async function submit() {
     if (submitting) return;
+    const isEdit = !!form.id;
+    if (isEdit ? !canEdit : !canCreate) return;
     setSubmitting(true);
     setError(null);
     try {
-      const isEdit = !!form.id;
       const res = await fetch(isEdit ? `/api/estoque/categorias/${form.id}` : "/api/estoque/categorias", {
         method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -93,7 +96,7 @@ export function CategoriasClient({
   }
 
   async function toggleActive(c: Category) {
-    if (!canCreate) return;
+    if (!canEdit) return;
     await fetch(`/api/estoque/categorias/${c.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -118,8 +121,8 @@ export function CategoriasClient({
           <button
             key={c.id}
             onClick={() => openEdit(c)}
-            disabled={!canCreate}
-            className={`nord-card p-4 text-left space-y-2 transition ${!c.active ? "opacity-50" : ""} ${canCreate ? "hover:border-nord-blue" : "cursor-default"}`}
+            disabled={!canEdit}
+            className={`nord-card p-4 text-left space-y-2 transition ${!c.active ? "opacity-50" : ""} ${canEdit ? "hover:border-nord-blue" : "cursor-default"}`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -138,7 +141,7 @@ export function CategoriasClient({
               <span>Meta de perda: {c.metaPerdaPercent}%</span>
               <span>{c.periodicidadeContagem === "MENSAL" ? "Contagem mensal" : "Contagem semanal"}</span>
             </div>
-            {canCreate && (
+            {canEdit && (
               <div className="pt-1 flex justify-end">
                 <span
                   onClick={(e) => { e.stopPropagation(); toggleActive(c); }}

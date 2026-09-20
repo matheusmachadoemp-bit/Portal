@@ -21,8 +21,10 @@ export default async function CategoriasPage() {
   // ativa para criar/editar — diferente das outras telas de Estoque, aqui não
   // faz sentido travar por "ctx?.mode === 'single'": travaria uma ação que a
   // API aceitaria normalmente em modo Grupo Nord. Só a permissão de verdade
-  // importa.
+  // importa. Confirmado nas rotas: POST checa canCreate, PATCH (edição de
+  // campos e ativar/desativar) checa canEdit.
   const canCreate = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  const canEdit = await hasModulePermission(session.user.id, "estoque", "canEdit");
 
   return (
     <PageContainer title="Estoque" subtitle="Categorias">
@@ -40,6 +42,7 @@ export default async function CategoriasPage() {
             produtos: c._count.ingredients,
           }))}
           canCreate={canCreate}
+          canEdit={canEdit}
         />
       </div>
     </PageContainer>
