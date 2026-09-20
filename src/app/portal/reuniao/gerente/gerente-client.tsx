@@ -143,6 +143,7 @@ export function GerenteClient({
   initialCustomIndicators,
   periodo,
   canCreate,
+  isGrupoNordMode,
   canDeleteMetas,
   empresaName,
 }: {
@@ -152,6 +153,8 @@ export function GerenteClient({
   initialCustomIndicators: GerenteCustomIndicatorDTO[];
   periodo: string;
   canCreate: boolean;
+  /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
+  isGrupoNordMode: boolean;
   /** Perfil "gerente" tem canCreate/canEdit mas não canDelete no módulo "reuniao" — controla
    * só o botão de excluir meta (criar/editar segue o mesmo `canCreate` do resto da tela). */
   canDeleteMetas: boolean;
@@ -503,18 +506,22 @@ export function GerenteClient({
       </div>
 
       {/* Sem loja específica selecionada (visão consolidada "Grupo Nord"), a reunião não
-          tem o que mostrar aqui: "Fechamento do mês"/"Observações" são por loja (`canCreate`
-          reflete isso — vem de `isSingle` em page.tsx) e o grid de indicadores fixos que
-          ficava nesse espaço foi removido (deixou de existir desde que "Fechamento do mês"
-          passou a ser a única fonte desses números, sem duplicar o que já aparece nela). Mesmo
-          padrão de aviso já usado em outras telas com essa mesma limitação — ver
-          src/app/portal/tarefas/checklist/checklist-client.tsx e
+          tem o que mostrar aqui: "Fechamento do mês"/"Observações" são por loja e o grid de
+          indicadores fixos que ficava nesse espaço foi removido (deixou de existir desde que
+          "Fechamento do mês" passou a ser a única fonte desses números, sem duplicar o que já
+          aparece nela). Mesmo padrão de aviso já usado em outras telas com essa mesma
+          limitação — ver src/app/portal/tarefas/checklist/checklist-client.tsx e
           src/app/portal/marketing/trafego-pago/trafego-pago-client.tsx — reaproveitado aqui
-          em vez de inventar um texto novo. */}
+          em vez de inventar um texto novo. `!canCreate` aqui tem 2 motivos possíveis: visão
+          consolidada "Grupo Nord" (sem loja específica selecionada) ou falta de permissão real
+          (canEdit) numa loja única — ver comentário de `canCreate` em page.tsx.
+          isGrupoNordMode escolhe a mensagem certa, mesmo padrão do item #255 (ex.:
+          movimentacoes-client.tsx, insumos-client.tsx). */}
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e
-          editar o fechamento do mês desta reunião.
+          {isGrupoNordMode
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para ver e editar o fechamento do mês desta reunião."
+            : "Seu perfil de permissão não permite ver ou editar o fechamento do mês desta reunião."}
         </p>
       )}
 
