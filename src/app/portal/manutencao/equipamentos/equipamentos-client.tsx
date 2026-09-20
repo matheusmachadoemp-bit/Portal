@@ -40,15 +40,15 @@ export function EquipamentosClient({ initialEquipamentos, canCreate }: { initial
       action={
         <Toolbar
           filters={
-            <>
-              <input className="input w-56" placeholder="Buscar por nome, código, marca..." value={q} onChange={(e) => setQ(e.target.value)} />
-              <select className="input w-44" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <div className="flex items-center gap-2 flex-nowrap min-w-0">
+              <input className="input !w-56 min-w-0" placeholder="Buscar por nome, código, marca..." value={q} onChange={(e) => setQ(e.target.value)} />
+              <select className="input !w-44 min-w-0" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="">Todos os status</option>
                 {Object.entries(EQUIPAMENTO_STATUS_LABEL).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
                 ))}
               </select>
-            </>
+            </div>
           }
           exportFilename="equipamentos"
           exportSheetName="Equipamentos"
