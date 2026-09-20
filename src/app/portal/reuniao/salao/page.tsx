@@ -39,9 +39,20 @@ export default async function ReuniaoSalaoPage() {
   const current = isSingle ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
   const customIndicators = isSingle ? await loadReuniaoCustomIndicators(ctx.empresa.id, "SALAO", periodo) : [];
 
+  // A prop "canCreate" desta tela na verdade controla o botão que salva o
+  // fechamento da reunião de salão do período — um upsert (POST
+  // /api/reuniao/salao), não uma criação de registro novo a cada clique.
+  // A própria rota exige "canEdit" no módulo "reuniao" (não "canCreate"),
+  // então checamos a permissão real que o backend usa, pra não "mentir" pro
+  // usuário do jeito contrário (mostrar o botão achando que precisa de
+  // canCreate quando na verdade precisa de canEdit).
+  const canManageReuniao = await hasModulePermission(session.user.id, "reuniao", "canEdit");
+  const canCreate = isSingle && canManageReuniao;
+
   // Card "Metas de [próximo mês]": criar/editar já é coberto pelo mesmo critério de
-  // `canCreate` (isSingle) que o resto da tela usa — mas excluir uma meta exige
-  // especificamente `canDelete` no módulo "reuniao" (ver mesmo comentário em gerente/page.tsx).
+  // `canCreate` (isSingle + canManageReuniao) que o resto da tela usa — mas excluir uma meta
+  // exige especificamente `canDelete` no módulo "reuniao" (ver mesmo comentário em
+  // gerente/page.tsx).
   const canDeleteMetas = await hasModulePermission(session.user.id, "reuniao", "canDelete");
 
   return (
@@ -54,7 +65,8 @@ export default async function ReuniaoSalaoPage() {
         initialComentarios={comentarios}
         initialCustomIndicators={customIndicators}
         periodo={periodo}
-        canCreate={isSingle}
+        canCreate={canCreate}
+        isGrupoNordMode={!isSingle}
         canDeleteMetas={canDeleteMetas}
         empresaName={isSingle ? ctx.empresa.name : "Grupo Nord"}
       />
