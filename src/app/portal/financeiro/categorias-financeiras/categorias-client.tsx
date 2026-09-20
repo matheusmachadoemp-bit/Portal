@@ -35,9 +35,13 @@ const emptyForm = { name: "", type: "DESPESA", dreKey: "" };
 export function CategoriasClient({
   initialCategories,
   dreOptions,
+  canCreate,
+  canEdit,
 }: {
   initialCategories: CategoryDTO[];
   dreOptions: DreOption[];
+  canCreate: boolean;
+  canEdit: boolean;
 }) {
   const [categories, setCategories] = useState(initialCategories);
   const [showForm, setShowForm] = useState(false);
@@ -63,12 +67,14 @@ export function CategoriasClient({
   }
 
   function openNew() {
+    if (!canCreate) return;
     setEditing(null);
     setForm({ ...emptyForm, dreKey: dreOptions[0]?.key ?? "" });
     setShowForm(true);
   }
 
   function openEdit(c: CategoryDTO) {
+    if (!canEdit) return;
     setEditing(c);
     setForm({ name: c.name, type: c.type, dreKey: c.dreKey });
     setShowForm(true);
@@ -76,6 +82,7 @@ export function CategoriasClient({
 
   async function submit() {
     if (saving) return;
+    if (editing ? !canEdit : !canCreate) return;
     if (!form.name.trim() || !form.dreKey) {
       setFormError("Nome e linha da DRE são obrigatórios.");
       return;
@@ -107,6 +114,7 @@ export function CategoriasClient({
   }
 
   async function toggleActive(c: CategoryDTO) {
+    if (!canEdit) return;
     await apiRequest(`/api/financeiro/categorias/${c.id}`, "PATCH", { active: !c.active });
     refresh();
   }
@@ -125,12 +133,14 @@ export function CategoriasClient({
               className="bg-nord-panel border border-nord-border rounded-lg pl-7 pr-2 py-1.5 text-xs text-white w-48"
             />
           </div>
-          <button
-            onClick={openNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-          >
-            <Plus size={13} /> Nova categoria
-          </button>
+          {canCreate && (
+            <button
+              onClick={openNew}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+            >
+              <Plus size={13} /> Nova categoria
+            </button>
+          )}
         </div>
       }
     >
@@ -159,15 +169,21 @@ export function CategoriasClient({
                 </td>
                 <td className="py-2 pr-4 text-nord-gray">{dreNameByKey.get(c.dreKey) ?? c.dreKey}</td>
                 <td className="py-2 pr-4">
-                  <button onClick={() => toggleActive(c)}>
+                  {canEdit ? (
+                    <button onClick={() => toggleActive(c)}>
+                      <Badge tone={c.active ? "success" : "default"}>{c.active ? "Ativo" : "Inativo"}</Badge>
+                    </button>
+                  ) : (
                     <Badge tone={c.active ? "success" : "default"}>{c.active ? "Ativo" : "Inativo"}</Badge>
-                  </button>
+                  )}
                 </td>
                 <td className="py-2 pr-4">
                   <div className="flex items-center gap-2 justify-end">
-                    <button onClick={() => openEdit(c)} className="text-nord-gray hover:text-white">
-                      <Pencil size={14} />
-                    </button>
+                    {canEdit && (
+                      <button onClick={() => openEdit(c)} className="text-nord-gray hover:text-white">
+                        <Pencil size={14} />
+                      </button>
+                    )}
                     <button onClick={() => setConfirmDeleteId(c.id)} className="text-nord-gray hover:text-nord-danger">
                       <Trash2 size={14} />
                     </button>
