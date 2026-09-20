@@ -105,6 +105,7 @@ const CATEGORIES = [
       { key: "ponto-eletronico", name: "Ponto Eletrônico", icon: "Clock" },
       { key: "ocorrencias", name: "Ocorrências", icon: "AlertTriangle" },
       { key: "ferias", name: "Férias", icon: "Palmtree" },
+      { key: "escala-folgas", name: "Escala de Folgas", icon: "CalendarDays" },
       { key: "uniformes", name: "Uniformes", icon: "Shirt" },
       { key: "documentos", name: "Documentos", icon: "FolderOpen" },
       { key: "pesquisa-satisfacao", name: "Pesquisa de Satisfação", icon: "Smile" },
@@ -2291,6 +2292,47 @@ async function main() {
 
     await prisma.employeeCargo.createMany({ data: [...cargosCatalogo.values()], skipDuplicates: true });
     await prisma.employeeSetor.createMany({ data: [...setoresCatalogo.values()], skipDuplicates: true });
+
+    // --- Escala de Folgas: catálogo de tipos de folga (DayOffType, global) ---
+    // "Férias"/"Afastamento" são reservados (isSystem = true): aparecem na lista do modal
+    // "Adicionar folga", mas ao serem escolhidos a rota grava em Vacation/Absence, não em
+    // DayOffEntry — ver comentário no bloco "RH — ESCALA DE FOLGAS" em schema.prisma. `update: {}`
+    // de propósito: depois do primeiro seed, nome/cor são customizáveis pelo admin/RH na tela de
+    // configuração (fase futura) — rodar o seed de novo nunca deve reverter uma customização.
+    const DAY_OFF_TYPES: {
+      key: string;
+      nome: string;
+      kind: "FOLGA" | "FERIAS" | "AFASTAMENTO";
+      cor: string;
+      ordem: number;
+      isSystem?: boolean;
+    }[] = [
+      { key: "folga-semanal", nome: "Folga Semanal", kind: "FOLGA", cor: "#2952E3", ordem: 0 },
+      { key: "folga-do-mes", nome: "Folga do Mês", kind: "FOLGA", cor: "#8b5cf6", ordem: 1 },
+      { key: "banco-de-horas", nome: "Banco de Horas", kind: "FOLGA", cor: "#0ea5e9", ordem: 2 },
+      { key: "compensacao", nome: "Compensação", kind: "FOLGA", cor: "#14b8a6", ordem: 3 },
+      { key: "ferias", nome: "Férias", kind: "FERIAS", cor: "#f59e0b", ordem: 4, isSystem: true },
+      { key: "afastamento", nome: "Afastamento", kind: "AFASTAMENTO", cor: "#ef4444", ordem: 5, isSystem: true },
+    ];
+    for (const t of DAY_OFF_TYPES) {
+      await prisma.dayOffType.upsert({
+        where: { key: t.key },
+        update: {},
+        create: { key: t.key, nome: t.nome, kind: t.kind, cor: t.cor, ordem: t.ordem, isSystem: t.isSystem ?? false },
+      });
+    }
+
+    // --- Escala de Folgas: cobertura mínima por setor (SectorCoverageConfig) ---
+    // Nasce zerada/desativada pra cada setor já cadastrado (mesmo Map `setoresCatalogo` acima) —
+    // existe a linha pronta pra configurar na tela, mas nada é validado (nenhum aviso de
+    // cobertura insuficiente aparece) até o RH/admin definir um mínimo de verdade e ativar.
+    for (const { empresaId, nome: setor } of setoresCatalogo.values()) {
+      await prisma.sectorCoverageConfig.upsert({
+        where: { empresaId_setor: { empresaId, setor } },
+        update: {},
+        create: { empresaId, setor, quantidadeMinima: 0, ativo: false },
+      });
+    }
   }
 
   console.log("Seed concluído.");
