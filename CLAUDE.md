@@ -204,6 +204,16 @@ diferente e totalmente independente — cada revisão é autocontida (não
 depende de contexto de conversa de uma revisão anterior) e só cria banco
 descartável com nome próprio, sem risco de esbarrar numa revisão paralela.
 
+**Atenção**: o isolamento por nome próprio vale pro banco descartável (Postgres),
+mas **não** foi confirmado pro diretório de scratchpad — duas revisões do
+Teulis rodando ao mesmo tempo já colidiram escrevendo arquivo de teste com o
+mesmo nome no mesmo scratchpad compartilhado (cookies de sessão de um teste
+sobrescrevendo o do outro). Não causou erro silencioso nesse caso (o Teulis
+percebeu pelo HTTP inesperado e refez o teste com nome de arquivo exclusivo),
+mas é um lembrete pra qualquer agente rodando revisão em paralelo: prefira
+nomear arquivos de teste temporários com algo único (ex.: o nome da própria
+tarefa/worktree) em vez de nomes genéricos como `cookies-admin.txt`.
+
 ## Isolar cada tarefa em uma branch/worktree própria
 
 Depois de um episódio em que Caio e Mylon, rodando ao mesmo tempo, editaram
