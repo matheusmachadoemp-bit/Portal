@@ -77,6 +77,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
             categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon }))}
             suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
             canCreate={canCreate}
+            isGrupoNordMode={ctx?.mode !== "single"}
           />
         </div>
       </PageContainer>
@@ -144,6 +145,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
           ingredientOptions={serializedIngredients}
           category={info.category}
           canCreate={canCreate}
+          isGrupoNordMode={ctx?.mode !== "single"}
           taxaIfoodPadrao={taxaIfoodPadrao}
         />
       </div>
