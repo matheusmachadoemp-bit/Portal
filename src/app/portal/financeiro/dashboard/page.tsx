@@ -26,6 +26,13 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getFinancialCategories } from "@/lib/financial-categories";
 
+// Checagem de cargo (MANAGER_ROLES) — mesmo padrão de cargo já usado no módulo RH (rotas de API
+// desde o commit f109b8e) e replicado aqui: sem ela, qualquer COLABORADOR com o Perfil de
+// Permissão padrão "Funcionário" (financeiro:canView=true de fábrica) conseguia ver o dashboard
+// financeiro inteiro — caixa atual, faturamento, DRE, contas a pagar/receber — direto nesta página
+// Server Component (BUG-004). Fica restrito a Administrador/Gestor/Gerente/Supervisor por cargo.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 async function getData() {
   const now = new Date();
   const ctx = await getActiveEmpresaContext();
@@ -176,7 +183,10 @@ async function getData() {
 
 export default async function FinanceiroDashboardPage() {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
     redirect("/portal/inicio");
   }
 

@@ -9,9 +9,20 @@ import { PesquisaSatisfacaoClient } from "./pesquisa-satisfacao-client";
 
 const CAN_CREATE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
+// Checagem de cargo (MANAGER_ROLES) pra VISUALIZAR a pesquisa — mesmo padrão de cargo já usado nas
+// rotas de API irmãs de RH (desde o commit f109b8e), diferente de CAN_CREATE_ROLES acima (que só
+// controla quem pode CRIAR uma pesquisa nova e já excluía Supervisor de propósito). Sem esta
+// checagem, qualquer COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView=true
+// de fábrica) conseguia ver as pesquisas de satisfação e o eNPS geral direto nesta página Server
+// Component (BUG-004).
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function PesquisaSatisfacaoPage() {
   const [session, ctx] = await Promise.all([auth(), getActiveEmpresaContext()]);
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];

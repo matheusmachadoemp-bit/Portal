@@ -6,9 +6,19 @@ import { PageContainer } from "@/components/page-container";
 import { UniformesClient } from "./uniformes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
+// Mesma checagem de cargo (MANAGER_ROLES) já usada nas rotas de API irmãs de RH (desde o commit
+// f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de Permissão padrão "Funcionário"
+// (rh:canView=true de fábrica) conseguia ver as entregas de uniforme de todos os colegas direto
+// nesta página Server Component (BUG-004). Fica restrito a Administrador/Gestor/Gerente/Supervisor
+// por cargo, igual ao resto do módulo RH.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function UniformesPage() {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
 

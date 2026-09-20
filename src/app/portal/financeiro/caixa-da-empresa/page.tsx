@@ -6,9 +6,19 @@ import { PageContainer } from "@/components/page-container";
 import { CaixaClient } from "./caixa-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
+// Checagem de cargo (MANAGER_ROLES) — mesmo padrão já usado no módulo RH (rotas de API desde o
+// commit f109b8e) e replicado aqui: sem ela, qualquer COLABORADOR com o Perfil de Permissão padrão
+// "Funcionário" (financeiro:canView=true de fábrica) conseguia ver todas as movimentações de caixa
+// da empresa direto nesta página Server Component (BUG-004). Fica restrito a
+// Administrador/Gestor/Gerente/Supervisor por cargo.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function CaixaDaEmpresaPage() {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "financeiro", "canView"))) {
     redirect("/portal/inicio");
   }
 

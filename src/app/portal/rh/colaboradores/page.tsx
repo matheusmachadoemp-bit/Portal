@@ -7,9 +7,22 @@ import { ColaboradoresClient } from "./colaboradores-client";
 import { startOfMonth } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
+// Mesma checagem de cargo (MANAGER_ROLES) já usada pelas rotas de API irmãs (`/api/rh/employees`
+// etc., desde o commit f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de Permissão padrão
+// "Funcionário" (que já vem com rh:canView=true de fábrica) conseguia ver CPF, chave PIX e salário
+// fixo de todos os colegas direto nesta página Server Component (BUG-004: a API já bloqueava,
+// mas esta página busca via Prisma direto, sem passar pela API). Fica restrito a
+// Administrador/Gestor/Gerente/Supervisor por cargo, igual à API — nenhuma das rotas de RH tem
+// hoje uma restrição de "Líder só vê o próprio setor" para Colaboradores (isso só existe na Escala
+// de Folgas), então Supervisor é tratado como gestor pleno aqui, igual GERENTE/GESTOR/ADMINISTRADOR.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function ColaboradoresPage() {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
 
