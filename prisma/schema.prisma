@@ -2299,7 +2299,15 @@ enum StockMovementType {
 model StockMovement {
   id            String            @id @default(cuid())
   ingredientId  String
-  ingredient    Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  /// `onDelete: Restrict` (não `Cascade`) de propósito, igual às tabelas irmãs
+  /// (`ProductIngredient`, `PurchaseItem`, `Loss`, `TransferItem`,
+  /// `StockCountItem`) — ver o comentário na rota DELETE de
+  /// `src/app/api/ficha-tecnica/insumos/[id]/route.ts`. Achado: excluir um
+  /// insumo com histórico de movimentação de estoque mas sem nenhuma outra
+  /// relação Restrict (ex.: um insumo vendido direto como item, nunca usado
+  /// como ingrediente de ficha técnica) retornava 200 OK e apagava esse
+  /// histórico em cascata, silenciosamente, sem avisar ninguém.
+  ingredient    Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
   empresaId     String
   empresa       Empresa           @relation(fields: [empresaId], references: [id])
   type          StockMovementType
