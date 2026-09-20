@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Plus, Pencil, Trash2, Trophy, ClipboardList } from "lucide-react";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency, formatNumber, safeDiv } from "@/lib/calc";
@@ -69,8 +69,10 @@ export function PartnersClient({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Partner | null>(null);
   const [form, setForm] = useState(emptyPartnerForm);
+  const [formError, setFormError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Lançamentos (MarketingPartnerEntry) do parceiro selecionado.
   const [entriesPartner, setEntriesPartner] = useState<Partner | null>(null);
@@ -136,31 +138,32 @@ export function PartnersClient({
   function openNew() {
     setEditing(null);
     setForm(emptyPartnerForm);
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(p: Partner) {
     setEditing(p);
     setForm({ nome: p.nome, cupom: p.cupom, observacoes: p.observacoes ?? "" });
+    setFormError(null);
     setShowForm(true);
   }
 
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
-      if (editing) {
-        await fetch(`/api/marketing/partners/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/marketing/partners", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const url = editing ? `/api/marketing/partners/${editing.id}` : "/api/marketing/partners";
+      const res = await fetch(url, {
+        method: editing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setFormError(data.error ?? "Não foi possível salvar o parceiro.");
+        return;
       }
       setShowForm(false);
       await refreshCurrentPeriodo();
@@ -171,10 +174,17 @@ export function PartnersClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/marketing/partners/${confirmDeleteId}`, { method: "DELETE" });
+    const res = await fetch(`/api/marketing/partners/${confirmDeleteId}`, { method: "DELETE" });
+    const wasEntriesPartner = entriesPartner?.id === confirmDeleteId;
     setConfirmDeleteId(null);
-    if (entriesPartner?.id === confirmDeleteId) closeEntries();
-    refreshCurrentPeriodo();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setActionError(data.error ?? "Não foi possível excluir o parceiro.");
+      return;
+    }
+    setActionError(null);
+    if (wasEntriesPartner) closeEntries();
+    await refreshCurrentPeriodo();
   }
 
   async function openEntries(p: Partner) {
@@ -257,8 +267,16 @@ export function PartnersClient({
 
   async function doDeleteEntry() {
     if (!confirmDeleteEntryId || !entriesPartner) return;
-    await fetch(`/api/marketing/partners/${entriesPartner.id}/entries/${confirmDeleteEntryId}`, { method: "DELETE" });
+    const res = await fetch(`/api/marketing/partners/${entriesPartner.id}/entries/${confirmDeleteEntryId}`, {
+      method: "DELETE",
+    });
     setConfirmDeleteEntryId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setEntriesError(data.error ?? "Não foi possível excluir o lançamento.");
+      return;
+    }
+    setEntriesError(null);
     if (editingEntry?.id === confirmDeleteEntryId) {
       setEditingEntry(null);
       setEntryForm(emptyEntryForm());
@@ -283,6 +301,8 @@ export function PartnersClient({
           </button>
         )}
       </div>
+
+      <FormError message={actionError} />
 
       <SortableStatCards
         storageKey="marketing-parcerias-kpi-order"
@@ -379,7 +399,16 @@ export function PartnersClient({
         </table>
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar parceiro" : "Novo parceiro"} widthClass="max-w-lg">
+      <Modal
+        open={showForm}
+        onClose={() => {
+          setShowForm(false);
+          setFormError(null);
+        }}
+        title={editing ? "Editar parceiro" : "Novo parceiro"}
+        widthClass="max-w-lg"
+      >
+        <FormError message={formError} />
         <div className="grid grid-cols-1 gap-3">
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Nome</span>
