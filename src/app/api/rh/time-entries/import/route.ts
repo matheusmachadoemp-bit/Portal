@@ -44,6 +44,20 @@ function parseDateFlexible(raw: string | number): Date | null {
   return null;
 }
 
+// A célula de horário pode chegar como number (célula nativa do Excel, sem formatação de texto —
+// uma hora "pura", sem data, vira uma fração do dia: "08:00" = serial 0.3333...) ou como string já
+// em "HH:MM" (arquivo exportado/editado como texto). Converte pro mesmo formato "HH:MM" que
+// timeToMinutes/computeHorasTrabalhadas (@/lib/rh-helpers) esperam nos dois casos.
+function parseTimeFlexible(raw: string | number): string | null {
+  if (typeof raw === "number") {
+    const parsed = parseExcelDateCode(raw);
+    if (!parsed) return null;
+    return `${String(parsed.H).padStart(2, "0")}:${String(parsed.M).padStart(2, "0")}`;
+  }
+  const s = raw.trim();
+  return s || null;
+}
+
 function rowsFromCsvText(text: string): string[][] {
   const delimiter = text.includes(";") ? ";" : ",";
   return text
@@ -127,6 +141,13 @@ export async function POST(req: Request) {
     if (!row || row.every((c) => String(c).trim() === "")) continue;
 
     const get = (key: string) => (columnMap[key] !== undefined ? String(row[columnMap[key]] ?? "").trim() : "");
+    // Preserva o tipo original da célula (number vs string) para os campos de horário — ver
+    // parseTimeFlexible. Horários sempre por getRaw(), nunca get(): uma célula nativa do Excel
+    // chega aqui como number (fração do dia), e get() já converteria isso pra string ANTES de
+    // chegar em parseTimeFlexible, corrompendo o horário (mesmo padrão de
+    // crm/clientes/import/route.ts para datas).
+    const getRaw = (key: string): string | number =>
+      columnMap[key] !== undefined ? (row[columnMap[key]] ?? "") : "";
 
     let employeeId = fixedEmployeeId;
     if (columnMap.colaborador !== undefined) {
@@ -150,10 +171,10 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const entrada = get("entrada") || null;
-    const saidaAlmoco = get("saidaAlmoco") || null;
-    const retornoAlmoco = get("retornoAlmoco") || null;
-    const saida = get("saida") || null;
+    const entrada = parseTimeFlexible(getRaw("entrada"));
+    const saidaAlmoco = parseTimeFlexible(getRaw("saidaAlmoco"));
+    const retornoAlmoco = parseTimeFlexible(getRaw("retornoAlmoco"));
+    const saida = parseTimeFlexible(getRaw("saida"));
 
     const horasTrabalhadas = computeHorasTrabalhadas({ entrada, saidaAlmoco, retornoAlmoco, saida });
 

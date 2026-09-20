@@ -60,7 +60,12 @@ function parseDateFlexible(raw: string | number): Date | null {
   return null;
 }
 
-function parseSalario(raw: string): number | null {
+// A célula pode chegar como number (xlsx com célula nativa, sem formatação de texto) ou como
+// string em formato brasileiro ("1.234,56"). Só aplica a conversão de separador de milhar/decimal
+// quando é texto — se já é number, já está correto, e tratar como texto (ex.: "1400.55") inflava o
+// valor ao remover o ponto decimal (mesmo padrão de parseValor em crm/clientes/import/route.ts).
+function parseSalario(raw: string | number): number | null {
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
   const cleaned = raw.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) && cleaned !== "" ? n : null;
@@ -175,6 +180,13 @@ export async function POST(req: Request) {
     if (!row || row.every((c) => String(c).trim() === "")) continue;
 
     const get = (key: string) => (columnMap[key] !== undefined ? String(row[columnMap[key]] ?? "").trim() : "");
+    // Preserva o tipo original da célula (number vs string) para os campos de data/valor — ver
+    // parseDateFlexible/parseSalario. Datas e valores numéricos sempre por getRaw(), nunca get():
+    // uma célula nativa do Excel (data ou número, sem formatação de texto) chega aqui como number,
+    // e get() já converteria isso pra string ANTES de chegar em parseDateFlexible/parseSalario,
+    // corrompendo o valor (mesmo padrão de crm/clientes/import/route.ts).
+    const getRaw = (key: string): string | number =>
+      columnMap[key] !== undefined ? (row[columnMap[key]] ?? "") : "";
 
     const name = get("name");
     if (!name) {
@@ -194,10 +206,10 @@ export async function POST(req: Request) {
     const pixKey = get("pixKey") || null;
     const phone = get("phone") || null;
     const cargoRaw = get("cargo") || "Geral";
-    const birthRaw = get("birthDate");
-    const birthDate = birthRaw ? parseDateFlexible(birthRaw) : null;
-    const salarioRaw = get("salarioFixo");
-    const salarioFixo = salarioRaw ? parseSalario(salarioRaw) : null;
+    const birthRaw = getRaw("birthDate");
+    const birthDate = birthRaw !== "" ? parseDateFlexible(birthRaw) : null;
+    const salarioRaw = getRaw("salarioFixo");
+    const salarioFixo = salarioRaw !== "" ? parseSalario(salarioRaw) : null;
 
     const cargoResolvido = await resolveCargoCached(cargoRaw);
     if (!cargoResolvido.ok) {
