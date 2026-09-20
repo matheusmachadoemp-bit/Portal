@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -8,6 +8,7 @@ import { Modal, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/api-client";
+import { ContasBancariasClient, type AccountDTO } from "./contas-bancarias-client";
 
 type MovementDTO = {
   id: string;
@@ -47,28 +48,41 @@ const emptyForm = {
 
 export function CaixaClient({
   initialMovements,
-  accounts,
+  initialAccounts,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
   initialMovements: MovementDTO[];
-  accounts: { id: string; name: string; saldoAtual: number }[];
+  /** Lista completa (ativas e inativas). Estado fica aqui — nível comum entre os cards de saldo,
+   *  o dropdown de "Nova movimentação" (só ativas) e a seção "Contas Bancárias" (todas) — pra que
+   *  criar/editar/ativar-desativar/excluir uma conta reflita nos três lugares sem precisar de F5. */
+  initialAccounts: AccountDTO[];
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
 }) {
   const [movements, setMovements] = useState(initialMovements);
+  const [accounts, setAccounts] = useState(initialAccounts);
+  const activeAccounts = useMemo(() => accounts.filter((a) => a.active), [accounts]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ ...emptyForm, bankAccountId: accounts[0]?.id ?? "" });
+  const [form, setForm] = useState({ ...emptyForm, bankAccountId: activeAccounts[0]?.id ?? "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const totalCaixa = accounts.reduce((a, acc) => a + acc.saldoAtual, 0);
+  const totalCaixa = activeAccounts.reduce((a, acc) => a + acc.saldoAtual, 0);
 
   async function refresh() {
     const res = await fetch("/api/financeiro/caixa");
     const data = await res.json();
     setMovements(data.movements);
+  }
+
+  function openForm() {
+    // Recalcula o padrão de conta selecionada toda vez que o modal abre, pra já vir preenchido
+    // mesmo se a lista de contas ativas mudou (ex.: primeira conta cadastrada há pouco na seção
+    // "Contas Bancárias", sem a página ter sido recarregada).
+    setForm((f) => ({ ...f, bankAccountId: f.bankAccountId || activeAccounts[0]?.id || "" }));
+    setShowForm(true);
   }
 
   async function submit() {
@@ -86,7 +100,7 @@ export function CaixaClient({
       return;
     }
     setShowForm(false);
-    setForm({ ...emptyForm, bankAccountId: accounts[0]?.id ?? "" });
+    setForm({ ...emptyForm, bankAccountId: activeAccounts[0]?.id ?? "" });
     refresh();
   }
 
@@ -97,7 +111,7 @@ export function CaixaClient({
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
         cards={[
           { key: "caixa-total", label: "Caixa total", value: formatCurrency(totalCaixa), icon: "Vault" },
-          ...accounts.slice(0, 3).map((a) => ({ key: `conta-${a.id}`, label: a.name, value: formatCurrency(a.saldoAtual), icon: "Landmark" })),
+          ...activeAccounts.slice(0, 3).map((a) => ({ key: `conta-${a.id}`, label: a.name, value: formatCurrency(a.saldoAtual), icon: "Landmark" })),
         ]}
       />
 
@@ -106,7 +120,7 @@ export function CaixaClient({
         action={
           canCreate ? (
             <button
-              onClick={() => setShowForm(true)}
+              onClick={openForm}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
             >
               <Plus size={13} /> Nova movimentação
@@ -160,6 +174,13 @@ export function CaixaClient({
         </div>
       </Section>
 
+      <ContasBancariasClient
+        accounts={accounts}
+        onAccountsChange={setAccounts}
+        canCreate={canCreate}
+        isGrupoNordMode={isGrupoNordMode}
+      />
+
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Nova movimentação de caixa">
         <FormError message={formError} />
         <div className="space-y-3">
@@ -182,7 +203,7 @@ export function CaixaClient({
               onChange={(e) => setForm({ ...form, bankAccountId: e.target.value })}
               className="input"
             >
-              {accounts.map((a) => (
+              {activeAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
@@ -198,7 +219,7 @@ export function CaixaClient({
                 className="input"
               >
                 <option value="">Selecione...</option>
-                {accounts.map((a) => (
+                {activeAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>

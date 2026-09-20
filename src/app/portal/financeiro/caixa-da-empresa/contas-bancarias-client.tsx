@@ -9,7 +9,7 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency } from "@/lib/calc";
 import { apiRequest } from "@/lib/api-client";
 
-type AccountDTO = {
+export type AccountDTO = {
   id: string;
   name: string;
   bank: string | null;
@@ -35,16 +35,19 @@ const emptyForm = {
 };
 
 export function ContasBancariasClient({
-  initialAccounts,
+  accounts,
+  onAccountsChange,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
-  initialAccounts: AccountDTO[];
+  /** Lista completa (ativas e inativas) — dono do estado é o CaixaClient (página Caixa da Empresa), para manter os cards de saldo e o dropdown de "Nova movimentação" sincronizados com qualquer mudança feita aqui. */
+  accounts: AccountDTO[];
+  /** Chamado com a lista atualizada (buscada de novo da API) após qualquer criação/edição/ativação/exclusão. */
+  onAccountsChange: (accounts: AccountDTO[]) => void;
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
 }) {
-  const [accounts, setAccounts] = useState(initialAccounts);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AccountDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -56,7 +59,7 @@ export function ContasBancariasClient({
   async function refresh() {
     const res = await fetch("/api/financeiro/bank-accounts");
     const data = await res.json();
-    setAccounts(data.accounts);
+    onAccountsChange(data.accounts);
   }
 
   function openNew() {
