@@ -1,24 +1,44 @@
 import { prisma } from "@/lib/prisma";
-import { computeGoalStatus, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
+import { computeGoalStatus, isAverageGoalUnit, GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
 import { formatNumber } from "@/lib/calc";
 import { getStoreManagers } from "@/lib/manutencao-server";
 import { createNotifications } from "@/lib/notifications";
 
 /**
- * Recalcula `Goal.valorRealizado` (e o `status`, que depende dele) a partir
- * da soma de todos os `GoalWeeklyUpdate` da meta — chamado sempre que um
- * lançamento semanal é criado, editado ou excluído (ver rotas em
+ * "Valor realizado" de uma meta a partir dos `GoalWeeklyUpdate` já
+ * lançados: soma para metas cumulativas (padrão — quantidade vendida, R$
+ * gasto/faturado), MÉDIA para metas em "%" (ver `isAverageGoalUnit` em
+ * src/lib/goals.ts) — somar percentuais de semanas diferentes não tem
+ * significado (5 semanas de ~30% cada não é "150%" de nada). A média usa
+ * `_count` (quantas semanas foram REALMENTE lançadas), não o total de
+ * semanas do período (`weeksInGoalPeriod`) — nem todas podem estar
+ * lançadas ainda, e dividir pelo total penalizaria uma meta só porque
+ * ainda faltam semanas para lançar.
+ */
+export async function computeValorRealizado(goalId: string, unidade: string): Promise<number> {
+  const agg = await prisma.goalWeeklyUpdate.aggregate({
+    where: { goalId },
+    _sum: { valor: true },
+    _count: true,
+  });
+
+  if (isAverageGoalUnit(unidade)) {
+    return agg._count > 0 ? (agg._sum.valor ?? 0) / agg._count : 0;
+  }
+  return agg._sum.valor ?? 0;
+}
+
+/**
+ * Recalcula `Goal.valorRealizado` (ver `computeValorRealizado` acima) e o
+ * `status`, que depende dele — chamado sempre que um lançamento semanal é
+ * criado, editado ou excluído (ver rotas em
  * src/app/api/metas/[id]/semanas/**). Nunca mais é a rota de criar/editar
  * meta quem escreve `valorRealizado` diretamente.
  */
 export async function recomputeGoalRealizado(goalId: string) {
-  const [goal, agg] = await Promise.all([
-    prisma.goal.findUniqueOrThrow({ where: { id: goalId } }),
-    prisma.goalWeeklyUpdate.aggregate({ where: { goalId }, _sum: { valor: true } }),
-  ]);
-
-  const valorRealizado = agg._sum.valor ?? 0;
-  const status = computeGoalStatus(valorRealizado, goal.valorMeta, goal.endDate);
+  const goal = await prisma.goal.findUniqueOrThrow({ where: { id: goalId } });
+  const valorRealizado = await computeValorRealizado(goalId, goal.unidade);
+  const status = computeGoalStatus(valorRealizado, goal.valorMeta, goal.endDate, new Date(), goal.direcao, goal.unidade);
 
   return prisma.goal.update({
     where: { id: goalId },
@@ -44,6 +64,7 @@ export async function processGoalAlerts(): Promise<{ checked: number; notified: 
       valorMeta: true,
       valorRealizado: true,
       unidade: true,
+      direcao: true,
       endDate: true,
     },
   });
@@ -60,7 +81,7 @@ export async function processGoalAlerts(): Promise<{ checked: number; notified: 
   // demais — dá pra rodar em paralelo em vez de uma de cada vez.
   const notifiedCounts = await Promise.all(
     goals.map(async (goal) => {
-      const status = computeGoalStatus(goal.valorRealizado, goal.valorMeta, goal.endDate, now);
+      const status = computeGoalStatus(goal.valorRealizado, goal.valorMeta, goal.endDate, now, goal.direcao, goal.unidade);
       let notifiedForGoal = 0;
 
       if (status === "NAO_ATINGIDA") {
