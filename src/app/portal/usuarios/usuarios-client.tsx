@@ -85,6 +85,7 @@ export function UsuariosClient({
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [empresaIds, setEmpresaIds] = useState<string[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -228,7 +229,13 @@ export function UsuariosClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/usuarios/${confirmDeleteId}`, { method: "DELETE" });
+    setDeleteError(null);
+    const res = await fetch(`/api/usuarios/${confirmDeleteId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error ?? "Não foi possível excluir o usuário.");
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -471,10 +478,13 @@ export function UsuariosClient({
                         <span className="text-xs text-nord-gray truncate">{m.label}</span>
                       </div>
                       <select
-                        value={permissions[m.key] ?? "VISUALIZAR"}
-                        onChange={(e) => setPermission(m.key, e.target.value)}
+                        value={permissions[m.key] ?? ""}
+                        onChange={(e) =>
+                          e.target.value ? setPermission(m.key, e.target.value) : clearPermission(m.key)
+                        }
                         className="perm-select bg-transparent text-xs text-white outline-none shrink-0"
                       >
+                        <option value="">Igual ao perfil</option>
                         <option value="NENHUM">Sem acesso</option>
                         <option value="VISUALIZAR">Visualizar</option>
                         <option value="EXECUTAR">Executar</option>
@@ -527,10 +537,15 @@ export function UsuariosClient({
       <ConfirmDialog
         open={!!confirmDeleteId}
         title="Excluir usuário"
-        message="Tem certeza que deseja excluir este usuário? Ele perderá acesso ao portal imediatamente."
+        message={
+          deleteError ?? "Tem certeza que deseja excluir este usuário? Ele perderá acesso ao portal imediatamente."
+        }
         onConfirm={doDelete}
-        onCancel={() => setConfirmDeleteId(null)}
-        confirmLabel="Excluir"
+        onCancel={() => {
+          setConfirmDeleteId(null);
+          setDeleteError(null);
+        }}
+        confirmLabel={deleteError ? "Tentar novamente" : "Excluir"}
         danger
       />
 

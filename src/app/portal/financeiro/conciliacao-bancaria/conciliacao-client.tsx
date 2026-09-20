@@ -357,20 +357,21 @@ export function ConciliacaoClient({
           </select>
         </label>
         <label className="block mb-1">
-          <span className="block text-xs text-nord-gray mb-1">Arquivo do extrato (CSV ou XLSX)</span>
+          <span className="block text-xs text-nord-gray mb-1">Arquivo do extrato (CSV, XLSX ou OFX)</span>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.txt,.xlsx"
+            accept=".csv,.txt,.xlsx,.ofx"
             onChange={handleFileChange}
             disabled={importing}
             className="input"
           />
         </label>
         <p className="text-xs text-nord-gray mt-2">
-          O arquivo deve conter colunas de <strong>data</strong>, <strong>descrição</strong> e <strong>valor</strong>{" "}
-          (valores negativos são lançados como saída) — ou colunas separadas de <strong>entrada</strong> /{" "}
-          <strong>saída</strong>.
+          Em <strong>CSV/XLSX</strong>, o arquivo deve conter colunas de <strong>data</strong>,{" "}
+          <strong>descrição</strong> e <strong>valor</strong> (valores negativos são lançados como saída) — ou
+          colunas separadas de <strong>entrada</strong> / <strong>saída</strong>. Em <strong>OFX</strong> (formato
+          exportado pelo banco), as transações do extrato já são reconhecidas automaticamente.
         </p>
         {importing && (
           <p className="mt-3 text-xs text-nord-blue-light flex items-center gap-1.5">

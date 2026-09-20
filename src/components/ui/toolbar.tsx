@@ -22,8 +22,8 @@ export function Toolbar({
   addLabel?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 flex-wrap">
-      <div className="flex items-center gap-2 flex-wrap">{filters}</div>
+    <div className="flex items-center justify-between gap-3 flex-wrap min-w-0">
+      <div className="flex items-center gap-2 flex-wrap min-w-0">{filters}</div>
       <div className="flex items-center gap-2 flex-wrap">
         {exportRows && exportFilename && (
           <button

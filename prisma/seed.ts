@@ -158,9 +158,7 @@ const CATEGORIES = [
       { key: "caixa-da-empresa", name: "Caixa da Empresa", icon: "Vault" },
       { key: "dre", name: "DRE", icon: "FileBarChart" },
       { key: "categorias-financeiras", name: "Categorias Financeiras", icon: "Tags" },
-      { key: "contas-bancarias", name: "Contas Bancárias", icon: "Landmark" },
       { key: "conciliacao-bancaria", name: "Conciliação Bancária", icon: "ListChecks" },
-      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
     ],
   },
   {

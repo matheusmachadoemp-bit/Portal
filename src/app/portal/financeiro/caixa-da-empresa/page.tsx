@@ -28,17 +28,26 @@ export default async function CaixaDaEmpresaPage() {
         createdBy: { select: { name: true } },
       },
     }),
-    prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
+    // Todas as contas (ativas e inativas) — a seção "Contas Bancárias", agora
+    // embutida nesta página, precisa listar/gerenciar as inativas também. Os
+    // cards de saldo e o dropdown de "Nova movimentação" filtram só as ativas
+    // dentro do client (CaixaClient), igual já faziam antes.
+    prisma.bankAccount.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
   ]);
 
-  const serialized = movements.map((m) => ({ ...m, date: m.date.toISOString() }));
+  const serializedMovements = movements.map((m) => ({ ...m, date: m.date.toISOString() }));
+  const serializedAccounts = accounts.map((a) => ({
+    ...a,
+    createdAt: a.createdAt.toISOString(),
+    updatedAt: a.updatedAt.toISOString(),
+  }));
 
   return (
     <PageContainer title="Financeiro" subtitle="Caixa da Empresa">
       <div className="space-y-6">
         <CaixaClient
-          initialMovements={serialized}
-          accounts={accounts}
+          initialMovements={serializedMovements}
+          initialAccounts={serializedAccounts}
           canCreate={canCreate}
           isGrupoNordMode={ctx?.mode !== "single"}
         />

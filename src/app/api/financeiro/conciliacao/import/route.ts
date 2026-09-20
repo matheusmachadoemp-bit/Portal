@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
+import { Extractor, Reader, type NormalizedTransaction } from "ofx-data-extractor";
 
 const HEADER_ALIASES: Record<string, string> = {
   data: "data",
@@ -61,6 +62,79 @@ function rowsFromCsvText(text: string): string[][] {
     .map((line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, "")));
 }
 
+// Bancos brasileiros costumam exportar OFX 1.x (SGML) em CP1252/ISO-8859-1 — o
+// campo CHARSET:1252 no cabeçalho é o indicativo disso, mas alguns arquivos
+// trazem ENCODING:USASCII mesmo contendo acentuação fora da faixa ASCII. Em vez
+// de confiar cegamente no cabeçalho, tenta UTF-8 primeiro e, se aparecer o
+// caractere de substituição (indicando bytes inválidos em UTF-8), refaz como
+// latin1 — que cobre tanto ISO-8859-1 quanto a maior parte de CP1252 usada em
+// texto de extrato bancário (letras acentuadas, ç, etc.).
+function decodeOfxBuffer(buffer: Buffer): string {
+  const utf8Text = buffer.toString("utf-8");
+  return utf8Text.includes("�") ? buffer.toString("latin1") : utf8Text;
+}
+
+// Detecta OFX pela extensão do arquivo e, de forma complementar, pelo conteúdo
+// (todo OFX começa com "OFXHEADER:" no formato 1.x/SGML ou contém a tag <OFX>
+// logo no início no formato 2.x/XML) — cobre o caso de o usuário salvar o
+// extrato com outra extensão (ex.: .txt).
+function isOfxFile(fileName: string, buffer: Buffer): boolean {
+  if (/\.ofx$/i.test(fileName)) return true;
+  const head = buffer.subarray(0, 100).toString("latin1").toUpperCase();
+  return head.includes("OFXHEADER") || head.includes("<OFX>");
+}
+
+type ParsedTransactionRow = { date: Date; descricao: string; direction: "ENTRADA" | "SAIDA"; valor: number };
+
+// Parseia um extrato em OFX (1.x/SGML ou 2.x/XML) usando a biblioteca
+// ofx-data-extractor, que já normaliza a árvore SGML->XML (inclusive tags sem
+// fechamento, comuns em exportações de banco) e sempre devolve uma lista de
+// transações (mesmo com uma única <STMTTRN> no arquivo). Cada <STMTTRN> vira
+// um item com `postedAt` (de DTPOSTED), `amount` (de TRNAMT, negativo =
+// saída/débito, positivo = entrada/crédito) e `description` (MEMO, com
+// fallback pra NAME quando MEMO não vem preenchido). O modo "lenient" evita
+// que uma transação malformada quebre o arquivo inteiro: o campo problemático
+// vem como null e é reportado como erro daquela transação, sem descartar as
+// demais.
+function parseOfxTransactions(buffer: Buffer): { parsedRows: ParsedTransactionRow[]; errors: string[] } {
+  const errors: string[] = [];
+  const parsedRows: ParsedTransactionRow[] = [];
+
+  let transactions: NormalizedTransaction[];
+  try {
+    const text = decodeOfxBuffer(buffer);
+    const extractor = new Extractor().data(new Reader(text)).config({ parserMode: "lenient" });
+    transactions = extractor.toNormalized({ amountMode: "number", dateMode: "date" }).transactions;
+  } catch (err) {
+    errors.push(
+      `Não foi possível interpretar o arquivo OFX (${err instanceof Error ? err.message : "erro desconhecido"}).`
+    );
+    return { parsedRows, errors };
+  }
+
+  transactions.forEach((t, idx) => {
+    const label = `Transação ${idx + 1}`;
+
+    const date = t.postedAt instanceof Date ? t.postedAt : null;
+    if (!date || Number.isNaN(date.getTime())) {
+      errors.push(`${label}: data inválida ("${String(t.raw?.DTPOSTED ?? "")}").`);
+      return;
+    }
+
+    const valor = typeof t.amount === "number" ? t.amount : NaN;
+    if (Number.isNaN(valor) || valor === 0) {
+      errors.push(`${label}: valor inválido ("${String(t.raw?.TRNAMT ?? "")}").`);
+      return;
+    }
+
+    const descricao = (t.description ?? "").trim() || "Sem descrição";
+    const direction: "ENTRADA" | "SAIDA" = valor >= 0 ? "ENTRADA" : "SAIDA";
+    parsedRows.push({ date, descricao, direction, valor: Math.abs(valor) });
+  });
+
+  return { parsedRows, errors };
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -92,83 +166,90 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const isSpreadsheet = /\.xlsx$/i.test(file.name);
-
-  let rows: (string | number)[][];
-  if (isSpreadsheet) {
-    rows = await readWorkbookRows(buffer);
-  } else {
-    rows = rowsFromCsvText(buffer.toString("utf-8"));
-  }
-
-  if (rows.length < 2) {
-    return NextResponse.json({ error: "Arquivo vazio ou sem linhas de dados." }, { status: 400 });
-  }
-
-  const headerRow = rows[0].map((h) => normalizeHeader(String(h)));
-  const columnMap: Record<string, number> = {};
-  headerRow.forEach((h, idx) => {
-    const mapped = HEADER_ALIASES[h];
-    if (mapped) columnMap[mapped] = idx;
-  });
-
-  if (columnMap.data === undefined || (columnMap.valor === undefined && columnMap.entrada === undefined && columnMap.saida === undefined)) {
-    return NextResponse.json(
-      {
-        error:
-          'Cabeçalho inválido. Esperado: data, descrição e valor (ou colunas separadas "entrada"/"saida").',
-      },
-      { status: 400 }
-    );
-  }
+  const isOfx = !isSpreadsheet && isOfxFile(file.name, buffer);
 
   const errors: string[] = [];
-  const parsedRows: { date: Date; descricao: string; direction: "ENTRADA" | "SAIDA"; valor: number }[] = [];
+  const parsedRows: ParsedTransactionRow[] = [];
 
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.every((c) => String(c).trim() === "")) continue;
-
-    const get = (key: string) => (columnMap[key] !== undefined ? String(row[columnMap[key]] ?? "").trim() : "");
-
-    const rawDate = columnMap.data !== undefined ? row[columnMap.data] : "";
-    const date = parseDateFlexible(rawDate);
-    if (!date) {
-      errors.push(`Linha ${i + 1}: data inválida ("${rawDate}").`);
-      continue;
-    }
-
-    const descricao = get("descricao") || "Sem descrição";
-
-    let direction: "ENTRADA" | "SAIDA";
-    let valor: number;
-    if (columnMap.valor !== undefined) {
-      valor = parseValor(get("valor"));
-      if (Number.isNaN(valor) || valor === 0) {
-        errors.push(`Linha ${i + 1}: valor inválido.`);
-        continue;
-      }
-      direction = valor >= 0 ? "ENTRADA" : "SAIDA";
-      valor = Math.abs(valor);
+  if (isOfx) {
+    const ofxResult = parseOfxTransactions(buffer);
+    parsedRows.push(...ofxResult.parsedRows);
+    errors.push(...ofxResult.errors);
+  } else {
+    let rows: (string | number)[][];
+    if (isSpreadsheet) {
+      rows = await readWorkbookRows(buffer);
     } else {
-      const entradaRaw = get("entrada");
-      const saidaRaw = get("saida");
-      if (entradaRaw) {
-        valor = Math.abs(parseValor(entradaRaw));
-        direction = "ENTRADA";
-      } else if (saidaRaw) {
-        valor = Math.abs(parseValor(saidaRaw));
-        direction = "SAIDA";
-      } else {
-        errors.push(`Linha ${i + 1}: nenhum valor de entrada ou saída informado.`);
-        continue;
-      }
-      if (Number.isNaN(valor) || valor === 0) {
-        errors.push(`Linha ${i + 1}: valor inválido.`);
-        continue;
-      }
+      rows = rowsFromCsvText(buffer.toString("utf-8"));
     }
 
-    parsedRows.push({ date, descricao, direction, valor });
+    if (rows.length < 2) {
+      return NextResponse.json({ error: "Arquivo vazio ou sem linhas de dados." }, { status: 400 });
+    }
+
+    const headerRow = rows[0].map((h) => normalizeHeader(String(h)));
+    const columnMap: Record<string, number> = {};
+    headerRow.forEach((h, idx) => {
+      const mapped = HEADER_ALIASES[h];
+      if (mapped) columnMap[mapped] = idx;
+    });
+
+    if (columnMap.data === undefined || (columnMap.valor === undefined && columnMap.entrada === undefined && columnMap.saida === undefined)) {
+      return NextResponse.json(
+        {
+          error:
+            'Cabeçalho inválido. Esperado: data, descrição e valor (ou colunas separadas "entrada"/"saida").',
+        },
+        { status: 400 }
+      );
+    }
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.every((c) => String(c).trim() === "")) continue;
+
+      const get = (key: string) => (columnMap[key] !== undefined ? String(row[columnMap[key]] ?? "").trim() : "");
+
+      const rawDate = columnMap.data !== undefined ? row[columnMap.data] : "";
+      const date = parseDateFlexible(rawDate);
+      if (!date) {
+        errors.push(`Linha ${i + 1}: data inválida ("${rawDate}").`);
+        continue;
+      }
+
+      const descricao = get("descricao") || "Sem descrição";
+
+      let direction: "ENTRADA" | "SAIDA";
+      let valor: number;
+      if (columnMap.valor !== undefined) {
+        valor = parseValor(get("valor"));
+        if (Number.isNaN(valor) || valor === 0) {
+          errors.push(`Linha ${i + 1}: valor inválido.`);
+          continue;
+        }
+        direction = valor >= 0 ? "ENTRADA" : "SAIDA";
+        valor = Math.abs(valor);
+      } else {
+        const entradaRaw = get("entrada");
+        const saidaRaw = get("saida");
+        if (entradaRaw) {
+          valor = Math.abs(parseValor(entradaRaw));
+          direction = "ENTRADA";
+        } else if (saidaRaw) {
+          valor = Math.abs(parseValor(saidaRaw));
+          direction = "SAIDA";
+        } else {
+          errors.push(`Linha ${i + 1}: nenhum valor de entrada ou saída informado.`);
+          continue;
+        }
+        if (Number.isNaN(valor) || valor === 0) {
+          errors.push(`Linha ${i + 1}: valor inválido.`);
+          continue;
+        }
+      }
+
+      parsedRows.push({ date, descricao, direction, valor });
+    }
   }
 
   if (parsedRows.length === 0) {
