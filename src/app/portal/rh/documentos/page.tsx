@@ -6,9 +6,20 @@ import { PageContainer } from "@/components/page-container";
 import { DocumentosClient } from "./documentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
+// Mesma checagem de cargo (MANAGER_ROLES) já usada pela rota de API irmã (`/api/rh/documents`,
+// desde o commit f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de Permissão padrão
+// "Funcionário" (rh:canView=true de fábrica) conseguia ver todos os documentos (inclusive
+// `fileUrl`, o arquivo do contrato/documento enviado) de todos os colegas direto nesta página
+// Server Component (BUG-004). Fica restrito a Administrador/Gestor/Gerente/Supervisor por cargo,
+// igual à API.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function DocumentosPage() {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
 
