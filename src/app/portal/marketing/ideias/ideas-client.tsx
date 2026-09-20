@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/stat-card";
 import { IDEA_STATUS_OPTIONS, IDEA_CATEGORY_OPTIONS } from "@/lib/marketing";
 
@@ -38,6 +38,8 @@ export function IdeasClient({
   const [promoted, setPromoted] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const filtered = useMemo(
     () => (filterCategory ? ideas.filter((i) => i.category === filterCategory) : ideas),
@@ -53,12 +55,18 @@ export function IdeasClient({
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
-      await fetch("/api/marketing/ideas", {
+      const res = await fetch("/api/marketing/ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setFormError(data.error ?? "Não foi possível salvar a ideia.");
+        return;
+      }
       setShowForm(false);
       setForm(emptyForm);
       await refresh();
@@ -68,20 +76,32 @@ export function IdeasClient({
   }
 
   async function setStatus(idea: Idea, status: string) {
-    await fetch(`/api/marketing/ideas/${idea.id}`, {
+    setActionError(null);
+    const res = await fetch(`/api/marketing/ideas/${idea.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setActionError(data.error ?? "Não foi possível atualizar o status da ideia.");
+      return;
+    }
     refresh();
   }
 
   async function promote(idea: Idea) {
-    await fetch(`/api/marketing/ideas/${idea.id}`, {
+    setActionError(null);
+    const res = await fetch(`/api/marketing/ideas/${idea.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ promote: true }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setActionError(data.error ?? "Não foi possível transformar a ideia em tarefa.");
+      return;
+    }
     setPromoted(idea.id);
     setTimeout(() => setPromoted(null), 2500);
     refresh();
@@ -89,8 +109,14 @@ export function IdeasClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/marketing/ideas/${confirmDeleteId}`, { method: "DELETE" });
+    const res = await fetch(`/api/marketing/ideas/${confirmDeleteId}`, { method: "DELETE" });
     setConfirmDeleteId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setActionError(data.error ?? "Não foi possível excluir a ideia.");
+      return;
+    }
+    setActionError(null);
     refresh();
   }
 
@@ -120,13 +146,18 @@ export function IdeasClient({
         </div>
         {canCreate && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setFormError(null);
+              setShowForm(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
             <Plus size={13} /> Nova ideia
           </button>
         )}
       </div>
+
+      <FormError message={actionError} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((idea) => {
@@ -195,7 +226,16 @@ export function IdeasClient({
         )}
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nova ideia" widthClass="max-w-2xl">
+      <Modal
+        open={showForm}
+        onClose={() => {
+          setShowForm(false);
+          setFormError(null);
+        }}
+        title="Nova ideia"
+        widthClass="max-w-2xl"
+      >
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <label className="block col-span-2">
             <span className="block text-xs text-nord-gray mb-1">Título</span>
