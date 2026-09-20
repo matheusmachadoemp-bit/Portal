@@ -36,6 +36,16 @@ function formToPayload(periodo: string, form: ReturnType<typeof buildForm>) {
   return { periodo, ...form };
 }
 
+// Avaliações (iFood), Tempo de Entrega e Chamados não têm mais input no modal "Fechamento
+// do mês" (seção "Resultado do período" removida a pedido do usuário), mas continuam
+// inicializados aqui a partir do registro já salvo: eles ainda aparecem (somente leitura) na
+// tabela "Histórico de reuniões" mais abaixo e entram no comparativo do PDF exportado (ver
+// `avaliacaoValor`/`tempoEntregaValor`/`chamadosValor` e `historico()` em `exportPdf`). A
+// rota POST /api/reuniao/delivery trata qualquer um desses 3 campos ausente no body como
+// "grava null" (ver route.ts) — se o form parasse de incluí-los, salvar o modal por qualquer
+// outro motivo (ex.: só um indicador do "Fechamento do mês") apagaria retroativamente um
+// valor já lançado em um mês anterior. Mesmo padrão usado na Reunião Gerente/Salão (ver
+// gerente-client.tsx/salao-client.tsx).
 function buildForm(m?: Meeting | null) {
   return {
     avaliacaoNota: m?.avaliacaoNota != null ? String(m.avaliacaoNota) : "",
@@ -299,43 +309,12 @@ export function DeliveryClient({
           widthClass="max-w-2xl"
         >
           <div className="space-y-5">
-            <div>
-              <h4 className="text-white text-sm font-medium mb-3">Resultado do período</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Avaliações (iFood)</span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={form.avaliacaoNota}
-                    onChange={(e) => setForm({ ...form, avaliacaoNota: e.target.value })}
-                    placeholder="nota"
-                    className="input"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Tempo de Entrega (min)</span>
-                  <input
-                    type="number"
-                    value={form.tempoEntregaMinutos}
-                    onChange={(e) => setForm({ ...form, tempoEntregaMinutos: e.target.value })}
-                    placeholder="minutos"
-                    className="input"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs text-nord-gray mb-1">Chamados (%)</span>
-                  <input
-                    type="number"
-                    value={form.chamadosPercent}
-                    onChange={(e) => setForm({ ...form, chamadosPercent: e.target.value })}
-                    placeholder="%"
-                    className="input"
-                  />
-                </label>
-              </div>
-            </div>
-
+            {/* Seção "Resultado do período" (Avaliações iFood + Tempo de Entrega + Chamados)
+                removida a pedido do usuário — aparecia sempre vazia no modal. Os valores
+                continuam aparecendo, só que somente leitura, na tabela "Histórico de
+                reuniões" mais abaixo na tela (fora do modal) — ver comentário de `buildForm`
+                acima para como esses 3 campos continuam "congelados" no round-trip do
+                `submit()`. */}
             <FechamentoDoMesEditor fdm={fdm} />
 
             <div className="flex items-center justify-between pt-2 border-t border-nord-border">
