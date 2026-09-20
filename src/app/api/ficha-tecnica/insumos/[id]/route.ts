@@ -107,14 +107,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // O insumo é referenciado (FK) por várias tabelas: ficha técnica de produtos
   // (ProductIngredient), ficha técnica de itens de produção (ProductionItemIngredient),
   // o item de produção que gera este insumo em estoque (ProductionItem.ingredientId) e
-  // histórico de compras/perdas/transferências/contagens (PurchaseItem, Loss,
-  // TransferItem, StockCountItem). Optamos por bloquear a exclusão em vez de fazer
-  // cascata: apagar a referência em ProductIngredient/ProductionItemIngredient por
-  // baixo do pano mudaria a ficha técnica (e o custo calculado) de produtos/itens de
-  // produção sem o usuário perceber, e apagar o histórico de compras/perdas/
-  // transferências/contagens destruiria dado financeiro/auditável. `Ingredient.active`
-  // já existe e já é editável em Estoque > Produtos — "desativar" é uma alternativa
-  // real, não uma funcionalidade prometida que não existe.
+  // histórico de compras/perdas/transferências/contagens/movimentações (PurchaseItem,
+  // Loss, TransferItem, StockCountItem, StockMovement). Optamos por bloquear a exclusão
+  // em vez de fazer cascata: apagar a referência em ProductIngredient/
+  // ProductionItemIngredient por baixo do pano mudaria a ficha técnica (e o custo
+  // calculado) de produtos/itens de produção sem o usuário perceber, e apagar o
+  // histórico de compras/perdas/transferências/contagens/movimentações destruiria dado
+  // financeiro/auditável (o histórico de StockMovement, em especial, alimenta o CMV
+  // Real). `Ingredient.active` já existe e já é editável em Estoque > Produtos —
+  // "desativar" é uma alternativa real, não uma funcionalidade prometida que não existe.
+  //
+  // StockMovement.ingredientId usava `onDelete: Cascade` até este achado: um insumo sem
+  // nenhuma das outras relações acima (ex.: um insumo vendido direto como item, nunca
+  // usado como ingrediente de ficha técnica — ex. "Coca Cola Lata" — mas com
+  // movimentações de estoque manuais/de venda registradas) excluía com sucesso (200 OK)
+  // e apagava esse histórico em cascata, silenciosamente — o único caso, entre as
+  // tabelas listadas acima, que não seguia a política de bloquear em vez de apagar.
+  // Corrigido trocando para `onDelete: Restrict`, igual às demais.
   //
   // ProductionItem.ingredientId usa `onDelete: SetNull` (não Restrict) porque é uma
   // relação opcional — então excluir o insumo NÃO lança erro nesse caso, só apaga o
@@ -140,11 +149,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     await prisma.ingredient.delete({ where: { id } });
   } catch (e) {
     // As demais tabelas acima (ProductIngredient, ProductionItemIngredient,
-    // PurchaseItem, Loss, TransferItem, StockCountItem) usam `onDelete: Restrict` —
-    // o Prisma lança PrismaClientKnownRequestError código P2003 nesses casos (mesma
-    // classe de erro já tratada para exclusão de usuário, achado #192). Sem o
-    // try/catch a rota devolvia 500 cru e, como a tela não conferia `res.ok`, a
-    // exclusão "não acontecia nada" silenciosamente.
+    // PurchaseItem, Loss, TransferItem, StockCountItem, StockMovement) usam
+    // `onDelete: Restrict` — o Prisma lança PrismaClientKnownRequestError código P2003
+    // nesses casos (mesma classe de erro já tratada para exclusão de usuário, achado
+    // #192). Sem o try/catch a rota devolvia 500 cru e, como a tela não conferia
+    // `res.ok`, a exclusão "não acontecia nada" silenciosamente.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
       const [products, producedByItems] = await Promise.all([
         prisma.product.findMany({
@@ -159,7 +168,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       const usedBy = [...products.map((p) => p.name), ...producedByItems.map((p) => p.name)];
       const detail = usedBy.length
         ? ` Ele está sendo usado em: ${usedBy.join(", ")}.`
-        : " Ele já tem movimentações registradas no sistema (compras, perdas, transferências ou contagens de estoque).";
+        : " Ele já tem movimentações registradas no sistema (compras, perdas, transferências, contagens de estoque ou lançamentos manuais de movimentação).";
       return NextResponse.json(
         {
           error: `Não é possível excluir "${existing.name}" porque ele está vinculado a outros registros do sistema.${detail} Em vez de excluir, desative o insumo em Estoque > Produtos (desmarque "Ativo") para que ele pare de aparecer em novos cadastros sem perder o histórico.`,
