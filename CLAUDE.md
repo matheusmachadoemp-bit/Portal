@@ -246,6 +246,23 @@ direto na pasta onde o líder está.
   tarefa já publicada). Isso já causou um alarme falso de segurança nesta
   sessão (achou que o Cofre de senhas tinha perdido uma checagem de cargo
   que na verdade só não existia nessa branch parada).
+- **Nunca remova um caminho `.claude/worktrees/agent-<id>` sem confirmar
+  antes que nenhum agente vivo está usando esse caminho agora.** Esses
+  caminhos parecem ser um pool de slots efêmeros do próprio harness (não
+  um worktree persistente por tarefa) — um agente pode receber exatamente
+  o mesmo caminho de um `.claude/worktrees/agent-*` que o líder acabou de
+  remover ao publicar/limpar uma tarefa anterior, perdendo o diretório
+  debaixo dele no meio do trabalho. Já aconteceu nesta sessão (a Nina
+  recebeu, no meio da Fase 1 da Escala de Folgas, o mesmo caminho que o
+  líder tinha acabado de remover ao publicar o cron do Checklist do
+  Mylon) — sem perda de trabalho porque nada tinha sido commitado ainda,
+  mas só por sorte de timing. Prefira sempre criar/usar worktrees em
+  `/home/user/worktrees/<nome-da-tarefa>` (nunca dentro de
+  `.claude/worktrees/`) para qualquer tarefa nova; se um agente relatar
+  ter recebido um caminho `.claude/worktrees/agent-*` como diretório
+  inicial, oriente-o a recriar o worktree de verdade em
+  `/home/user/worktrees/<nome-da-tarefa>` antes de gravar qualquer
+  edição, como a própria Nina já fez sozinha ao perceber o problema.
 
 # AGENTS.md: nunca aceitar o conteúdo regerado pelo `next dev` sem conferir
 
