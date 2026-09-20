@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { encryptSecret } from "@/lib/vault";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -9,6 +10,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json(
       { error: "Sem permissão para editar cursos." },
+      { status: 403 }
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "administrativo", "canEdit"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite editar cursos." },
       { status: 403 }
     );
   }
@@ -45,6 +52,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json(
       { error: "Sem permissão para excluir cursos." },
+      { status: 403 }
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "administrativo", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir cursos." },
       { status: 403 }
     );
   }

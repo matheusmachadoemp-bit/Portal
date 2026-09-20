@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { encryptSecret } from "@/lib/vault";
+import { hasModulePermission } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -9,6 +10,12 @@ export async function GET() {
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json(
       { error: "Sem permissão para acessar os cursos." },
+      { status: 403 }
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "administrativo", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite acessar os cursos." },
       { status: 403 }
     );
   }
@@ -29,6 +36,12 @@ export async function POST(req: Request) {
   if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR") {
     return NextResponse.json(
       { error: "Sem permissão para cadastrar cursos." },
+      { status: 403 }
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "administrativo", "canCreate"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite cadastrar cursos." },
       { status: 403 }
     );
   }
