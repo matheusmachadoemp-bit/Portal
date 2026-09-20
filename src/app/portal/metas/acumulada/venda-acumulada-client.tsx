@@ -255,21 +255,6 @@ export function VendaAcumuladaClient({
         danger
       />
 
-      <style jsx global>{`
-        .input {
-          width: 100%;
-          background: var(--nord-panel);
-          border: 1px solid var(--nord-border);
-          border-radius: 8px;
-          padding: 8px 12px;
-          color: white;
-          font-size: 13px;
-          outline: none;
-        }
-        .input:focus {
-          border-color: var(--nord-blue);
-        }
-      `}</style>
     </div>
   );
 }
