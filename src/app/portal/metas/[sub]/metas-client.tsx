@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle, Award, CalendarCheck2, MessageCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Paperclip, AlertTriangle, AlertCircle, Award, CalendarCheck2, MessageCircle, Copy, CheckCheck } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { RadialProgress } from "@/components/ui/radial-progress";
@@ -165,6 +165,7 @@ export function MetasClient({
   const [attachName, setAttachName] = useState("");
   const [attachUrl, setAttachUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
 
   const [weeklyGoal, setWeeklyGoal] = useState<GoalDTO | null>(null);
   const [weekValues, setWeekValues] = useState<Record<number, string>>({});
@@ -202,6 +203,24 @@ export function MetasClient({
     curr,
     semanaAtual
   );
+
+  /**
+   * Copia o mesmo texto do botão "Enviar por WhatsApp" para a área de
+   * transferência. `navigator.clipboard` pode não existir em contexto
+   * não-seguro (HTTP) — o try/catch cobre esse caso e qualquer outra
+   * rejeição (ex.: permissão negada), mostrando feedback de erro em vez de
+   * falhar em silêncio.
+   */
+  async function copyReportText() {
+    try {
+      await navigator.clipboard.writeText(relatorioSemanalTexto);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("error");
+    } finally {
+      setTimeout(() => setCopyStatus("idle"), 1500);
+    }
+  }
 
   async function refresh() {
     const res = await fetch(`/api/metas?category=${category}`);
@@ -362,6 +381,26 @@ export function MetasClient({
           >
             <MessageCircle size={13} /> Enviar por WhatsApp
           </a>
+          <button
+            type="button"
+            onClick={copyReportText}
+            className="btn-outline"
+            title="Copiar o desempenho semanal deste setor (mesmo texto do WhatsApp)"
+          >
+            {copyStatus === "copied" ? (
+              <>
+                <CheckCheck size={13} className="text-nord-success" /> <span className="text-nord-success">Copiado!</span>
+              </>
+            ) : copyStatus === "error" ? (
+              <>
+                <AlertTriangle size={13} className="text-nord-danger" /> <span className="text-nord-danger">Erro ao copiar</span>
+              </>
+            ) : (
+              <>
+                <Copy size={13} /> Copiar
+              </>
+            )}
+          </button>
           {canCreate && (
             <button
               onClick={openNew}
