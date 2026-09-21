@@ -189,7 +189,7 @@ export function ProdutosClient({
                   <Pencil size={12} /> Editar
                 </button>
                 <button onClick={() => setConfirmDeleteId(item.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-nord-danger py-1.5">
-                  <Trash2 size={12} /> Excluir
+                  <Trash2 size={12} /> Desativar
                 </button>
               </div>
             )}
@@ -331,7 +331,7 @@ export function ProdutosClient({
 
       <ConfirmDialog
         open={!!confirmDeleteId}
-        title="Excluir produto de produção"
+        title="Desativar produto de produção"
         message="Isso desativa o produto de produção (o histórico de ordens já geradas é mantido). Deseja continuar?"
         onConfirm={doDelete}
         onCancel={() => setConfirmDeleteId(null)}

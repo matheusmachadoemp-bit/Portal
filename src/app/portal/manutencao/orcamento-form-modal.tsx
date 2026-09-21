@@ -97,39 +97,33 @@ export function OrcamentoFormModal({
     <Modal open={open} onClose={handleClose} title="Adicionar orçamento" widthClass="max-w-lg">
       <FormError message={error} />
       <div className="space-y-4">
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Prestador *</label>
+        <Field label="Prestador *">
           <select className="input w-full" value={form.prestadorId} onChange={(e) => set("prestadorId", e.target.value)}>
             <option value="">Selecione...</option>
             {prestadores.map((p) => (
               <option key={p.id} value={p.id}>{p.nome}</option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Descrição</label>
+        </Field>
+        <Field label="Descrição">
           <textarea className="input w-full min-h-[60px]" value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />
-        </div>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Mão de obra</label>
+          <Field label="Mão de obra">
             <input type="number" step="0.01" className="input w-full" value={form.valorMaoDeObra} onChange={(e) => set("valorMaoDeObra", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Peças</label>
+          </Field>
+          <Field label="Peças">
             <input type="number" step="0.01" className="input w-full" value={form.valorPecas} onChange={(e) => set("valorPecas", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Prazo</label>
+          </Field>
+          <Field label="Prazo">
             <input className="input w-full" placeholder="Ex.: 3 dias úteis" value={form.prazo} onChange={(e) => set("prazo", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Garantia</label>
+          </Field>
+          <Field label="Garantia">
             <input className="input w-full" placeholder="Ex.: 90 dias" value={form.garantia} onChange={(e) => set("garantia", e.target.value)} />
-          </div>
+          </Field>
         </div>
         <div>
-          <label className="text-xs text-nord-gray mb-1 block">Documento do orçamento</label>
+          <span className="text-xs text-nord-gray mb-1 block">Documento do orçamento</span>
           <label className={`btn-outline inline-flex cursor-pointer ${uploading ? "opacity-60" : ""}`}>
             <UploadIcon size={13} /> {uploading ? "Enviando..." : "Anexar arquivo"}
             <input type="file" hidden onChange={(e) => handleUpload(e.target.files)} disabled={uploading} />
@@ -158,5 +152,22 @@ export function OrcamentoFormModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-xs text-nord-gray mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }
