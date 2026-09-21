@@ -335,6 +335,7 @@ export function ProdutosClient({
         message="Isso desativa o produto de produção (o histórico de ordens já geradas é mantido). Deseja continuar?"
         onConfirm={doDelete}
         onCancel={() => setConfirmDeleteId(null)}
+        confirmLabel="Desativar"
         danger
       />
     </Section>
