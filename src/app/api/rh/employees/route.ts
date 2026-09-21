@@ -34,6 +34,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canCreate"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite cadastrar colaboradores." },
