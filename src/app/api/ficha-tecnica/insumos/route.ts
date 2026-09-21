@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET() {
   const session = await auth();
@@ -57,6 +58,9 @@ export async function POST(req: Request) {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!name) {
     return NextResponse.json({ error: "Informe o nome do insumo." }, { status: 400 });
+  }
+  if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   if (body.fornecedorPrincipalId) {

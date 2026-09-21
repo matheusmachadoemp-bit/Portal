@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 // BUG-004b: as rotas irmãs `[id]` de RH (`/api/rh/documents/[id]`, `/api/rh/occurrences/[id]`,
 // `/api/rh/vacations/[id]`, `/api/rh/time-entries/[id]`) já têm essa checagem de cargo no
@@ -28,6 +29,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
   const body = await req.json();
+
+  if (body.termoAssinadoUrl && !isValidBlobUrl(body.termoAssinadoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const delivery = await prisma.uniformDelivery.update({
     where: { id },

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET() {
   const session = await auth();
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
   const body = await req.json();
   if (!body.ingredientId || !body.motivo || body.quantidade === undefined) {
     return NextResponse.json({ error: "Informe o produto, a quantidade e o motivo." }, { status: 400 });
+  }
+  if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   const ingredient = await prisma.ingredient.findUnique({ where: { id: body.ingredientId } });

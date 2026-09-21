@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { logTaskHistory, notifyUser } from "@/lib/tarefas-server";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -43,6 +44,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const needsText = task.proofType === "TEXTO" || task.proofType === "FOTO_TEXTO";
     if (needsFile && !fileUrl) return NextResponse.json({ error: "Envie o arquivo/foto exigido para comprovar." }, { status: 400 });
     if (needsText && !text) return NextResponse.json({ error: "Escreva o comentário de comprovação exigido." }, { status: 400 });
+  }
+  if (fileUrl && !isValidBlobUrl(fileUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   const proof = await prisma.taskProof.create({

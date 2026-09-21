@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, findUsersWithoutEmpresaAccess, getActiveEmpresaContext } from "@/lib/empresa";
 import { generateDueTaskOccurrences, logTaskHistory, notifyUser } from "@/lib/tarefas-server";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 const TASK_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
@@ -151,6 +152,9 @@ export async function POST(req: Request) {
   const attachments: { name: string; fileUrl: string; mimeType?: string; sizeBytes?: number }[] = Array.isArray(body.attachments)
     ? body.attachments
     : [];
+  if (attachments.some((a) => !isValidBlobUrl(a?.fileUrl))) {
+    return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
+  }
 
   // Cada responsável/validador atribuído precisa ter acesso à(s) loja(s) em que a tarefa está
   // sendo criada — sem essa checagem, qualquer usuário ativo da empresa toda podia ser atribuído

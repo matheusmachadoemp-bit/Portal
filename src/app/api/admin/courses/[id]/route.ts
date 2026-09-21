@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { encryptSecret } from "@/lib/vault";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -14,6 +15,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const { id } = await params;
   const body = await req.json();
+
+  if (body.certificadoUrl && !isValidBlobUrl(body.certificadoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const data: Record<string, unknown> = {
     name: body.name ?? undefined,

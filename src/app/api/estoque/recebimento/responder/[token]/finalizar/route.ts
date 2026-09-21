@@ -7,10 +7,14 @@ import {
   notifyReceivingDivergence,
   receivingState,
 } from "@/lib/recebimento-server";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const body = await req.json().catch(() => ({}));
+  if (body.fotoNotaUrl && !isValidBlobUrl(body.fotoNotaUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
   const purchase = await loadPurchaseByToken(token);
   const state = receivingState(purchase);
   if (state === "invalido") return NextResponse.json({ error: "Link inválido." }, { status: 404 });

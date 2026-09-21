@@ -5,6 +5,7 @@ import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } fr
 import { hasModulePermission } from "@/lib/authz";
 import { logPurchaseEvent, notifyReceivingCompleted, notifyReceivingDivergence } from "@/lib/recebimento-server";
 import { RECEIVING_DIVERGENCE_LABEL } from "@/lib/estoque";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET() {
   const session = await auth();
@@ -54,6 +55,12 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   if (!body.purchaseId) return NextResponse.json({ error: "Informe o pedido de compra." }, { status: 400 });
+  if (body.fotoMercadoriaUrl && !isValidBlobUrl(body.fotoMercadoriaUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
+  if (body.fotoNotaUrl && !isValidBlobUrl(body.fotoNotaUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const purchase = await prisma.purchase.findUnique({
     where: { id: body.purchaseId },

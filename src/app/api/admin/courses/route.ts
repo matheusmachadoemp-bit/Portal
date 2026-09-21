@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { encryptSecret } from "@/lib/vault";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET() {
   const session = await auth();
@@ -33,6 +34,10 @@ export async function POST(req: Request) {
     );
   }
   const body = await req.json();
+
+  if (body.certificadoUrl && !isValidBlobUrl(body.certificadoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const course = await prisma.course.create({
     data: {
