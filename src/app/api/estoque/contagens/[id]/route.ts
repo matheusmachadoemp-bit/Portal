@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { ingredientCostPerUnit } from "@/lib/estoque";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -52,6 +53,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   // --- Atualização item a item (contagem em andamento) ---
   if (Array.isArray(body.items)) {
+    const temFotoInvalida = (body.items as { fotoUrl?: string }[]).some(
+      (upd) => upd.fotoUrl && !isValidBlobUrl(upd.fotoUrl)
+    );
+    if (temFotoInvalida) {
+      return NextResponse.json({ error: "URL de foto inválida em um dos itens." }, { status: 400 });
+    }
+
     const limiar = existing.empresa.metaDivergenciaContagemPercent;
     // Cada item atualiza uma linha diferente de StockCountItem — são
     // independentes entre si, então rodam em paralelo em vez de um de cada vez.

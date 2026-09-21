@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 /** `Product.code` é `@unique` no schema inteiro (não por loja) — ver comentário em `PATCH`. */
 function isProductCodeConflict(e: unknown): boolean {
@@ -44,6 +45,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!code) {
       return NextResponse.json({ error: "Informe o código do produto." }, { status: 400 });
     }
+  }
+  if (body.photoUrl && !isValidBlobUrl(body.photoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   if (body.ingredients) {

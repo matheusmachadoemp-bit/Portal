@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 // Atualiza o próprio perfil (hoje só a foto/avatar). Diferente de PATCH
 // /api/usuarios/[id] (que exige ADMIN/GESTOR para editar o perfil de OUTRA
@@ -22,6 +23,9 @@ export async function PATCH(req: Request) {
   const avatarUrl = body?.avatarUrl;
   if (typeof avatarUrl !== "string" || !avatarUrl.trim()) {
     return NextResponse.json({ error: "avatarUrl é obrigatório." }, { status: 400 });
+  }
+  if (!isValidBlobUrl(avatarUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   await prisma.user.update({

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadPurchaseByToken, logPurchaseEvent, receivingState } from "@/lib/recebimento-server";
 import { RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO } from "@/lib/estoque";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ token: string; purchaseItemId: string }> }) {
   const { token, purchaseItemId } = await params;
@@ -18,6 +19,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ token:
   }
 
   const body = await req.json();
+
+  if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
+
   const condicao: "CONFORME" | "DIVERGENCIA" = body.condicao === "DIVERGENCIA" ? "DIVERGENCIA" : "CONFORME";
   const divergenciaTipos: string[] = Array.isArray(body.divergenciaTipos) ? body.divergenciaTipos : [];
   const quantidadeRecebida = body.quantidadeRecebida != null ? Number(body.quantidadeRecebida) : null;

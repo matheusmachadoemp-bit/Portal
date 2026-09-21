@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 /** Edita um brinde do catálogo, incluindo ativar/desativar (Administrador/Gestor). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -20,6 +21,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Corpo inválido." }, { status: 400 });
+  if (body.imagemUrl && !isValidBlobUrl(body.imagemUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const existing = await prisma.lojaNordReward.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Brinde não encontrado." }, { status: 404 });

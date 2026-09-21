@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -25,6 +26,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
   const body = await req.json();
+
+  if (body.anexoUrl && !isValidBlobUrl(body.anexoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const occurrence = await prisma.occurrence.update({
     where: { id },

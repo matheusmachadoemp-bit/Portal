@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, getUserEmpresas } from "@/lib/empresa";
 import { canManageUsers } from "@/lib/permissions";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET() {
   const session = await auth();
@@ -40,6 +41,9 @@ export async function POST(req: Request) {
   const body = await req.json();
   if (!body.name || !body.fileUrl) {
     return NextResponse.json({ error: "Nome e arquivo são obrigatórios." }, { status: 400 });
+  }
+  if (!isValidBlobUrl(body.fileUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   let empresaId: string | null = null;
