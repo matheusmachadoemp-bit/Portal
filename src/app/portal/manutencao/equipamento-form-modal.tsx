@@ -136,21 +136,18 @@ export function EquipamentoFormModal({
       <FormError message={error} />
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className="text-xs text-nord-gray mb-1 block">Nome do equipamento *</label>
+          <Field label="Nome do equipamento *" className="col-span-2">
             <input className="input w-full" value={form.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Ex.: Geladeira da cozinha" />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Setor *</label>
+          </Field>
+          <Field label="Setor *">
             <input className="input w-full" list="setores-sugestoes" value={form.setor} onChange={(e) => set("setor", e.target.value)} />
             <datalist id="setores-sugestoes">
               {SETOR_SUGESTOES.map((s) => (
                 <option key={s} value={s} />
               ))}
             </datalist>
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Categoria *</label>
+          </Field>
+          <Field label="Categoria *">
             <input
               className="input w-full"
               list="categorias-sugestoes"
@@ -162,67 +159,54 @@ export function EquipamentoFormModal({
                 <option key={c} value={c} />
               ))}
             </datalist>
-          </div>
-          <div className="col-span-2">
-            <label className="text-xs text-nord-gray mb-1 block">Localização</label>
+          </Field>
+          <Field label="Localização" className="col-span-2">
             <input className="input w-full" value={form.localizacao} onChange={(e) => set("localizacao", e.target.value)} placeholder="Ex.: Área de preparo, próximo à câmara fria" />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Marca</label>
+          </Field>
+          <Field label="Marca">
             <input className="input w-full" value={form.marca} onChange={(e) => set("marca", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Modelo</label>
+          </Field>
+          <Field label="Modelo">
             <input className="input w-full" value={form.modelo} onChange={(e) => set("modelo", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Número de série</label>
+          </Field>
+          <Field label="Número de série">
             <input className="input w-full" value={form.numeroSerie} onChange={(e) => set("numeroSerie", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Fornecedor</label>
+          </Field>
+          <Field label="Fornecedor">
             <input className="input w-full" value={form.fornecedor} onChange={(e) => set("fornecedor", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Data da compra</label>
+          </Field>
+          <Field label="Data da compra">
             <input type="date" className="input w-full" value={form.dataCompra} onChange={(e) => set("dataCompra", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Valor da compra</label>
+          </Field>
+          <Field label="Valor da compra">
             <input type="number" step="0.01" className="input w-full" value={form.valorCompra} onChange={(e) => set("valorCompra", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Número da nota fiscal</label>
+          </Field>
+          <Field label="Número da nota fiscal">
             <input className="input w-full" value={form.numeroNotaFiscal} onChange={(e) => set("numeroNotaFiscal", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Garantia até</label>
+          </Field>
+          <Field label="Garantia até">
             <input type="date" className="input w-full" value={form.garantiaAte} onChange={(e) => set("garantiaAte", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Vida útil estimada (meses)</label>
+          </Field>
+          <Field label="Vida útil estimada (meses)">
             <input type="number" className="input w-full" value={form.vidaUtilEstimadaMeses} onChange={(e) => set("vidaUtilEstimadaMeses", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Frequência de manutenção</label>
+          </Field>
+          <Field label="Frequência de manutenção">
             <select className="input w-full" value={form.frequenciaManutencao} onChange={(e) => set("frequenciaManutencao", e.target.value)}>
               {MANUTENCAO_FREQUENCIA_OPTIONS.map((f) => (
                 <option key={f.key} value={f.key}>{f.label}</option>
               ))}
             </select>
-          </div>
-          <div className="col-span-2">
-            <label className="text-xs text-nord-gray mb-1 block">Prestador recomendado</label>
+          </Field>
+          <Field label="Prestador recomendado" className="col-span-2">
             <input className="input w-full" value={form.prestadorRecomendado} onChange={(e) => set("prestadorRecomendado", e.target.value)} />
-          </div>
-          <div className="col-span-2">
-            <label className="text-xs text-nord-gray mb-1 block">Observações</label>
+          </Field>
+          <Field label="Observações" className="col-span-2">
             <textarea className="input w-full min-h-[70px]" value={form.observacoes} onChange={(e) => set("observacoes", e.target.value)} />
-          </div>
+          </Field>
         </div>
 
         <div>
-          <label className="text-xs text-nord-gray mb-1 block">Fotos, manual, nota fiscal, certificado de garantia</label>
+          <span className="text-xs text-nord-gray mb-1 block">Fotos, manual, nota fiscal, certificado de garantia</span>
           <label className={`btn-outline inline-flex cursor-pointer ${uploading ? "opacity-60" : ""}`}>
             <UploadIcon size={13} /> {uploading ? "Enviando..." : "Anexar arquivo"}
             <input type="file" multiple hidden onChange={(e) => handleUpload(e.target.files)} disabled={uploading} />
@@ -251,5 +235,22 @@ export function EquipamentoFormModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-xs text-nord-gray mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }

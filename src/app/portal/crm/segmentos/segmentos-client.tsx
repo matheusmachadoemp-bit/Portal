@@ -162,14 +162,12 @@ export function SegmentosClient({
       <Modal open={showBuilder} onClose={() => setShowBuilder(false)} title="Criar Segmento" widthClass="max-w-2xl">
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-nord-gray mb-1.5">Nome do segmento</label>
+            <Field label="Nome do segmento">
               <input value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-nord-blue" />
-            </div>
-            <div>
-              <label className="block text-xs text-nord-gray mb-1.5">Descrição (opcional)</label>
+            </Field>
+            <Field label="Descrição (opcional)">
               <input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-nord-blue" />
-            </div>
+            </Field>
           </div>
 
           {isGrupo && (
@@ -223,14 +221,13 @@ export function SegmentosClient({
             <NumField label="Sem comprar há (máx. dias)" onChange={(v) => setCriteria((p) => ({ ...p, semCompraDiasMax: v }))} />
           </div>
 
-          <div>
-            <label className="block text-xs text-nord-gray mb-1.5">Produto comprado</label>
+          <Field label="Produto comprado">
             <input
               placeholder="Ex: Hot Philadelphia"
               onChange={(e) => setCriteria((p) => ({ ...p, produtos: e.target.value.trim() ? [e.target.value.trim()] : undefined }))}
               className="w-full bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-nord-blue"
             />
-          </div>
+          </Field>
 
           <div className="rounded-xl border border-nord-blue/40 bg-nord-blue/5 p-4 flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2">
@@ -257,16 +254,25 @@ export function SegmentosClient({
   );
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-xs text-nord-gray mb-1.5">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function NumField({ label, onChange }: { label: string; onChange: (v: number | undefined) => void }) {
   return (
-    <div>
-      <label className="block text-[11px] text-nord-gray mb-1">{label}</label>
+    <label className="block">
+      <span className="block text-[11px] text-nord-gray mb-1">{label}</span>
       <input
         type="number"
         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
         className="w-full bg-nord-panel border border-nord-border rounded-lg px-2.5 py-1.5 text-sm text-white outline-none focus:border-nord-blue"
       />
-    </div>
+    </label>
   );
 }
 
