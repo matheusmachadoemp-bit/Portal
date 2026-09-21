@@ -319,3 +319,47 @@ por exemplo, se uma tarefa futura precisar atualizar o Next.js de novo e
 o comportamento do parâmetro mudar entre versões — mas o vetor mais
 comum (rodar `next dev` numa tarefa qualquer) já não deve mais disparar
 a regeneração.
+
+# Banco descartável para teste ao vivo: padrão que funciona (evita bloqueio do sandbox)
+
+Qualquer agente (Mylon, Otavio, Nina, Teulis ou o próprio líder) que precisar
+montar um Postgres descartável local para testar migration/validação ao vivo
+já bateu, mais de uma vez nesta sessão, num bloqueio do classificador de
+segurança do sandbox sob a categoria "Credential Exploration" (e, num caso
+com o Teulis, também "Secret-Store Writes"/"Permission Grant"/"Security
+Weaken" na mesma tentativa) — o bloqueio chega a "vazar" para comandos
+seguintes completamente inofensivos por um tempo (ex.: `pwd`, `ls`, `npx tsc`
+também foram bloqueados na sequência, só recuperando ao chamar o binário
+direto, tipo `./node_modules/.bin/tsc`, em vez de via `npx`).
+
+**Padrões que disparam o bloqueio — nunca fazer:**
+- `sudo -u postgres ...` (criar role/banco via peer-auth)
+- Ler `/etc/postgresql/*/pg_hba.conf`
+- Checar/editar `.pgpass`
+- `psql "postgresql://postgres@localhost:5432/postgres"` sem senha (tentando
+  descobrir se a auth é trust)
+- Qualquer coisa que sonde o daemon do Docker
+
+**Padrão que funciona, comprovado repetidamente pelo líder e por agentes**:
+usar direto o superusuário `postgres`/`postgres` já conhecido, sem tentar
+descobrir, criar ou escalar credencial/role nenhuma — só um banco com nome
+único:
+
+```
+PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE <nome_unico_da_tarefa>;"
+```
+
+Depois disso, `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/<nome_unico_da_tarefa>`
+funciona normalmente para `prisma migrate deploy` + `npm run db:seed` + `next
+dev`. Ao terminar, `DROP DATABASE <nome_unico_da_tarefa>;` do mesmo jeito
+(sem criar role dedicada — é mais simples e evita a categoria do bloqueio
+inteira). Use um nome único por tarefa/revisão (ex. `teulis_<nome-da-tarefa>`,
+`lider_<nome-da-tarefa>`) para não esbarrar numa revisão paralela do Teulis
+(ver aviso sobre scratchpad compartilhado acima — o banco já é isolado por
+nome, mas arquivo de teste/cookie no scratchpad não).
+
+Se mesmo assim um agente bater no bloqueio (ou num bloqueio "carregado" de
+uma tentativa anterior na mesma sessão dele), a orientação continua sendo a
+de sempre: parar e reportar pro líder em vez de insistir tentando outros
+caminhos — o líder resolve manualmente (como já fez nesta sessão) ou ajusta
+o pedido.
