@@ -49,6 +49,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   // O upsert abaixo (create/update por employeeId+date) é só uma proteção contra duplicidade —
   // no fluxo da tela (ponto-eletronico-client.tsx) este POST só é chamado para lançar um registro
   // novo; editar um já existente vai sempre pela rota PATCH em [id]. Por isso trata como canCreate.
