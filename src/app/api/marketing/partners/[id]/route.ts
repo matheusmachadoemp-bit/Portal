@@ -27,6 +27,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const body = await req.json();
 
+  // nome/cupom são String obrigatório no schema (diferente de observacoes,
+  // que é opcional) — mesma validação do POST acima, senão um nome/cupom
+  // limpo pro vazio vira `data.nome = null` e o Prisma lança erro de
+  // validação (500 com corpo vazio) em vez de um 400 com mensagem clara.
+  if (body.nome !== undefined && (!body.nome || !String(body.nome).trim())) {
+    return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
+  }
+  if (body.cupom !== undefined && (!body.cupom || !String(body.cupom).trim())) {
+    return NextResponse.json({ error: "Cupom é obrigatório." }, { status: 400 });
+  }
+
   const data: Record<string, unknown> = {};
   for (const f of STR_FIELDS) {
     if (body[f] !== undefined) data[f] = body[f] || null;
