@@ -76,6 +76,21 @@ export async function POST(req: Request) {
     }
   }
 
+  // O fornecedor precisa pertencer a esta mesma loja — sem essa checagem, um
+  // pedido de compra da loja ativa podia referenciar um fornecedor de outra
+  // loja, contaminando as estatísticas agregadas desse fornecedor (histórico
+  // de recebimento, divergências etc. em GET .../fornecedores/[id]/historico-recebimento).
+  const supplier = await prisma.supplier.findUnique({
+    where: { id: body.supplierId },
+    select: { empresaId: true },
+  });
+  if (!supplier) {
+    return NextResponse.json({ error: "Fornecedor não encontrado." }, { status: 400 });
+  }
+  if (supplier.empresaId !== empresa.id) {
+    return NextResponse.json({ error: "Esse fornecedor não pertence a esta loja." }, { status: 400 });
+  }
+
   const purchase = await prisma.purchase.create({
     data: {
       empresaId: empresa.id,
