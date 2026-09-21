@@ -190,7 +190,6 @@ const CATEGORIES = [
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
       { key: "transferencias", name: "Transferências", icon: "Shuffle" },
       { key: "perdas", name: "Perdas e Desperdícios", icon: "TriangleAlert" },
-      { key: "relatorios", name: "Relatórios", icon: "FileSpreadsheet" },
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
