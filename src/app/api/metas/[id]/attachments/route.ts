@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -20,6 +21,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
   const body = await req.json();
+
+  if (body.fileUrl && !isValidBlobUrl(body.fileUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const attachment = await prisma.goalAttachment.create({
     data: { goalId: id, fileName: body.fileName, fileUrl: body.fileUrl },

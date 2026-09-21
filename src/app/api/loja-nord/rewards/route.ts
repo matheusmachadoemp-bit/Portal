@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 /** Catálogo de brindes disponíveis para a loja ativa do usuário logado. */
 export async function GET(req: NextRequest) {
@@ -57,6 +58,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body?.nome || !body?.categoria || !Number.isFinite(body?.pontos)) {
     return NextResponse.json({ error: "Preencha nome, categoria e quantidade de pontos." }, { status: 400 });
+  }
+  if (body.imagemUrl && !isValidBlobUrl(body.imagemUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   const reward = await prisma.lojaNordReward.create({

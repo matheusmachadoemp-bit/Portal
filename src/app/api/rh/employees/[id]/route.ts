@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -26,6 +27,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
   const body = await req.json();
+
+  if (body.photoUrl && !isValidBlobUrl(body.photoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   // Mesmo catálogo de RH (EmployeeCargo/EmployeeSetor) da criação (ver @/lib/rh-server) — só
   // resolve/cadastra quando o campo foi de fato enviado no PATCH (`undefined` continua

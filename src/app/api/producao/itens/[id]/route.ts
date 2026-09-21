@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
 import { assertEmpresaAccess } from "@/lib/empresa";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 type IngredienteInput = { ingredientId: string; quantidadeUsada: number; unidade: string };
 
@@ -52,6 +53,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const body = await req.json();
+
+  if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
+
   const ingredientes: IngredienteInput[] | undefined = Array.isArray(body.ingredientes) ? body.ingredientes : undefined;
 
   const item = await prisma.$transaction(async (tx) => {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getActiveEmpresaContext, empresaIdsForContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -17,6 +18,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (!fileUrl || !fileName) {
     return NextResponse.json({ error: "Arquivo de foto inválido." }, { status: 400 });
+  }
+  if (!isValidBlobUrl(fileUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   const occurrence = await prisma.checklistOccurrence.findFirst({

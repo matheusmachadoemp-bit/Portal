@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { MANAGER_ROLES, notifyManutencaoUser, getStoreManagers } from "@/lib/manutencao-server";
+import { MANAGER_ROLES, isValidBlobUrl, notifyManutencaoUser, getStoreManagers } from "@/lib/manutencao-server";
 import { hasModulePermission } from "@/lib/authz";
 
 const EQUIPAMENTO_DETAIL_INCLUDE = {
@@ -62,6 +62,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const body = await req.json();
+
+  if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const equipamento = await prisma.equipamento.update({
     where: { id },

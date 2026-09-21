@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -35,6 +36,11 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+
+  if (body.fileUrl && !isValidBlobUrl(body.fileUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
+
   const file = await prisma.fileItem.create({
     data: {
       name: body.name,

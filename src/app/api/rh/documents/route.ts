@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 // BUG-004b: mesma checagem de cargo já usada nas rotas irmãs `/api/rh/employees` e
 // `/api/rh/finance` (desde o commit f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de
@@ -63,6 +64,11 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+
+  if (body.fileUrl && !isValidBlobUrl(body.fileUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
+
   const employee = await prisma.employee.findUnique({ where: { id: body.employeeId } });
   if (!employee || employee.empresaId !== empresa.id) {
     return NextResponse.json({ error: "Colaborador inválido para a loja ativa." }, { status: 400 });

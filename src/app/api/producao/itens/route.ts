@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 type IngredienteInput = { ingredientId: string; quantidadeUsada: number; unidade: string };
 
@@ -63,6 +64,9 @@ export async function POST(req: Request) {
   const body = await req.json();
   if (!body.name || !body.categoryId) {
     return NextResponse.json({ error: "Nome e categoria são obrigatórios." }, { status: 400 });
+  }
+  if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   const ingredientes: IngredienteInput[] = Array.isArray(body.ingredientes) ? body.ingredientes : [];

@@ -77,6 +77,9 @@ export async function POST(req: Request) {
   if (Array.isArray(body.anexos) && body.anexos.some((a: { fileUrl?: string }) => !isValidBlobUrl(a?.fileUrl))) {
     return NextResponse.json({ error: "Anexo inválido." }, { status: 400 });
   }
+  if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
 
   const equipamento = await prisma.$transaction(async (tx) => {
     const created = await tx.equipamento.create({

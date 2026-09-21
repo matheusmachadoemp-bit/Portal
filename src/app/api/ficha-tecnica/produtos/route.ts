@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 /** `Product.code` é `@unique` no schema inteiro (não por loja) — ver comentário em `POST`. */
 function isProductCodeConflict(e: unknown): boolean {
@@ -69,6 +70,9 @@ export async function POST(req: Request) {
   const code = typeof body.code === "string" ? body.code.trim() : "";
   if (!code) {
     return NextResponse.json({ error: "Informe o código do produto." }, { status: 400 });
+  }
+  if (body.photoUrl && !isValidBlobUrl(body.photoUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   const ingredientIds = [

@@ -9,6 +9,7 @@ import {
 } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
 import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -79,6 +80,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const quantidadeProduzida = Number(body.quantidadeProduzida);
     if (!Number.isFinite(quantidadeProduzida) || quantidadeProduzida < 0) {
       return NextResponse.json({ error: "Informe uma quantidade produzida válida." }, { status: 400 });
+    }
+    if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
+      return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
     }
     const ordem = await finalizarProductionOrder(id, session.user.id, {
       quantidadeProduzida,
