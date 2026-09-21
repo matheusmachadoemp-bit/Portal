@@ -126,79 +126,76 @@ export function ChamadoFormModal({
     <Modal open={open} onClose={handleClose} title="Relatar problema" widthClass="max-w-2xl">
       <FormError message={error} />
       <div className="space-y-4">
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Título do chamado *</label>
+        <Field label="Título do chamado *">
           <input className="input w-full" value={form.titulo} onChange={(e) => set("titulo", e.target.value)} placeholder="Ex.: Geladeira não está gelando" />
-        </div>
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Setor *</label>
+          <Field label="Setor *">
             <input className="input w-full" list="setores-chamado" value={form.setor} onChange={(e) => set("setor", e.target.value)} />
             <datalist id="setores-chamado">
               {SETOR_SUGESTOES.map((s) => (
                 <option key={s} value={s} />
               ))}
             </datalist>
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Local específico</label>
+          </Field>
+          <Field label="Local específico">
             <input className="input w-full" value={form.localEspecifico} onChange={(e) => set("localEspecifico", e.target.value)} placeholder="Ex.: próximo à câmara fria" />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Categoria</label>
+          </Field>
+          <Field label="Categoria">
             <select className="input w-full" value={form.categoria} onChange={(e) => set("categoria", e.target.value)}>
               {CHAMADO_CATEGORIA_OPTIONS.map((c) => (
                 <option key={c.key} value={c.key}>{c.label}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Prioridade</label>
+          </Field>
+          <Field label="Prioridade">
             <select className="input w-full" value={form.prioridade} onChange={(e) => set("prioridade", e.target.value)}>
               {CHAMADO_PRIORIDADE_OPTIONS.map((p) => (
                 <option key={p.key} value={p.key}>{p.label}</option>
               ))}
             </select>
-          </div>
+          </Field>
         </div>
 
         <div>
-          <label className="text-xs text-nord-gray mb-1 block">Equipamento relacionado</label>
-          <select className="input w-full" value={form.equipamentoId} onChange={(e) => selectEquipamento(e.target.value)}>
-            <option value="">Nenhum equipamento específico</option>
-            {equipamentos.map((e) => (
-              <option key={e.id} value={e.id}>{e.nome} ({e.codigo})</option>
-            ))}
-          </select>
+          {/* O parágrafo de código/setor fica FORA do Field de propósito: se
+              entrasse dentro do <label>, o nome acessível do select passaria a
+              incluir esse texto dinâmico (ex.: "Equipamento relacionado Código:
+              ... Setor: ..."), variando a cada seleção em vez de ficar estável. */}
+          <Field label="Equipamento relacionado">
+            <select className="input w-full" value={form.equipamentoId} onChange={(e) => selectEquipamento(e.target.value)}>
+              <option value="">Nenhum equipamento específico</option>
+              {equipamentos.map((e) => (
+                <option key={e.id} value={e.id}>{e.nome} ({e.codigo})</option>
+              ))}
+            </select>
+          </Field>
           {selectedEquipamento && (
             <p className="text-xs text-nord-gray mt-1">Código: {selectedEquipamento.codigo} · Setor: {selectedEquipamento.setor}</p>
           )}
         </div>
 
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Descrição detalhada *</label>
+        <Field label="Descrição detalhada *">
           <textarea className="input w-full min-h-[80px]" value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />
-        </div>
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Responsável por acompanhar</label>
+          <Field label="Responsável por acompanhar">
             <select className="input w-full" value={form.responsavelId} onChange={(e) => set("responsavelId", e.target.value)}>
               <option value="">A definir</option>
               {teamMembers.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Prazo desejado</label>
+          </Field>
+          <Field label="Prazo desejado">
             <input type="date" className="input w-full" value={form.prazo} onChange={(e) => set("prazo", e.target.value)} />
-          </div>
+          </Field>
         </div>
 
         <div>
-          <label className="text-xs text-nord-gray mb-1 block">Fotos, vídeos e documentos</label>
+          <span className="text-xs text-nord-gray mb-1 block">Fotos, vídeos e documentos</span>
           <label className={`btn-outline inline-flex cursor-pointer ${uploading ? "opacity-60" : ""}`}>
             <UploadIcon size={13} /> {uploading ? "Enviando..." : "Anexar arquivo"}
             <input type="file" multiple hidden onChange={(e) => handleUpload(e.target.files)} disabled={uploading} />
@@ -230,5 +227,22 @@ export function ChamadoFormModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-xs text-nord-gray mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }

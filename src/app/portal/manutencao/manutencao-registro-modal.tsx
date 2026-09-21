@@ -138,54 +138,51 @@ export function ManutencaoRegistroModal({
       <FormError message={error} />
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Tipo</label>
+          <Field label="Tipo">
             <select className="input w-full" value={form.tipo} onChange={(e) => set("tipo", e.target.value)}>
               {MANUTENCAO_TIPO_OPTIONS.map((t) => (
                 <option key={t.key} value={t.key}>{t.label}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Data *</label>
+          </Field>
+          <Field label="Data *">
             <input type="date" className="input w-full" value={form.data} onChange={(e) => set("data", e.target.value)} />
-          </div>
+          </Field>
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-nord-gray mb-1 block">Início</label>
+            <Field label="Início">
               <input type="time" className="input w-full" value={form.horaInicio} onChange={(e) => set("horaInicio", e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-nord-gray mb-1 block">Fim</label>
+            </Field>
+            <Field label="Fim">
               <input type="time" className="input w-full" value={form.horaFim} onChange={(e) => set("horaFim", e.target.value)} />
-            </div>
+            </Field>
           </div>
         </div>
 
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Serviço executado *</label>
+        <Field label="Serviço executado *">
           <textarea className="input w-full min-h-[60px]" value={form.servicoExecutado} onChange={(e) => set("servicoExecutado", e.target.value)} />
-        </div>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Problema encontrado</label>
+          <Field label="Problema encontrado">
             <textarea className="input w-full min-h-[60px]" value={form.problemaEncontrado} onChange={(e) => set("problemaEncontrado", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Solução aplicada</label>
+          </Field>
+          <Field label="Solução aplicada">
             <textarea className="input w-full min-h-[60px]" value={form.solucaoAplicada} onChange={(e) => set("solucaoAplicada", e.target.value)} />
-          </div>
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Peças trocadas</label>
+          <Field label="Peças trocadas">
             <input className="input w-full" value={form.pecasTrocadas} onChange={(e) => set("pecasTrocadas", e.target.value)} />
-          </div>
+          </Field>
           <div>
-            <label className="text-xs text-nord-gray mb-1 block">Prestador</label>
+            {/* "Prestador" cobre dois controles alternados (select cadastrado
+                ou texto livre), então não dá pra usar um único <label> —
+                cada controle recebe seu próprio aria-label, mesmo padrão já
+                usado no filtro de setor da Escala de Folgas. */}
+            <span className="text-xs text-nord-gray mb-1 block">Prestador</span>
             {prestadores.length > 0 ? (
               <select
                 className="input w-full"
+                aria-label="Prestador"
                 value={form.prestadorId}
                 onChange={(e) => {
                   const p = prestadores.find((pr) => pr.id === e.target.value);
@@ -203,6 +200,7 @@ export function ManutencaoRegistroModal({
               <input
                 className="input w-full mt-2"
                 placeholder="Nome do prestador"
+                aria-label="Nome do prestador"
                 value={form.prestador}
                 onChange={(e) => set("prestador", e.target.value)}
               />
@@ -211,37 +209,31 @@ export function ManutencaoRegistroModal({
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Valor mão de obra</label>
+          <Field label="Valor mão de obra">
             <input type="number" step="0.01" className="input w-full" value={form.valorMaoDeObra} onChange={(e) => set("valorMaoDeObra", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Valor peças</label>
+          </Field>
+          <Field label="Valor peças">
             <input type="number" step="0.01" className="input w-full" value={form.valorPecas} onChange={(e) => set("valorPecas", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Outros custos</label>
+          </Field>
+          <Field label="Outros custos">
             <input type="number" step="0.01" className="input w-full" value={form.valorOutros} onChange={(e) => set("valorOutros", e.target.value)} />
-          </div>
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Garantia do serviço</label>
+          <Field label="Garantia do serviço">
             <input className="input w-full" placeholder="Ex.: 90 dias" value={form.garantiaServico} onChange={(e) => set("garantiaServico", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Próxima manutenção</label>
+          </Field>
+          <Field label="Próxima manutenção">
             <input type="date" className="input w-full" value={form.proximaManutencaoEm} onChange={(e) => set("proximaManutencaoEm", e.target.value)} />
-          </div>
+          </Field>
         </div>
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Observações</label>
+        <Field label="Observações">
           <textarea className="input w-full min-h-[50px]" value={form.observacoes} onChange={(e) => set("observacoes", e.target.value)} />
-        </div>
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-nord-gray mb-1 block">Fotos / nota fiscal — antes</label>
+            <span className="text-xs text-nord-gray mb-1 block">Fotos / nota fiscal — antes</span>
             <label className={`btn-outline inline-flex cursor-pointer ${uploading ? "opacity-60" : ""}`}>
               <UploadIcon size={13} /> Anexar
               <input type="file" multiple hidden onChange={(e) => handleUpload(e.target.files, "antes")} disabled={uploading} />
@@ -258,7 +250,7 @@ export function ManutencaoRegistroModal({
             </div>
           </div>
           <div>
-            <label className="text-xs text-nord-gray mb-1 block">Fotos — depois</label>
+            <span className="text-xs text-nord-gray mb-1 block">Fotos — depois</span>
             <label className={`btn-outline inline-flex cursor-pointer ${uploading ? "opacity-60" : ""}`}>
               <UploadIcon size={13} /> Anexar
               <input type="file" multiple hidden onChange={(e) => handleUpload(e.target.files, "depois")} disabled={uploading} />
@@ -286,5 +278,22 @@ export function ManutencaoRegistroModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-xs text-nord-gray mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }
