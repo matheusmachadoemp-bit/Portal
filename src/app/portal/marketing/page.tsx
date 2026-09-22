@@ -18,6 +18,16 @@ export default async function MarketingPage() {
   const now = new Date();
   const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageMarketing;
+  // "Marcar como feita" e excluir agem sobre uma tarefa JÁ EXISTENTE (não têm
+  // a ambiguidade de empresaId que "criar" tem no modo Grupo Nord), e cada
+  // uma bate com a permissão exata que a rota de API já exige (PATCH exige
+  // canEdit, DELETE exige canDelete) — mesmo padrão já corrigido em
+  // Ideias/Parcerias/Tráfego Pago/Tarefas (commits a41cce2/42c97e9). Antes,
+  // o botão de concluir usava `canCreate` (gated por loja única + create),
+  // escondendo (ou implicando erroneamente "concluída") tarefas em aberto no
+  // modo Grupo Nord e para perfis com canEdit=true/canCreate=false.
+  const canEdit = await hasModulePermission(session.user.id, "marketing", "canEdit");
+  const canDelete = await hasModulePermission(session.user.id, "marketing", "canDelete");
 
   const [weekTasks, recentFiles, recentLogs, allTasksForPanel, teamMembers] =
     await Promise.all([
@@ -67,6 +77,8 @@ export default async function MarketingPage() {
         recentLogs={recentLogs.map((l) => ({ ...l, createdAt: l.createdAt.toISOString() }))}
         teamMembers={teamMembers}
         canCreate={canCreate}
+        canEdit={canEdit}
+        canDelete={canDelete}
       />
     </PageContainer>
   );

@@ -34,6 +34,8 @@ export function DashboardClient({
   recentLogs,
   teamMembers,
   canCreate,
+  canEdit,
+  canDelete,
 }: {
   weekTasks: TaskDTO[];
   allTasks: TaskDTO[];
@@ -41,6 +43,8 @@ export function DashboardClient({
   recentLogs: LogDTO[];
   teamMembers: TeamMember[];
   canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const router = useRouter();
   const [weekOffset, setWeekOffset] = useState(0);
@@ -232,14 +236,27 @@ export function DashboardClient({
                           }}
                           className="flex items-center gap-2 min-w-0 flex-1 text-left"
                         >
-                          {canCreate && !DONE_STATUSES.includes(t.status) ? (
-                            <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                markDone(t);
-                              }}
-                              className="shrink-0 w-4 h-4 rounded-full border border-nord-border hover:border-nord-success cursor-pointer"
-                            />
+                          {!DONE_STATUSES.includes(t.status) ? (
+                            // "Marcar como feita" é um PATCH sobre uma tarefa já existente
+                            // (PATCH /api/marketing/tasks/[id] exige `canEdit`, não
+                            // `canCreate`) — antes usava `canCreate` (gated por loja única),
+                            // então em Grupo Nord (ou para um perfil canEdit=true/
+                            // canCreate=false) o círculo clicável desaparecia e caía direto
+                            // no `else`, mostrando o check verde de "concluída" pra uma
+                            // tarefa que não estava concluída. Agora o texto/ícone reflete
+                            // sempre o status real; só a interatividade (clicar pra concluir)
+                            // depende de `canEdit`.
+                            canEdit ? (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  markDone(t);
+                                }}
+                                className="shrink-0 w-4 h-4 rounded-full border border-nord-border hover:border-nord-success cursor-pointer"
+                              />
+                            ) : (
+                              <span className="shrink-0 w-4 h-4 rounded-full border border-nord-border" />
+                            )
                           ) : (
                             <CheckCircle2 size={16} className="shrink-0 text-nord-success" />
                           )}
@@ -342,8 +359,13 @@ export function DashboardClient({
           setShowTaskModal(false);
           router.refresh();
         }}
+        onDeleted={() => {
+          setShowTaskModal(false);
+          router.refresh();
+        }}
         task={editingTask}
         teamMembers={teamMembers}
+        canDelete={canDelete}
       />
     </div>
   );

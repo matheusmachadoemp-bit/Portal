@@ -26,10 +26,12 @@ export function CalendarClient({
   initialTasks,
   teamMembers,
   canCreate,
+  canDelete,
 }: {
   initialTasks: TaskDTO[];
   teamMembers: TeamMember[];
   canCreate: boolean;
+  canDelete: boolean;
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>("mes");
@@ -235,9 +237,14 @@ export function CalendarClient({
           setShowModal(false);
           router.refresh();
         }}
+        onDeleted={() => {
+          setShowModal(false);
+          router.refresh();
+        }}
         task={editingTask}
         teamMembers={teamMembers}
         defaultDate={defaultDate}
+        canDelete={canDelete}
       />
     </div>
   );
