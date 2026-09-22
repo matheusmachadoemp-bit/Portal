@@ -99,42 +99,37 @@ export function PrestadorFormModal({
     <Modal open={open} onClose={onClose} title={prestador ? "Editar prestador" : "Novo prestador"} widthClass="max-w-xl">
       <FormError message={error} />
       <div className="space-y-4">
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Nome ou razão social *</label>
+        <Field label="Nome ou razão social *">
           <input className="input w-full" value={form.nome} onChange={(e) => set("nome", e.target.value)} />
-        </div>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Nome do contato</label>
+          <Field label="Nome do contato">
             <input className="input w-full" value={form.nomeContato} onChange={(e) => set("nomeContato", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Especialidade</label>
+          </Field>
+          <Field label="Especialidade">
             <input className="input w-full" value={form.especialidade} onChange={(e) => set("especialidade", e.target.value)} placeholder="Ex.: Refrigeração" />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Telefone</label>
+          </Field>
+          <Field label="Telefone">
             <input className="input w-full" value={form.telefone} onChange={(e) => set("telefone", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">WhatsApp</label>
+          </Field>
+          <Field label="WhatsApp">
             <input className="input w-full" value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">E-mail</label>
+          </Field>
+          <Field label="E-mail">
             <input type="email" className="input w-full" value={form.email} onChange={(e) => set("email", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">CNPJ ou CPF</label>
+          </Field>
+          <Field label="CNPJ ou CPF">
             <input className="input w-full" value={form.documento} onChange={(e) => set("documento", e.target.value)} />
-          </div>
+          </Field>
         </div>
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Endereço</label>
+        <Field label="Endereço">
           <input className="input w-full" value={form.endereco} onChange={(e) => set("endereco", e.target.value)} />
-        </div>
+        </Field>
         <div>
-          <label className="text-xs text-nord-gray mb-1 block">Lojas atendidas</label>
+          {/* "Lojas atendidas" rotula um grupo de botões multi-escolha, não
+              um único input — texto solto (<span>), como o padrão já usado
+              para o texto de apoio de upload em chamado-form-modal.tsx. */}
+          <span className="text-xs text-nord-gray mb-1 block">Lojas atendidas</span>
           <div className="flex flex-wrap gap-2">
             {empresas.map((e) => (
               <button
@@ -152,10 +147,9 @@ export function PrestadorFormModal({
           <p className="text-[11px] text-nord-gray mt-1">Nenhuma loja selecionada = atende todas as lojas.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Avaliação (1 a 5)</label>
+          <Field label="Avaliação (1 a 5)">
             <input type="number" min={1} max={5} className="input w-full" value={form.avaliacao} onChange={(e) => set("avaliacao", e.target.value)} />
-          </div>
+          </Field>
           <div className="flex items-end pb-2">
             <label className="flex items-center gap-2 text-sm text-white">
               <input type="checkbox" checked={form.active} onChange={(e) => set("active", e.target.checked)} />
@@ -163,10 +157,9 @@ export function PrestadorFormModal({
             </label>
           </div>
         </div>
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Observações</label>
+        <Field label="Observações">
           <textarea className="input w-full min-h-[60px]" value={form.observacoes} onChange={(e) => set("observacoes", e.target.value)} />
-        </div>
+        </Field>
 
         <div className="flex justify-end gap-2 pt-2">
           <button className="btn-outline" onClick={onClose} disabled={saving}>
@@ -178,5 +171,22 @@ export function PrestadorFormModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-xs text-nord-gray mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }

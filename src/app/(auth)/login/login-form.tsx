@@ -36,10 +36,7 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
               <h1 className="text-white text-xl font-semibold mb-1">Entrar</h1>
               <p className="text-nord-gray text-sm mb-4">Acesse com seu e-mail e senha cadastrados.</p>
 
-              <div>
-                <label className="block text-xs font-medium text-nord-gray mb-1.5">
-                  E-mail ou usuário
-                </label>
+              <Field label="E-mail ou usuário">
                 <input
                   name="email"
                   type="text"
@@ -48,10 +45,9 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
                   placeholder="seuemail@nordpizza.com"
                   className="w-full rounded-lg bg-nord-panel border border-nord-border px-3.5 py-2.5 text-white placeholder:text-nord-gray/60 outline-none focus:border-nord-blue focus:ring-1 focus:ring-nord-blue transition"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="block text-xs font-medium text-nord-gray mb-1.5">Senha</label>
+              <Field label="Senha">
                 <div className="relative">
                   <input
                     name="password"
@@ -70,7 +66,7 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-              </div>
+              </Field>
 
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-2 text-nord-gray cursor-pointer select-none">
@@ -117,8 +113,7 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
               <p className="text-nord-gray text-sm mb-4">
                 Informe seu e-mail cadastrado para receber as instruções de recuperação.
               </p>
-              <div>
-                <label className="block text-xs font-medium text-nord-gray mb-1.5">E-mail</label>
+              <Field label="E-mail">
                 <input
                   name="email"
                   type="email"
@@ -126,7 +121,7 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
                   placeholder="seuemail@nordpizza.com"
                   className="w-full rounded-lg bg-nord-panel border border-nord-border px-3.5 py-2.5 text-white placeholder:text-nord-gray/60 outline-none focus:border-nord-blue focus:ring-1 focus:ring-nord-blue transition"
                 />
-              </div>
+              </Field>
 
               {forgotState?.message && (
                 <p className="text-sm text-emerald-400 bg-emerald-950/40 border border-emerald-900 rounded-lg px-3 py-2">
@@ -159,5 +154,20 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
         </p>
       </div>
     </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-nord-gray mb-1.5">{label}</span>
+      {children}
+    </label>
   );
 }
