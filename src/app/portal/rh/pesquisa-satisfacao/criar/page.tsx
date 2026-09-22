@@ -7,6 +7,17 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_LABEL } from "@/lib/goals";
 import { CriarPesquisaClient } from "./criar-client";
 
+// Checagem de cargo (MANAGER_ROLES) pra VISUALIZAR o formulário de criar/editar — mesmo padrão já
+// aplicado à página-lista (`../page.tsx`, BUG-004) e à página de resultados (`../[id]/resultados/
+// page.tsx`). Sem esta checagem, qualquer COLABORADOR com o Perfil de Permissão padrão
+// "Funcionário" (rh:canView=true de fábrica) conseguia abrir esta página e, sabendo/adivinhando o
+// ID de uma pesquisa (`?id=...`), ver o formulário pré-preenchido com as perguntas e o público
+// daquela pesquisa direto nesta página Server Component (achado de auditoria de segurança, Alto —
+// a submissão em si já estava protegida: POST usa CAN_CREATE_ROLES, PATCH usa CAN_MANAGE_ROLES,
+// só a leitura/visualização do formulário ficava aberta). Este mesmo componente serve tanto pra
+// CRIAR (sem `?id`) quanto pra EDITAR (com `?id`) — um único gate cobre os dois casos.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 const DETAIL_INCLUDE = {
   publico: true,
   perguntas: {
@@ -18,7 +29,10 @@ const DETAIL_INCLUDE = {
 
 export default async function CriarPesquisaPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
 

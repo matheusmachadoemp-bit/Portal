@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { hasModulePermission } from "@/lib/authz";
 import {
   SATISFACTION_MIN_GROUP_SIZE,
   SATISFACTION_SCORABLE_TYPES,
@@ -10,9 +11,29 @@ import {
 } from "@/lib/satisfaction";
 import type { SatisfactionTheme } from "@prisma/client";
 
+// Checagem de cargo (MANAGER_ROLES) pra VER OS RESULTADOS agregados — mesmo padrão de
+// visualização já usado nos outros GETs de `/api/satisfaction/surveys` (lista e detalhe) e na
+// página que consome esta rota (`.../[id]/resultados/page.tsx`). Sem esta checagem, qualquer
+// COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView=true de fábrica)
+// conseguia chamar este GET direto e ver o eNPS geral, o eNPS por setor, os alertas de "setor com
+// clima ruim" e os comentários abertos anônimos de qualquer pesquisa (achado de auditoria de
+// segurança, Alto). Não mexe na proteção de anonimato já existente abaixo (setor com menos que
+// SATISFACTION_MIN_GROUP_SIZE respostas continua sem expor nota/comentário) — só restringe QUEM
+// pode acessar a rota, não o que é mostrado dentro da proteção já existente.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver pesquisas de satisfação." },
+      { status: 403 }
+    );
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

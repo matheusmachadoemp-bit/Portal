@@ -8,6 +8,15 @@ import { hasModulePermission } from "@/lib/authz";
 
 const CAN_MANAGE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
+// Checagem de cargo (MANAGER_ROLES) pra VER O DETALHE de uma pesquisa — mesmo padrão de
+// visualização já usado no GET de `/api/satisfaction/surveys` (lista). Sem esta checagem,
+// qualquer COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView=true de
+// fábrica) conseguia chamar este GET direto e ver o detalhe completo (perguntas, público etc.) de
+// qualquer pesquisa (achado de auditoria de segurança, Alto). Diferente de CAN_MANAGE_ROLES acima
+// (que só controla quem pode EDITAR/EXCLUIR, excluindo Supervisor de propósito), aqui é a
+// permissão mais ampla de VISUALIZAR.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 const DETAIL_INCLUDE = {
   publico: { include: { empresa: { select: { id: true, name: true } } } },
   perguntas: { include: { opcoes: { orderBy: { ordem: "asc" as const } } }, orderBy: { ordem: "asc" as const } },
@@ -28,6 +37,15 @@ async function findAccessibleSurvey(id: string) {
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver pesquisas de satisfação." },
+      { status: 403 }
+    );
+  }
 
   const { id } = await params;
   const { survey } = await findAccessibleSurvey(id);
