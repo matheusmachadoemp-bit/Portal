@@ -5,10 +5,11 @@ import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST } from "@/lib/estoque";
+import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST, SECTORS } from "@/lib/estoque";
 
 type CountRow = {
   id: string;
+  setor: string | null;
   mes: number | null;
   ano: number;
   dataContagem: string;
@@ -22,6 +23,8 @@ type CountRow = {
   divergencias: number;
   createdByName: string;
 };
+
+type EmployeeOption = { id: string; name: string };
 
 type CountItem = {
   id: string;
@@ -37,8 +40,19 @@ type CountItem = {
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const APPROVER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
-export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { initialCounts: CountRow[]; canCreate: boolean; userRole: string }) {
+export function ContagemMensalClient({
+  initialCounts,
+  employees,
+  canCreate,
+  userRole,
+}: {
+  initialCounts: CountRow[];
+  employees: EmployeeOption[];
+  canCreate: boolean;
+  userRole: string;
+}) {
   const [counts, setCounts] = useState(initialCounts);
+  const [setor, setSetor] = useState<string>("");
   const [responsavel, setResponsavel] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +70,7 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
     setCounts(
       data.counts.map((c: Record<string, unknown>) => ({
         id: c.id,
+        setor: c.setor,
         mes: c.mes,
         ano: c.ano,
         dataContagem: c.dataContagem,
@@ -77,7 +92,7 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
     const res = await fetch("/api/estoque/contagens", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "MENSAL", responsavel }),
+      body: JSON.stringify({ type: "MENSAL", setor: setor || undefined, responsavel }),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
@@ -169,6 +184,7 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
             <thead>
               <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
                 <th className="py-2 pr-4">Mês/Ano</th>
+                <th className="py-2 pr-4">Setor</th>
                 <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4">Progresso</th>
                 <th className="py-2 pr-4">Status</th>
@@ -180,6 +196,7 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
               {counts.map((c) => (
                 <tr key={c.id} className="border-b border-nord-border/50 hover:bg-white/5">
                   <td className="py-2.5 pr-4 text-white">{c.mes ? MESES[c.mes - 1] : "—"}/{c.ano}</td>
+                  <td className="py-2.5 pr-4 text-white">{c.setor ?? "Todos"}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{c.responsavel ?? "—"}</td>
                   <td className="py-2.5 pr-4 w-40">
                     <div className="flex items-center gap-2">
@@ -200,7 +217,7 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
               ))}
               {counts.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-nord-gray">
+                  <td colSpan={7} className="py-6 text-center text-nord-gray">
                     Nenhum fechamento mensal registrado ainda.
                   </td>
                 </tr>
@@ -212,10 +229,28 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
 
       <Modal open={showNew} onClose={() => setShowNew(false)} title="Iniciar fechamento mensal" widthClass="max-w-sm">
         <div className="space-y-3">
-          <p className="text-xs text-nord-gray">A contagem mensal considera todos os produtos ativos da loja e será usada no cálculo oficial do CMV Real.</p>
+          <p className="text-xs text-nord-gray">
+            {setor
+              ? "A contagem mensal considerará apenas os produtos ativos do setor escolhido e será usada no cálculo oficial do CMV Real."
+              : "A contagem mensal considera todos os produtos ativos da loja e será usada no cálculo oficial do CMV Real."}
+          </p>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Setor</span>
+            <select className="input" value={setor} onChange={(e) => setSetor(e.target.value)}>
+              <option value="">Todos os setores</option>
+              {SECTORS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Responsável pelo fechamento</span>
-            <input className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} />
+            <select className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}>
+              <option value="">Selecione...</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.name}>{emp.name}</option>
+              ))}
+            </select>
           </label>
           {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={iniciarContagem} className="btn-primary w-full py-2.5">
@@ -224,9 +259,21 @@ export function ContagemMensalClient({ initialCounts, canCreate, userRole }: { i
         </div>
       </Modal>
 
-      <Modal open={!!active} onClose={() => setActive(null)} title={`Fechamento mensal — ${active?.mes ? MESES[active.mes - 1] : ""}/${active?.ano ?? ""}`} widthClass="max-w-4xl">
+      <Modal
+        open={!!active}
+        onClose={() => setActive(null)}
+        title={`Fechamento mensal — ${active?.mes ? MESES[active.mes - 1] : ""}/${active?.ano ?? ""}${active?.setor ? ` — ${active.setor}` : ""}`}
+        widthClass="max-w-4xl"
+      >
         {active && (
           <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-nord-gray">
+              <div>Setor: <span className="text-white">{active.setor ?? "Todos os setores"}</span></div>
+              <div>Responsável: <span className="text-white">{active.responsavel ?? "—"}</span></div>
+              <div>Conferidos: <span className="text-white">{items.filter((i) => i.quantidadeContada !== null).length}/{items.length}</span></div>
+              <div>Pendentes: <span className="text-white">{pendentes}</span></div>
+            </div>
+
             <div>
               <span className="block text-xs text-nord-gray mb-2">Checklist antes da finalização</span>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">

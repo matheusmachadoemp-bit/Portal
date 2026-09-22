@@ -17,7 +17,7 @@ export default async function ContagemEstoquePage() {
   const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageEstoque;
 
-  const [semanais, mensais] = await Promise.all([
+  const [semanais, mensais, employees] = await Promise.all([
     prisma.stockCount.findMany({
       where: { empresaId: { in: empresaIds }, type: "SEMANAL" },
       orderBy: { dataContagem: "desc" },
@@ -29,6 +29,10 @@ export default async function ContagemEstoquePage() {
       orderBy: { dataContagem: "desc" },
       take: 24,
       include: { items: true, createdBy: { select: { name: true } } },
+    }),
+    prisma.employee.findMany({
+      where: { empresaId: { in: empresaIds }, status: "ATIVO" },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -53,6 +57,7 @@ export default async function ContagemEstoquePage() {
           }))}
           initialMensais={mensais.map((c) => ({
             id: c.id,
+            setor: c.setor,
             mes: c.mes,
             ano: c.ano,
             dataContagem: c.dataContagem.toISOString(),
@@ -66,6 +71,7 @@ export default async function ContagemEstoquePage() {
             divergencias: c.items.filter((i) => i.status === "DIVERGENCIA").length,
             createdByName: c.createdBy.name,
           }))}
+          employees={employees.map((e) => ({ id: e.id, name: e.name }))}
           canCreate={canCreate}
           userRole={session?.user?.role ?? ""}
         />
