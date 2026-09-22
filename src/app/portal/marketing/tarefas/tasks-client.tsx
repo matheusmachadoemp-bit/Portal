@@ -53,11 +53,13 @@ export function TasksClient({
   initialTasks,
   teamMembers,
   canCreate,
+  canDelete,
   history,
 }: {
   initialTasks: TaskDTO[];
   teamMembers: TeamMember[];
   canCreate: boolean;
+  canDelete: boolean;
   history: HistoryEntry[];
 }) {
   const [tasks, setTasks] = useState(initialTasks);
@@ -289,8 +291,13 @@ export function TasksClient({
           setShowModal(false);
           refresh();
         }}
+        onDeleted={() => {
+          setShowModal(false);
+          refresh();
+        }}
         task={editingTask}
         teamMembers={teamMembers}
+        canDelete={canDelete}
       />
     </div>
   );
