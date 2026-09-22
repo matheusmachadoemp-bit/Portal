@@ -195,12 +195,24 @@ function nextOccurrenceDate(from: Date, frequencia: string, intervaloDiasCustom:
 }
 
 /**
+ * Horizonte padrão (em dias, a partir de hoje) até onde `generateDuePreventivaOcorrencias` gera
+ * ocorrências futuras — nunca existe (em condições normais) uma `ManutencaoPreventivaOcorrencia`
+ * programada além de hoje + esse valor. Exportado como constante nomeada (em vez de só um default
+ * de parâmetro) para a tela do Calendário (`calendario/page.tsx`) poder alinhar a janela de busca
+ * da query a esse mesmo limite, sem duplicar o número em dois lugares — ver #295.
+ */
+export const PREVENTIVA_HORIZONTE_DIAS = 90;
+
+/**
  * Gera (de forma preguiçosa e idempotente) as próximas ocorrências de cada
  * manutenção preventiva ativa dentro da janela [hoje, hoje + horizonteDias],
  * chamado ao abrir o Calendário preventivo. Protegido pelo índice único
  * (preventivaId, dataProgramada): nunca duplica mesmo se rodar em paralelo.
  */
-export async function generateDuePreventivaOcorrencias(empresaIds: string[], horizonteDias = 90): Promise<void> {
+export async function generateDuePreventivaOcorrencias(
+  empresaIds: string[],
+  horizonteDias = PREVENTIVA_HORIZONTE_DIAS
+): Promise<void> {
   const now = new Date();
   const horizonte = addDays(now, horizonteDias);
 
