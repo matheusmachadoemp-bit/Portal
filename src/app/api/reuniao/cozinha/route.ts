@@ -6,6 +6,16 @@ import { currentPeriodo } from "@/lib/reuniao";
 import { computeCozinhaMetrics, loadReuniaoCustomIndicators, upsertReuniaoCustomIndicatorValues } from "@/lib/reuniao-server";
 import { hasModulePermission } from "@/lib/authz";
 
+// Converte pra número, preservando 0 como valor válido — só cai em null quando o
+// valor vier vazio/ausente/não-numérico (evitar o clássico bug de `Number(v) || null`
+// tratar 0 como "ausente"). Trata string vazia à parte porque `Number("")` é 0, não NaN.
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,8 +78,8 @@ export async function POST(req: Request) {
     update: {
       cmvPercent: metrics.cmvPercent,
       desperdicioValor: metrics.desperdicioValor,
-      tempoPedidoMinutos: body.tempoPedidoMinutos !== undefined ? Number(body.tempoPedidoMinutos) || null : undefined,
-      organizacaoPercent: body.organizacaoPercent !== undefined ? Number(body.organizacaoPercent) || null : undefined,
+      tempoPedidoMinutos: body.tempoPedidoMinutos !== undefined ? toNullableNumber(body.tempoPedidoMinutos) : undefined,
+      organizacaoPercent: body.organizacaoPercent !== undefined ? toNullableNumber(body.organizacaoPercent) : undefined,
       notas: body.notas || null,
     },
     create: {
@@ -77,8 +87,8 @@ export async function POST(req: Request) {
       periodo,
       cmvPercent: metrics.cmvPercent,
       desperdicioValor: metrics.desperdicioValor,
-      tempoPedidoMinutos: body.tempoPedidoMinutos !== undefined ? Number(body.tempoPedidoMinutos) || null : null,
-      organizacaoPercent: body.organizacaoPercent !== undefined ? Number(body.organizacaoPercent) || null : null,
+      tempoPedidoMinutos: body.tempoPedidoMinutos !== undefined ? toNullableNumber(body.tempoPedidoMinutos) : null,
+      organizacaoPercent: body.organizacaoPercent !== undefined ? toNullableNumber(body.organizacaoPercent) : null,
       notas: body.notas || null,
       createdById: session.user.id,
     },
