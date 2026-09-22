@@ -26,10 +26,15 @@ export function VendaAcumuladaClient({
   initialEntries,
   employees,
   canCreate,
+  canManageMetas,
 }: {
   initialEntries: EntryDTO[];
   employees: EmployeeOption[];
   canCreate: boolean;
+  // Permissão (`metas:canCreate`) isolada do modo de loja — serve só pra diferenciar, no aviso
+  // abaixo, a causa de `canCreate=false`: falta de permissão (canManageMetas=false) vs. estar em
+  // modo Grupo Nord com a permissão em dia (canManageMetas=true, mas ctx.mode !== "single").
+  canManageMetas: boolean;
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [showForm, setShowForm] = useState(false);
@@ -103,7 +108,9 @@ export function VendaAcumuladaClient({
 
       {!canCreate && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas.
+          {canManageMetas
+            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar vendas."
+            : "Você não tem permissão para lançar vendas acumuladas."}
         </p>
       )}
       {canCreate && (

@@ -11,9 +11,19 @@ import { parseDateKeyInput } from "@/lib/escala-folgas";
  * "RH — AFASTAMENTOS" em `prisma/schema.prisma`). A Escala de Folgas lê daqui pro calendário
  * (tipo "Afastamento"), sem duplicar em `DayOffEntry`.
  */
+// Mesma checagem de cargo (MANAGER_ROLES) já usada na rota irmã `/api/rh/vacations` (desde o
+// BUG-004b) e em `/api/rh/absences/[id]` (PATCH/DELETE). Achado da revisão do Teulis: este GET
+// tinha ficado de fora das duas varreduras anteriores (BUG-004b e item 272) que adicionaram
+// MANAGER_ROLES nas rotas irmãs de RH — sem ela, canView=true de fábrica pro perfil "Funcionário"
+// bastava pra qualquer Colaborador listar nome/setor de afastamentos de todos os colegas.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     return NextResponse.json({ error: "Seu perfil de permissão não permite ver o RH." }, { status: 403 });
   }

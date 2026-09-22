@@ -2,13 +2,34 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
+import { AccessDenied } from "@/components/ui/access-denied";
 import { EmployeeProfileClient } from "./employee-profile-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { notFound, redirect } from "next/navigation";
 
+// Mesma checagem de cargo (MANAGER_ROLES) já usada pela página-lista irmã (`../page.tsx`, BUG-004)
+// e por todas as demais páginas do módulo RH — sem ela, qualquer COLABORADOR com o Perfil de
+// Permissão padrão "Funcionário" (rh:canView=true de fábrica) conseguia abrir a ficha de QUALQUER
+// colega sabendo o `id` (a query abaixo só filtra por empresaId, nunca por cargo) e ver CPF, chave
+// PIX, salário fixo e nota da última avaliação de desempenho, além de ter acesso às abas de
+// Financeiro, Ponto Eletrônico, Ocorrências, Férias, Uniformes e Documentos (RG/contrato, via URL
+// pública do Vercel Blob) daquele colega — achado CRÍTICO de auditoria (Jonas). Fica restrito a
+// Administrador/Gestor/Gerente/Supervisor por cargo, igual ao resto do RH.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user) {
+    redirect("/portal/inicio");
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return (
+      <PageContainer title="RH" subtitle="Ficha do colaborador" backHref="/portal/rh/colaboradores" backLabel="Colaboradores">
+        <AccessDenied message="Esta página reúne dados sensíveis do colaborador (CPF, chave PIX, salário, avaliações de desempenho) e por isso é restrita a Administrador, Gestor, Gerente ou Supervisor. Se você precisa desse acesso, fale com seu gestor." />
+      </PageContainer>
+    );
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
 
