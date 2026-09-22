@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
+import { AccessDenied } from "@/components/ui/access-denied";
 import { FinanceiroClient } from "./financeiro-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -15,8 +16,15 @@ const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
 export default async function FinanceiroPage() {
   const session = await auth();
-  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+  if (!session?.user) {
     redirect("/portal/inicio");
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return (
+      <PageContainer title="RH" subtitle="Financeiro">
+        <AccessDenied message="Esta página reúne os lançamentos financeiros (vale, adiantamento, desconto) de todos os colaboradores e por isso é restrita a Administrador, Gestor, Gerente ou Supervisor. Se você precisa desse acesso, fale com seu gestor." />
+      </PageContainer>
+    );
   }
   if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
