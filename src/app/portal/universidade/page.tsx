@@ -17,22 +17,49 @@ export default async function UniversidadePage() {
 
   const now = new Date();
 
+  // Últimos 6 meses (mais antigo -> mais recente), usados tanto pra contar concluídos por mês
+  // (monthlyEvolution) quanto pra disparar essas 6 contagens em paralelo com o resto — cada uma é
+  // um COUNT indexável no banco, não uma varredura de toda `TrainingEnrollment` em JS.
+  const monthRanges = Array.from({ length: 6 }, (_, idx) => {
+    const monthDate = subMonths(now, 5 - idx);
+    return { month: format(monthDate, "MM/yyyy"), from: startOfMonth(monthDate), to: endOfMonth(monthDate) };
+  });
+
   const [
     users,
-    enrollments,
+    concluidos,
+    pendentes,
+    progressoMedio,
+    concluidosPorUsuario,
     certificates,
-    moduleProgress,
-    attempts,
+    horasSoma,
+    mediaScore,
     courses,
     overdueEnrollments,
     xpEventsThisMonth,
     pendingAssessments,
+    monthlyCounts,
   ] = await Promise.all([
     prisma.user.count({ where: { active: true } }),
-    prisma.trainingEnrollment.findMany({ include: { course: { select: { name: true } } } }),
+    // `enrollments.findMany` (sem where nenhum) trazia TODA matrícula de todo funcionário pra
+    // somar/contar em JS — cresce pra sempre a cada matrícula nova. Trocado por count/aggregate/
+    // groupBy calculados no banco (ver #296): cada consulta abaixo já chega pronta.
+    prisma.trainingEnrollment.count({ where: { status: "CONCLUIDO" } }),
+    prisma.trainingEnrollment.count({ where: { status: { in: ["NAO_INICIADO", "EM_ANDAMENTO"] } } }),
+    prisma.trainingEnrollment.aggregate({ _avg: { progressPercent: true } }),
+    // Um `groupBy` só substitui tanto "quantos colaboradores distintos já concluíram algo"
+    // (trainedUserIds, = número de grupos) quanto "quem concluiu mais cursos" (mostCoursesUser, =
+    // primeiro grupo, já vem ordenado por contagem decrescente) — sem trazer uma linha por
+    // matrícula, só uma linha por colaborador com pelo menos 1 conclusão.
+    prisma.trainingEnrollment.groupBy({
+      by: ["userId"],
+      where: { status: "CONCLUIDO" },
+      _count: { userId: true },
+      orderBy: { _count: { userId: "desc" } },
+    }),
     prisma.trainingCertificate.count(),
-    prisma.trainingLessonProgress.findMany({ select: { watchedSeconds: true } }),
-    prisma.trainingAttempt.findMany({ select: { score: true } }),
+    prisma.trainingLessonProgress.aggregate({ _sum: { watchedSeconds: true } }),
+    prisma.trainingAttempt.aggregate({ _avg: { score: true } }),
     prisma.trainingCourse.findMany({
       select: { id: true, name: true, category: true, _count: { select: { enrollments: true } } },
     }),
@@ -49,16 +76,14 @@ export default async function UniversidadePage() {
       include: { user: { select: { name: true } } },
     }),
     prisma.trainingAttempt.count({ where: { passed: false } }),
+    Promise.all(
+      monthRanges.map((r) => prisma.trainingEnrollment.count({ where: { completedAt: { gte: r.from, lte: r.to } } }))
+    ),
   ]);
 
-  const trainedUserIds = new Set(enrollments.filter((e) => e.status === "CONCLUIDO").map((e) => e.userId));
-  const concluidos = enrollments.filter((e) => e.status === "CONCLUIDO").length;
-  const pendentes = enrollments.filter((e) => e.status === "NAO_INICIADO" || e.status === "EM_ANDAMENTO").length;
-  const horasRealizadas = Math.round(moduleProgress.reduce((a, p) => a + p.watchedSeconds, 0) / 3600);
-  const mediaConclusao = enrollments.length
-    ? Math.round(enrollments.reduce((a, e) => a + e.progressPercent, 0) / enrollments.length)
-    : 0;
-  const mediaAvaliacoes = attempts.length ? Math.round(attempts.reduce((a, at) => a + at.score, 0) / attempts.length) : 0;
+  const horasRealizadas = Math.round((horasSoma._sum.watchedSeconds ?? 0) / 3600);
+  const mediaConclusao = Math.round(progressoMedio._avg.progressPercent ?? 0);
+  const mediaAvaliacoes = Math.round(mediaScore._avg.score ?? 0);
 
   const topCourses = [...courses]
     .sort((a, b) => b._count.enrollments - a._count.enrollments)
@@ -72,14 +97,7 @@ export default async function UniversidadePage() {
   }
   const byCategory = [...categoryMap.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
-  const monthlyEvolution: { month: string; concluidos: number }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const monthDate = subMonths(now, i);
-    const from = startOfMonth(monthDate);
-    const to = endOfMonth(monthDate);
-    const count = enrollments.filter((e) => e.completedAt && e.completedAt >= from && e.completedAt <= to).length;
-    monthlyEvolution.push({ month: format(monthDate, "MM/yyyy"), concluidos: count });
-  }
+  const monthlyEvolution = monthRanges.map((r, idx) => ({ month: r.month, concluidos: monthlyCounts[idx] }));
 
   const xpByUser = new Map<string, { name: string; xp: number }>();
   for (const ev of xpEventsThisMonth) {
@@ -89,16 +107,9 @@ export default async function UniversidadePage() {
   }
   const topPerformer = [...xpByUser.values()].sort((a, b) => b.xp - a.xp)[0] ?? null;
 
-  const enrollmentsByUser = new Map<string, number>();
-  for (const e of enrollments) {
-    if (e.status === "CONCLUIDO") enrollmentsByUser.set(e.userId, (enrollmentsByUser.get(e.userId) ?? 0) + 1);
-  }
-  let mostCoursesUser: { userId: string; count: number } | null = null;
-  for (const [userId, count] of enrollmentsByUser) {
-    if (!mostCoursesUser || count > mostCoursesUser.count) mostCoursesUser = { userId, count };
-  }
-  const mostCoursesUserName = mostCoursesUser
-    ? (await prisma.user.findUnique({ where: { id: mostCoursesUser.userId }, select: { name: true } }))?.name ?? null
+  const topByCursos = concluidosPorUsuario[0] ?? null;
+  const mostCoursesUserName = topByCursos
+    ? (await prisma.user.findUnique({ where: { id: topByCursos.userId }, select: { name: true } }))?.name ?? null
     : null;
 
   return (
@@ -106,7 +117,7 @@ export default async function UniversidadePage() {
       <DashboardClient
         isAdmin={session ? canManageUsers(session.user.role) : false}
         colaboradoresCadastrados={users}
-        colaboradoresTreinados={trainedUserIds.size}
+        colaboradoresTreinados={concluidosPorUsuario.length}
         cursosConcluidos={concluidos}
         cursosPendentes={pendentes}
         horasRealizadas={horasRealizadas}
@@ -120,7 +131,7 @@ export default async function UniversidadePage() {
         avaliacoesPendentes={pendingAssessments}
         topPerformer={topPerformer}
         mostCoursesUserName={mostCoursesUserName}
-        mostCoursesCount={mostCoursesUser?.count ?? 0}
+        mostCoursesCount={topByCursos?._count.userId ?? 0}
       />
     </PageContainer>
   );

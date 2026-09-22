@@ -52,18 +52,39 @@ function dataGroupBadge(referenceISO: string): { label: string; tone: "default" 
   return { label: "Programada", tone: "default" };
 }
 
+/** Início/fim (inclusive) de um intervalo de datas já carregado ou a carregar, sempre como ISO string
+ * (mesmo formato de `dataProgramada` no DTO) pra poder comparar/ordenar sem parsing extra. */
+type DateRange = { from: string; to: string };
+
+/** Janela de 3 meses (mês anterior + mês do cursor + mês seguinte) que cobre com folga a grade de
+ * 42 células do `MonthCalendar` (que sempre mostra só o rastro do mês anterior/seguinte pra
+ * completar semanas) pra um cursor qualquer — usada pra saber se dá pra navegar pra esse mês só com
+ * o que já está em memória ou se precisa buscar mais no servidor. */
+function monthWindow(cursor: Date): DateRange {
+  const from = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
+  const to = new Date(cursor.getFullYear(), cursor.getMonth() + 2, 0, 23, 59, 59, 999);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
 export function CalendarioClient({
   initialOcorrencias,
+  initialRange,
   equipamentos,
   teamMembers,
   prestadores,
 }: {
   initialOcorrencias: PreventivaOcorrenciaDTO[];
+  initialRange: DateRange;
   equipamentos: EquipamentoOption[];
   teamMembers: UserOption[];
   prestadores: PrestadorOption[];
 }) {
   const [ocorrencias, setOcorrencias] = useState(initialOcorrencias);
+  // Janela [from, to] que já foi carregada do servidor (começa na janela ±90 dias trazida pela
+  // carga inicial da página, ver calendario/page.tsx) — cresce conforme o usuário navega pra meses
+  // fora dela na visão Mês (ver ensureRangeLoaded). `refresh()` sempre busca dentro dela, nunca o
+  // catálogo inteiro — ver #295.
+  const [range, setRange] = useState<DateRange>(initialRange);
   const [view, setView] = useState<"lista" | "mes">("lista");
   const [groupBy, setGroupBy] = useState<GroupKey>("data");
   const [setorFilter, setSetorFilter] = useState("");
@@ -80,10 +101,41 @@ export function CalendarioClient({
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
 
-  async function refresh() {
-    const res = await fetch("/api/manutencao/preventivas/ocorrencias");
+  async function fetchOcorrencias(win: DateRange): Promise<PreventivaOcorrenciaDTO[]> {
+    const params = new URLSearchParams({ from: win.from, to: win.to });
+    const res = await fetch(`/api/manutencao/preventivas/ocorrencias?${params}`);
     const data = await res.json();
-    setOcorrencias(data.ocorrencias ?? []);
+    return data.ocorrencias ?? [];
+  }
+
+  /** Sempre busca só dentro da janela já carregada (`range`) — nunca o catálogo inteiro. */
+  async function refresh() {
+    setOcorrencias(await fetchOcorrencias(range));
+  }
+
+  /** Chamado ao navegar de mês na visão Mês: se o mês alvo (+ rastro de mês anterior/seguinte) já
+   * está coberto pela janela carregada, não faz nada; senão busca só o que falta e mescla no estado
+   * (por id, pra não duplicar o que já estava carregado), expandindo `range` pra essa união — evita
+   * tanto reinventar paginação complexa quanto voltar a carregar tudo de uma vez. */
+  async function ensureRangeLoaded(cursor: Date) {
+    const win = monthWindow(cursor);
+    if (win.from >= range.from && win.to <= range.to) return;
+
+    const novas = await fetchOcorrencias(win);
+    setOcorrencias((prev) => {
+      const byId = new Map(prev.map((o) => [o.id, o]));
+      for (const o of novas) byId.set(o.id, o);
+      return [...byId.values()].sort((a, b) => a.dataProgramada.localeCompare(b.dataProgramada));
+    });
+    setRange((prev) => ({
+      from: win.from < prev.from ? win.from : prev.from,
+      to: win.to > prev.to ? win.to : prev.to,
+    }));
+  }
+
+  function changeMonthCursor(next: Date) {
+    setMonthCursor(next);
+    void ensureRangeLoaded(next);
   }
 
   const setores = useMemo(() => [...new Set(ocorrencias.map((o) => o.preventiva.equipamento.setor))], [ocorrencias]);
@@ -335,7 +387,7 @@ export function CalendarioClient({
         ) : (
           <MonthCalendar
             cursor={monthCursor}
-            onCursorChange={setMonthCursor}
+            onCursorChange={changeMonthCursor}
             renderDay={(day, { inMonth, isToday }) => {
               const items = ocorrenciasNoDia(day);
               return (
