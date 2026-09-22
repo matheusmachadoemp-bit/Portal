@@ -17,7 +17,17 @@ export default async function TrafegoPagoPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const range = defaultMetaAdsRange();
   const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
+  // "Novo período de marketing" (POST /api/marketing) precisa de loja única
+  // selecionada — mesma ambiguidade de empresaId no modo Grupo Nord dos
+  // demais módulos de Marketing (ver requireActiveSingleEmpresa na rota).
+  // Editar/excluir um lançamento já existente usam suas PRÓPRIAS permissões
+  // (canEdit/canDelete, checadas separadamente em PATCH/DELETE
+  // /api/marketing/[id]) — não a mesma flag de canCreate, que escondia a
+  // ação errada pra um perfil customizado com canDelete=true/canCreate=false
+  // (mesmo achado do Teulis já corrigido em Ideias/Parcerias).
   const canCreate = ctx?.mode === "single" && canManageMarketing;
+  const canEdit = await hasModulePermission(session.user.id, "marketing", "canEdit");
+  const canDelete = await hasModulePermission(session.user.id, "marketing", "canDelete");
 
   const [entries, metaAdsSummary, metaAdsCampaigns] = await Promise.all([
     prisma.marketingEntry.findMany({
@@ -36,6 +46,8 @@ export default async function TrafegoPagoPage() {
       <TrafegoPagoClient
         initialEntries={serialized}
         canCreate={canCreate}
+        canEdit={canEdit}
+        canDelete={canDelete}
         isGrupoNordMode={ctx?.mode !== "single"}
         metaAdsSummary={metaAdsSummary}
         metaAdsCampaigns={metaAdsCampaigns}

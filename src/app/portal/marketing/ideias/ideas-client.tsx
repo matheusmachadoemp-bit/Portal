@@ -25,10 +25,14 @@ const emptyForm = { title: "", description: "", references: "", links: "", categ
 export function IdeasClient({
   initialIdeas,
   canCreate,
+  canEdit,
+  canDelete,
   canApprove,
 }: {
   initialIdeas: Idea[];
   canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   canApprove: boolean;
 }) {
   const [ideas, setIdeas] = useState(initialIdeas);
@@ -202,18 +206,22 @@ export function IdeasClient({
                 </div>
               )}
 
-              {canCreate && (
+              {(canEdit || canDelete) && (
                 <div className="flex items-center justify-end gap-3 mt-2 pt-2">
-                  <button
-                    onClick={() => promote(idea)}
-                    title="Transformar em tarefa"
-                    className="flex items-center gap-1 text-xs text-nord-blue-light hover:text-white"
-                  >
-                    <Sparkles size={13} /> {promoted === idea.id ? "Tarefa criada!" : "Promover"}
-                  </button>
-                  <button onClick={() => setConfirmDeleteId(idea.id)} className="text-nord-gray hover:text-nord-danger">
-                    <Trash2 size={13} />
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => promote(idea)}
+                      title="Transformar em tarefa"
+                      className="flex items-center gap-1 text-xs text-nord-blue-light hover:text-white"
+                    >
+                      <Sparkles size={13} /> {promoted === idea.id ? "Tarefa criada!" : "Promover"}
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button onClick={() => setConfirmDeleteId(idea.id)} className="text-nord-gray hover:text-nord-danger">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
               )}
             </div>

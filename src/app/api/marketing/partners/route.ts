@@ -66,6 +66,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Cupom é obrigatório." }, { status: 400 });
   }
 
+  // Unicidade de cupom é por loja, não global: a mesma loja não pode ter
+  // duas parcerias com o cupom idêntico (venda ficaria ambígua na hora de
+  // atribuir), mas lojas diferentes podem repetir o código entre si (times
+  // e redes sociais separados). Comparação case-insensitive mesmo o client
+  // já forçando maiúsculas (partners-client.tsx), pra não abrir brecha pra
+  // quem enviar direto pela API.
+  const cupomTrim = String(body.cupom).trim();
+  const existingCupom = await prisma.marketingPartner.findFirst({
+    where: { empresaId: empresa.id, cupom: { equals: cupomTrim, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existingCupom) {
+    return NextResponse.json({ error: "Já existe uma parceria com este cupom nesta loja." }, { status: 400 });
+  }
+
   const partner = await prisma.marketingPartner.create({
     data: {
       empresaId: empresa.id,
