@@ -1,5 +1,50 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { ACCESS_LEVEL_TO_MODULE_FLAGS, defaultProfileKeyForRole, type PermissionAction } from "@/lib/permissions";
+
+/**
+ * Busca TODAS as permissões do usuário — role, perfil atribuído, todos os
+ * `UserPermission` (override pessoal, qualquer módulo/subcategoria) e
+ * todos os `ModulePermission` do perfil (qualquer módulo) — numa única
+ * consulta, memoizada por requisição via `cache()` do React (mesma
+ * garantia já usada em `getActiveEmpresaContext`/`getUserEmpresas`,
+ * `@/lib/empresa.ts`: deduplica só DENTRO da mesma requisição/renderização;
+ * a próxima requisição sempre busca de novo, sem risco de servir permissão
+ * desatualizada entre requisições).
+ *
+ * Ao contrário da versão anterior (que filtrava `where: { moduleKey: {in:
+ * keys} }` na própria query, trazendo só as linhas do módulo sendo checado
+ * NAQUELA chamada), esta busca não filtra por módulo de propósito: cada
+ * usuário tem no máximo ~20 linhas de `UserPermission` (uma por módulo/
+ * subcategoria com override pessoal) e ~20 de `ModulePermission` (uma por
+ * módulo do catálogo, ver `MODULES` em `@/lib/permissions`) — poucas
+ * dezenas de linhas no total, barato de trazer inteiro de uma vez — e isso
+ * permite que `hasModulePermission` seja chamada várias vezes na mesma
+ * requisição com `moduleKey`/`action`/`subcategoryKey` diferentes (ex.:
+ * canView + canCreate + canEdit + canDelete do mesmo módulo numa página, ou
+ * módulos diferentes checados por `layout.tsx` e por `page.tsx`) sem repetir
+ * a ida ao banco: achado da auditoria de performance (tarefa #285) — medido
+ * ao vivo, isso respondia por boa parte das ~3,6 a ~7,7 consultas
+ * redundantes na tabela `User` por carregamento de página (a outra parte,
+ * a duplicação de `auth()` em si, já foi corrigida em `src/auth.ts`).
+ */
+const loadUserPermissionData = cache((userId: string) =>
+  prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: true,
+      permissionProfileId: true,
+      permissions: { select: { moduleKey: true, level: true } },
+      permissionProfile: {
+        select: {
+          modulePermissions: {
+            select: { moduleKey: true, canView: true, canExecute: true, canCreate: true, canEdit: true, canDelete: true },
+          },
+        },
+      },
+    },
+  })
+);
 
 // Este arquivo é separado de `@/lib/permissions` de propósito: `permissions.ts`
 // é importado por componentes client (ex.: `permissoes-client.tsx`, que tem
@@ -53,27 +98,8 @@ export async function hasModulePermission(
   subcategoryKey?: string
 ): Promise<boolean> {
   const compoundKey = subcategoryKey ? `${moduleKey}:${subcategoryKey}` : null;
-  const keys = compoundKey ? [moduleKey, compoundKey] : [moduleKey];
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      role: true,
-      permissionProfileId: true,
-      permissions: {
-        where: { moduleKey: { in: keys } },
-        select: { moduleKey: true, level: true },
-      },
-      permissionProfile: {
-        select: {
-          modulePermissions: {
-            where: { moduleKey: { in: keys } },
-            select: { moduleKey: true, canView: true, canExecute: true, canCreate: true, canEdit: true, canDelete: true },
-          },
-        },
-      },
-    },
-  });
+  const user = await loadUserPermissionData(userId);
   if (!user) return false;
   if (user.role === "ADMINISTRADOR") return true;
 
