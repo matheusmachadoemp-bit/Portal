@@ -8,6 +8,9 @@ export type SubcategoryDTO = {
   order: number;
   active: boolean;
   isSystem: boolean;
+  /** Loja dona desta subcategoria (id de Empresa) — `null` = compartilhada, aparece não importa
+   * a loja ativa. Ver comentário de Subcategory.empresaId em prisma/schema.prisma. */
+  empresaId: string | null;
 };
 
 export type CategoryDTO = {

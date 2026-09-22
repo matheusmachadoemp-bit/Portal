@@ -41,6 +41,14 @@ function mapCategoria(raw: string): ProductCategory | null {
   if (c.includes("acompanhamento")) return "ACOMPANHAMENTO";
   if (c.includes("esfiha")) return isDoce ? "ESFIHA_DOCE" : "ESFIHA_SALGADA";
   if (c.includes("pizza")) return isDoce ? "PIZZA_DOCE" : "PIZZA_SALGADA";
+  // Cardápio da Zarki Sushi (ver ProductCategory em prisma/schema.prisma) — checados antes de
+  // "sushi" (o mais genérico dos seis) para não capturar um texto tipo "Sashimi" no branch errado.
+  if (c.includes("entrada")) return "ENTRADA";
+  if (c.includes("sashimi")) return "SASHIMI";
+  if (c.includes("temaki")) return "TEMAKI";
+  if (c.includes("uramaki")) return "URAMAKI";
+  if (c.includes("hot roll") || c.includes("hotroll")) return "HOT_ROLL";
+  if (c.includes("sushi")) return "SUSHI";
   return null;
 }
 
