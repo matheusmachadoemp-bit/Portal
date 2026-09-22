@@ -127,22 +127,38 @@ const CATEGORIES = [
     ],
   },
   {
+    // Subcategorias marcadas com `empresaKey` são específicas de UMA loja do Grupo Nord (ver
+    // campo Subcategory.empresaId em prisma/schema.prisma) — resolvidas para o id real da
+    // empresa mais abaixo, no loop que grava CATEGORIES no banco (nordPizza/zarkiSushi só
+    // existem depois do prisma.empresa.upsert). As subcategorias SEM `empresaKey` continuam
+    // `empresaId: null` = compartilhadas/visíveis pra todas as lojas, igual sempre foi.
+    //
+    // Antes de existirem categorias próprias de sushi, os 2 produtos de exemplo da Zarki Sushi
+    // apareciam junto com "Pizzas Salgadas", "Esfihas" etc. (subcategorias da Nord Pizza &
+    // Burger sem nenhum sentido pro cardápio de uma sushi house) — ver ProductCategory em
+    // prisma/schema.prisma para o raciocínio de cada categoria nova de sushi.
     key: "ficha-tecnica",
     name: "Ficha Técnica",
     icon: "ClipboardList",
     order: 7,
     contentType: "ficha-tecnica",
     subs: [
-      { key: "pizzas-salgadas", name: "Pizzas Salgadas", icon: "Pizza" },
-      { key: "pizzas-doces", name: "Pizzas Doces", icon: "Pizza" },
+      { key: "pizzas-salgadas", name: "Pizzas Salgadas", icon: "Pizza", empresaKey: "nord-pizza" },
+      { key: "pizzas-doces", name: "Pizzas Doces", icon: "Pizza", empresaKey: "nord-pizza" },
       { key: "combos", name: "Combos", icon: "Package" },
-      { key: "esfihas-salgadas", name: "Esfihas Salgadas", icon: "Sandwich" },
-      { key: "esfihas-doces", name: "Esfihas Doces", icon: "Sandwich" },
-      { key: "acompanhamentos", name: "Acompanhamentos", icon: "Soup" },
-      { key: "burgers", name: "Burgers", icon: "Beef" },
+      { key: "esfihas-salgadas", name: "Esfihas Salgadas", icon: "Sandwich", empresaKey: "nord-pizza" },
+      { key: "esfihas-doces", name: "Esfihas Doces", icon: "Sandwich", empresaKey: "nord-pizza" },
+      { key: "acompanhamentos", name: "Acompanhamentos", icon: "Soup", empresaKey: "nord-pizza" },
+      { key: "burgers", name: "Burgers", icon: "Beef", empresaKey: "nord-pizza" },
       { key: "bebidas", name: "Bebidas", icon: "CupSoda" },
       { key: "drinks", name: "Drinks", icon: "Martini" },
       { key: "insumos", name: "Insumos", icon: "Boxes" },
+      { key: "entradas", name: "Entradas", icon: "Soup", empresaKey: "zarki-sushi" },
+      { key: "sashimis", name: "Sashimis", icon: "Fish", empresaKey: "zarki-sushi" },
+      { key: "sushis", name: "Sushis", icon: "Utensils", empresaKey: "zarki-sushi" },
+      { key: "temakis", name: "Temakis", icon: "IceCreamCone", empresaKey: "zarki-sushi" },
+      { key: "uramakis", name: "Uramakis", icon: "Layers", empresaKey: "zarki-sushi" },
+      { key: "hot-rolls", name: "Hot Rolls", icon: "Flame", empresaKey: "zarki-sushi" },
     ],
   },
   {
@@ -451,6 +467,14 @@ async function main() {
     });
   }
 
+  // Resolve o `empresaKey` opcional de cada subcategoria (ver comentário em CATEGORIES acima)
+  // para o id real da empresa — só dá pra montar esse mapa aqui, depois que nordPizza/zarkiSushi
+  // já foram criadas pelo upsert lá em cima.
+  const EMPRESA_ID_BY_KEY: Record<string, string> = {
+    "nord-pizza": nordPizza.id,
+    "zarki-sushi": zarkiSushi.id,
+  };
+
   for (const cat of CATEGORIES) {
     const linked = "linked" in cat ? (cat.linked as boolean) : true;
     const category = await prisma.category.upsert({
@@ -469,9 +493,11 @@ async function main() {
 
     let subOrder = 0;
     for (const sub of cat.subs) {
+      const empresaKey = "empresaKey" in sub ? (sub.empresaKey as string) : null;
+      const empresaId = empresaKey ? EMPRESA_ID_BY_KEY[empresaKey] : null;
       await prisma.subcategory.upsert({
         where: { categoryId_key: { categoryId: category.id, key: sub.key } },
-        update: { name: sub.name, icon: sub.icon, order: subOrder },
+        update: { name: sub.name, icon: sub.icon, order: subOrder, empresaId },
         create: {
           categoryId: category.id,
           key: sub.key,
@@ -479,6 +505,7 @@ async function main() {
           icon: sub.icon,
           order: subOrder,
           isSystem: true,
+          empresaId,
         },
       });
       subOrder++;
@@ -1891,7 +1918,7 @@ async function main() {
         empresaId: zarkiSushi.id,
         name: "Uramaki Cream Cheese 8 peças",
         code: "SK-002",
-        category: "COMBO",
+        category: "URAMAKI",
         rendimento: "8 peças",
         precoVenda: 34,
         tempoPreparo: 12,

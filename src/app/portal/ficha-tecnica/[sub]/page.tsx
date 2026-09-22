@@ -6,23 +6,12 @@ import { ProdutosClient } from "./produtos-client";
 import { InsumosClient } from "./insumos-client";
 import { QualidadePanel } from "./qualidade-panel";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { productTotalCost, cmvPercent } from "@/lib/ficha";
+import { productTotalCost, cmvPercent, FICHA_TECNICA_SUB_MAP, defaultFichaTecnicaSub } from "@/lib/ficha";
 import { formatPercent } from "@/lib/calc";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
-const SUB_MAP: Record<string, { category: string; label: string }> = {
-  "pizzas-salgadas": { category: "PIZZA_SALGADA", label: "Pizzas Salgadas" },
-  "pizzas-doces": { category: "PIZZA_DOCE", label: "Pizzas Doces" },
-  combos: { category: "COMBO", label: "Combos" },
-  "esfihas-salgadas": { category: "ESFIHA_SALGADA", label: "Esfihas Salgadas" },
-  "esfihas-doces": { category: "ESFIHA_DOCE", label: "Esfihas Doces" },
-  acompanhamentos: { category: "ACOMPANHAMENTO", label: "Acompanhamentos" },
-  burgers: { category: "BURGER", label: "Burgers" },
-  bebidas: { category: "BEBIDA", label: "Bebidas" },
-  drinks: { category: "DRINK", label: "Drinks" },
-  sobremesas: { category: "SOBREMESA", label: "Sobremesas" },
-};
+const SUB_MAP = FICHA_TECNICA_SUB_MAP;
 
 export default async function FichaTecnicaSubPage({ params }: { params: Promise<{ sub: string }> }) {
   const session = await auth();
@@ -86,6 +75,15 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
 
   const info = SUB_MAP[sub];
   if (!info) notFound();
+  // `sub` é uma aba válida (existe no SUB_MAP), mas pode ser de OUTRA loja (ex.: acessar
+  // /portal/ficha-tecnica/pizzas-salgadas direto pela URL com a Zarki Sushi ativa) — nesse caso
+  // redireciona pra aba padrão da loja ativa em vez de renderizar uma lista vazia sem explicação
+  // (a query de produtos abaixo já é isolada por empresaId, então ficaria vazia mesmo se
+  // deixássemos passar). Sem uma loja única ativa (modo Grupo Nord), não redireciona — não há
+  // uma loja "errada" pra checar, e o sidebar já lista as abas das duas lojas nesse modo.
+  if (ctx?.mode === "single" && info.empresaKey && info.empresaKey !== ctx.empresa.key) {
+    redirect(`/portal/ficha-tecnica/${defaultFichaTecnicaSub(ctx.empresa.key)}`);
+  }
 
   const [products, ingredients, qualityConfig] = await Promise.all([
     prisma.product.findMany({

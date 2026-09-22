@@ -373,6 +373,7 @@ model Empresa {
   dayOffEntries                      DayOffEntry[]
   shiftSwapRequests                  ShiftSwapRequest[]
   scheduleChangeLogs                 ScheduleChangeLog[]
+  subcategories                      Subcategory[]
 }
 
 model UserEmpresaAccess {
@@ -423,6 +424,21 @@ model Subcategory {
   isSystem   Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  // Loja dona desta subcategoria (ex.: "Pizzas Salgadas" da Ficha Técnica só faz sentido pra
+  // Nord Pizza & Burger, "Sushi" só pra Zarki Sushi). `null` = compartilhada/visível pra todas as
+  // lojas (comportamento padrão de sempre, mantido para Financeiro/RH/Estoque/etc. e para as
+  // subcategorias de Ficha Técnica genuinamente comuns às duas lojas, como Combos/Bebidas).
+  // `onDelete: SetNull` (em vez de Cascade): excluir uma empresa não deve arrastar a subcategoria
+  // do menu lateral junto — ela só volta a ficar "compartilhada" (visível a todas as lojas
+  // restantes), igual uma subcategoria que nunca teve loja específica.
+  //
+  // IMPORTANTE: filtrar por loja ativa é responsabilidade de quem RENDERIZA NAVEGAÇÃO (sidebar,
+  // rotas da Ficha Técnica) — não da função compartilhada `getMenuCategories()`
+  // (src/lib/menu-categories.ts), que também alimenta o editor de Perfil de Permissão em
+  // Usuários e precisa continuar enxergando as subcategorias de TODAS as lojas (perfil de
+  // permissão é por usuário, não por loja ativa).
+  empresaId  String?
+  empresa    Empresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
 
   @@unique([categoryId, key])
 }
@@ -2512,6 +2528,20 @@ enum ProductCategory {
   BEBIDA
   DRINK
   SOBREMESA
+  // Cardápio da Zarki Sushi (segunda loja do Grupo Nord) — antes desses valores existirem, os
+  // produtos de sushi eram forçados em COMBO só por ser o valor menos errado disponível no enum
+  // (mesmo padrão de "cair em Outros" que já causou problema em importação — ver CLAUDE.md).
+  // SUSHI cobre as peças estilo niguiri (arroz + cobertura), distinto de SASHIMI (só o peixe, sem
+  // arroz), TEMAKI (cone enrolado à mão), URAMAKI (enrolado com arroz por fora) e HOT_ROLL
+  // (empanado/frito). ENTRADA cobre aperitivos não-sushi do cardápio (ex.: edamame, guioza,
+  // harumaki) — papel equivalente ao ACOMPANHAMENTO da Nord Pizza, mas como conceito de cardápio
+  // são pratos diferentes o suficiente para não reaproveitar o mesmo valor.
+  SUSHI
+  SASHIMI
+  TEMAKI
+  URAMAKI
+  HOT_ROLL
+  ENTRADA
 }
 
 model Ingredient {

@@ -36,6 +36,7 @@ import { logoutAction } from "@/app/actions/logout";
 import { StoreSwitcher } from "./store-switcher";
 import { useMobileSidebar } from "./mobile-sidebar-context";
 import type { CategoryDTO, SubcategoryDTO } from "./types";
+import { GRUPO_SENTINEL } from "@/lib/empresa-constants";
 
 export function Sidebar({
   initialCategories,
@@ -80,15 +81,27 @@ export function Sidebar({
   }, [pathname]);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return categories;
+    // Subcategoria com `empresaId` setado (ex.: "Pizzas Salgadas" da Ficha Técnica) só aparece
+    // como link quando essa é a loja ativa — `empresaId: null` continua aparecendo sempre, igual
+    // já era pra Financeiro/RH/Estoque/etc. No modo "Grupo Nord" (`activeEmpresaId ===
+    // GRUPO_SENTINEL`, várias lojas ao mesmo tempo) não filtra por loja — mostra a união das
+    // subcategorias de todas as lojas, já que não existe uma loja única ativa pra restringir.
+    const isGrupoNord = activeEmpresaId === GRUPO_SENTINEL;
+    const byEmpresa = categories.map((c) => ({
+      ...c,
+      subcategories: c.subcategories.filter(
+        (s) => !s.empresaId || isGrupoNord || s.empresaId === activeEmpresaId
+      ),
+    }));
+    if (!query.trim()) return byEmpresa;
     const q = query.toLowerCase();
-    return categories
+    return byEmpresa
       .map((c) => ({
         ...c,
         subcategories: c.subcategories.filter((s) => s.name.toLowerCase().includes(q)),
       }))
       .filter((c) => c.name.toLowerCase().includes(q) || c.subcategories.length > 0);
-  }, [categories, query]);
+  }, [categories, query, activeEmpresaId]);
 
   async function persistCategoryOrder(items: CategoryDTO[]) {
     await fetch("/api/menu/reorder", {
