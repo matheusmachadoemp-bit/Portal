@@ -15,6 +15,7 @@ type UserDTO = {
   phone: string | null;
   lastLoginAt: string | null;
   createdAt: string;
+  pushSubscriptionsCount: number;
   permissions: { moduleKey: string; level: string }[];
   empresaIds: string[];
   canViewGrupoNord: boolean;
@@ -262,6 +263,7 @@ export function UsuariosClient({
               <th className="py-2 pr-4">E-mail</th>
               <th className="py-2 pr-4">Nível</th>
               <th className="py-2 pr-4">Status</th>
+              <th className="py-2 pr-4">Notificações</th>
               <th className="py-2 pr-4">Último acesso</th>
               <th className="py-2 pr-4"></th>
             </tr>
@@ -276,6 +278,18 @@ export function UsuariosClient({
                 </td>
                 <td className="py-2.5 pr-4">
                   <Badge tone={u.active ? "success" : "danger"}>{u.active ? "Ativo" : "Inativo"}</Badge>
+                </td>
+                <td className="py-2.5 pr-4">
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <Badge tone={u.pushSubscriptionsCount > 0 ? "success" : "default"}>
+                      {u.pushSubscriptionsCount > 0 ? "Ativas" : "Desativadas"}
+                    </Badge>
+                    {u.pushSubscriptionsCount > 0 && (
+                      <span className="text-[11px] text-nord-gray">
+                        {u.pushSubscriptionsCount} dispositivo{u.pushSubscriptionsCount > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-2.5 pr-4 text-nord-gray">
                   {u.lastLoginAt ? format(new Date(u.lastLoginAt), "dd/MM/yyyy HH:mm") : "Nunca acessou"}

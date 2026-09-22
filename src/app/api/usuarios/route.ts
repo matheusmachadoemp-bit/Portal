@@ -23,7 +23,7 @@ export async function GET() {
 
   const users = await prisma.user.findMany({
     orderBy: { name: "asc" },
-    include: { permissions: true, empresaAccess: true },
+    include: { permissions: true, empresaAccess: true, _count: { select: { pushSubscriptions: true } } },
   });
 
   // Mesmo formato de `src/app/portal/usuarios/page.tsx` (o server component que monta
@@ -32,7 +32,9 @@ export async function GET() {
   // `permissionProfileId`/`defaultEmpresaId`/`canViewGrupoNord`/`empresaIds` de todo mundo no
   // estado em memória (o formulário de edição já lê esses 4 campos há tempos, mas essa rota
   // nunca os devolvia) até a próxima recarga completa da página. `empresaIds` deriva de
-  // `empresaAccess` do mesmo jeito que `page.tsx` já faz — não é um formato novo.
+  // `empresaAccess` do mesmo jeito que `page.tsx` já faz — não é um formato novo. Mesma história
+  // pra `pushSubscriptionsCount` (coluna "Notificações"): sem ele aqui, todo mundo aparecia
+  // "Desativadas" depois de qualquer refresh, mesmo com push ativado de verdade.
   const sanitized = users.map((u) => ({
     id: u.id,
     name: u.name,
@@ -43,6 +45,7 @@ export async function GET() {
     employeeId: u.employeeId,
     lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
     createdAt: u.createdAt.toISOString(),
+    pushSubscriptionsCount: u._count.pushSubscriptions,
     permissions: u.permissions.map((p) => ({ moduleKey: p.moduleKey, level: p.level })),
     empresaIds: u.empresaAccess.map((a) => a.empresaId),
     canViewGrupoNord: u.canViewGrupoNord,

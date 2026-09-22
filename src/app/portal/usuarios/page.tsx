@@ -35,7 +35,11 @@ export default async function UsuariosPage() {
   const [users, empresas, profiles, menuCategories] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
-      include: { permissions: true, empresaAccess: true },
+      include: {
+        permissions: true,
+        empresaAccess: true,
+        _count: { select: { pushSubscriptions: true } },
+      },
     }),
     prisma.empresa.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
     prisma.permissionProfile.findMany({ orderBy: { name: "asc" } }),
@@ -57,6 +61,7 @@ export default async function UsuariosPage() {
     employeeId: u.employeeId,
     lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
     createdAt: u.createdAt.toISOString(),
+    pushSubscriptionsCount: u._count.pushSubscriptions,
     permissions: u.permissions.map((p) => ({ moduleKey: p.moduleKey, level: p.level })),
     empresaIds: u.empresaAccess.map((a) => a.empresaId),
     canViewGrupoNord: u.canViewGrupoNord,
