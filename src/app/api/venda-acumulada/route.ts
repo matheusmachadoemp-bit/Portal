@@ -26,11 +26,24 @@ export async function GET() {
     orderBy: { date: "desc" },
   });
 
-  const employees = await prisma.employee.findMany({
-    where: { empresaId: { in: empresaIds }, status: "ATIVO" },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, cargo: true, photoUrl: true },
-  });
+  // Mesmo raciocínio do SSR (`src/app/portal/metas/acumulada/page.tsx`): a lista completa de
+  // colaboradores ativos (com `id`) só serve pro dropdown de "Lançar venda" — só quem pode criar
+  // de verdade (metas:canCreate, E em modo de loja única — o SSR usa
+  // `ctx?.mode === "single" && canManageMetas`) precisa dela. Achado ALTO de auditoria (Jonas):
+  // esta rota é chamada direto pelo client (`refresh()` em venda-acumulada-client.tsx) e podia ser
+  // chamada por qualquer usuário com metas:canView (perfil "Funcionário" padrão já inclui isso),
+  // então também precisa dessa checagem — não bastaria proteger só a página SSR. Revisão do Teulis
+  // (achado "importante"): a checagem aqui tinha ficado incompleta (só repetia canCreate, sem o
+  // `ctx.mode === "single"`), então em modo Grupo Nord esta rota ainda devolvia o roster completo
+  // das duas lojas pra quem tivesse metas:canCreate — corrigido replicando a condição inteira.
+  const canCreateEntry = ctx.mode === "single" && (await hasModulePermission(session.user.id, "metas", "canCreate"));
+  const employees = canCreateEntry
+    ? await prisma.employee.findMany({
+        where: { empresaId: { in: empresaIds }, status: "ATIVO" },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, cargo: true, photoUrl: true },
+      })
+    : [];
 
   return NextResponse.json({
     entries: entries.map((e) => ({

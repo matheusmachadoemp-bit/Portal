@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Pencil, Eye, EyeOff } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -103,6 +103,17 @@ export function EmployeeProfileClient({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // CPF/Pix/salário fixo ficam mascarados por padrão e só aparecem com um clique explícito —
+  // mesmo padrão de "revelar sob demanda" já usado no Cofre de Senhas (senhas-client.tsx) e em
+  // Cursos (cursos-client.tsx). Diferente do Cofre (que busca a senha do servidor só ao revelar,
+  // porque o valor nunca sai do banco em texto puro até isso), aqui é uma máscara puramente visual
+  // no client: o valor real já chegou nesta página via SSR (agora só pra Administrador/Gestor/
+  // Gerente/Supervisor, depois da correção do achado Crítico de RH). Achado Baixo de auditoria
+  // (Jonas).
+  const [revealedFields, setRevealedFields] = useState({ cpf: false, pix: false, salario: false });
+  function toggleReveal(field: keyof typeof revealedFields) {
+    setRevealedFields((r) => ({ ...r, [field]: !r[field] }));
+  }
   const [form, setForm] = useState({
     name: employee.name,
     cargo: employee.cargo,
@@ -306,9 +317,33 @@ export function EmployeeProfileClient({
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-nord-gray">
               <span>Admissão: {format(new Date(employee.admissionDate), "dd/MM/yyyy")}</span>
               <span>Tempo de empresa: {tempoDeEmpresa(employee.admissionDate)}</span>
-              {employee.cpf && <span>CPF: {employee.cpf}</span>}
+              {employee.cpf && (
+                <span className="inline-flex items-center gap-1">
+                  CPF: {revealedFields.cpf ? employee.cpf : "•••.•••.•••-••"}
+                  <button
+                    type="button"
+                    onClick={() => toggleReveal("cpf")}
+                    title={revealedFields.cpf ? "Ocultar CPF" : "Revelar CPF"}
+                    className="text-nord-gray hover:text-white"
+                  >
+                    {revealedFields.cpf ? <EyeOff size={11} /> : <Eye size={11} />}
+                  </button>
+                </span>
+              )}
               {employee.phone && <span>Tel: {employee.phone}</span>}
-              {employee.pixKey && <span>Pix: {employee.pixKey}</span>}
+              {employee.pixKey && (
+                <span className="inline-flex items-center gap-1">
+                  Pix: {revealedFields.pix ? employee.pixKey : "••••••••••"}
+                  <button
+                    type="button"
+                    onClick={() => toggleReveal("pix")}
+                    title={revealedFields.pix ? "Ocultar chave Pix" : "Revelar chave Pix"}
+                    className="text-nord-gray hover:text-white"
+                  >
+                    {revealedFields.pix ? <EyeOff size={11} /> : <Eye size={11} />}
+                  </button>
+                </span>
+              )}
             </div>
             {photoUploading && <p className="text-xs text-nord-gray mt-1">Enviando foto...</p>}
             {!photoUploading && photoError && <p className="text-xs text-nord-danger mt-1">{photoError}</p>}
@@ -333,11 +368,30 @@ export function EmployeeProfileClient({
         storageKey="rh-colaborador-perfil-kpi-order"
         cards={[
           { key: "total-recebido", label: "Total Recebido", value: formatCurrency(totals.totalRecebido), icon: "Wallet", color: "#22c55e" },
-          { key: "salario-fixo", label: "Salário Fixo", value: employee.salarioFixo ? formatCurrency(employee.salarioFixo) : "-", icon: "DollarSign" },
+          {
+            key: "salario-fixo",
+            label: "Salário Fixo",
+            value: employee.salarioFixo
+              ? revealedFields.salario
+                ? formatCurrency(employee.salarioFixo)
+                : "••••••"
+              : "-",
+            icon: "DollarSign",
+          },
           { key: "comissoes", label: "Comissões", value: formatCurrency(totals.comissao), icon: "TrendingUp" },
           { key: "bonificacoes", label: "Bonificações", value: formatCurrency(totals.bonificacao), icon: "Gift" },
         ]}
       />
+      {employee.salarioFixo != null && (
+        <button
+          type="button"
+          onClick={() => toggleReveal("salario")}
+          className="flex items-center gap-1.5 -mt-2 text-[11px] text-nord-gray hover:text-white"
+        >
+          {revealedFields.salario ? <EyeOff size={11} /> : <Eye size={11} />}
+          {revealedFields.salario ? "Ocultar salário fixo" : "Revelar salário fixo"}
+        </button>
+      )}
 
       <div className="flex gap-2 flex-wrap">
         {TABS.map((t) => (
