@@ -1,3 +1,4 @@
+import { cache } from "react";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
@@ -50,7 +51,7 @@ async function registerFailedAttempt(userId: string): Promise<void> {
   }
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const { handlers, signIn, signOut, auth: uncachedAuth } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -172,3 +173,36 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
 });
+
+export { handlers, signIn, signOut };
+
+// `auth()` (usada em ~535 pontos, sem argumento, dentro de Server
+// Components/Route Handlers/Server Actions) roda a pipeline inteira do
+// Auth.js a cada chamada — incluindo o callback `jwt` acima, que sempre
+// faz um `prisma.user.findUnique` pra revalidar `active`/`role`/
+// `avatarUrl` (não tem como pular essa consulta: é a correção de
+// segurança que fecha a brecha do cargo/desativação "presos" no JWT por
+// até 8h, comentário acima). O próprio `next-auth` NÃO envolve `auth` em
+// `cache()` do React (conferido lendo `node_modules/next-auth/lib/
+// index.js` e `node_modules/next-auth/index.js`: é uma função comum,
+// sem memoização), então cada chamada é uma consulta nova — mesmo
+// quando várias chamadas de `auth()` acontecem dentro da MESMA
+// requisição (ex.: `src/app/portal/layout.tsx` chama `auth()`
+// diretamente E através de `getActiveEmpresaContext()`, que chama
+// `auth()` de novo internamente; cada `page.tsx` chama `auth()` outra
+// vez). Medido ao vivo (achado da auditoria de performance, tarefa
+// #285): só isso já gerava entre ~3,6 e ~7,7 consultas repetidas na
+// tabela User por carregamento de página, todas com o mesmo resultado
+// dentro da mesma requisição.
+//
+// `cache()` do React deduplica chamadas dentro de UM MESMO ciclo de
+// renderização/requisição (documentado em `node_modules/next/dist/docs/
+// 01-app/02-guides/caching-without-cache-components.md`, seção
+// "Deduplicating requests") — mesmo padrão já usado com sucesso em
+// `getActiveEmpresaContext`/`getUserEmpresas` (`src/lib/empresa.ts`).
+// Não muda nenhum comportamento de segurança: a revalidação continua
+// acontecendo (o callback `jwt` roda normalmente na primeira chamada de
+// cada requisição), só para de se repetir à toa dentro da mesma
+// requisição — a próxima requisição (próximo carregamento de página)
+// sempre dispara uma chamada nova, sem cache entre requisições.
+export const auth = cache(uncachedAuth);
