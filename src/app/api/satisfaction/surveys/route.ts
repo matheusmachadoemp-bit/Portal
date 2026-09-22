@@ -8,6 +8,16 @@ import { hasModulePermission } from "@/lib/authz";
 
 const CAN_CREATE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 
+// Checagem de cargo (MANAGER_ROLES) pra LISTAR pesquisas — mesmo padrão já usado nas rotas de API
+// irmãs de RH (`/api/rh/employees`, `/api/rh/documents` etc., BUG-004b) e na página que consome
+// esta rota (`.../pesquisa-satisfacao/page.tsx`, BUG-004). Sem esta checagem, qualquer
+// COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView=true de fábrica)
+// conseguia chamar este GET direto (fora da tela) e listar todas as pesquisas de satisfação
+// (achado de auditoria de segurança, Alto). Diferente de CAN_CREATE_ROLES acima (que só controla
+// quem pode CRIAR, excluindo Supervisor de propósito), aqui é a permissão mais ampla de
+// VISUALIZAR.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 const LIST_INCLUDE = {
   publico: { include: { empresa: { select: { id: true, name: true } } } },
   perguntas: { select: { id: true } },
@@ -17,6 +27,15 @@ const LIST_INCLUDE = {
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite ver pesquisas de satisfação." },
+      { status: 403 }
+    );
+  }
 
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });

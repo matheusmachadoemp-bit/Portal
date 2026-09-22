@@ -7,9 +7,19 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { SATISFACTION_STATUS_LABEL } from "@/lib/satisfaction";
 import { ResultadosClient } from "./resultados-client";
 
+// Checagem de cargo (MANAGER_ROLES) pra VISUALIZAR os resultados — mesmo padrão já aplicado à
+// página-lista (`../page.tsx`, BUG-004): sem esta checagem, qualquer COLABORADOR com o Perfil de
+// Permissão padrão "Funcionário" (rh:canView=true de fábrica) conseguia ver o eNPS geral, o eNPS
+// por setor, os alertas de "setor com clima ruim" e os comentários abertos anônimos direto nesta
+// página Server Component, mesmo sem cargo de gestor (achado de auditoria de segurança, Alto).
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function ResultadosPesquisaPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
 
