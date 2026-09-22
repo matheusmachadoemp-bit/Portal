@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { notifyUser } from "@/lib/tarefas-server";
 import type { LojaNordTransactionKind, Prisma } from "@prisma/client";
@@ -76,21 +77,42 @@ export async function getPontosNoPeriodo(userId: string, start: Date, end: Date,
  * Extraído de src/app/api/loja-nord/ranking/route.ts (que também passou a
  * importar daqui) para não duplicar a mesma consulta: usado tanto pelo
  * ranking geral/por período/por loja quanto pelo card "Loja Nord" da Tela de
- * Início (posição do usuário logado e top 3 de uma loja).
+ * Início (posição do usuário logado e top 3 de uma loja) e pela tela
+ * .../ranking (estado inicial, chamado com `{}`).
+ *
+ * Cacheado (achado de performance #293): `LojaNordPointTransaction` é um
+ * livro-razão que só cresce (um lançamento por checklist/tarefa/curso
+ * concluído por qualquer funcionário, mais ajustes manuais e
+ * resgates/estornos), e quando `where` não recorta por data (período
+ * "geral", o caso mais comum desta função) o `groupBy` varre a tabela
+ * inteira. Medido com EXPLAIN ANALYZE contra 24 mil lançamentos sintéticos
+ * (~2 anos de histórico): ainda rápido hoje (7,3ms), mas sem limite de
+ * crescimento pela frente e recalculado a cada visita/clique nas telas que
+ * usam ranking. TTL curto (60s) sem tag/invalidação ativa — mesmo critério
+ * já usado em src/lib/crm-data.ts: uma janela de até 60s de defasagem é
+ * aceitável para uma métrica de ranking/posição, e amarrar invalidação a
+ * toda rotina que cria `LojaNordPointTransaction` (recompensa de
+ * checklist, de tarefa, de curso, ajuste manual de admin, resgate/estorno)
+ * seria bem mais invasivo pra um ganho pequeno. A chave de cache do
+ * `unstable_cache` já inclui os argumentos (JSON dos filtros de `where`),
+ * então cada combinação de período/loja/setor/origem tem sua própria
+ * entrada — não faz uma consulta "vazar" resultado pra outra.
  */
-export async function rankForRange(
-  where: object
-): Promise<{ userId: string; pontos: number; posicao: number }[]> {
-  const rows = await prisma.lojaNordPointTransaction.groupBy({
-    by: ["userId"],
-    where: { ...where, pontos: { gt: 0 } },
-    _sum: { pontos: true },
-  });
-  return rows
-    .map((r) => ({ userId: r.userId, pontos: r._sum.pontos ?? 0 }))
-    .sort((a, b) => b.pontos - a.pontos)
-    .map((r, idx) => ({ ...r, posicao: idx + 1 }));
-}
+export const rankForRange = unstable_cache(
+  async (where: object): Promise<{ userId: string; pontos: number; posicao: number }[]> => {
+    const rows = await prisma.lojaNordPointTransaction.groupBy({
+      by: ["userId"],
+      where: { ...where, pontos: { gt: 0 } },
+      _sum: { pontos: true },
+    });
+    return rows
+      .map((r) => ({ userId: r.userId, pontos: r._sum.pontos ?? 0 }))
+      .sort((a, b) => b.pontos - a.pontos)
+      .map((r, idx) => ({ ...r, posicao: idx + 1 }));
+  },
+  ["loja-nord-rank-for-range"],
+  { revalidate: 60 }
+);
 
 /** Pontos já debitados em resgates que ainda aguardam aprovação (reservados, podem voltar se recusado). */
 export async function getPontosPendentesAprovacao(userId: string): Promise<number> {
