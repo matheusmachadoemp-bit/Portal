@@ -48,10 +48,23 @@ function retornoOf(p: { vendas: number; gasto: number }) {
 export function PartnersClient({
   initialPartners,
   canCreate,
+  canCreateEntry,
+  canEdit,
+  canDelete,
 }: {
   initialPartners: Partner[];
   canCreate: boolean;
+  /** Permite "Adicionar lançamento" num parceiro já existente — mesma permissão
+   * de `canCreate` (POST exige `canCreate`), mas sem a restrição de loja única,
+   * já que o parceiro já tem empresaId fixa (ver comentário em page.tsx). */
+  canCreateEntry: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
+  // Form de lançamento (criar/editar) usa uma permissão diferente conforme o
+  // modo: "Novo lançamento" (editingEntry null) é uma criação (canCreateEntry);
+  // "Editar lançamento" é uma edição de registro existente (canEdit).
+  const canShowEntryForm = (entry: PartnerEntry | null) => (entry ? canEdit : canCreateEntry);
   const [partners, setPartners] = useState(initialPartners);
 
   // Filtro de período do ranking (padrão do portal) — os números de cada
@@ -373,15 +386,15 @@ export function PartnersClient({
                       >
                         <ClipboardList size={14} />
                       </button>
-                      {canCreate && (
-                        <>
-                          <button onClick={() => openEdit(p)} title="Editar cadastro" className="text-nord-gray hover:text-white">
-                            <Pencil size={14} />
-                          </button>
-                          <button onClick={() => setConfirmDeleteId(p.id)} title="Excluir parceiro" className="text-nord-gray hover:text-nord-danger">
-                            <Trash2 size={14} />
-                          </button>
-                        </>
+                      {canEdit && (
+                        <button onClick={() => openEdit(p)} title="Editar cadastro" className="text-nord-gray hover:text-white">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => setConfirmDeleteId(p.id)} title="Excluir parceiro" className="text-nord-gray hover:text-nord-danger">
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </td>
@@ -477,25 +490,29 @@ export function PartnersClient({
                       </span>
                       {e.observacoes && <p className="text-xs text-nord-gray/80 mt-0.5">{e.observacoes}</p>}
                     </div>
-                    {canCreate && (
+                    {(canEdit || canDelete) && (
                       <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={() => openEditEntry(e)} title="Editar lançamento" className="text-nord-gray hover:text-white">
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteEntryId(e.id)}
-                          title="Excluir lançamento"
-                          className="text-nord-gray hover:text-nord-danger"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {canEdit && (
+                          <button onClick={() => openEditEntry(e)} title="Editar lançamento" className="text-nord-gray hover:text-white">
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => setConfirmDeleteEntryId(e.id)}
+                            title="Excluir lançamento"
+                            className="text-nord-gray hover:text-nord-danger"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
                 ))}
             </div>
 
-            {canCreate && (
+            {canShowEntryForm(editingEntry) && (
               <div className="border-t border-nord-border pt-4">
                 <p className="text-xs text-nord-gray mb-2">{editingEntry ? "Editar lançamento" : "Novo lançamento"}</p>
                 <div className="grid grid-cols-2 gap-3">

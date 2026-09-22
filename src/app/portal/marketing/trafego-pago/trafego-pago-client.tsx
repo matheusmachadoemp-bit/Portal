@@ -72,6 +72,8 @@ type TabKey = (typeof TABS)[number]["key"];
 export function TrafegoPagoClient({
   initialEntries,
   canCreate = true,
+  canEdit = true,
+  canDelete = true,
   isGrupoNordMode = true,
   metaAdsSummary,
   metaAdsCampaigns,
@@ -81,6 +83,10 @@ export function TrafegoPagoClient({
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
+  /** Editar/excluir um lançamento já existente — permissões próprias (canEdit/
+   * canDelete), independentes de `canCreate` e do modo de visualização. */
+  canEdit?: boolean;
+  canDelete?: boolean;
   metaAdsSummary: MetaAdsInsightSummary;
   metaAdsCampaigns: MetaAdsCampaignPerformance[];
   metaAdsRange: { start: string; end: string };
@@ -301,14 +307,18 @@ export function TrafegoPagoClient({
                   </td>
                   <td className="py-2 pr-4 text-nord-gray">{formatPercent(pct(e.conversoes, e.visitasSite))}</td>
                   <td className="py-2 pr-4">
-                    {canCreate && (
+                    {(canEdit || canDelete) && (
                       <div className="flex items-center gap-2 justify-end">
-                        <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-nord-danger">
-                          <Trash2 size={14} />
-                        </button>
+                        {canEdit && (
+                          <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => setConfirmDeleteId(e.id)} className="text-nord-gray hover:text-nord-danger">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>

@@ -38,6 +38,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Cupom é obrigatório." }, { status: 400 });
   }
 
+  // Mesma checagem de unicidade por loja do POST acima (ver comentário lá),
+  // excluindo o próprio registro sendo editado — senão o parceiro nunca
+  // conseguiria salvar sem mudar o cupom.
+  if (body.cupom !== undefined) {
+    const cupomTrim = String(body.cupom).trim();
+    const existingCupom = await prisma.marketingPartner.findFirst({
+      where: {
+        empresaId: existing.empresaId,
+        cupom: { equals: cupomTrim, mode: "insensitive" },
+        id: { not: id },
+      },
+      select: { id: true },
+    });
+    if (existingCupom) {
+      return NextResponse.json({ error: "Já existe uma parceria com este cupom nesta loja." }, { status: 400 });
+    }
+  }
+
   const data: Record<string, unknown> = {};
   for (const f of STR_FIELDS) {
     if (body[f] !== undefined) data[f] = body[f] || null;
