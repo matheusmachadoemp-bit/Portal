@@ -366,28 +366,25 @@ export function ChamadoDetailClient({
             ))}
           </div>
           {(descricaoSolucao || chamado.status !== "RESOLVIDO") && (
-            <div>
-              <label className="text-xs text-nord-gray mb-1 block">Descrição da solução {chamado.status !== "RESOLVIDO" && "(obrigatória para resolver)"}</label>
+            <Field label={`Descrição da solução${chamado.status !== "RESOLVIDO" ? " (obrigatória para resolver)" : ""}`}>
               <textarea className="input w-full min-h-[60px]" value={descricaoSolucao} onChange={(e) => setDescricaoSolucao(e.target.value)} disabled={!canManage} />
-            </div>
+            </Field>
           )}
         </Section>
 
         <Section title="Responsável e prazo">
           <div className="space-y-3">
-            <div>
-              <label className="text-xs text-nord-gray mb-1 block">Responsável</label>
+            <Field label="Responsável">
               <select className="input w-full" value={responsavelId} onChange={(e) => setResponsavelId(e.target.value)} disabled={!canManage}>
                 <option value="">A definir</option>
                 {teamMembers.map((u) => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="text-xs text-nord-gray mb-1 block">Prazo</label>
+            </Field>
+            <Field label="Prazo">
               <input type="date" className="input w-full" value={prazo} onChange={(e) => setPrazo(e.target.value)} disabled={!canManage} />
-            </div>
+            </Field>
             {canManage && (
               <button className="btn-outline w-full" onClick={saveResponsavelPrazo} disabled={saving}>
                 Salvar
@@ -429,5 +426,22 @@ export function ChamadoDetailClient({
         }}
       />
     </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-xs text-nord-gray mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }

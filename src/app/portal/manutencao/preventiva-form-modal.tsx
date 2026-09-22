@@ -106,73 +106,63 @@ export function PreventivaFormModal({
       <FormError message={error} />
       <div className="space-y-4">
         {!presetEquipamentoId && (
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Equipamento *</label>
+          <Field label="Equipamento *">
             <select className="input w-full" value={form.equipamentoId} onChange={(e) => set("equipamentoId", e.target.value)}>
               <option value="">Selecione...</option>
               {equipamentos.map((e) => (
                 <option key={e.id} value={e.id}>{e.nome} ({e.codigo})</option>
               ))}
             </select>
-          </div>
+          </Field>
         )}
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Tipo de serviço *</label>
+        <Field label="Tipo de serviço *">
           <input className="input w-full" value={form.tipoServico} onChange={(e) => set("tipoServico", e.target.value)} placeholder="Ex.: Limpeza do sistema de refrigeração" />
-        </div>
-        <div>
-          <label className="text-xs text-nord-gray mb-1 block">Descrição</label>
+        </Field>
+        <Field label="Descrição">
           <textarea className="input w-full min-h-[60px]" value={form.descricao} onChange={(e) => set("descricao", e.target.value)} />
-        </div>
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Frequência</label>
+          <Field label="Frequência">
             <select className="input w-full" value={form.frequencia} onChange={(e) => set("frequencia", e.target.value)}>
               {MANUTENCAO_FREQUENCIA_OPTIONS.map((f) => (
                 <option key={f.key} value={f.key}>{f.label}</option>
               ))}
             </select>
-          </div>
+          </Field>
           {form.frequencia === "PERSONALIZADA" && (
-            <div>
-              <label className="text-xs text-nord-gray mb-1 block">Repetir a cada (dias)</label>
+            <Field label="Repetir a cada (dias)">
               <input type="number" min={1} className="input w-full" value={form.intervaloDiasCustom} onChange={(e) => set("intervaloDiasCustom", e.target.value)} />
-            </div>
+            </Field>
           )}
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Data de início *</label>
+          <Field label="Data de início *">
             <input type="date" className="input w-full" value={form.dataInicio} onChange={(e) => set("dataInicio", e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Horário</label>
+          </Field>
+          <Field label="Horário">
             <input type="time" className="input w-full" value={form.horario} onChange={(e) => set("horario", e.target.value)} />
-          </div>
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Responsável interno</label>
+          <Field label="Responsável interno">
             <select className="input w-full" value={form.responsavelId} onChange={(e) => set("responsavelId", e.target.value)}>
               <option value="">A definir</option>
               {teamMembers.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Prestador</label>
+          </Field>
+          <Field label="Prestador">
             <select className="input w-full" value={form.prestadorId} onChange={(e) => set("prestadorId", e.target.value)}>
               <option value="">Nenhum</option>
               {prestadores.map((p) => (
                 <option key={p.id} value={p.id}>{p.nome}</option>
               ))}
             </select>
-          </div>
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-3 items-end">
-          <div>
-            <label className="text-xs text-nord-gray mb-1 block">Custo previsto</label>
+          <Field label="Custo previsto">
             <input type="number" step="0.01" className="input w-full" value={form.custoPrevisto} onChange={(e) => set("custoPrevisto", e.target.value)} />
-          </div>
+          </Field>
           <label className="flex items-center gap-2 text-sm text-white pb-2">
             <input type="checkbox" checked={form.necessidadeParada} onChange={(e) => set("necessidadeParada", e.target.checked)} />
             Exige parada do equipamento
@@ -180,7 +170,11 @@ export function PreventivaFormModal({
         </div>
 
         <div>
-          <label className="text-xs text-nord-gray mb-1 block">Checklist do serviço</label>
+          {/* "Checklist do serviço" rotula o grupo inteiro (campo de
+              adicionar + lista de itens), não um único input — mesmo padrão
+              de "Itens do checklist" em checklist-client.tsx: texto solto
+              (<p>), não <label>/Field. */}
+          <p className="text-xs text-nord-gray mb-1">Checklist do serviço</p>
           <div className="flex gap-2 mb-2">
             <input
               className="input flex-1"
@@ -217,5 +211,22 @@ export function PreventivaFormModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="text-xs text-nord-gray mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }
