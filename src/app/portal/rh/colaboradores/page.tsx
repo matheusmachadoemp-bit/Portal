@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
+import { AccessDenied } from "@/components/ui/access-denied";
 import { ColaboradoresClient } from "./colaboradores-client";
 import { startOfMonth } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
@@ -19,8 +20,15 @@ const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
 export default async function ColaboradoresPage() {
   const session = await auth();
-  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+  if (!session?.user) {
     redirect("/portal/inicio");
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return (
+      <PageContainer title="RH" subtitle="Colaboradores">
+        <AccessDenied message="Esta página reúne dados sensíveis dos colaboradores (CPF, chave PIX, salário) e por isso é restrita a Administrador, Gestor, Gerente ou Supervisor. Se você precisa desse acesso, fale com seu gestor." />
+      </PageContainer>
+    );
   }
   if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
