@@ -2,8 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { AutomacoesClient } from "./automacoes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { loadClientesCompletos } from "@/lib/crm-data";
-import { computeClienteMetrics, computeAutomationMatchCount, AUTOMATION_TEMPLATES, type AutomationTriggerKey } from "@/lib/crm";
+import { loadClientesResumo } from "@/lib/crm-data";
+import { computeClienteMetricsFromResumo, computeAutomationMatchCount, AUTOMATION_TEMPLATES, type AutomationTriggerKey } from "@/lib/crm";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
@@ -22,10 +22,10 @@ export default async function AutomacoesPage() {
   const canDelete = await hasModulePermission(session.user.id, "crm", "canDelete");
 
   const [clientes, automacoesSalvas] = await Promise.all([
-    loadClientesCompletos(empresaIds),
+    loadClientesResumo(empresaIds),
     prisma.automation.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { createdAt: "desc" } }),
   ]);
-  const metrics = computeClienteMetrics(clientes);
+  const metrics = computeClienteMetricsFromResumo(clientes);
 
   const templates = AUTOMATION_TEMPLATES.map((t) => ({
     ...t,

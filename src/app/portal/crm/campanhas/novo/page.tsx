@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { getActiveEmpresaContext } from "@/lib/empresa";
-import { loadClientesCompletos } from "@/lib/crm-data";
-import { computeClienteMetrics, computeAutoSegments } from "@/lib/crm";
+import { loadClientesResumo, countComprasRecentesPorCliente } from "@/lib/crm-data";
+import { computeClienteMetricsFromResumo, computeAutoSegments } from "@/lib/crm";
 import { CampanhaWizard } from "./campanha-wizard";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -32,11 +32,12 @@ export default async function NovaCampanhaPage({
   }
 
   const [clientes, segmentosSalvos] = await Promise.all([
-    loadClientesCompletos([ctx.empresa.id]),
+    loadClientesResumo([ctx.empresa.id]),
     prisma.crmSegment.findMany({ where: { empresaId: ctx.empresa.id }, orderBy: { name: "asc" } }),
   ]);
-  const metrics = computeClienteMetrics(clientes);
-  const autoSegments = computeAutoSegments(clientes, metrics);
+  const metrics = computeClienteMetricsFromResumo(clientes);
+  const compras60dById = await countComprasRecentesPorCliente(clientes.map((c) => c.id));
+  const autoSegments = computeAutoSegments(metrics, compras60dById);
 
   const clienteIdsPreselecionados = sp.clientes ? sp.clientes.split(",").filter(Boolean) : [];
   const clientesPreselecionados = clientes

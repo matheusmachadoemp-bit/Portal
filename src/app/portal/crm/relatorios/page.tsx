@@ -2,8 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { RelatoriosClient } from "./relatorios-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { loadClientesCompletos } from "@/lib/crm-data";
-import { computeClienteMetrics, bucketFrequencia, isReativacao, STATUS_LABEL, type ClienteStatus } from "@/lib/crm";
+import { loadClientesResumo, loadVendasResumoPorCliente } from "@/lib/crm-data";
+import { computeClienteMetricsFromResumo, bucketFrequencia, isReativacao, STATUS_LABEL, type ClienteStatus } from "@/lib/crm";
 import { computeRfv } from "@/lib/rfv";
 import { CAMPAIGN_STATUS_LABEL } from "@/lib/crm";
 import { startOfMonth, subMonths, format } from "date-fns";
@@ -23,14 +23,15 @@ export default async function RelatoriosPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const [clientes, campanhas, loyaltyAccounts, npsRespostas] = await Promise.all([
-    loadClientesCompletos(empresaIds),
+  const [clientes, campanhas, loyaltyAccounts, npsRespostas, vendasPorCliente] = await Promise.all([
+    loadClientesResumo(empresaIds),
     prisma.campaign.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { createdAt: "desc" }, include: { _count: { select: { recipients: true } } } }),
     prisma.loyaltyAccount.findMany({ where: { empresaId: { in: empresaIds } }, include: { cliente: { select: { nome: true } } }, orderBy: { pontos: "desc" } }),
     prisma.npsResponse.findMany({ where: { empresaId: { in: empresaIds } }, include: { cliente: { select: { nome: true } } }, orderBy: { createdAt: "desc" } }),
+    loadVendasResumoPorCliente(empresaIds),
   ]);
 
-  const metrics = computeClienteMetrics(clientes);
+  const metrics = computeClienteMetricsFromResumo(clientes);
   const comHistorico = metrics.filter((m) => m.pedidos > 0);
   const now = new Date();
 
@@ -194,8 +195,8 @@ export default async function RelatoriosPage() {
     }),
   };
 
-  // Receita recuperada — mensal
-  const vendasOrdenadasPorCliente = new Map(clientes.map((c) => [c.id, [...c.vendas].sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime())]));
+  // Receita recuperada — mensal (`loadVendasResumoPorCliente` já devolve as
+  // vendas de cada cliente ordenadas por data, sem precisar reordenar aqui)
   const receitaRecuperada: ReportDef = {
     key: "receita-recuperada",
     title: "Receita recuperada",
@@ -206,7 +207,7 @@ export default async function RelatoriosPage() {
       const mesFim = startOfMonth(subMonths(now, 10 - idx));
       let total = 0;
       for (const c of clientes) {
-        const ordenadas = vendasOrdenadasPorCliente.get(c.id) ?? [];
+        const ordenadas = vendasPorCliente.get(c.id) ?? [];
         for (const v of ordenadas) {
           if (v.dateTime >= mes && v.dateTime < mesFim && isReativacao(ordenadas, v)) total += v.valorTotal;
         }

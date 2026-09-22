@@ -11,6 +11,7 @@ import {
   getPontosNoPeriodo,
   getPontosPendentesAprovacao,
   getSaldoAtual,
+  rankForRange,
 } from "@/lib/loja-nord-server";
 import {
   LOJA_NORD_TRANSACTION_KIND_LABEL,
@@ -41,17 +42,15 @@ export default async function MeusPontosPage() {
       take: 50,
       include: { empresa: { select: { name: true } }, criadoPor: { select: { name: true } } },
     }),
-    prisma.lojaNordPointTransaction.groupBy({
-      by: ["userId"],
-      where: { pontos: { gt: 0 } },
-      _sum: { pontos: true },
-    }),
+    // rankForRange({}) = mesma consulta de antes (soma de pontos > 0 por
+    // usuário, sem nenhum outro filtro) — agora reaproveitando o helper
+    // compartilhado com a tela de Ranking (src/lib/loja-nord-server.ts),
+    // cacheado (TTL 60s, achado #293) em vez de duplicar a query aqui sem
+    // cache (achado #297).
+    rankForRange({}),
   ]);
 
-  const ranked = ranking
-    .map((r) => ({ userId: r.userId, total: r._sum.pontos ?? 0 }))
-    .sort((a, b) => b.total - a.total);
-  const posicao = ranked.findIndex((r) => r.userId === userId) + 1;
+  const posicao = ranking.find((r) => r.userId === userId)?.posicao ?? 0;
 
   const nivel = levelForPontos(ganhosTotal);
   const proximo = nextLevelForPontos(ganhosTotal);

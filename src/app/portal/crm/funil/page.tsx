@@ -1,8 +1,8 @@
 import { PageContainer } from "@/components/page-container";
 import { FunilClient } from "./funil-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { loadClientesCompletos } from "@/lib/crm-data";
-import { computeClienteMetrics, computeFunil } from "@/lib/crm";
+import { loadClientesResumo } from "@/lib/crm-data";
+import { computeClienteMetricsFromResumo, computeFunil } from "@/lib/crm";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
@@ -16,8 +16,8 @@ export default async function FunilPage() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const clientes = await loadClientesCompletos(empresaIds);
-  const metrics = computeClienteMetrics(clientes);
+  const clientes = await loadClientesResumo(empresaIds);
+  const metrics = computeClienteMetricsFromResumo(clientes);
   const funil = computeFunil(metrics);
 
   return (

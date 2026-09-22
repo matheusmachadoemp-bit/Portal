@@ -1,8 +1,8 @@
 import { PageContainer } from "@/components/page-container";
 import { ClientesClient } from "./clientes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { loadClientesCompletos } from "@/lib/crm-data";
-import { computeClienteMetrics } from "@/lib/crm";
+import { loadClientesResumo, loadProdutosPorCliente } from "@/lib/crm-data";
+import { computeClienteMetricsFromResumo } from "@/lib/crm";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
@@ -19,13 +19,16 @@ export default async function ClientesPage() {
   const canManageCrm = await hasModulePermission(session.user.id, "crm", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageCrm;
 
-  const clientes = await loadClientesCompletos(empresaIds);
-  const metrics = computeClienteMetrics(clientes);
+  const [clientes, produtosPorCliente] = await Promise.all([
+    loadClientesResumo(empresaIds),
+    loadProdutosPorCliente(empresaIds),
+  ]);
+  const metrics = computeClienteMetricsFromResumo(clientes);
   const metricsById = new Map(metrics.map((m) => [m.id, m]));
 
   const rows = clientes.map((c) => {
     const m = metricsById.get(c.id)!;
-    const produtos = Array.from(new Set(c.vendas.flatMap((v) => v.items.map((i) => i.nome))));
+    const produtos = Array.from(produtosPorCliente.get(c.id) ?? []);
     return {
       id: c.id,
       nome: c.nome,
