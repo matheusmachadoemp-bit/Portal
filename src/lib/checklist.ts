@@ -18,6 +18,34 @@ export function spStartOfDay(dateKey: string): Date {
   return new Date(`${dateKey}T00:00:00-03:00`);
 }
 
+/**
+ * Último instante (23:59:59.999) de um "YYYY-MM-DD" em São Paulo, como
+ * instante UTC. Sempre derivado de `spStartOfDay` do mesmo `dateKey` + 24h -
+ * 1ms (em vez de reprocessar uma string "T23:59:59-03:00" à parte) para
+ * garantir simetria exata com `spStartOfDay` — mesmo dia sempre soma
+ * exatamente 24h, já que São Paulo não tem horário de verão desde 2019 (ver
+ * `SP_OFFSET_HOURS` acima).
+ */
+export function spEndOfDay(dateKey: string): Date {
+  return new Date(spStartOfDay(dateKey).getTime() + 24 * 60 * 60 * 1000 - 1);
+}
+
+/**
+ * Hora (0-23) e minuto (0-59) de um instante, no fuso de São Paulo — nunca
+ * `date.getHours()`/`date.getMinutes()` puros, que dependem do fuso do
+ * runtime onde o código roda (UTC no servidor, América/São_Paulo no
+ * navegador do usuário) e por isso dão respostas diferentes pro mesmo
+ * instante real dependendo de onde rodam (mesma causa raiz do bug de
+ * "Ontem" em Vendas > Faturamento não achar vendas — ver `resolvePeriod` em
+ * `@/lib/periods.ts` — que também afetava o agrupamento por hora do dia).
+ */
+export function spHours(date: Date): number {
+  return new Date(date.getTime() - SP_OFFSET_HOURS * 60 * 60 * 1000).getUTCHours();
+}
+export function spMinutes(date: Date): number {
+  return new Date(date.getTime() - SP_OFFSET_HOURS * 60 * 60 * 1000).getUTCMinutes();
+}
+
 /** Combina um "YYYY-MM-DD" com um "HH:mm" (hora de São Paulo) num instante UTC. */
 export function spDateTime(dateKey: string, time: string): Date {
   const [h, m] = time.split(":").map(Number);

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { resolvePeriod, resolveSameWeekdayComparison, type PeriodKey } from "@/lib/periods";
 import { SALE_CHANNEL_LABEL } from "@/lib/vendas-analytics";
 import { productTotalCost } from "@/lib/ficha";
+import { spStartOfDay, spEndOfDay, spHours, spMinutes } from "@/lib/checklist";
 import type { SaleChannel, SalePlatform } from "@prisma/client";
 
 export type FaturamentoParams = {
@@ -30,8 +31,8 @@ export function buildHalfHourBuckets(sales: { dateTime: Date; valorTotal: number
     return { hour, minute: isHalf ? 30 : 0, label: isHalf ? `${hour}h30` : `${hour}h`, faturamento: 0, pedidos: 0 };
   });
   for (const s of sales) {
-    const hour = s.dateTime.getHours();
-    const minute = s.dateTime.getMinutes();
+    const hour = spHours(s.dateTime);
+    const minute = spMinutes(s.dateTime);
     if (hour < OPENING_HOUR || hour > CLOSING_HOUR) continue;
     const index = (hour - OPENING_HOUR) * 2 + (minute >= 30 ? 1 : 0);
     if (index < 0 || index >= buckets.length) continue;
@@ -49,8 +50,13 @@ export async function computeFaturamentoSummary(empresaIds: string[], params: Fa
   let prevFrom = resolved.prevFrom;
   let prevTo = resolved.prevTo;
   if (params.compareFrom && params.compareTo) {
-    prevFrom = new Date(params.compareFrom);
-    prevTo = new Date(params.compareTo);
+    // compareFrom/compareTo vêm de <input type="date"> ("YYYY-MM-DD") — tratados
+    // como dia de São Paulo (spStartOfDay/spEndOfDay), nunca com `new Date(string)`
+    // puro: uma string "YYYY-MM-DD" pura é interpretada pelo JS como meia-noite UTC,
+    // que já é a noite do dia ANTERIOR em São Paulo (mesma causa raiz do bug de
+    // "Ontem" corrigido em resolvePeriod/resolveRollingPeriod — ver @/lib/periods.ts).
+    prevFrom = spStartOfDay(params.compareFrom.slice(0, 10));
+    prevTo = spEndOfDay(params.compareTo.slice(0, 10));
   } else if (params.compareMode === "mesmo-dia-semana") {
     const aligned = resolveSameWeekdayComparison(periodFrom, periodTo);
     prevFrom = aligned.prevFrom;
