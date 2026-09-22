@@ -25,6 +25,11 @@ export function TaskModal({
   teamMembers,
   defaultDate,
   canDelete = false,
+  // Padrão `true`: este modal também é usado em Dashboard e Calendário de Marketing, que
+  // ainda não calculam essa permissão e não devem perder a possibilidade de salvar por causa
+  // disso — só a tela de Tarefas (Kanban) hoje passa o valor real calculado a partir de
+  // `hasModulePermission(..., "canEdit")`. Ver task #298.
+  canEdit = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -34,6 +39,7 @@ export function TaskModal({
   teamMembers: TeamMember[];
   defaultDate?: string;
   canDelete?: boolean;
+  canEdit?: boolean;
 }) {
   // Sem efeito de sincronização: quem chama este modal remonta o
   // componente (via `key`) toda vez que ele abre pra uma tarefa (nova ou
@@ -65,6 +71,12 @@ export function TaskModal({
   const doneCount = checklist.filter((c) => c.done).length;
   const progress = checklist.length ? Math.round((doneCount / checklist.length) * 100) : 0;
 
+  // Criar uma tarefa nova (task === null) já só é possível pra quem tem canCreate — o botão
+  // "Nova tarefa"/"Novo conteúdo" que abre este modal nesse modo já é escondido por quem
+  // chama (tasks-client.tsx, dashboard-client.tsx, calendar-client.tsx). Editar uma já
+  // existente é que precisa da checagem de canEdit aqui dentro.
+  const canSave = !task || canEdit;
+
   function toggleChecklistItem(idx: number) {
     setChecklist((prev) => prev.map((c, i) => (i === idx ? { ...c, done: !c.done } : c)));
   }
@@ -82,6 +94,7 @@ export function TaskModal({
   async function submit() {
     if (saving) return;
     if (!title.trim()) return;
+    if (!canSave) return;
     setSaving(true);
     try {
       const payload = {
@@ -295,6 +308,10 @@ export function TaskModal({
           </div>
         )}
 
+        {task && !canEdit && (
+          <p className="text-xs text-nord-warning">Seu perfil de permissão só permite visualizar esta tarefa.</p>
+        )}
+
         <div className="flex items-center gap-2">
           {task && canDelete && (
             <button
@@ -307,13 +324,15 @@ export function TaskModal({
               Excluir
             </button>
           )}
-          <button
-            onClick={submit}
-            disabled={!title.trim() || saving}
-            className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
-          >
-            {saving ? "Salvando..." : "Salvar"}
-          </button>
+          {canSave && (
+            <button
+              onClick={submit}
+              disabled={!title.trim() || saving}
+              className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+            >
+              {saving ? "Salvando..." : "Salvar"}
+            </button>
+          )}
         </div>
       </div>
 

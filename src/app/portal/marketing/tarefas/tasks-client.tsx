@@ -12,6 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { useDndSensors } from "@/lib/use-dnd-sensors";
 import { TaskModal } from "../task-modal";
+import { FormError } from "@/components/ui/modal";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import {
@@ -54,12 +55,14 @@ export function TasksClient({
   teamMembers,
   canCreate,
   canDelete,
+  canEdit,
   history,
 }: {
   initialTasks: TaskDTO[];
   teamMembers: TeamMember[];
   canCreate: boolean;
   canDelete: boolean;
+  canEdit: boolean;
   history: HistoryEntry[];
 }) {
   const [tasks, setTasks] = useState(initialTasks);
@@ -69,6 +72,7 @@ export function TasksClient({
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskDTO | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
 
   const sensors = useDndSensors();
 
@@ -111,17 +115,31 @@ export function TasksClient({
   async function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     setActiveId(null);
-    if (!over) return;
+    // Os cards já ficam com o arrastar desabilitado (useDraggable({ disabled: !canEdit })
+    // em DraggableCard) quando a pessoa não tem canEdit, então isto nunca deveria disparar
+    // nesse caso — mas mantemos a checagem aqui também, pra não depender só da UI de mais
+    // acima pra evitar a chamada à API.
+    if (!over || !canEdit) return;
     const taskId = String(active.id);
     const newStatus = String(over.id);
     const task = tasks.find((t) => t.id === taskId);
     if (!task || task.status === newStatus) return;
+    setDragError(null);
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
     const res = await fetch(`/api/marketing/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
+    if (!res.ok) {
+      // O card já foi movido de coluna otimisticamente acima — se o PATCH falhar (ex.:
+      // permissão mudou no meio da sessão), busca o estado real do servidor de novo em vez
+      // de deixar o card "grudado" na coluna errada até um refresh manual da página.
+      const data = await res.json().catch(() => ({}));
+      setDragError(data.error ?? "Não foi possível mover a tarefa. Tente novamente.");
+      await refresh();
+      return;
+    }
     const data = await res.json();
     if (data.historyEntry) setTaskHistory((prev) => [data.historyEntry, ...prev]);
   }
@@ -170,6 +188,8 @@ export function TasksClient({
         </div>
       </div>
 
+      <FormError message={dragError} />
+
       {view === "kanban" ? (
         // `id` fixo: só existe uma instância de DndContext nesta tela hoje, mas fixar
         // evita depender do contador automático do dnd-kit (compartilhado com outras
@@ -191,6 +211,7 @@ export function TasksClient({
                 color={col.color}
                 tasks={filtered.filter((t) => t.status === col.key)}
                 onOpen={openEdit}
+                canEdit={canEdit}
               />
             ))}
           </div>
@@ -298,6 +319,7 @@ export function TasksClient({
         task={editingTask}
         teamMembers={teamMembers}
         canDelete={canDelete}
+        canEdit={canEdit}
       />
     </div>
   );
@@ -310,6 +332,7 @@ function KanbanColumn({
   color,
   tasks,
   onOpen,
+  canEdit,
 }: {
   columnKey: string;
   label: string;
@@ -317,6 +340,7 @@ function KanbanColumn({
   color: string;
   tasks: TaskDTO[];
   onOpen: (t: TaskDTO) => void;
+  canEdit: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnKey });
   return (
@@ -331,15 +355,19 @@ function KanbanColumn({
       </div>
       <div className="space-y-2 min-h-[40px]">
         {tasks.map((t) => (
-          <DraggableCard key={t.id} task={t} onOpen={onOpen} />
+          <DraggableCard key={t.id} task={t} onOpen={onOpen} canEdit={canEdit} />
         ))}
       </div>
     </div>
   );
 }
 
-function DraggableCard({ task, onOpen }: { task: TaskDTO; onOpen: (t: TaskDTO) => void }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
+function DraggableCard({ task, onOpen, canEdit }: { task: TaskDTO; onOpen: (t: TaskDTO) => void; canEdit: boolean }) {
+  // `disabled: !canEdit` faz o dnd-kit não devolver `listeners` nenhum (fica `undefined`),
+  // então o card nem entra em modo de arrastar pra quem só tem canView — sem isso, a pessoa
+  // conseguia "pegar" o card e só descobria que não tinha permissão quando soltava (e ainda
+  // ficava preso na coluna errada até um refresh, ver handleDragEnd acima).
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id, disabled: !canEdit });
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.4 : 1 }
     : undefined;

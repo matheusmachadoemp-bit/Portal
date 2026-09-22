@@ -17,6 +17,11 @@ export default async function TarefasPage() {
   const canManageMarketing = await hasModulePermission(session.user.id, "marketing", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageMarketing;
   const canDelete = await hasModulePermission(session.user.id, "marketing", "canDelete");
+  // Salvar (no TaskModal) e arrastar card entre colunas (handleDragEnd) usam esta mesma
+  // flag — a API (PATCH /api/marketing/tasks/[id]) já exigia canEdit no servidor, mas a UI
+  // não avisava antes de tentar, deixando quem só tem canView tomar um 403 sem explicação
+  // (achado do Teulis, revisão da task #286).
+  const canEdit = await hasModulePermission(session.user.id, "marketing", "canEdit");
 
   const [tasks, teamMembers, history] = await Promise.all([
     prisma.marketingTask.findMany({
@@ -54,6 +59,7 @@ export default async function TarefasPage() {
         teamMembers={teamMembers}
         canCreate={canCreate}
         canDelete={canDelete}
+        canEdit={canEdit}
         history={serializedHistory}
       />
     </PageContainer>
