@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { ProgressBar } from "@/components/ui/stat-card";
 import { Plus, Trash2, Send } from "lucide-react";
 import {
@@ -20,16 +20,20 @@ export function TaskModal({
   open,
   onClose,
   onSaved,
+  onDeleted,
   task,
   teamMembers,
   defaultDate,
+  canDelete = false,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onDeleted?: () => void;
   task?: TaskDTO | null;
   teamMembers: TeamMember[];
   defaultDate?: string;
+  canDelete?: boolean;
 }) {
   // Sem efeito de sincronização: quem chama este modal remonta o
   // componente (via `key`) toda vez que ele abre pra uma tarefa (nova ou
@@ -54,6 +58,9 @@ export function TaskModal({
   const [comment, setComment] = useState("");
   const [comments, setComments] = useState(task?.comments ?? []);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const doneCount = checklist.filter((c) => c.done).length;
   const progress = checklist.length ? Math.round((doneCount / checklist.length) * 100) : 0;
@@ -121,6 +128,24 @@ export function TaskModal({
     const data = await res.json();
     if (data.comment) setComments((prev) => [...prev, data.comment]);
     setComment("");
+  }
+
+  async function doDelete() {
+    if (!task || deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/marketing/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? "Não foi possível excluir esta tarefa.");
+        return;
+      }
+      setConfirmDelete(false);
+      setDeleteError(null);
+      onDeleted?.();
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -270,15 +295,44 @@ export function TaskModal({
           </div>
         )}
 
-        <button
-          onClick={submit}
-          disabled={!title.trim() || saving}
-          className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
-        >
-          {saving ? "Salvando..." : "Salvar"}
-        </button>
+        <div className="flex items-center gap-2">
+          {task && canDelete && (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-medium bg-nord-danger/15 text-nord-danger hover:bg-nord-danger/25 disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              Excluir
+            </button>
+          )}
+          <button
+            onClick={submit}
+            disabled={!title.trim() || saving}
+            className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            {saving ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
       </div>
 
+      {task && (
+        <ConfirmDialog
+          open={confirmDelete}
+          title="Excluir tarefa"
+          message={
+            deleteError ?? `Tem certeza que deseja excluir "${task.title}"? Essa ação não pode ser desfeita.`
+          }
+          onConfirm={doDelete}
+          onCancel={() => {
+            setConfirmDelete(false);
+            setDeleteError(null);
+          }}
+          confirmLabel={deleting ? "Excluindo..." : deleteError ? "Tentar novamente" : "Excluir"}
+          danger
+        />
+      )}
     </Modal>
   );
 }
