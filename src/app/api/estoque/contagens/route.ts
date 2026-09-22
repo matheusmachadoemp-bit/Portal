@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   const now = new Date();
 
   const ingredients = await prisma.ingredient.findMany({
-    where: { empresaId: empresa.id, active: true, ...(type === "SEMANAL" && body.setor ? { setor: body.setor } : {}) },
+    where: { empresaId: empresa.id, active: true, ...(body.setor ? { setor: body.setor } : {}) },
     orderBy: { name: "asc" },
   });
 
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     data: {
       empresaId: empresa.id,
       type,
-      setor: type === "SEMANAL" ? body.setor || null : null,
+      setor: body.setor || null,
       semana: body.semana ? Number(body.semana) : null,
       mes: type === "MENSAL" ? now.getMonth() + 1 : null,
       ano: body.ano ? Number(body.ano) : now.getFullYear(),

@@ -6,6 +6,7 @@ import { ContagemMensalClient } from "../contagem-mensal/contagem-mensal-client"
 
 type SemanalRow = Parameters<typeof ContagemSemanalClient>[0]["initialCounts"][number];
 type MensalRow = Parameters<typeof ContagemMensalClient>[0]["initialCounts"][number];
+type EmployeeOption = Parameters<typeof ContagemMensalClient>[0]["employees"][number];
 
 const TABS = [
   { key: "semanal", label: "Semanal" },
@@ -15,11 +16,13 @@ const TABS = [
 export function ContagemClient({
   initialSemanais,
   initialMensais,
+  employees,
   canCreate,
   userRole,
 }: {
   initialSemanais: SemanalRow[];
   initialMensais: MensalRow[];
+  employees: EmployeeOption[];
   canCreate: boolean;
   userRole: string;
 }) {
@@ -44,7 +47,7 @@ export function ContagemClient({
       {tab === "semanal" ? (
         <ContagemSemanalClient initialCounts={initialSemanais} canCreate={canCreate} />
       ) : (
-        <ContagemMensalClient initialCounts={initialMensais} canCreate={canCreate} userRole={userRole} />
+        <ContagemMensalClient initialCounts={initialMensais} employees={employees} canCreate={canCreate} userRole={userRole} />
       )}
     </div>
   );
