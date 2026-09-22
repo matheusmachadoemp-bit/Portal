@@ -1530,6 +1530,19 @@ model ChecklistOccurrence {
 
   @@unique([templateId, date])
   @@index([empresaId, date])
+  // Índice parcial (só cobre ocorrências não-terminais) para a query de
+  // `src/app/portal/tarefas/checklist/page.tsx` que busca "ocorrências
+  // abertas" por empresa sem filtro de data — sem ele, o Postgres teria que
+  // varrer TODO o histórico de ocorrências da loja pra descartar as
+  // terminais. O `@@index` abaixo é só um placeholder pro Prisma detectar
+  // que existe um índice aqui: a definição real (com o WHERE) está na
+  // migration `prisma/migrations/*_checklist_occurrence_open_partial_index`,
+  // escrita manualmente porque o Prisma Schema Language não suporta índice
+  // parcial declarativamente. Se a lista de status terminais mudar em
+  // `CHECKLIST_TERMINAL_STATUSES` (src/lib/checklist.ts), essa migration
+  // precisa ser atualizada/substituída junto — não há como manter isso
+  // sincronizado automaticamente.
+  @@index([empresaId], map: "ChecklistOccurrence_empresaId_open_idx")
 }
 
 /**
