@@ -1,4 +1,5 @@
-import { differenceInCalendarDays, differenceInCalendarYears, startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, subMonths } from "date-fns";
+import { differenceInCalendarDays, differenceInCalendarYears } from "date-fns";
+import { spDayStart, spDayEnd, spAddDays, spMonthStart, spMonthEnd, spSubMonths, customDayStart, customDayEnd } from "@/lib/periods";
 
 export type CrmPeriodKey =
   | "hoje"
@@ -27,6 +28,31 @@ export const CRM_PERIOD_OPTIONS: { key: CrmPeriodKey; label: string }[] = [
   { key: "personalizado", label: "Personalizado" },
 ];
 
+/**
+ * Cálculo de calendário sempre no fuso de São Paulo, NUNCA no fuso do runtime
+ * onde o código roda — mesmo bug (e mesma correção) de `resolvePeriod`/
+ * `resolveRollingPeriod` em `@/lib/periods.ts` (ver comentário lá para a
+ * explicação completa): usar `startOfDay`/`endOfDay`/`startOfMonth`/
+ * `endOfMonth`/`subDays`/`subMonths` do `date-fns` puro sobre `new Date()`
+ * usa os métodos LOCAIS do JS, que dependem do fuso do processo (servidor
+ * roda em UTC) — isso fazia "Ontem"/"Hoje" do CRM e da Tela de Início
+ * (que reaproveita esta função via `resolvePeriodoInicio`, em
+ * `@/lib/inicio.ts`) errarem a inclusão de vendas/eventos feitos entre
+ * 21h-23h59 em São Paulo, o mesmo horário de pico da loja.
+ *
+ * Correção: reaproveita os helpers de fuso fixo (`spDayStart`/`spDayEnd`/
+ * `spAddDays`/`spMonthStart`/`spMonthEnd`/`spSubMonths`/`customDayStart`/
+ * `customDayEnd`) já exportados por `@/lib/periods.ts`, que por sua vez usam
+ * `spDateKey`/`spStartOfDay`/`spEndOfDay` de `@/lib/checklist.ts` — em vez de
+ * duplicar essa aritmética aqui. `PeriodKey`/`RollingPeriodKey` (periods.ts)
+ * não cobrem "30dias"/"90dias"/"12meses" (extras só do CRM), por isso
+ * `resolveCrmPeriod` continua com sua própria função/chaves em vez de virar
+ * um alias de `resolvePeriod`/`resolveRollingPeriod` — só a aritmética de
+ * calendário é compartilhada, não a função inteira.
+ *
+ * `now` continua aceitando um valor customizado (usado em teste e por quem
+ * mais precisar injetar um "agora" fixo) — preservado da assinatura original.
+ */
 export function resolveCrmPeriod(
   key: CrmPeriodKey,
   custom?: { from?: string; to?: string },
@@ -34,63 +60,68 @@ export function resolveCrmPeriod(
 ): { from: Date; to: Date; prevFrom: Date; prevTo: Date } {
   switch (key) {
     case "hoje":
-      return { from: startOfDay(now), to: endOfDay(now), prevFrom: startOfDay(subDays(now, 1)), prevTo: endOfDay(subDays(now, 1)) };
+      return {
+        from: spDayStart(now),
+        to: spDayEnd(now),
+        prevFrom: spDayStart(spAddDays(now, -1)),
+        prevTo: spDayEnd(spAddDays(now, -1)),
+      };
     case "ontem":
       return {
-        from: startOfDay(subDays(now, 1)),
-        to: endOfDay(subDays(now, 1)),
-        prevFrom: startOfDay(subDays(now, 2)),
-        prevTo: endOfDay(subDays(now, 2)),
+        from: spDayStart(spAddDays(now, -1)),
+        to: spDayEnd(spAddDays(now, -1)),
+        prevFrom: spDayStart(spAddDays(now, -2)),
+        prevTo: spDayEnd(spAddDays(now, -2)),
       };
     case "mes-passado":
       return {
-        from: startOfMonth(subMonths(now, 1)),
-        to: endOfMonth(subMonths(now, 1)),
-        prevFrom: startOfMonth(subMonths(now, 2)),
-        prevTo: endOfMonth(subMonths(now, 2)),
+        from: spMonthStart(spSubMonths(now, 1)),
+        to: spMonthEnd(spSubMonths(now, 1)),
+        prevFrom: spMonthStart(spSubMonths(now, 2)),
+        prevTo: spMonthEnd(spSubMonths(now, 2)),
       };
     case "7dias":
       return {
-        from: startOfDay(subDays(now, 6)),
-        to: endOfDay(now),
-        prevFrom: startOfDay(subDays(now, 13)),
-        prevTo: endOfDay(subDays(now, 7)),
+        from: spDayStart(spAddDays(now, -6)),
+        to: spDayEnd(now),
+        prevFrom: spDayStart(spAddDays(now, -13)),
+        prevTo: spDayEnd(spAddDays(now, -7)),
       };
     case "30dias":
       return {
-        from: startOfDay(subDays(now, 29)),
-        to: endOfDay(now),
-        prevFrom: startOfDay(subDays(now, 59)),
-        prevTo: endOfDay(subDays(now, 30)),
+        from: spDayStart(spAddDays(now, -29)),
+        to: spDayEnd(now),
+        prevFrom: spDayStart(spAddDays(now, -59)),
+        prevTo: spDayEnd(spAddDays(now, -30)),
       };
     case "90dias":
       return {
-        from: startOfDay(subDays(now, 89)),
-        to: endOfDay(now),
-        prevFrom: startOfDay(subDays(now, 179)),
-        prevTo: endOfDay(subDays(now, 90)),
+        from: spDayStart(spAddDays(now, -89)),
+        to: spDayEnd(now),
+        prevFrom: spDayStart(spAddDays(now, -179)),
+        prevTo: spDayEnd(spAddDays(now, -90)),
       };
     case "12meses":
       return {
-        from: startOfDay(subDays(now, 364)),
-        to: endOfDay(now),
-        prevFrom: startOfDay(subDays(now, 729)),
-        prevTo: endOfDay(subDays(now, 365)),
+        from: spDayStart(spAddDays(now, -364)),
+        to: spDayEnd(now),
+        prevFrom: spDayStart(spAddDays(now, -729)),
+        prevTo: spDayEnd(spAddDays(now, -365)),
       };
     case "personalizado":
       if (custom?.from && custom?.to) {
-        const from = startOfDay(new Date(custom.from));
-        const to = endOfDay(new Date(custom.to));
+        const from = customDayStart(custom.from);
+        const to = customDayEnd(custom.to);
         const diff = to.getTime() - from.getTime();
         return { from, to, prevFrom: new Date(from.getTime() - diff), prevTo: new Date(from.getTime() - 1) };
       }
     case "mes":
     default:
       return {
-        from: startOfMonth(now),
-        to: endOfMonth(now),
-        prevFrom: startOfMonth(subMonths(now, 1)),
-        prevTo: endOfMonth(subMonths(now, 1)),
+        from: spMonthStart(now),
+        to: spMonthEnd(now),
+        prevFrom: spMonthStart(spSubMonths(now, 1)),
+        prevTo: spMonthEnd(spSubMonths(now, 1)),
       };
   }
 }
