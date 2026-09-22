@@ -1,8 +1,8 @@
 import { PageContainer } from "@/components/page-container";
 import { AniversariantesClient } from "./aniversariantes-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { loadClientesCompletos } from "@/lib/crm-data";
-import { computeClienteMetrics, proximoAniversario } from "@/lib/crm";
+import { loadClientesResumo } from "@/lib/crm-data";
+import { computeClienteMetricsFromResumo, proximoAniversario } from "@/lib/crm";
 import { differenceInCalendarDays } from "date-fns";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -18,8 +18,8 @@ export default async function AniversariantesPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const isGrupo = ctx?.mode === "grupo";
 
-  const clientes = await loadClientesCompletos(empresaIds);
-  const metrics = computeClienteMetrics(clientes);
+  const clientes = await loadClientesResumo(empresaIds);
+  const metrics = computeClienteMetricsFromResumo(clientes);
   const metricsById = new Map(metrics.map((m) => [m.id, m]));
   const now = new Date();
 

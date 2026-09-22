@@ -2,8 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { SegmentosClient } from "./segmentos-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { loadClientesCompletos } from "@/lib/crm-data";
-import { computeClienteMetrics, computeAutoSegments, matchesCriteria, type SegmentCriteria } from "@/lib/crm";
+import { loadClientesResumo, loadProdutosPorCliente, countComprasRecentesPorCliente } from "@/lib/crm-data";
+import { computeClienteMetricsFromResumo, computeAutoSegments, matchesCriteria, type SegmentCriteria } from "@/lib/crm";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
@@ -21,21 +21,19 @@ export default async function SegmentosPage() {
   const canCreate = ctx?.mode === "single" && canManageCrm;
   const canDelete = await hasModulePermission(session.user.id, "crm", "canDelete");
 
-  const [clientes, segmentosSalvos] = await Promise.all([
-    loadClientesCompletos(empresaIds),
+  const [clientes, segmentosSalvos, produtosPorCliente] = await Promise.all([
+    loadClientesResumo(empresaIds),
     prisma.crmSegment.findMany({
       where: { empresaId: { in: empresaIds } },
       orderBy: { createdAt: "desc" },
       include: { createdBy: { select: { name: true } } },
     }),
+    loadProdutosPorCliente(empresaIds),
   ]);
 
-  const metrics = computeClienteMetrics(clientes);
-  const autoSegments = computeAutoSegments(clientes, metrics);
-
-  const produtosPorCliente = new Map(
-    clientes.map((c) => [c.id, new Set(c.vendas.flatMap((v) => v.items.map((i) => i.nome)))])
-  );
+  const metrics = computeClienteMetricsFromResumo(clientes);
+  const compras60dById = await countComprasRecentesPorCliente(clientes.map((c) => c.id));
+  const autoSegments = computeAutoSegments(metrics, compras60dById);
 
   const customSegments = segmentosSalvos.map((s) => {
     const criteria = s.criteria as SegmentCriteria;

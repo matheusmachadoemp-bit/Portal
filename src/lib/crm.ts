@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, differenceInCalendarYears } from "date-fns";
+import { differenceInCalendarDays, differenceInCalendarYears, startOfDay, subDays } from "date-fns";
 import { spDayStart, spDayEnd, spAddDays, spMonthStart, spMonthEnd, spSubMonths, customDayStart, customDayEnd } from "@/lib/periods";
 
 export type CrmPeriodKey =
@@ -213,28 +213,35 @@ export function classifyStatus(params: {
   return "ATIVO";
 }
 
+/** Resumo agregado de vendas de um cliente — os 4 únicos números de que `computeMetricsCore` precisa. */
+export type ClienteVendasResumo = {
+  pedidos: number;
+  totalGasto: number;
+  primeiraCompra: Date | null;
+  ultimaCompra: Date | null;
+};
+
 /**
- * Calcula as métricas completas de cada cliente a partir do histórico de vendas.
- * O corte de VIP é o percentil 75 do gasto total entre clientes com pelo menos
- * uma compra — não existe um valor "oficial", então usamos a distribuição real
- * da base para se adaptar a cada loja.
+ * Núcleo do cálculo de `ClienteMetrics` — recebe só os 4 números agregados por
+ * cliente (pedidos, totalGasto, primeira/última compra), nunca a lista de
+ * vendas em si. Compartilhado por `computeClienteMetrics` (deriva o resumo a
+ * partir de `vendas[]` completo, em JS) e `computeClienteMetricsFromResumo`
+ * (recebe o resumo já calculado no banco via `groupBy`/`aggregate` —
+ * ver `loadClientesResumo` em crm-data.ts, achado de performance #294).
+ * Isolar essa lógica aqui garante que as duas formas de alimentar os dados
+ * cheguem exatamente na mesma fórmula, sem duplicar (e arriscar divergir) o
+ * cálculo de status/frequência/VIP em dois lugares.
  */
-export function computeClienteMetrics(
-  clientes: (ClienteBase & { vendas: VendaResumo[] })[],
-  now: Date = new Date()
-): ClienteMetrics[] {
-  const totaisComHistorico = clientes
-    .filter((c) => c.vendas.length > 0)
-    .map((c) => c.vendas.reduce((sum, v) => sum + v.valorTotal, 0));
+function computeMetricsCore<T extends ClienteBase & ClienteVendasResumo>(
+  clientes: T[],
+  now: Date
+): (T & Omit<ClienteMetrics, keyof ClienteBase>)[] {
+  const totaisComHistorico = clientes.filter((c) => c.pedidos > 0).map((c) => c.totalGasto);
   const vipGastoThreshold = percentile(totaisComHistorico, 75);
 
   return clientes.map((c) => {
-    const vendas = [...c.vendas].sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
-    const pedidos = vendas.length;
-    const totalGasto = vendas.reduce((sum, v) => sum + v.valorTotal, 0);
+    const { pedidos, totalGasto, primeiraCompra, ultimaCompra } = c;
     const ticketMedio = pedidos ? totalGasto / pedidos : 0;
-    const primeiraCompra = vendas[0]?.dateTime ?? null;
-    const ultimaCompra = vendas[pedidos - 1]?.dateTime ?? null;
     const diasDesdeUltimaCompra = ultimaCompra ? differenceInCalendarDays(now, ultimaCompra) : null;
 
     let frequenciaMediaDias: number | null = null;
@@ -258,6 +265,51 @@ export function computeClienteMetrics(
       ehNovo,
     };
   });
+}
+
+/**
+ * Calcula as métricas completas de cada cliente a partir do histórico de vendas
+ * (linha a linha, em memória). Use só quando a lista de vendas já foi carregada
+ * por outro motivo (ex.: perfil individual de um cliente, que precisa do
+ * histórico linha a linha de qualquer forma) — para telas que só precisam do
+ * resumo agregado, prefira `computeClienteMetricsFromResumo` (evita trazer
+ * toda venda/item pro Node só para somar/contar).
+ * O corte de VIP é o percentil 75 do gasto total entre clientes com pelo menos
+ * uma compra — não existe um valor "oficial", então usamos a distribuição real
+ * da base para se adaptar a cada loja.
+ */
+export function computeClienteMetrics(
+  clientes: (ClienteBase & { vendas: VendaResumo[] })[],
+  now: Date = new Date()
+): ClienteMetrics[] {
+  const resumos = clientes.map((c) => {
+    const vendas = [...c.vendas].sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
+    const pedidos = vendas.length;
+    const totalGasto = vendas.reduce((sum, v) => sum + v.valorTotal, 0);
+    return {
+      ...c,
+      pedidos,
+      totalGasto,
+      primeiraCompra: vendas[0]?.dateTime ?? null,
+      ultimaCompra: vendas[pedidos - 1]?.dateTime ?? null,
+    };
+  });
+  return computeMetricsCore(resumos, now);
+}
+
+/**
+ * Mesmas métricas de `computeClienteMetrics`, mas a partir de um resumo já
+ * agregado por cliente (pedidos/totalGasto/primeira e última compra) —
+ * tipicamente calculado no banco via `prisma.sale.groupBy` em vez de trazer
+ * toda linha de Sale para o Node. Resultado idêntico a `computeClienteMetrics`
+ * para o mesmo conjunto de vendas, já que as duas funções compartilham
+ * `computeMetricsCore`.
+ */
+export function computeClienteMetricsFromResumo(
+  clientes: (ClienteBase & ClienteVendasResumo)[],
+  now: Date = new Date()
+): ClienteMetrics[] {
+  return computeMetricsCore(clientes, now);
 }
 
 export function frequenciaLabel(dias: number | null): string {
@@ -649,20 +701,31 @@ function summarize(
 }
 
 /**
+ * Início do período "últimos 60 dias" usado por `computeAutoSegments`, no
+ * mesmo critério de `differenceInCalendarDays(now, data) <= 60` de antes —
+ * ver comentário de `compras60dById` em `computeAutoSegments` para a prova de
+ * equivalência entre as duas formas de checar essa janela.
+ */
+export function inicioUltimos60Dias(now: Date = new Date()): Date {
+  return startOfDay(subDays(now, 60));
+}
+
+/**
  * Segmentos automáticos padrão do CRM (seção 8 do módulo). "Recorrentes" usa
  * as vendas dos últimos 60 dias (não o total histórico) para refletir
  * atividade recente, conforme a definição do produto.
+ *
+ * `compras60dById` é a contagem de vendas dos últimos 60 dias por cliente,
+ * calculada no banco (`prisma.sale.groupBy` com `dateTime: { gte: ... } }`,
+ * ver `countComprasRecentesPorCliente` em crm-data.ts) em vez de filtrar em
+ * JS a lista completa de vendas de cada cliente (achado de performance #294)
+ * — `inicioUltimos60Dias(now)` é o corte exato equivalente a
+ * `differenceInCalendarDays(now, v.dateTime) <= 60`: como as duas pontas
+ * (aqui e ali) usam os mesmos `startOfDay`/`subDays`/`differenceInCalendarDays`
+ * do date-fns, a equivalência vale em qualquer fuso do processo, não só UTC.
  */
-export function computeAutoSegments(
-  clientesComVendas: (ClienteBase & { vendas: VendaResumo[] })[],
-  metrics: ClienteMetrics[],
-  now: Date = new Date()
-): AutoSegment[] {
-  const metricsById = new Map(metrics.map((m) => [m.id, m]));
-  const recorrentes60d = clientesComVendas.filter((c) => {
-    const compras60d = c.vendas.filter((v) => differenceInCalendarDays(now, v.dateTime) <= 60).length;
-    return compras60d >= 3;
-  });
+export function computeAutoSegments(metrics: ClienteMetrics[], compras60dById: Map<string, number>): AutoSegment[] {
+  const recorrentes60d = metrics.filter((m) => (compras60dById.get(m.id) ?? 0) >= 3);
   const comHistorico = metrics.filter((m) => m.pedidos > 0);
   const ticketAlto = percentile(comHistorico.map((m) => m.ticketMedio), 75);
 
@@ -672,7 +735,7 @@ export function computeAutoSegments(
       "recorrentes",
       "Recorrentes",
       "3 ou mais compras nos últimos 60 dias.",
-      recorrentes60d.map((c) => metricsById.get(c.id)).filter((m): m is ClienteMetrics => !!m),
+      recorrentes60d,
       { minPedidos: 3, semCompraDiasMax: 60 }
     ),
     summarize("vip", "VIP", "Alta frequência e alto gasto.", metrics.filter((m) => m.status === "VIP"), { status: ["VIP"] }),
