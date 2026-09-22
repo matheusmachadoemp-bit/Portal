@@ -27,11 +27,24 @@ export default async function PontoEletronicoPage() {
   const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageRh;
 
+  // Task #282: este findMany não tinha `take` nenhum — buscava TODO o histórico de ponto de
+  // todas as lojas do contexto ativo numa carga SSR só, e isso só piora com o tempo (RH gera ~1
+  // registro por colaborador por dia, sem fim, igual observado na rota irmã `/api/rh/time-entries`
+  // — ver comentário lá). Usamos o mesmo teto SAFETY_TAKE=2000 daquela rota (task #373) por
+  // consistência: o `refresh()` do client component (ponto-eletronico-client.tsx) já busca dessa
+  // rota sem paginação depois de qualquer criação/edição/exclusão/importação, então a carga inicial
+  // já precisa bater com esse mesmo teto — do contrário a tela mudaria de quantidade de registros
+  // visíveis (e o gráfico de tendência mensal, que soma sobre todo `entries` independente do
+  // período selecionado) só por causa de uma ação do usuário, sem nenhum dado novo de verdade.
+  // orderBy date desc garante que o teto sempre corta os registros mais ANTIGOS, nunca os recentes.
+  const TIME_ENTRIES_SAFETY_TAKE = 2000;
+
   const [entries, employees] = await Promise.all([
     prisma.timeEntry.findMany({
       where: { empresaId: { in: empresaIds } },
       orderBy: { date: "desc" },
       include: { employee: { select: { name: true, setor: true } } },
+      take: TIME_ENTRIES_SAFETY_TAKE,
     }),
     prisma.employee.findMany({
       where: { empresaId: { in: empresaIds } },
