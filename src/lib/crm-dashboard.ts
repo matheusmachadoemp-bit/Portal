@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { growth } from "@/lib/calc";
-import { startOfDay, subDays } from "date-fns";
 import {
   computeClienteMetrics,
   computeDashboardSummary,
@@ -11,6 +10,7 @@ import {
   isReativacao,
   type CrmPeriodKey,
 } from "@/lib/crm";
+import { spDayStart, spDayEnd, spAddDays } from "@/lib/periods";
 
 async function loadClientesComVendas(empresaIds: string[]) {
   return prisma.cliente.findMany({
@@ -104,8 +104,16 @@ export async function getCrmDashboardData(
   const dias = Math.max(1, Math.round((periodTo.getTime() - periodFrom.getTime()) / 86400000));
   const bucketCount = Math.min(30, dias);
   const evolucao = Array.from({ length: bucketCount }, (_, idx) => {
-    const dayStart = startOfDay(subDays(periodTo, bucketCount - 1 - idx));
-    const dayEnd = new Date(dayStart.getTime() + 86400000 - 1);
+    // Bucket diário sempre ancorado no fuso de São Paulo (mesmo motivo do
+    // resto deste módulo — ver comentário em `resolveCrmPeriod`,
+    // src/lib/crm.ts): `periodFrom`/`periodTo` já vêm corretos em SP, então
+    // os buckets diários do gráfico precisam da mesma aritmética
+    // (`spDayStart`/`spDayEnd`/`spAddDays` de `@/lib/periods.ts`), senão o
+    // rótulo de data de cada barra fica sistematicamente deslocado em
+    // relação ao período mostrado no resto da tela.
+    const dayRef = spAddDays(periodTo, -(bucketCount - 1 - idx));
+    const dayStart = spDayStart(dayRef);
+    const dayEnd = spDayEnd(dayRef);
     let novos = 0;
     let recorrentes = 0;
     let reativados = 0;

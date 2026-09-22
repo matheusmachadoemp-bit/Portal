@@ -61,14 +61,19 @@ function dateKeyFromFields(y: number, m: number, d: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
-function spDayStart(date: Date): Date {
+// `spDayStart`/`spDayEnd`/`spAddDays`/`spMonthStart`/`spMonthEnd`/`spSubMonths`/
+// `customDayStart`/`customDayEnd` são exportados (não só de uso interno deste
+// arquivo) para que `resolveCrmPeriod` (src/lib/crm.ts) reaproveite a MESMA
+// aritmética de calendário em vez de duplicar o truque do offset fixo — ver
+// comentário em `resolveCrmPeriod` sobre o mesmo bug de fuso corrigido aqui.
+export function spDayStart(date: Date): Date {
   return spStartOfDay(spDateKey(date));
 }
-function spDayEnd(date: Date): Date {
+export function spDayEnd(date: Date): Date {
   return spEndOfDay(spDateKey(date));
 }
 /** Soma/subtrai dias em SP — seguro como aritmética pura de ms (dia sempre = 24h, sem horário de verão). */
-function spAddDays(date: Date, amount: number): Date {
+export function spAddDays(date: Date, amount: number): Date {
   return new Date(date.getTime() + amount * 24 * 60 * 60 * 1000);
 }
 function spWeekStart(date: Date, weekStartsOn: number): Date {
@@ -81,30 +86,30 @@ function spWeekEnd(date: Date, weekStartsOn: number): Date {
   const { y, m, d } = spFields(spWeekStart(date, weekStartsOn));
   return spEndOfDay(dateKeyFromFields(y, m, d + 6));
 }
-function spMonthStart(date: Date): Date {
+export function spMonthStart(date: Date): Date {
   const { y, m } = spFields(date);
   return spStartOfDay(dateKeyFromFields(y, m, 1));
 }
-function spMonthEnd(date: Date): Date {
+export function spMonthEnd(date: Date): Date {
   const { y, m } = spFields(date);
   return spEndOfDay(dateKeyFromFields(y, m + 1, 0)); // dia 0 do mês seguinte = último dia do mês atual
 }
 /**
  * "N meses atrás", só para uso imediatamente seguido de `spMonthStart`/
- * `spMonthEnd` (único uso dentro deste arquivo) — por isso sempre normaliza
- * pro dia 1 do mês alvo, evitando o overflow de "dia 31 menos 1 mês" cair
- * num mês mais curto (ex.: 31/mar - 1 mês não pode virar 2 ou 3/mar).
+ * `spMonthEnd` — por isso sempre normaliza pro dia 1 do mês alvo, evitando o
+ * overflow de "dia 31 menos 1 mês" cair num mês mais curto (ex.: 31/mar - 1
+ * mês não pode virar 2 ou 3/mar).
  */
-function spSubMonths(date: Date, amount: number): Date {
+export function spSubMonths(date: Date, amount: number): Date {
   const { y, m } = spFields(date);
   return spStartOfDay(dateKeyFromFields(y, m - amount, 1));
 }
 
 /** Trata uma string "YYYY-MM-DD" (sempre o formato de `<input type="date">`) como dia de São Paulo. */
-function customDayStart(value: string): Date {
+export function customDayStart(value: string): Date {
   return spStartOfDay(value.slice(0, 10));
 }
-function customDayEnd(value: string): Date {
+export function customDayEnd(value: string): Date {
   return spEndOfDay(value.slice(0, 10));
 }
 
