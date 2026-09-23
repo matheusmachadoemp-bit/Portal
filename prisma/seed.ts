@@ -159,6 +159,16 @@ const CATEGORIES = [
       { key: "temakis", name: "Temakis", icon: "IceCreamCone", empresaKey: "zarki-sushi" },
       { key: "uramakis", name: "Uramakis", icon: "Layers", empresaKey: "zarki-sushi" },
       { key: "hot-rolls", name: "Hot Rolls", icon: "Flame", empresaKey: "zarki-sushi" },
+      // Sem `empresaKey` de propósito: "sobremesa" é um conceito de cardápio genérico o bastante
+      // pra cada loja ter as suas (petit gateau na Nord Pizza, mochi/cheesecake de matchá na
+      // Zarki, por ex.) sem precisar de categorias de produto separadas — mesmo raciocínio de
+      // Combos/Bebidas/Drinks, também compartilhadas. Ver
+      // prisma/migrations/20260923120000_ficha_tecnica_sobremesas_subcategoria para o histórico
+      // (categoria de produto SOBREMESA e a rota /portal/ficha-tecnica/sobremesas já existiam,
+      // mas nunca teve link no menu lateral). Entra no FIM da lista (order 16, depois de
+      // "hot-rolls"=15) — mesmo raciocínio de "ficha_tecnica_categorias_por_loja", que também
+      // evitou deslocar as subcategorias já existentes.
+      { key: "sobremesas", name: "Sobremesas", icon: "CakeSlice" },
     ],
   },
   {
