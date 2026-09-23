@@ -9,6 +9,7 @@ import { getMenuCategories } from "@/lib/menu-categories";
 import { PushRegistration } from "@/components/push-registration";
 import { IosInstallBanner } from "@/components/ios-install-banner";
 import { PushPermissionBanner } from "@/components/push-permission-banner";
+import { FirstLoginNotificationModal } from "@/components/first-login-notification-modal";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -55,7 +56,15 @@ export default async function PortalLayout({ children }: { children: React.React
     <MobileSidebarProvider>
       <PushRegistration />
       <IosInstallBanner />
-      <PushPermissionBanner />
+      {/* No primeiro login de verdade, o FirstLoginNotificationModal já é o
+          convite pra ativar notificações (mais chamativo, pensado pra esse
+          momento específico) — sem esconder o banner aqui, os dois
+          apareceriam juntos (banner fino no topo + popup centralizado)
+          pedindo a mesma coisa (achado do Teulis na revisão). `isFirstLogin`
+          some (`undefined`/`false`) a partir do próximo login do mesmo
+          usuário — o banner volta a aparecer normalmente a partir daí. */}
+      {!session.user.isFirstLogin && <PushPermissionBanner />}
+      <FirstLoginNotificationModal />
       <div className="flex min-h-screen w-full bg-nord-black">
         <Sidebar
           initialCategories={categories}

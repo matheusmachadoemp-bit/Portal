@@ -75,6 +75,15 @@ const { handlers, signIn, signOut, auth: uncachedAuth } = NextAuth({
           return null;
         }
 
+        // Precisa ser capturado ANTES do update abaixo, que sobrescreve
+        // `lastLoginAt` com o instante deste login — este é o único ponto do
+        // código em que dá pra saber com certeza se este é o primeiro login
+        // de verdade do usuário (nunca logou antes = `lastLoginAt` ainda
+        // `null` no banco). Depois do update essa informação se perde pra
+        // sempre: qualquer consulta futura veria `lastLoginAt` já
+        // preenchido, mesmo que fosse consultada um segundo depois.
+        const isFirstLogin = user.lastLoginAt === null;
+
         await prisma.user.update({
           where: { id: user.id },
           data: { lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null },
@@ -86,6 +95,7 @@ const { handlers, signIn, signOut, auth: uncachedAuth } = NextAuth({
           email: user.email,
           role: user.role,
           avatarUrl: user.avatarUrl,
+          isFirstLogin,
         };
       },
     }),
