@@ -36,6 +36,14 @@ export const authConfig = {
         token.role = (user as { role: string }).role;
         token.id = user.id as string;
         token.avatarUrl = (user as { avatarUrl: string | null }).avatarUrl;
+        // Só populado neste ramo (login de verdade, `user` vem de
+        // `authorize()`). No caminho de revalidação (`user` undefined, ver
+        // `src/auth.ts`), este campo simplesmente não é tocado — o valor já
+        // presente no token (decodificado do JWT existente) segue adiante
+        // sem mudança, então uma vez `true` no login, permanece `true` pelo
+        // resto da sessão (até 8h); nunca é setado como `true` de novo numa
+        // sessão que já começou com `false`, já que só é escrito aqui.
+        token.isFirstLogin = (user as { isFirstLogin: boolean }).isFirstLogin;
       }
       return token;
     },
@@ -47,6 +55,8 @@ export const authConfig = {
           token.id as string;
         (session.user as typeof session.user & { role: string; id: string; avatarUrl: string | null }).avatarUrl =
           (token.avatarUrl as string | null) ?? null;
+        (session.user as typeof session.user & { isFirstLogin: boolean }).isFirstLogin =
+          (token.isFirstLogin as boolean | undefined) ?? false;
       }
       return session;
     },
