@@ -38,17 +38,31 @@ export async function POST(req: Request) {
       );
     }
   }
-  // Neste ponto, se !isSelfEnroll então isAdminOrGestor é garantidamente true (checado acima).
-  // A checagem de status abaixo (curso em rascunho) só se aplica à auto-matrícula de quem
-  // NÃO é admin/gestor — admin/gestor pode se auto-matricular em rascunho (útil para revisar antes
-  // de publicar) e matricular outro colaborador continua liberado por canManageUsers, sem depender
-  // do status do curso.
+  // Curso em RASCUNHO/ARQUIVADO só pode receber matrícula quando é o próprio admin/gestor se
+  // auto-matriculando (útil para revisar o conteúdo antes de publicar) — qualquer outro caso exige
+  // curso PUBLICADO: tanto auto-matrícula de quem não é admin/gestor quanto admin/gestor
+  // matriculando OUTRO colaborador (não existe hoje nenhum fluxo de produto que dependa de
+  // pré-matricular alguém num rascunho antes de publicar).
+  //
+  // Corrigida na tarefa #317 (3ª rodada — achado do Teulis): a condição antiga,
+  // `isSelfEnroll && !isAdminOrGestor`, parece (à primeira vista) equivalente a só `!isAdminOrGestor`
+  // pro caso self-enroll — e de fato é, dado o guard das linhas 30-39 (só chega aqui com
+  // `!isSelfEnroll` se `isAdminOrGestor` for garantidamente true). Mas é exatamente esse guard que
+  // torna as DUAS formas um no-op pro caso "matricular outro colaborador": com `isAdminOrGestor`
+  // sempre true ali, tanto `isSelfEnroll && !isAdminOrGestor` quanto `!isAdminOrGestor` avaliam
+  // sempre `false` — nunca bloqueavam um admin/gestor matriculando outro colaborador num rascunho,
+  // mesmo sem nenhum botão na UI hoje montando esse POST com `userId` de outra pessoa (alcançável
+  // direto por API). A matrícula "órfã" resultante aparecia com o nome real do curso rascunho em
+  // `/portal/universidade/videoaulas` do colaborador matriculado. A forma que fecha os 3 casos
+  // (auto-matrícula não-admin bloqueia; auto-matrícula admin/gestor libera; matricular outro
+  // colaborador bloqueia mesmo sendo admin/gestor) é a negação de "self-enroll E admin/gestor" —
+  // `!isSelfEnroll || !isAdminOrGestor`, equivalente a `!(isSelfEnroll && isAdminOrGestor)`.
   //
   // A matrícula em bloco por trilha (body.trackId) existia aqui antes da Fase 1 desta tarefa —
   // "Trilhas de Aprendizagem" foi descontinuada (ver
   // prisma/migrations/20260915130000_universidade_curso_modulo_aula): cursos que pertenciam a
   // uma trilha viraram módulos de 1 curso só, então matricular no curso já é o equivalente.
-  const blockDraftForSelf = isSelfEnroll && !isAdminOrGestor;
+  const blockDraft = !isSelfEnroll || !isAdminOrGestor;
 
   if (body.courseId) {
     const course = await prisma.trainingCourse.findUnique({
@@ -70,7 +84,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Este curso não está disponível para a sua loja." }, { status: 403 });
     }
 
-    if (blockDraftForSelf && course.status !== "PUBLICADO") {
+    if (blockDraft && course.status !== "PUBLICADO") {
       return NextResponse.json({ error: "Este curso ainda não está disponível." }, { status: 403 });
     }
     const enrollment = await enrollUserInCourse(targetUserId, body.courseId);

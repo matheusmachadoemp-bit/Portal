@@ -3,6 +3,8 @@ import crypto from "crypto";
 import type { Prisma } from "@prisma/client";
 import { XP_RULES } from "@/lib/university";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { auth } from "@/auth";
+import { canManageUsers } from "@/lib/permissions";
 
 // ---------------------------------------------------------------------------
 // Hierarquia (a partir de set/2026): Curso -> Módulo -> Aula. Matrícula
@@ -35,13 +37,20 @@ export async function awardXp(userId: string, amount: number, reason: string) {
  * ADMINISTRADOR/GESTOR, via `getUserEmpresas`). Mesmo filtro que `GET /api/university/courses` já
  * aplica na listagem (`OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }]`).
  *
- * Reaplicado nos 3 pontos que criam/consomem `TrainingEnrollment` — `POST /api/university/enroll`,
- * a página do player em `/portal/universidade/cursos/[id]`, e `getOrCreateModuleEnrollment` abaixo
- * (usado por `POST /api/university/progress`) — nenhum deles validava isso antes: um usuário
- * conseguia se matricular, assistir aula, completar módulo e até emitir certificado de um curso de
- * uma loja fora do seu contexto de acesso, só por saber (ou adivinhar) o id do curso, mesmo esse
- * curso nunca aparecendo na listagem dele. Achado de auditoria de segurança, tarefa #312 —
- * confirmado explorável ao vivo (curl direto nas 3 rotas) antes desta correção.
+ * Introduzida na tarefa #312 e, na época, reaplicada nos 3 pontos que criam/consomem
+ * `TrainingEnrollment` — `POST /api/university/enroll`, a página do player em
+ * `/portal/universidade/cursos/[id]`, e `getOrCreateModuleEnrollment` (usado por
+ * `POST /api/university/progress`) — nenhum deles validava isso antes: um usuário conseguia se
+ * matricular, assistir aula, completar módulo e até emitir certificado de um curso de uma loja
+ * fora do seu contexto de acesso, só por saber (ou adivinhar) o id do curso, mesmo esse curso nunca
+ * aparecendo na listagem dele. Achado de auditoria de segurança, tarefa #312 — confirmado
+ * explorável ao vivo (curl direto nas 3 rotas) antes daquela correção.
+ *
+ * Desde a tarefa #317 (2ª rodada), o player e `getOrCreateModuleEnrollment` passaram a combinar
+ * este critério de loja com o de status (`courseStatusWhere`) num único `findFirst`, em vez de
+ * chamar esta função separadamente — ela continua em uso direto só em `POST /api/university/enroll`
+ * (que já filtra status com sua própria lógica, `blockDraftForSelf`, equivalente a
+ * `courseStatusWhere` mas também levando em conta matricular OUTRO colaborador).
  */
 export async function courseAllowedForActiveEmpresa(courseEmpresaId: string | null): Promise<boolean> {
   if (courseEmpresaId === null) return true;
@@ -71,19 +80,57 @@ export function courseEmpresaWhere(empresaIds: string[]): Prisma.TrainingCourseW
 }
 
 /**
+ * Filtro Prisma de status — curso em RASCUNHO/ARQUIVADO só é visível para quem pode gerenciar
+ * cursos (`canManageUsers`, mesmo critério que já decidia se o card aparecia no client, em
+ * `courses-client.tsx`); quem não é admin/gestor só enxerga curso PUBLICADO. Componível com
+ * `courseEmpresaWhere` acima (ambos são condições independentes, combine os dois objetos no mesmo
+ * `where` — `{ ...courseEmpresaWhere(empresaIds), ...courseStatusWhere(isAdmin) }`).
+ *
+ * Extraída na tarefa #317 (achado do Teulis, na revisão da #315): a checagem de LOJA já tinha sido
+ * centralizada em `courseEmpresaWhere`, mas a de STATUS continuava reimplementada (ou, em 3
+ * lugares, simplesmente ausente) cada hora de um jeito — `/portal/universidade/cursos/page.tsx`
+ * (corrigida na própria #315) filtrava certo mas com a condição escrita à mão; o dashboard
+ * (`/portal/universidade/page.tsx`), `GET /api/university/courses/[id]` e o player
+ * (`/portal/universidade/cursos/[id]/page.tsx`) buscavam RASCUNHO sem filtro nenhum — o player,
+ * pior, além de vazar o conteúdo completo do rascunho (aulas com videoUrl/pdfUrl/content) pra
+ * qualquer colaborador, ainda criava uma `TrainingEnrollment` de verdade pra ele só de visitar a
+ * URL, sem passar pela checagem equivalente que `POST /api/university/enroll` já tem
+ * (`blockDraftForSelf`).
+ */
+export function courseStatusWhere(isAdmin: boolean): Prisma.TrainingCourseWhereInput {
+  return isAdmin ? {} : { status: "PUBLICADO" };
+}
+
+/**
  * Garante que exista a matrícula do curso (grão curso) e a matrícula do
  * módulo (grão módulo) do colaborador — criadas sob demanda, na primeira vez
  * que ele interage com alguma aula daquele módulo. Usado por
  * POST /api/university/progress antes de registrar o progresso da aula.
  *
- * Retorna `null` (em vez de criar) quando o curso não existe mais ou está fora do escopo de loja
- * do usuário (ver `courseAllowedForActiveEmpresa`) — a rota chamadora trata isso como 403, do
- * mesmo jeito que `requireActiveSingleEmpresa` (`@/lib/empresa`) já sinaliza "sem acesso" com
- * `null` em vez de lançar exceção.
+ * Retorna `null` (em vez de criar) quando o curso não existe, está fora do escopo de loja do
+ * usuário, ou está em RASCUNHO/ARQUIVADO pra quem não pode gerenciar cursos — as duas últimas
+ * condições combinadas no MESMO `findFirst` (`courseEmpresaWhere` + `courseStatusWhere`), mesmo
+ * padrão já usado no player (`/portal/universidade/cursos/[id]/page.tsx`). A rota chamadora trata
+ * `null` como 403, do mesmo jeito que `requireActiveSingleEmpresa` (`@/lib/empresa`) já sinaliza
+ * "sem acesso" com `null` em vez de lançar exceção.
+ *
+ * Corrigido na tarefa #317 (2ª rodada — achado CRÍTICO do Teulis, na revisão da própria #317): até
+ * então só validava loja (via `courseAllowedForActiveEmpresa`), nunca status — dava pra chamar
+ * POST /api/university/progress direto com o `lessonId` de uma aula de um curso em RASCUNHO, sem
+ * nunca passar pelo player (já corrigido na 1ª rodada), e criar uma `TrainingEnrollment`/
+ * `TrainingModuleEnrollment` real por tabela.
  */
 export async function getOrCreateModuleEnrollment(userId: string, courseId: string, moduleId: string) {
-  const course = await prisma.trainingCourse.findUnique({ where: { id: courseId }, select: { empresaId: true } });
-  if (!course || !(await courseAllowedForActiveEmpresa(course.empresaId))) return null;
+  const session = await auth();
+  const isAdmin = session?.user ? canManageUsers(session.user.role) : false;
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
+  const course = await prisma.trainingCourse.findFirst({
+    where: { id: courseId, ...courseEmpresaWhere(empresaIds), ...courseStatusWhere(isAdmin) },
+    select: { id: true },
+  });
+  if (!course) return null;
 
   const enrollment = await prisma.trainingEnrollment.upsert({
     where: { userId_courseId: { userId, courseId } },

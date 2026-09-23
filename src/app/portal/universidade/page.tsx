@@ -6,7 +6,7 @@ import { PageContainer } from "@/components/page-container";
 import { DashboardClient } from "./dashboard/dashboard-client";
 import { canManageUsers } from "@/lib/permissions";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { courseEmpresaWhere } from "@/lib/university-server";
+import { courseEmpresaWhere, courseStatusWhere } from "@/lib/university-server";
 import { startOfMonth, endOfMonth, subMonths, subDays, format } from "date-fns";
 
 const OVERDUE_DAYS = 7;
@@ -17,6 +17,7 @@ export default async function UniversidadePage() {
     redirect("/portal/inicio");
   }
 
+  const isAdmin = canManageUsers(session.user.role);
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
@@ -65,12 +66,13 @@ export default async function UniversidadePage() {
     prisma.trainingCertificate.count(),
     prisma.trainingLessonProgress.aggregate({ _sum: { watchedSeconds: true } }),
     prisma.trainingAttempt.aggregate({ _avg: { score: true } }),
-    // Filtrado pela loja ativa (`courseEmpresaWhere`) desde a tarefa #315 (achado do Teulis, na
-    // revisão da #312): sem isso, os gráficos "Cursos mais concluídos"/"por categoria" abaixo
-    // agregavam nome+categoria+matrículas de cursos de TODAS as lojas, vazando esse dado de cursos
-    // de outra loja (mandatory ou não) pra qualquer colaborador com acesso à Universidade.
+    // Filtrado por loja (`courseEmpresaWhere`, desde a #315) E status (`courseStatusWhere`, desde
+    // a #317 — achado do Teulis na revisão da #315): sem o segundo, os gráficos "Cursos mais
+    // concluídos"/"por categoria" abaixo agregavam nome+categoria+matrículas de cursos em
+    // RASCUNHO (da própria loja ou compartilhados) pra qualquer colaborador com acesso à
+    // Universidade, mesmo sem o gate de `isAdmin` que os outros cards administrativos têm.
     prisma.trainingCourse.findMany({
-      where: courseEmpresaWhere(empresaIds),
+      where: { ...courseEmpresaWhere(empresaIds), ...courseStatusWhere(isAdmin) },
       select: { id: true, name: true, category: true, _count: { select: { enrollments: true } } },
     }),
     prisma.trainingEnrollment.findMany({
@@ -125,7 +127,7 @@ export default async function UniversidadePage() {
   return (
     <PageContainer title="Universidade Grupo Nord" subtitle="Treinamento corporativo e videoaulas">
       <DashboardClient
-        isAdmin={session ? canManageUsers(session.user.role) : false}
+        isAdmin={isAdmin}
         colaboradoresCadastrados={users}
         colaboradoresTreinados={concluidosPorUsuario.length}
         cursosConcluidos={concluidos}
