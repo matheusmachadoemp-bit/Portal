@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { courseEmpresaWhere, courseStatusWhere } from "@/lib/university-server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,11 +14,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   const { id } = await params;
 
+  const isAdmin = canManageUsers(session.user.role);
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
+  // Filtro de loja (`courseEmpresaWhere`, já usado aqui desde antes) + status (`courseStatusWhere`,
+  // adicionado na tarefa #317 — achado do Teulis, na revisão da #315): sem o segundo, esta rota
+  // devolvia o curso em RASCUNHO inteiro — nome, descrição e todas as aulas, incluindo
+  // videoUrl/pdfUrl/content — pra qualquer colaborador com acesso à Universidade, não só admin.
   const course = await prisma.trainingCourse.findFirst({
-    where: { id, OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }] },
+    where: { id, ...courseEmpresaWhere(empresaIds), ...courseStatusWhere(isAdmin) },
     include: {
       modules: {
         orderBy: { order: "asc" },
@@ -31,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
   if (!course) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
 
-  if (!canManageUsers(session.user.role)) {
+  if (!isAdmin) {
     for (const m of course.modules) {
       if (m.quiz) {
         m.quiz.questions = m.quiz.questions.map((q) => ({

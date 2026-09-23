@@ -6,7 +6,7 @@ import { PageContainer } from "@/components/page-container";
 import { CoursesClient } from "./courses-client";
 import { canManageUsers } from "@/lib/permissions";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { courseEmpresaWhere } from "@/lib/university-server";
+import { courseEmpresaWhere, courseStatusWhere } from "@/lib/university-server";
 
 export default async function CursosPage() {
   const session = await auth();
@@ -32,14 +32,11 @@ export default async function CursosPage() {
 
   const [courses, myEnrollments, empresas] = await Promise.all([
     prisma.trainingCourse.findMany({
-      where: {
-        ...courseEmpresaWhere(empresaIds),
-        // RASCUNHO/ARQUIVADO só trafegam pro payload de quem pode gerenciar (mesmo critério que
-        // já decidia se o card aparecia no client) — antes desta correção, o array completo
-        // (inclusive rascunhos) já saía serializado no HTML/RSC inicial pra qualquer colaborador,
-        // só escondido do card por `courses-client.tsx`, nunca do payload em si.
-        ...(isAdmin ? {} : { status: "PUBLICADO" as const }),
-      },
+      // RASCUNHO/ARQUIVADO só trafegam pro payload de quem pode gerenciar (`courseStatusWhere`,
+      // extraída na #317 a partir do que já era feito aqui à mão) — antes da correção original
+      // (#315), o array completo (inclusive rascunhos) já saía serializado no HTML/RSC inicial pra
+      // qualquer colaborador, só escondido do card por `courses-client.tsx`, nunca do payload em si.
+      where: { ...courseEmpresaWhere(empresaIds), ...courseStatusWhere(isAdmin) },
       orderBy: [{ order: "asc" }, { name: "asc" }],
       include: {
         modules: {

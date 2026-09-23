@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
-import { courseAllowedForActiveEmpresa } from "@/lib/university-server";
+import { canManageUsers } from "@/lib/permissions";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { courseEmpresaWhere, courseStatusWhere } from "@/lib/university-server";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { PlayerClient } from "./player-client";
@@ -14,8 +16,22 @@ export default async function CoursePlayerPage({ params }: { params: Promise<{ i
     redirect("/portal/inicio");
   }
 
-  const course = await prisma.trainingCourse.findUnique({
-    where: { id },
+  const isAdmin = canManageUsers(session.user.role);
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+
+  // Curso fora do escopo de loja (achado de auditoria de segurança, tarefa #312) OU em
+  // RASCUNHO/ARQUIVADO pra quem não pode gerenciar cursos (tarefa #317 — achado do Teulis, na
+  // revisão da #315): as duas condições ficam no MESMO `findFirst` (em vez de buscar o curso e só
+  // depois checar), pra garantir que um usuário comum sem acesso ao rascunho nunca chegue nem a
+  // carregar o conteúdo completo da aula (videoUrl/pdfUrl/content) nem a passar pelo
+  // `trainingEnrollment.upsert` logo abaixo — antes desta correção, visitar a URL do player de um
+  // curso em RASCUNHO já criava uma matrícula de verdade pra qualquer colaborador, sem repetir a
+  // checagem equivalente que `POST /api/university/enroll` já tem (`blockDraftForSelf`). Mesmo
+  // tratamento de "não encontrado" tanto pra id inexistente quanto pra curso fora do escopo —
+  // igual já era feito só para loja, e igual `GET /api/university/courses/[id]` já faz.
+  const course = await prisma.trainingCourse.findFirst({
+    where: { id, ...courseEmpresaWhere(empresaIds), ...courseStatusWhere(isAdmin) },
     include: {
       modules: {
         orderBy: { order: "asc" },
@@ -27,15 +43,6 @@ export default async function CoursePlayerPage({ params }: { params: Promise<{ i
     },
   });
   if (!course) redirect("/portal/universidade/cursos");
-
-  // Curso fora do escopo de loja do usuário (achado de auditoria de segurança, tarefa #312): sem
-  // essa checagem, bastava conhecer/adivinhar o id de um curso de outra loja para acessar o
-  // player e se auto-matricular por tabela, mesmo esse curso nunca aparecendo na listagem do
-  // usuário (GET /api/university/courses já aplica esse mesmo filtro). Mesmo tratamento de "não
-  // acessível" que o curso inexistente logo acima.
-  if (!(await courseAllowedForActiveEmpresa(course.empresaId))) {
-    redirect("/portal/universidade/cursos");
-  }
 
   const enrollment = await prisma.trainingEnrollment.upsert({
     where: { userId_courseId: { userId: session.user.id, courseId: id } },

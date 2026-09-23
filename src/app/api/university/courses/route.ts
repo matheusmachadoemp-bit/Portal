@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { courseEmpresaWhere } from "@/lib/university-server";
+import { courseEmpresaWhere, courseStatusWhere } from "@/lib/university-server";
 
 export async function GET() {
   const session = await auth();
@@ -13,11 +13,19 @@ export async function GET() {
     return NextResponse.json({ error: "Seu perfil de permissão não permite ver a Universidade." }, { status: 403 });
   }
 
+  const isManager = canManageUsers(session.user.role);
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
+  // Filtro de loja (`courseEmpresaWhere`) + status (`courseStatusWhere`) — 2ª rodada da tarefa
+  // #317 (achado CRÍTICO do Teulis, na revisão da própria #317): esta é a rota de LISTAGEM/coleção
+  // (diferente de `courses/[id]/route.ts`, já corrigida na 1ª rodada). Só tinha o filtro de loja
+  // (desde a #315); sem o de status, devolvia cursos em RASCUNHO inteiros (nome, videoUrl,
+  // content) pro JSON de qualquer usuário com `canView` em Universidade — o único chamador atual
+  // no client fica atrás de um botão só-admin, mas isso nunca protegeu nada no servidor: a rota é
+  // alcançável direto por curl/DevTools por qualquer usuário comum.
   const courses = await prisma.trainingCourse.findMany({
-    where: courseEmpresaWhere(empresaIds),
+    where: { ...courseEmpresaWhere(empresaIds), ...courseStatusWhere(isManager) },
     orderBy: [{ order: "asc" }, { name: "asc" }],
     include: {
       modules: {
@@ -32,7 +40,6 @@ export async function GET() {
     },
   });
 
-  const isManager = canManageUsers(session.user.role);
   const sanitized = isManager
     ? courses
     : courses.map((c) => ({
