@@ -47,13 +47,55 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
 
   const employeeRef = { select: { id: true, name: true, setor: true } } as const;
 
+  // Task #287 (mesma classe do #282, já corrigido em ../ponto-eletronico/page.tsx): estes 6 findMany
+  // não tinham nenhum `take`, carregando o histórico COMPLETO de cada aba de uma vez só. Diferente
+  // do #282 (company-wide, todas as lojas/colaboradores juntos), aqui cada query já é filtrada por
+  // `employeeId: id` — cresce bem mais devagar (um funcionário só), mas sem teto nenhum ainda é um
+  // risco de longo prazo nos três históricos que crescem ao longo da carreira do colaborador:
+  // Financeiro (lançamentos recorrentes: salário, VT, VA, comissão, bonificação, desconto), Ponto
+  // Eletrônico (~1 registro/dia) e Ocorrências.
+  //
+  // Férias, Uniformes e Documentos ficam DE PROPÓSITO sem `take`: crescem devagar por natureza (~1
+  // período aquisitivo por ano, poucas entregas de uniforme/documentos por colaborador — mesmo
+  // alguém com décadas de casa dificilmente passa de algumas dezenas de registros), não existe teto
+  // equivalente em nenhuma rota irmã pra replicar aqui, e os cards de "Resumo" (dias de férias
+  // disponíveis, férias a vencer) somam o array de férias inteiro — cortar aqui arriscaria descontar
+  // dado real sem ganho de performance que justifique.
+  //
+  // Os tetos abaixo replicam os já usados nas rotas/páginas irmãs, pra manter o mesmo volume entre a
+  // carga inicial (SSR) e o refresh() que cada client component (Financeiro/Ponto
+  // Eletrônico/Ocorrências) dispara depois de qualquer criação/edição/exclusão:
+  // - Ponto Eletrônico: mesmo TIME_ENTRIES_SAFETY_TAKE=2000 de ../ponto-eletronico/page.tsx (#282) e
+  //   de /api/rh/time-entries (#373) — aqui é 1 colaborador só, então na prática nunca deve nem
+  //   chegar perto do teto.
+  // - Ocorrências: mesmo take:300 já usado em /api/rh/occurrences (rota chamada pelo refresh()).
+  // - Financeiro: não existe teto irmão pra replicar — /api/rh/finance nunca teve `take` (achado
+  //   incidental, fora do escopo desta task, ver relatório). Usamos o mesmo 2000 do Ponto Eletrônico
+  //   por ser a mesma categoria "cresce com o tempo": bem acima do volume real esperado mesmo pra
+  //   quem está há muitos anos na empresa, então funciona como teto de segurança sem cortar dado de
+  //   verdade no uso normal.
+  const TIME_ENTRIES_SAFETY_TAKE = 2000;
+  const FINANCE_ENTRIES_SAFETY_TAKE = 2000;
+  const OCCURRENCES_SAFETY_TAKE = 300;
+
   const [financeEntries, timeEntries, occurrences, vacations, uniformDeliveries, documents] = await Promise.all([
-    prisma.employeeFinanceEntry.findMany({ where: { employeeId: id }, orderBy: { date: "desc" }, include: { employee: employeeRef } }),
-    prisma.timeEntry.findMany({ where: { employeeId: id }, orderBy: { date: "desc" }, include: { employee: employeeRef } }),
+    prisma.employeeFinanceEntry.findMany({
+      where: { employeeId: id },
+      orderBy: { date: "desc" },
+      include: { employee: employeeRef },
+      take: FINANCE_ENTRIES_SAFETY_TAKE,
+    }),
+    prisma.timeEntry.findMany({
+      where: { employeeId: id },
+      orderBy: { date: "desc" },
+      include: { employee: employeeRef },
+      take: TIME_ENTRIES_SAFETY_TAKE,
+    }),
     prisma.occurrence.findMany({
       where: { employeeId: id },
       orderBy: { date: "desc" },
       include: { createdBy: { select: { name: true } }, employee: employeeRef },
+      take: OCCURRENCES_SAFETY_TAKE,
     }),
     prisma.vacation.findMany({ where: { employeeId: id }, orderBy: { periodoAquisitivoInicio: "desc" }, include: { employee: employeeRef } }),
     prisma.uniformDelivery.findMany({ where: { employeeId: id }, orderBy: { dataEntrega: "desc" }, include: { employee: employeeRef } }),
