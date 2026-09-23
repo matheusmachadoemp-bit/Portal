@@ -5,7 +5,8 @@ import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { CoursesClient } from "./courses-client";
 import { canManageUsers } from "@/lib/permissions";
-import { getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { courseEmpresaWhere } from "@/lib/university-server";
 
 export default async function CursosPage() {
   const session = await auth();
@@ -13,18 +14,32 @@ export default async function CursosPage() {
     redirect("/portal/inicio");
   }
   const ctx = await getActiveEmpresaContext();
-  // Cursos não são "por loja" (o cadastro é global, ver query sem filtro de
-  // empresaIds abaixo) — por isso o gate de contexto aqui sempre foi mais
-  // permissivo que o padrão "só modo loja única" usado nos outros módulos
-  // (libera tanto "single" quanto "grupo", só nunca fica undefined). Mantido
-  // como estava; a parte que faltava era combinar com a permissão real do
-  // usuário — antes disso só dependia de `isAdmin` no client
-  // (`courses-client.tsx`), que é global e não específico do módulo.
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  const isAdmin = canManageUsers(session.user.role);
+
+  // Gate de contexto desta página é mais permissivo que o padrão "só modo loja única" usado em
+  // outros módulos (libera tanto "single" quanto "grupo" pra poder criar curso, só nunca fica
+  // undefined) — mantido como estava. O que faltava (achado de auditoria de segurança, tarefa
+  // #315, revisão do Teulis) era o próprio `findMany` abaixo respeitar a loja ativa: cursos SÃO
+  // por loja quando `empresaId` está preenchido — só são compartilhados quando fica `null`, mesmo
+  // padrão de Ficha Técnica/Combos (ver `courseEmpresaWhere`, `@/lib/university-server`). Sem
+  // isso, esta página buscava e serializava no RSC/HTML TODOS os cursos de TODAS as lojas
+  // (inclusive em RASCUNHO) pra qualquer colaborador logado — o filtro em `courses-client.tsx`
+  // (status/categoria/busca) é só de exibição client-side, nunca foi (e não deveria ser) proteção
+  // de dado.
   const canManageUniversidade = await hasModulePermission(session.user.id, "universidade", "canCreate");
   const canCreate = (ctx?.mode === "single" || ctx?.mode === "grupo") && canManageUniversidade;
 
   const [courses, myEnrollments, empresas] = await Promise.all([
     prisma.trainingCourse.findMany({
+      where: {
+        ...courseEmpresaWhere(empresaIds),
+        // RASCUNHO/ARQUIVADO só trafegam pro payload de quem pode gerenciar (mesmo critério que
+        // já decidia se o card aparecia no client) — antes desta correção, o array completo
+        // (inclusive rascunhos) já saía serializado no HTML/RSC inicial pra qualquer colaborador,
+        // só escondido do card por `courses-client.tsx`, nunca do payload em si.
+        ...(isAdmin ? {} : { status: "PUBLICADO" as const }),
+      },
       orderBy: [{ order: "asc" }, { name: "asc" }],
       include: {
         modules: {
@@ -54,7 +69,7 @@ export default async function CursosPage() {
       <CoursesClient
         initialCourses={serialized as never}
         myEnrollments={myEnrollments.map((e) => ({ courseId: e.courseId, status: e.status, progressPercent: e.progressPercent }))}
-        isAdmin={session ? canManageUsers(session.user.role) : false}
+        isAdmin={isAdmin}
         empresas={empresas}
         canCreate={canCreate}
       />

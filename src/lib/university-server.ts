@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import type { Prisma } from "@prisma/client";
 import { XP_RULES } from "@/lib/university";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
@@ -47,6 +48,26 @@ export async function courseAllowedForActiveEmpresa(courseEmpresaId: string | nu
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   return empresaIds.includes(courseEmpresaId);
+}
+
+/**
+ * Mesmo critério de `courseAllowedForActiveEmpresa` acima, em formato de `where` do Prisma — para
+ * usar direto num `findMany`/`count` de `TrainingCourse` (filtrando no banco), em vez de buscar
+ * um curso específico e checar depois.
+ *
+ * Centralizada aqui de propósito depois da tarefa #315 (achado do Teulis, na revisão da #312):
+ * até então a regra "curso sem empresaId é compartilhado; com empresaId, só entra se a loja
+ * estiver no contexto ativo" vivia reimplementada em 3 lugares que listam/agregam
+ * `TrainingCourse` — só `GET /api/university/courses` filtrava certo (com um `OR` escrito à mão);
+ * a listagem de cursos (`/portal/universidade/cursos/page.tsx`, que tinha inclusive um comentário
+ * — errado — afirmando que "cursos não são por loja") e o dashboard (`/portal/universidade/page.tsx`)
+ * buscavam TODOS os cursos de TODAS as lojas sem filtro nenhum, vazando nome/descrição/imagem/
+ * categoria (e, na listagem, até cursos em RASCUNHO inteiros via payload RSC) de cursos de outras
+ * lojas para qualquer colaborador logado. Os 3 pontos agora chamam esta função em vez de
+ * reescrever a mesma regra cada um do seu jeito — exatamente a duplicação que causou o gap.
+ */
+export function courseEmpresaWhere(empresaIds: string[]): Prisma.TrainingCourseWhereInput {
+  return { OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }] };
 }
 
 /**
