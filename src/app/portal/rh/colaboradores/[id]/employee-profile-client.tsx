@@ -68,6 +68,8 @@ export function EmployeeProfileClient({
   vacations,
   uniformDeliveries,
   documents,
+  timeEntryTotals,
+  timeEntryChartData,
   financeTotals,
   financeChartData,
   occurrenceCounts,
@@ -87,6 +89,15 @@ export function EmployeeProfileClient({
   uniformDeliveries: any[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   documents: any[];
+  /**
+   * Task #316: totais/gráfico "por mês" de Ponto Eletrônico, calculados no servidor via agregação
+   * no banco (nunca somando/contando `timeEntries` acima, que tem `take`) — ver racional em
+   * src/lib/ponto-eletronico-server.ts e no comentário de ../[id]/page.tsx.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  timeEntryTotals: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  timeEntryChartData: any[];
   /**
    * Task #309 revisão (Teulis): totais/contagens de Financeiro e Ocorrências, calculados no
    * servidor via agregação no banco (nunca somando/contando `financeEntries`/`occurrences` acima,
@@ -470,6 +481,8 @@ export function EmployeeProfileClient({
       {tab === "Ponto Eletrônico" && (
         <PontoEletronicoClient
           initialEntries={timeEntries}
+          initialTotals={timeEntryTotals}
+          initialChartData={timeEntryChartData}
           employees={[]}
           fixedEmployeeId={employee.id}
           canCreate={canCreate}

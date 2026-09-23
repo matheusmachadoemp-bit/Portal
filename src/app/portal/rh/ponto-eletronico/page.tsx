@@ -6,6 +6,8 @@ import { PageContainer } from "@/components/page-container";
 import { AccessDenied } from "@/components/ui/access-denied";
 import { PontoEletronicoClient } from "./ponto-eletronico-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { computeTimeEntryTotals, computeTimeEntryMonthlyChart } from "@/lib/ponto-eletronico-server";
+import { resolveRollingPeriod } from "@/lib/periods";
 
 // Mesma checagem de cargo (MANAGER_ROLES) já usada pela rota de API irmã (`/api/rh/time-entries`,
 // desde o commit f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de Permissão padrão
@@ -47,7 +49,20 @@ export default async function PontoEletronicoPage() {
   // orderBy date desc garante que o teto sempre corta os registros mais ANTIGOS, nunca os recentes.
   const TIME_ENTRIES_SAFETY_TAKE = 2000;
 
-  const [entries, employees] = await Promise.all([
+  // Task #316: os StatCards ("Horas trabalhadas", "Atrasos", "Faltas", "Banco de horas") e os
+  // gráficos "por mês" NÃO podem vir da lista `entries` acima — ela tem `take`, e somar/contar uma
+  // lista cortada dá um número ERRADO (silenciosamente menor que o real) assim que o histórico da
+  // loja passa do teto. `computeTimeEntryTotals`/`computeTimeEntryMonthlyChart` (ver
+  // src/lib/ponto-eletronico-server.ts pro racional completo) calculam isso via agregação no banco,
+  // sem `take` nenhum. Os StatCards respeitam o período selecionado na tela — "mes-atual" é o
+  // período inicial do client component (`ponto-eletronico-client.tsx`), então a carga SSR usa o
+  // mesmo período pra bater com o que a tela mostra antes de qualquer interação do usuário; trocar
+  // de período depois dispara uma busca nova em `/api/rh/time-entries/totals`. Os gráficos "por mês"
+  // nunca são filtrados por período, de propósito (ver racional em `computeTimeEntryMonthlyChart`).
+  const initialRange = resolveRollingPeriod("mes-atual");
+  const timeEntryWhere = { empresaId: { in: empresaIds }, date: { gte: initialRange.from, lte: initialRange.to } };
+
+  const [entries, employees, initialTotals, initialChartData] = await Promise.all([
     prisma.timeEntry.findMany({
       where: { empresaId: { in: empresaIds } },
       orderBy: { date: "desc" },
@@ -59,6 +74,8 @@ export default async function PontoEletronicoPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true, setor: true },
     }),
+    computeTimeEntryTotals(timeEntryWhere),
+    computeTimeEntryMonthlyChart(empresaIds),
   ]);
 
   const serialized = entries.map((e) => ({ ...e, date: e.date.toISOString() }));
@@ -67,6 +84,8 @@ export default async function PontoEletronicoPage() {
     <PageContainer title="RH" subtitle="Ponto Eletrônico">
       <PontoEletronicoClient
         initialEntries={serialized}
+        initialTotals={initialTotals}
+        initialChartData={initialChartData}
         employees={employees}
         canCreate={canCreate}
         isGrupoNordMode={ctx?.mode !== "single"}
