@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -64,14 +64,31 @@ function emptyForm(employeeId: string) {
   };
 }
 
+type OccurrenceCounts = { faltas: number; atrasos: number; advertencias: number; suspensoes: number };
+type OccurrenceRanking = { atrasos: [string, number][]; faltas: [string, number][] };
+
 export function OcorrenciasClient({
   initialOccurrences,
+  initialCounts,
+  initialRanking = { atrasos: [], faltas: [] },
   employees,
   fixedEmployeeId,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
   initialOccurrences: OccurrenceDTO[];
+  /**
+   * Task #309 revisão (Teulis): contagens ("Faltas", "Atrasos" etc.) e ranking SEMPRE calculados
+   * no servidor via agregação no banco (ver src/lib/rh-server.ts), nunca contando/agrupando
+   * `occurrences`/`visible` aqui no cliente — essa lista tem `take` (teto de segurança contra
+   * histórico sem fim), e contar uma lista cortada dá um número errado (silenciosamente menor que
+   * o real, podendo até esconder um colaborador inteiro do ranking) assim que o histórico passa do
+   * teto. Atualizados a cada `refresh()` (POST/PATCH/DELETE), sempre com uma query própria sem
+   * `take`.
+   */
+  initialCounts: OccurrenceCounts;
+  /** Vazio por padrão (só é usado — e só faz sentido — na tela standalone, sem `fixedEmployeeId`). */
+  initialRanking?: OccurrenceRanking;
   employees: { id: string; name: string; setor: string }[];
   fixedEmployeeId?: string;
   canCreate?: boolean;
@@ -79,51 +96,58 @@ export function OcorrenciasClient({
   isGrupoNordMode?: boolean;
 }) {
   const [occurrences, setOccurrences] = useState(initialOccurrences);
+  const [counts, setCounts] = useState(initialCounts);
+  const [ranking, setRanking] = useState(initialRanking);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<OccurrenceDTO | null>(null);
   const [form, setForm] = useState(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [detail, setDetail] = useState<OccurrenceDTO | null>(null);
+  const [historico, setHistorico] = useState<OccurrenceDTO[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // Só usado pra decidir o que a TABELA mostra (lista de "atividade recente", que já tem `take` —
+  // isso é esperado, nunca foi o problema).
   const visible = useMemo(() => {
     return fixedEmployeeId ? occurrences.filter((o) => o.employeeId === fixedEmployeeId) : occurrences;
   }, [occurrences, fixedEmployeeId]);
 
-  const faltas = visible.filter((o) => o.type === "FALTA").length;
-  const atrasos = visible.filter((o) => o.type === "ATRASO").length;
-  const advertencias = visible.filter((o) => o.type === "ADVERTENCIA").length;
-  const suspensoes = visible.filter((o) => o.type === "SUSPENSAO").length;
-
-  const rankingAtrasos = useMemo(() => {
-    const map = new Map<string, number>();
-    visible.filter((o) => o.type === "ATRASO").forEach((o) => {
-      map.set(o.employee.name, (map.get(o.employee.name) ?? 0) + 1);
-    });
-    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [visible]);
-
-  const rankingFaltas = useMemo(() => {
-    const map = new Map<string, number>();
-    visible.filter((o) => o.type === "FALTA").forEach((o) => {
-      map.set(o.employee.name, (map.get(o.employee.name) ?? 0) + 1);
-    });
-    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [visible]);
-
-  const historico = useMemo(() => {
-    if (!detail) return [];
-    return occurrences
-      .filter((o) => o.employeeId === detail.employeeId && o.id !== detail.id)
-      .sort((a, b) => (a.date > b.date ? -1 : 1))
-      .slice(0, 8);
-  }, [detail, occurrences]);
+  // Task #309 revisão (Teulis): "Histórico do colaborador" (dentro do modal de detalhe) filtrava
+  // `occurrences` — a mesma lista já cortada pelo `take` da loja inteira — pelo `employeeId` do
+  // registro aberto. Um colaborador cujas ocorrências antigas tinham saído do corte mostrava um
+  // histórico incompleto (ou vazio) mesmo tendo mais registros de verdade. Agora busca de novo,
+  // direto, com `?employeeId=` (mesma rota/teto individual usado pela ficha) toda vez que o modal
+  // abre — nunca deriva da lista já cortada.
+  useEffect(() => {
+    // Não reseta pra `[]` quando o modal fecha (`!detail`): `historico` só é renderizado dentro do
+    // bloco `{detail && (...)}` do modal, então o valor da vez anterior fica sem uso até o próximo
+    // `detail` ser setado, quando este efeito busca de novo e substitui. Chamar `setHistorico([])`
+    // de forma síncrona aqui geraria um cascading render desnecessário (regra
+    // react-hooks/set-state-in-effect).
+    if (!detail) return;
+    let cancelled = false;
+    fetch(`/api/rh/occurrences?employeeId=${detail.employeeId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        const outras = (data.occurrences as OccurrenceDTO[])
+          .filter((o) => o.id !== detail.id)
+          .sort((a, b) => (a.date > b.date ? -1 : 1))
+          .slice(0, 8);
+        setHistorico(outras);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
 
   async function refresh() {
     const url = fixedEmployeeId ? `/api/rh/occurrences?employeeId=${fixedEmployeeId}` : "/api/rh/occurrences";
     const res = await fetch(url);
     const data = await res.json();
     setOccurrences(data.occurrences);
+    setCounts(data.counts);
+    setRanking(data.ranking);
   }
 
   function openNew() {
@@ -188,10 +212,10 @@ export function OcorrenciasClient({
         storageKey="rh-ocorrencias-kpi-order"
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
         cards={[
-          { key: "faltas", label: "Faltas", value: formatNumber(faltas), icon: "UserX", color: "#ef4444" },
-          { key: "atrasos", label: "Atrasos", value: formatNumber(atrasos), icon: "Clock", color: "#eab308" },
-          { key: "advertencias", label: "Advertências", value: formatNumber(advertencias), icon: "AlertTriangle", color: "#f97316" },
-          { key: "suspensoes", label: "Suspensões", value: formatNumber(suspensoes), icon: "Ban", color: "#ef4444" },
+          { key: "faltas", label: "Faltas", value: formatNumber(counts.faltas), icon: "UserX", color: "#ef4444" },
+          { key: "atrasos", label: "Atrasos", value: formatNumber(counts.atrasos), icon: "Clock", color: "#eab308" },
+          { key: "advertencias", label: "Advertências", value: formatNumber(counts.advertencias), icon: "AlertTriangle", color: "#f97316" },
+          { key: "suspensoes", label: "Suspensões", value: formatNumber(counts.suspensoes), icon: "Ban", color: "#ef4444" },
         ]}
       />
 
@@ -218,7 +242,7 @@ export function OcorrenciasClient({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Section title="Ranking de atrasos">
             <ul className="space-y-2">
-              {rankingAtrasos.map(([name, count], i) => (
+              {ranking.atrasos.map(([name, count], i) => (
                 <li key={name} className="flex items-center justify-between text-sm">
                   <span className="text-nord-gray">
                     {i + 1}. {name}
@@ -226,12 +250,12 @@ export function OcorrenciasClient({
                   <Badge tone="warning">{count}x</Badge>
                 </li>
               ))}
-              {rankingAtrasos.length === 0 && <p className="text-sm text-nord-gray">Sem registros.</p>}
+              {ranking.atrasos.length === 0 && <p className="text-sm text-nord-gray">Sem registros.</p>}
             </ul>
           </Section>
           <Section title="Ranking de faltas">
             <ul className="space-y-2">
-              {rankingFaltas.map(([name, count], i) => (
+              {ranking.faltas.map(([name, count], i) => (
                 <li key={name} className="flex items-center justify-between text-sm">
                   <span className="text-nord-gray">
                     {i + 1}. {name}
@@ -239,7 +263,7 @@ export function OcorrenciasClient({
                   <Badge tone="danger">{count}x</Badge>
                 </li>
               ))}
-              {rankingFaltas.length === 0 && <p className="text-sm text-nord-gray">Sem registros.</p>}
+              {ranking.faltas.length === 0 && <p className="text-sm text-nord-gray">Sem registros.</p>}
             </ul>
           </Section>
         </div>

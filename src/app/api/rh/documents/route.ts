@@ -31,6 +31,13 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
+  // Task #309: avaliado e decidido NÃO colocar `take` aqui (nem no caso sem employeeId, chamado
+  // pelo refresh() da página standalone .../rh/documentos/page.tsx) — mesma decisão e mesma conta
+  // de colaboradores/loja documentadas lá: documentos por colaborador também são poucos (~5-15 ao
+  // longo do vínculo). É a mais próxima das 3 rotas sem `take` de virar um volume grande (ver conta
+  // detalhada na página), mas ainda administrável hoje — se o Grupo Nord crescer bem além de ~8
+  // lojas ativas isso merece reavaliação. Mantém a página SSR e este refresh() consistentes (os
+  // dois sem `take`).
   const documents = await prisma.employeeDocument.findMany({
     where: {
       empresaId: { in: empresaIdsForContext(ctx) },

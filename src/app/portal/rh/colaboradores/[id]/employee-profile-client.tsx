@@ -68,6 +68,9 @@ export function EmployeeProfileClient({
   vacations,
   uniformDeliveries,
   documents,
+  financeTotals,
+  financeChartData,
+  occurrenceCounts,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
@@ -84,6 +87,18 @@ export function EmployeeProfileClient({
   uniformDeliveries: any[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   documents: any[];
+  /**
+   * Task #309 revisão (Teulis): totais/contagens de Financeiro e Ocorrências, calculados no
+   * servidor via agregação no banco (nunca somando/contando `financeEntries`/`occurrences` acima,
+   * que têm `take`) — ver racional em src/lib/rh-server.ts e no comentário de
+   * ../[id]/page.tsx.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  financeTotals: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  financeChartData: any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  occurrenceCounts: any;
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
@@ -186,31 +201,27 @@ export function EmployeeProfileClient({
     [form.setor, setorOptions]
   );
 
-  const totals = useMemo(() => {
-    const sumType = (type: string) => financeEntries.filter((f) => f.type === type).reduce((s, f) => s + f.value, 0);
-    const salario = sumType("SALARIO");
-    const comissao = sumType("COMISSAO");
-    const bonificacao = sumType("BONIFICACAO");
-    const desconto = sumType("DESCONTO");
-    const vt = sumType("VALE_TRANSPORTE");
-    const va = sumType("VALE_ALIMENTACAO");
-    const outro = sumType("OUTRO");
-    return { totalRecebido: salario + comissao + bonificacao + vt + va + outro - desconto, comissao, bonificacao };
-  }, [financeEntries]);
-
-  const resumo = useMemo(() => {
-    const faltas = occurrences.filter((o) => o.type === "FALTA").length;
-    const atrasos = occurrences.filter((o) => o.type === "ATRASO").length;
-    const advertencias = occurrences.filter((o) => o.type === "ADVERTENCIA").length;
-    const suspensoes = occurrences.filter((o) => o.type === "SUSPENSAO").length;
+  // Task #309 revisão (Teulis, 2ª rodada): este componente já recebia `financeTotals`/
+  // `occurrenceCounts` prontos do servidor (agregação no banco, sem `take` — ver
+  // ../page.tsx e src/lib/rh-server.ts) pra alimentar as abas Financeiro/Ocorrências via
+  // FinanceiroClient/OcorrenciasClient, mas o StatCard de cabeçalho ("Total Recebido"/"Comissões"/
+  // "Bonificações") e a aba "Resumo" ("Faltas"/"Atrasos"/"Advertências"/"Suspensões") continuavam
+  // com sua PRÓPRIA conta duplicada, somando/contando `financeEntries`/`occurrences` — as mesmas
+  // listas já cortadas por `take` recebidas como prop. Resultado: a mesma ficha podia mostrar 2
+  // números diferentes pra mesma pessoa dependendo de qual parte da tela se olhava (cabeçalho/
+  // Resumo errados, aba Financeiro/Ocorrências certa). Removidos os `useMemo` que duplicavam essa
+  // conta; cabeçalho e Resumo agora leem direto de `financeTotals`/`occurrenceCounts` (mesma fonte
+  // já usada pelas abas). `diasDisponiveis`/`feriasVencidas` continuam somando `vacations` direto
+  // (sem `take`, nunca foi o problema — Férias fica de propósito sem teto, ver ../page.tsx).
+  const resumoFerias = useMemo(() => {
     const diasDisponiveis = vacations
       .filter((v) => v.status !== "CANCELADA")
       .reduce((s, v) => s + (v.diasDireito - (v.dias ?? 0)), 0);
     const feriasVencidas = vacations.filter(
       (v) => v.status !== "CONCLUIDA" && v.status !== "CANCELADA" && new Date(v.periodoAquisitivoFim) < new Date()
     ).length;
-    return { faltas, atrasos, advertencias, suspensoes, diasDisponiveis, feriasVencidas };
-  }, [occurrences, vacations]);
+    return { diasDisponiveis, feriasVencidas };
+  }, [vacations]);
 
   async function handlePhotoChange(fileList: FileList | null) {
     const file = fileList?.[0];
@@ -367,7 +378,7 @@ export function EmployeeProfileClient({
       <SortableStatCards
         storageKey="rh-colaborador-perfil-kpi-order"
         cards={[
-          { key: "total-recebido", label: "Total Recebido", value: formatCurrency(totals.totalRecebido), icon: "Wallet", color: "#22c55e" },
+          { key: "total-recebido", label: "Total Recebido", value: formatCurrency(financeTotals.totalRecebido), icon: "Wallet", color: "#22c55e" },
           {
             key: "salario-fixo",
             label: "Salário Fixo",
@@ -378,8 +389,8 @@ export function EmployeeProfileClient({
               : "-",
             icon: "DollarSign",
           },
-          { key: "comissoes", label: "Comissões", value: formatCurrency(totals.comissao), icon: "TrendingUp" },
-          { key: "bonificacoes", label: "Bonificações", value: formatCurrency(totals.bonificacao), icon: "Gift" },
+          { key: "comissoes", label: "Comissões", value: formatCurrency(financeTotals.comissao), icon: "TrendingUp" },
+          { key: "bonificacoes", label: "Bonificações", value: formatCurrency(financeTotals.bonificacao), icon: "Gift" },
         ]}
       />
       {employee.salarioFixo != null && (
@@ -413,12 +424,12 @@ export function EmployeeProfileClient({
             storageKey="rh-colaborador-resumo-kpi-order"
             className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
             cards={[
-              { key: "faltas", label: "Faltas", value: formatNumber(resumo.faltas), icon: "UserX", color: "#ef4444" },
-              { key: "atrasos", label: "Atrasos", value: formatNumber(resumo.atrasos), icon: "Clock", color: "#eab308" },
-              { key: "advertencias", label: "Advertências", value: formatNumber(resumo.advertencias), icon: "AlertTriangle", color: "#f97316" },
-              { key: "suspensoes", label: "Suspensões", value: formatNumber(resumo.suspensoes), icon: "Ban", color: "#ef4444" },
-              { key: "dias-ferias-disponiveis", label: "Dias de férias disponíveis", value: formatNumber(resumo.diasDisponiveis), icon: "Palmtree", color: "#22c55e" },
-              { key: "ferias-a-vencer", label: "Férias a vencer", value: formatNumber(resumo.feriasVencidas), icon: "AlertCircle", color: "#ef4444" },
+              { key: "faltas", label: "Faltas", value: formatNumber(occurrenceCounts.faltas), icon: "UserX", color: "#ef4444" },
+              { key: "atrasos", label: "Atrasos", value: formatNumber(occurrenceCounts.atrasos), icon: "Clock", color: "#eab308" },
+              { key: "advertencias", label: "Advertências", value: formatNumber(occurrenceCounts.advertencias), icon: "AlertTriangle", color: "#f97316" },
+              { key: "suspensoes", label: "Suspensões", value: formatNumber(occurrenceCounts.suspensoes), icon: "Ban", color: "#ef4444" },
+              { key: "dias-ferias-disponiveis", label: "Dias de férias disponíveis", value: formatNumber(resumoFerias.diasDisponiveis), icon: "Palmtree", color: "#22c55e" },
+              { key: "ferias-a-vencer", label: "Férias a vencer", value: formatNumber(resumoFerias.feriasVencidas), icon: "AlertCircle", color: "#ef4444" },
             ]}
           />
           <div className="nord-card p-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
@@ -448,6 +459,8 @@ export function EmployeeProfileClient({
       {tab === "Financeiro" && (
         <FinanceiroClient
           initialEntries={financeEntries}
+          initialTotals={financeTotals}
+          initialChartData={financeChartData}
           employees={[]}
           fixedEmployeeId={employee.id}
           canCreate={canCreate}
@@ -466,6 +479,7 @@ export function EmployeeProfileClient({
       {tab === "Ocorrências" && (
         <OcorrenciasClient
           initialOccurrences={occurrences}
+          initialCounts={occurrenceCounts}
           employees={[]}
           fixedEmployeeId={employee.id}
           canCreate={canCreate}

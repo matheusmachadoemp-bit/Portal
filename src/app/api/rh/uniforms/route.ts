@@ -31,6 +31,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
+  // Task #309: avaliado e decidido NÃO colocar `take` aqui (nem no caso sem employeeId, chamado
+  // pelo refresh() da página standalone .../rh/uniformes/page.tsx) — mesma decisão e mesma conta de
+  // colaboradores/loja documentadas lá: entregas de uniforme são poucas por colaborador (~1-3/ano),
+  // ficando na faixa de poucos milhares de registros mesmo no pior caso (Grupo Nord consolidado,
+  // toda a história da rede), então segue um SELECT indexado rápido sem teto. Mantém a página SSR e
+  // este refresh() consistentes (os dois sem `take`).
   const deliveries = await prisma.uniformDelivery.findMany({
     where: {
       empresaId: { in: empresaIdsForContext(ctx) },
