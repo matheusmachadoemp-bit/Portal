@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { XP_RULES } from "@/lib/university";
+import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 
 // ---------------------------------------------------------------------------
 // Hierarquia (a partir de set/2026): Curso -> Módulo -> Aula. Matrícula
@@ -25,12 +26,44 @@ export async function awardXp(userId: string, amount: number, reason: string) {
 }
 
 /**
+ * Confirma se um curso está dentro do escopo de loja do usuário logado: cursos sem `empresaId`
+ * são compartilhados entre todas as lojas (mesmo padrão de Ficha Técnica/Combos: `null` = catálogo
+ * comum, não exclusivo de nenhuma loja); cursos com `empresaId` só ficam acessíveis para quem tem
+ * essa loja no contexto de loja ativo da sessão atual — loja única selecionada, ou qualquer uma
+ * das permitidas no modo "Grupo Nord" consolidado (que já inclui todas as lojas para
+ * ADMINISTRADOR/GESTOR, via `getUserEmpresas`). Mesmo filtro que `GET /api/university/courses` já
+ * aplica na listagem (`OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }]`).
+ *
+ * Reaplicado nos 3 pontos que criam/consomem `TrainingEnrollment` — `POST /api/university/enroll`,
+ * a página do player em `/portal/universidade/cursos/[id]`, e `getOrCreateModuleEnrollment` abaixo
+ * (usado por `POST /api/university/progress`) — nenhum deles validava isso antes: um usuário
+ * conseguia se matricular, assistir aula, completar módulo e até emitir certificado de um curso de
+ * uma loja fora do seu contexto de acesso, só por saber (ou adivinhar) o id do curso, mesmo esse
+ * curso nunca aparecendo na listagem dele. Achado de auditoria de segurança, tarefa #312 —
+ * confirmado explorável ao vivo (curl direto nas 3 rotas) antes desta correção.
+ */
+export async function courseAllowedForActiveEmpresa(courseEmpresaId: string | null): Promise<boolean> {
+  if (courseEmpresaId === null) return true;
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  return empresaIds.includes(courseEmpresaId);
+}
+
+/**
  * Garante que exista a matrícula do curso (grão curso) e a matrícula do
  * módulo (grão módulo) do colaborador — criadas sob demanda, na primeira vez
  * que ele interage com alguma aula daquele módulo. Usado por
  * POST /api/university/progress antes de registrar o progresso da aula.
+ *
+ * Retorna `null` (em vez de criar) quando o curso não existe mais ou está fora do escopo de loja
+ * do usuário (ver `courseAllowedForActiveEmpresa`) — a rota chamadora trata isso como 403, do
+ * mesmo jeito que `requireActiveSingleEmpresa` (`@/lib/empresa`) já sinaliza "sem acesso" com
+ * `null` em vez de lançar exceção.
  */
 export async function getOrCreateModuleEnrollment(userId: string, courseId: string, moduleId: string) {
+  const course = await prisma.trainingCourse.findUnique({ where: { id: courseId }, select: { empresaId: true } });
+  if (!course || !(await courseAllowedForActiveEmpresa(course.empresaId))) return null;
+
   const enrollment = await prisma.trainingEnrollment.upsert({
     where: { userId_courseId: { userId, courseId } },
     update: {},

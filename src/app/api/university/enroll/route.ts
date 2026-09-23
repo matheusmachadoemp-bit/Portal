@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
 import { hasModulePermission } from "@/lib/authz";
+import { courseAllowedForActiveEmpresa } from "@/lib/university-server";
 
 async function enrollUserInCourse(userId: string, courseId: string) {
   const existing = await prisma.trainingEnrollment.findUnique({
@@ -50,14 +51,27 @@ export async function POST(req: Request) {
   const blockDraftForSelf = isSelfEnroll && !isAdminOrGestor;
 
   if (body.courseId) {
-    if (blockDraftForSelf) {
-      const course = await prisma.trainingCourse.findUnique({
-        where: { id: body.courseId },
-        select: { status: true },
-      });
-      if (!course || course.status !== "PUBLICADO") {
-        return NextResponse.json({ error: "Este curso ainda não está disponível." }, { status: 403 });
-      }
+    const course = await prisma.trainingCourse.findUnique({
+      where: { id: body.courseId },
+      select: { status: true, empresaId: true },
+    });
+    if (!course) {
+      return NextResponse.json({ error: "Curso não encontrado." }, { status: 404 });
+    }
+
+    // Curso restrito a uma loja (empresaId != null; null = compartilhado entre todas, mesmo
+    // padrão de Ficha Técnica/Combos) só pode ser matriculado por quem tem essa loja no contexto
+    // de loja ativo — mesmo filtro que GET /api/university/courses já aplica na listagem. Sem
+    // essa checagem, a rota aceitava courseId de qualquer curso de qualquer loja, mesmo fora do
+    // escopo de acesso do usuário, tanto em auto-matrícula quanto ao matricular outro colaborador
+    // (achado de auditoria de segurança, tarefa #312 — confirmado explorável ao vivo antes desta
+    // correção).
+    if (!(await courseAllowedForActiveEmpresa(course.empresaId))) {
+      return NextResponse.json({ error: "Este curso não está disponível para a sua loja." }, { status: 403 });
+    }
+
+    if (blockDraftForSelf && course.status !== "PUBLICADO") {
+      return NextResponse.json({ error: "Este curso ainda não está disponível." }, { status: 403 });
     }
     const enrollment = await enrollUserInCourse(targetUserId, body.courseId);
     return NextResponse.json({ enrollment });

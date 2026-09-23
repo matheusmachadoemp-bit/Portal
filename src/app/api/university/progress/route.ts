@@ -22,11 +22,14 @@ export async function POST(req: Request) {
   const lesson = await prisma.trainingLesson.findUnique({ where: { id: lessonId }, include: { module: true } });
   if (!lesson) return NextResponse.json({ error: "Aula não encontrada." }, { status: 404 });
 
-  const { moduleEnrollment } = await getOrCreateModuleEnrollment(
-    session.user.id,
-    lesson.module.courseId,
-    lesson.moduleId
-  );
+  // Curso fora do escopo de loja do usuário (achado de auditoria de segurança, tarefa #312): sem
+  // essa checagem, bastava saber o id de uma aula de outra loja para matricular-se e registrar
+  // progresso nela por tabela, mesmo sem o curso nunca aparecer na listagem do usuário.
+  const enrollmentResult = await getOrCreateModuleEnrollment(session.user.id, lesson.module.courseId, lesson.moduleId);
+  if (!enrollmentResult) {
+    return NextResponse.json({ error: "Este curso não está disponível para a sua loja." }, { status: 403 });
+  }
+  const { moduleEnrollment } = enrollmentResult;
 
   const existing = await prisma.trainingLessonProgress.findUnique({
     where: { moduleEnrollmentId_lessonId: { moduleEnrollmentId: moduleEnrollment.id, lessonId } },
