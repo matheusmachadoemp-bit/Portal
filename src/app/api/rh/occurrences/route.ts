@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import { computeOccurrenceCounts, computeOccurrenceRanking, type OccurrenceRanking } from "@/lib/rh-server";
 
 // BUG-004b: mesma checagem de cargo já usada nas rotas irmãs `/api/rh/employees` e
 // `/api/rh/finance` (desde o commit f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de
@@ -31,16 +32,38 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
-  const occurrences = await prisma.occurrence.findMany({
-    where: {
-      employee: { empresaId: { in: empresaIdsForContext(ctx) } },
-      ...(employeeId ? { employeeId } : {}),
-    },
-    orderBy: { date: "desc" },
-    take: 300,
-    include: { employee: { select: { name: true, setor: true } }, createdBy: { select: { name: true } } },
-  });
-  return NextResponse.json({ occurrences });
+  // Task #309: o `take` fixo de 300 já existia antes desta task, mas era aplicado igual nos dois
+  // casos de uso da rota — filtrado por employeeId (refresh() da ficha do colaborador, que espera
+  // exatamente 300 pra bater com OCCURRENCES_SAFETY_TAKE em colaboradores/[id]/page.tsx) e sem
+  // filtro (refresh() da página standalone .../rh/ocorrencias/page.tsx, que soma as ocorrências de
+  // TODOS os colaboradores da loja/Grupo Nord). Isso cortava o caso sem filtro no mesmo teto
+  // pensado pra 1 colaborador só. Teto sem filtro sobe pra 1000 (mesma conta de colaboradores/loja
+  // documentada em .../rh/ocorrencias/page.tsx); o individual continua 300, inalterado, pra não
+  // mudar o comportamento já validado da ficha no #287.
+  const OCCURRENCES_INDIVIDUAL_TAKE = 300;
+  const OCCURRENCES_STORE_TAKE = 1000;
+
+  const where = {
+    employee: { empresaId: { in: empresaIdsForContext(ctx) } },
+    ...(employeeId ? { employeeId } : {}),
+  };
+
+  // Task #309 revisão (Teulis): `counts` (StatCards "Faltas"/"Atrasos"/etc.) sempre via agregação
+  // no banco (sem `take`), nunca contando a lista `occurrences` abaixo (que tem `take`) — ver
+  // racional completo em src/lib/rh-server.ts. `ranking` (top 5 por atraso/falta) só faz sentido
+  // sem filtro de colaborador (a tela esconde essas seções quando `employeeId` vem preenchido, e
+  // ranquear 1 pessoa só não faz sentido) — pulamos as 2 queries extras nesse caso.
+  const [occurrences, counts, ranking] = await Promise.all([
+    prisma.occurrence.findMany({
+      where,
+      orderBy: { date: "desc" },
+      take: employeeId ? OCCURRENCES_INDIVIDUAL_TAKE : OCCURRENCES_STORE_TAKE,
+      include: { employee: { select: { name: true, setor: true } }, createdBy: { select: { name: true } } },
+    }),
+    computeOccurrenceCounts(where),
+    employeeId ? Promise.resolve<OccurrenceRanking>({ atrasos: [], faltas: [] }) : computeOccurrenceRanking(where),
+  ]);
+  return NextResponse.json({ occurrences, counts, ranking });
 }
 
 export async function POST(req: Request) {

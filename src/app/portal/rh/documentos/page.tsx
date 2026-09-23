@@ -28,6 +28,17 @@ export default async function DocumentosPage() {
   const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageRh;
 
+  // Task #309 (avaliado e decidido NÃO colocar `take` aqui — mesma decisão já tomada por
+  // colaborador em #287, ver conta completa de colaboradores/loja em ../financeiro/page.tsx):
+  // documentos por colaborador também são poucos (RG, CPF, contrato, exames admissionais/
+  // periódicos, certificados — ~5-15 ao longo do vínculo). Conta (mesma base ~120 colaboradores
+  // "históricos"/loja × ~8 lojas ≈ 960 no Grupo Nord): uso ~10/colaborador ≈ 1200 registros/loja
+  // acumulados em TODA a história da loja ≈ 9600 no Grupo Nord consolidado — esta é a MAIS PRÓXIMA
+  // das 3 sem `take` de virar um volume grande (quase metade de 1 mês de crescimento do Financeiro,
+  // que é ≈2200/mês, mas acumulada na história INTEIRA da rede, não por mês), então ainda é um
+  // SELECT indexado (`@@index([empresaId, createdAt])`) administrável, mas se o Grupo Nord crescer
+  // bem além de ~8 lojas ativas isso merece reavaliação. Nenhum campo é um blob — `fileUrl` é só a
+  // URL do arquivo no Vercel Blob, não o arquivo em si — então o custo por linha continua baixo.
   const [documents, employees] = await Promise.all([
     prisma.employeeDocument.findMany({
       where: { empresaId: { in: empresaIds } },

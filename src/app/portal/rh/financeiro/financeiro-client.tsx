@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Download } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -50,27 +50,39 @@ function emptyForm(employeeId: string) {
   };
 }
 
-function computeTotals(entries: FinanceEntryDTO[]) {
-  const sumType = (type: string) => entries.filter((e) => e.type === type).reduce((s, e) => s + e.value, 0);
-  const salario = sumType("SALARIO");
-  const comissao = sumType("COMISSAO");
-  const bonificacao = sumType("BONIFICACAO");
-  const desconto = sumType("DESCONTO");
-  const vt = sumType("VALE_TRANSPORTE");
-  const va = sumType("VALE_ALIMENTACAO");
-  const outro = sumType("OUTRO");
-  const totalRecebido = salario + comissao + bonificacao + vt + va + outro - desconto;
-  return { salario, comissao, bonificacao, desconto, vt, va, totalRecebido };
-}
+type FinanceTotals = {
+  salario: number;
+  comissao: number;
+  bonificacao: number;
+  desconto: number;
+  vt: number;
+  va: number;
+  outro: number;
+  totalRecebido: number;
+};
+
+type FinanceChartPoint = { mes: string; valor: number };
 
 export function FinanceiroClient({
   initialEntries,
+  initialTotals,
+  initialChartData,
   employees,
   fixedEmployeeId,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
   initialEntries: FinanceEntryDTO[];
+  /**
+   * Task #309 revisão (Teulis): totais SEMPRE calculados no servidor via agregação no banco (ver
+   * src/lib/rh-server.ts), nunca somando `entries`/`visible` aqui no cliente — essa lista tem
+   * `take` (teto de segurança contra histórico sem fim), e somar uma lista cortada dá um total
+   * errado (silenciosamente menor que o real) assim que o histórico passa do teto. `totals`/
+   * `chartData` chegam prontos do servidor (SSR) e são atualizados a cada `refresh()` (POST/PATCH/
+   * DELETE ou troca do filtro de colaborador), sempre com uma query própria sem `take`.
+   */
+  initialTotals: FinanceTotals;
+  initialChartData: FinanceChartPoint[];
   employees: { id: string; name: string; setor: string }[];
   fixedEmployeeId?: string;
   canCreate?: boolean;
@@ -78,6 +90,8 @@ export function FinanceiroClient({
   isGrupoNordMode?: boolean;
 }) {
   const [entries, setEntries] = useState(initialEntries);
+  const [totals, setTotals] = useState(initialTotals);
+  const [chartData, setChartData] = useState(initialChartData);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<FinanceEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
@@ -85,31 +99,46 @@ export function FinanceiroClient({
   const [filterEmployeeId, setFilterEmployeeId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Só usado pra decidir o que a TABELA mostra (lista de "atividade recente", que já tem `take` —
+  // isso é esperado, nunca foi o problema). `entries` já vem do servidor filtrado por `targetId`
+  // (ver `refresh` abaixo), então este `.filter()` é normalmente um no-op — fica só como estado de
+  // carregamento (evita mostrar a lista errada por 1 instante enquanto o fetch do novo filtro ainda
+  // não voltou).
   const visible = useMemo(() => {
     const targetId = fixedEmployeeId ?? filterEmployeeId;
     return targetId ? entries.filter((e) => e.employeeId === targetId) : entries;
   }, [entries, fixedEmployeeId, filterEmployeeId]);
 
-  const totals = useMemo(() => computeTotals(visible), [visible]);
+  // Sequência da última chamada de `refresh()` disparada — protege contra resposta fora de ordem
+  // (ex.: usuário troca o filtro de colaborador rápido demais e a resposta do fetch ANTERIOR chega
+  // DEPOIS da mais recente, sobrescrevendo o dado certo com o do colaborador errado por um
+  // instante). Mesmo racional do `cancelled` usado no efeito de "Histórico do colaborador" em
+  // ocorrencias-client.tsx, adaptado pra uma função chamada de vários lugares (troca de filtro,
+  // submit, delete) em vez de um único useEffect.
+  const refreshSeqRef = useRef(0);
 
-  const chartData = useMemo(() => {
-    const map = new Map<string, number>();
-    visible
-      .filter((e) => e.type !== "DESCONTO")
-      .forEach((e) => {
-        const key = format(new Date(e.date), "MM/yyyy");
-        map.set(key, (map.get(key) ?? 0) + e.value);
-      });
-    return [...map.entries()]
-      .sort((a, b) => (a[0] > b[0] ? 1 : -1))
-      .map(([mes, valor]) => ({ mes, valor }));
-  }, [visible]);
-
-  async function refresh() {
-    const url = fixedEmployeeId ? `/api/rh/finance?employeeId=${fixedEmployeeId}` : "/api/rh/finance";
+  async function refresh(targetIdOverride?: string) {
+    // Task #309 revisão (Teulis) — "segundo sintoma": antes, trocar o filtro de colaborador
+    // (`filterEmployeeId`) só rodava um `.filter()` no cliente sobre a lista já cortada pelo
+    // `take` da loja inteira — um colaborador cujos lançamentos antigos tinham saído do corte
+    // aparecia com ZERO lançamentos aqui, enquanto a ficha dele (que busca com `employeeId` de
+    // verdade, teto individual bem maior na prática) mostrava o histórico certo. Agora trocar o
+    // filtro dispara este mesmo `refresh()` com o novo id, buscando de verdade com `?employeeId=`
+    // — mesma rota, mesmo teto individual usado pela ficha, então as duas telas concordam.
+    const targetId = fixedEmployeeId ?? targetIdOverride ?? filterEmployeeId;
+    const url = targetId ? `/api/rh/finance?employeeId=${targetId}` : "/api/rh/finance";
+    const seq = ++refreshSeqRef.current;
     const res = await fetch(url);
     const data = await res.json();
+    if (seq !== refreshSeqRef.current) return; // uma chamada mais nova já foi disparada — descarta esta resposta atrasada
     setEntries(data.entries);
+    setTotals(data.totals);
+    setChartData(data.chartData);
+  }
+
+  function handleFilterChange(id: string) {
+    setFilterEmployeeId(id);
+    refresh(id);
   }
 
   function openNew() {
@@ -205,7 +234,7 @@ export function FinanceiroClient({
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
         {!fixedEmployeeId ? (
-          <select value={filterEmployeeId} onChange={(e) => setFilterEmployeeId(e.target.value)} className="input max-w-xs">
+          <select value={filterEmployeeId} onChange={(e) => handleFilterChange(e.target.value)} className="input max-w-xs">
             <option value="">Todos os colaboradores</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>

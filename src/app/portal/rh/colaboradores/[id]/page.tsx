@@ -6,6 +6,7 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { EmployeeProfileClient } from "./employee-profile-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { notFound, redirect } from "next/navigation";
+import { computeFinanceMonthlyChart, computeFinanceTotals, computeOccurrenceCounts } from "@/lib/rh-server";
 
 // Mesma checagem de cargo (MANAGER_ROLES) já usada pela página-lista irmã (`../page.tsx`, BUG-004)
 // e por todas as demais páginas do módulo RH — sem ela, qualquer COLABORADOR com o Perfil de
@@ -78,9 +79,32 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
   const FINANCE_ENTRIES_SAFETY_TAKE = 2000;
   const OCCURRENCES_SAFETY_TAKE = 300;
 
-  const [financeEntries, timeEntries, occurrences, vacations, uniformDeliveries, documents] = await Promise.all([
+  // Task #309 revisão (Teulis): os StatCards de Financeiro ("Total recebido" etc.) e Ocorrências
+  // ("Faltas"/"Atrasos" etc.) na ficha do colaborador têm o MESMO problema apontado nas páginas
+  // standalone (ver ../../financeiro/page.tsx e ../../ocorrencias/page.tsx pro racional completo):
+  // não podem vir de somar/contar `financeEntries`/`occurrences` acima, porque essas listas têm
+  // `take`. Aqui o risco prático é bem menor (é 1 colaborador só, dificilmente passa do teto — ver
+  // conta em ../../financeiro/page.tsx), mas o mecanismo do bug é idêntico, e agora que
+  // `computeFinanceTotals`/`computeFinanceMonthlyChart`/`computeOccurrenceCounts` já existem (ver
+  // src/lib/rh-server.ts) não custa nada aplicar aqui também, pra ficha e standalone sempre
+  // concordarem no mesmo número. `ranking` não é calculado aqui: a ficha esconde as seções de
+  // ranking quando `fixedEmployeeId` está setado (não faz sentido ranquear 1 pessoa só).
+  const financeWhere = { employeeId: id };
+  const occurrenceWhere = { employeeId: id };
+
+  const [
+    financeEntries,
+    timeEntries,
+    occurrences,
+    vacations,
+    uniformDeliveries,
+    documents,
+    financeTotals,
+    financeChartData,
+    occurrenceCounts,
+  ] = await Promise.all([
     prisma.employeeFinanceEntry.findMany({
-      where: { employeeId: id },
+      where: financeWhere,
       orderBy: { date: "desc" },
       include: { employee: employeeRef },
       take: FINANCE_ENTRIES_SAFETY_TAKE,
@@ -92,7 +116,7 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
       take: TIME_ENTRIES_SAFETY_TAKE,
     }),
     prisma.occurrence.findMany({
-      where: { employeeId: id },
+      where: occurrenceWhere,
       orderBy: { date: "desc" },
       include: { createdBy: { select: { name: true } }, employee: employeeRef },
       take: OCCURRENCES_SAFETY_TAKE,
@@ -100,6 +124,9 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
     prisma.vacation.findMany({ where: { employeeId: id }, orderBy: { periodoAquisitivoInicio: "desc" }, include: { employee: employeeRef } }),
     prisma.uniformDelivery.findMany({ where: { employeeId: id }, orderBy: { dataEntrega: "desc" }, include: { employee: employeeRef } }),
     prisma.employeeDocument.findMany({ where: { employeeId: id }, orderBy: { createdAt: "desc" }, include: { employee: employeeRef } }),
+    computeFinanceTotals(financeWhere),
+    computeFinanceMonthlyChart([employee.empresaId], id),
+    computeOccurrenceCounts(occurrenceWhere),
   ]);
 
   const employeeDTO = {
@@ -131,6 +158,9 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
         }))}
         uniformDeliveries={uniformDeliveries.map((u) => ({ ...u, dataEntrega: u.dataEntrega.toISOString() }))}
         documents={documents.map((d) => ({ ...d, validade: d.validade ? d.validade.toISOString() : null }))}
+        financeTotals={financeTotals}
+        financeChartData={financeChartData}
+        occurrenceCounts={occurrenceCounts}
         canCreate={canCreate}
         isGrupoNordMode={ctx?.mode !== "single"}
       />

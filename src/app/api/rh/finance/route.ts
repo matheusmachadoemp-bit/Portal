@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { computeFinanceMonthlyChart, computeFinanceTotals } from "@/lib/rh-server";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -25,15 +26,44 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
-  const entries = await prisma.employeeFinanceEntry.findMany({
-    where: {
-      empresaId: { in: empresaIdsForContext(ctx) },
-      ...(employeeId ? { employeeId } : {}),
-    },
-    orderBy: { date: "desc" },
-    include: { employee: { select: { name: true, setor: true } } },
-  });
-  return NextResponse.json({ entries });
+  // Task #309: este GET nunca teve `take`, nem no caso filtrado por employeeId (chamado pelo
+  // refresh() da ficha do colaborador, .../colaboradores/[id]/page.tsx, via FinanceiroClient com
+  // fixedEmployeeId) nem no caso sem filtro (chamado pelo refresh() da página standalone
+  // .../rh/financeiro/page.tsx). Isso já era uma inconsistência mesmo antes desta task: a ficha
+  // aplica take:FINANCE_ENTRIES_SAFETY_TAKE=2000 na carga inicial via SSR, mas o refresh() batia
+  // nesta rota sem teto nenhum — na prática inofensivo (nenhum colaborador chega perto de 2000
+  // lançamentos, ver conta em colaboradores/[id]/page.tsx), mas incorreto por princípio (achado do
+  // Teulis na revisão do #287, corrigido só agora).
+  //
+  // Os dois valores abaixo replicam os das páginas SSR irmãs (mesma conta de colaboradores/loja
+  // documentada em ambas): 2000 pro caso filtrado por 1 colaborador
+  // (colaboradores/[id]/page.tsx), 5000 pro caso sem filtro — todos os colaboradores da loja/Grupo
+  // Nord (../../../portal/rh/financeiro/page.tsx).
+  const FINANCE_ENTRIES_INDIVIDUAL_TAKE = 2000;
+  const FINANCE_ENTRIES_STORE_TAKE = 5000;
+
+  const empresaIds = empresaIdsForContext(ctx);
+  const where = {
+    empresaId: { in: empresaIds },
+    ...(employeeId ? { employeeId } : {}),
+  };
+
+  // Task #309 revisão (Teulis): `totals`/`chartData` alimentam os StatCards e o gráfico do
+  // FinanceiroClient (tanto standalone quanto na ficha do colaborador) — precisam vir de agregação
+  // no banco (sem `take`), nunca de somar a lista `entries` acima (que tem `take`). Ver racional
+  // completo em src/lib/rh-server.ts. Usam o MESMO `where` de `entries` (então já respeitam o
+  // filtro por employeeId quando presente), só sem o `take`.
+  const [entries, totals, chartData] = await Promise.all([
+    prisma.employeeFinanceEntry.findMany({
+      where,
+      orderBy: { date: "desc" },
+      include: { employee: { select: { name: true, setor: true } } },
+      take: employeeId ? FINANCE_ENTRIES_INDIVIDUAL_TAKE : FINANCE_ENTRIES_STORE_TAKE,
+    }),
+    computeFinanceTotals(where),
+    computeFinanceMonthlyChart(empresaIds, employeeId),
+  ]);
+  return NextResponse.json({ entries, totals, chartData });
 }
 
 export async function POST(req: Request) {

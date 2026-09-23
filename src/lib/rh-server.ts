@@ -91,3 +91,130 @@ export async function listEmployeeSetores(empresaId: string) {
     orderBy: [{ ativo: "desc" }, { nome: "asc" }],
   });
 }
+
+// ---------------------------------------------------------------------------
+// RH — AGREGAÇÕES de Financeiro/Ocorrências (StatCards, gráfico, ranking)
+//
+// SEMPRE calculadas via agregação no banco (`groupBy`/`_sum`/`_count`/SQL bruto com `date_trunc`),
+// nunca somando/contando uma lista de linhas completas já carregada em outro lugar.
+//
+// Motivo (achado do Teulis na revisão da task #309): antes da #309, as páginas de Financeiro e
+// Ocorrências (standalone e ficha do colaborador) buscavam a lista COMPLETA de lançamentos/
+// ocorrências sem nenhum `take`, e os StatCards/ranking somavam essa lista inteira no cliente — os
+// totais sempre batiam com a realidade (o único risco era performance numa loja com muito
+// histórico). A #309 adicionou `take` de segurança nessas listas (pra não crescer sem parar), mas
+// os StatCards/ranking continuaram somando/contando a MESMA lista agora cortada — então, assim que
+// o total real passa do teto, registros antigos somem silenciosamente da conta (reproduzido ao vivo
+// pelo Teulis: R$200.000 em lançamentos antigos sumindo do card "Total recebido"; um colaborador
+// com 50 faltas reais ficando com o card "Faltas" zerado e sumindo do ranking).
+//
+// A correção é DESACOPLAR completamente as duas coisas: a lista com `take` continua existindo só
+// pra alimentar a tabela de "atividade recente" (isso nunca foi o problema); os números dos
+// StatCards/ranking vêm de consultas de agregação separadas, sem `take`, que o Postgres resolve
+// direto no banco (a resposta tem no máximo algumas dezenas de linhas — 1 por tipo de lançamento/
+// ocorrência, ou 1 por mês com movimento, ou 1 por colaborador no top 5 do ranking — nunca 1 linha
+// por lançamento/ocorrência), então continuam corretas não importa o tamanho do histórico real, sem
+// reintroduzir o risco de custo/tamanho de resposta que o `take` da #309 existe pra evitar.
+// ---------------------------------------------------------------------------
+
+export type FinanceTotals = {
+  salario: number;
+  comissao: number;
+  bonificacao: number;
+  desconto: number;
+  vt: number;
+  va: number;
+  outro: number;
+  totalRecebido: number;
+};
+
+/** Totais de Financeiro (RH) por tipo, via `groupBy`/`_sum` — ver racional no bloco acima. */
+export async function computeFinanceTotals(where: Prisma.EmployeeFinanceEntryWhereInput): Promise<FinanceTotals> {
+  const groups = await prisma.employeeFinanceEntry.groupBy({ by: ["type"], where, _sum: { value: true } });
+  const byType = new Map(groups.map((g) => [g.type as string, g._sum.value ?? 0]));
+  const salario = byType.get("SALARIO") ?? 0;
+  const comissao = byType.get("COMISSAO") ?? 0;
+  const bonificacao = byType.get("BONIFICACAO") ?? 0;
+  const desconto = byType.get("DESCONTO") ?? 0;
+  const vt = byType.get("VALE_TRANSPORTE") ?? 0;
+  const va = byType.get("VALE_ALIMENTACAO") ?? 0;
+  const outro = byType.get("OUTRO") ?? 0;
+  const totalRecebido = salario + comissao + bonificacao + vt + va + outro - desconto;
+  return { salario, comissao, bonificacao, desconto, vt, va, outro, totalRecebido };
+}
+
+export type FinanceChartPoint = { mes: string; valor: number };
+
+/**
+ * Série mensal de Financeiro (gráfico "Evolução dos recebimentos"), via SQL bruto com
+ * `date_trunc('month', ...)` — o Prisma não tem como truncar data dentro de `groupBy`. Mesmo
+ * racional de `computeFinanceTotals`: nunca sofre corte de `take`, resultado tem no máximo 1 linha
+ * por mês com pelo menos 1 lançamento. `empresaIds`/`employeeId` sempre vão parametrizados (nunca
+ * interpolados como string concatenada), mesmo padrão de SQL bruto já usado em `src/lib/crm-data.ts`.
+ */
+export async function computeFinanceMonthlyChart(
+  empresaIds: string[],
+  employeeId?: string | null
+): Promise<FinanceChartPoint[]> {
+  if (empresaIds.length === 0) return [];
+  const employeeFilter = employeeId ? Prisma.sql`AND "employeeId" = ${employeeId}` : Prisma.empty;
+  const rows = await prisma.$queryRaw<{ mes: string; valor: number }[]>(Prisma.sql`
+    SELECT to_char(date_trunc('month', "date"), 'MM/YYYY') AS mes,
+           COALESCE(SUM("value"), 0)::float AS valor
+    FROM "EmployeeFinanceEntry"
+    WHERE "empresaId" = ANY(${empresaIds}::text[])
+      AND "type" != 'DESCONTO'
+      ${employeeFilter}
+    GROUP BY date_trunc('month', "date")
+    ORDER BY date_trunc('month', "date") ASC
+  `);
+  return rows.map((r) => ({ mes: r.mes, valor: Number(r.valor) }));
+}
+
+export type OccurrenceCounts = { faltas: number; atrasos: number; advertencias: number; suspensoes: number };
+
+/** Contagem de Ocorrências (RH) por tipo, via `groupBy`/`_count` — ver racional no bloco acima. */
+export async function computeOccurrenceCounts(where: Prisma.OccurrenceWhereInput): Promise<OccurrenceCounts> {
+  const groups = await prisma.occurrence.groupBy({ by: ["type"], where, _count: { id: true } });
+  const byType = new Map(groups.map((g) => [g.type as string, g._count.id]));
+  return {
+    faltas: byType.get("FALTA") ?? 0,
+    atrasos: byType.get("ATRASO") ?? 0,
+    advertencias: byType.get("ADVERTENCIA") ?? 0,
+    suspensoes: byType.get("SUSPENSAO") ?? 0,
+  };
+}
+
+export type OccurrenceRanking = { atrasos: [string, number][]; faltas: [string, number][] };
+
+/**
+ * Ranking (top 5) de colaboradores por atraso/falta — só usado na página standalone (a ficha
+ * individual esconde essas seções, um colaborador só não faz ranking). Via `groupBy(employeeId)` +
+ * `_count`, direto no banco; uma segunda query pequena (no máximo 10 ids) resolve os nomes.
+ */
+export async function computeOccurrenceRanking(where: Prisma.OccurrenceWhereInput): Promise<OccurrenceRanking> {
+  const [atrasoGroups, faltaGroups] = await Promise.all([
+    prisma.occurrence.groupBy({
+      by: ["employeeId"],
+      where: { ...where, type: "ATRASO" },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 5,
+    }),
+    prisma.occurrence.groupBy({
+      by: ["employeeId"],
+      where: { ...where, type: "FALTA" },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 5,
+    }),
+  ]);
+  const ids = [...new Set([...atrasoGroups, ...faltaGroups].map((g) => g.employeeId))];
+  const employees = ids.length
+    ? await prisma.employee.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+    : [];
+  const nameById = new Map(employees.map((e) => [e.id, e.name]));
+  const toPairs = (groups: typeof atrasoGroups): [string, number][] =>
+    groups.map((g) => [nameById.get(g.employeeId) ?? "—", g._count.id]);
+  return { atrasos: toPairs(atrasoGroups), faltas: toPairs(faltaGroups) };
+}
