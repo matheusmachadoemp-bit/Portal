@@ -560,6 +560,7 @@ model Sale {
 
   @@unique([empresaId, saiposSaleId])
   @@index([empresaId, dateTime])
+  @@index([clienteId])
 }
 
 // ---------------------------------------------------------------------------
