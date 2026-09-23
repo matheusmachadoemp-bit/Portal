@@ -27,6 +27,16 @@ export default async function UniformesPage() {
   const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageRh;
 
+  // Task #309 (avaliado e decidido NÃO colocar `take` aqui — mesma decisão já tomada por
+  // colaborador em #287, ver conta completa de colaboradores/loja em ../financeiro/page.tsx):
+  // entregas de uniforme são poucas por colaborador (~1-3/ano: uniforme novo, reposição por
+  // desgaste/troca de tamanho). Conta (mesma base ~120 colaboradores "históricos"/loja × ~8 lojas
+  // ≈ 960 no Grupo Nord): ~5 entregas por colaborador ao longo do vínculo (~3 anos médios) ≈ 600
+  // registros/loja acumulados em TODA a história da loja ≈ 4800 no Grupo Nord consolidado — ainda
+  // bem abaixo de 1 único mês de crescimento de Financeiro (≈2200/mês), então continua um SELECT
+  // indexado (`@@index([empresaId, dataEntrega])`) rápido sem `take`. Os cards de "Entregas/Trocas/
+  // Devoluções/Perdas" (ver `totals` em uniformes-client.tsx) também contam o array inteiro por
+  // status — cortar aqui arriscaria distorcer essas contagens sem ganho de performance real.
   const [deliveries, employees] = await Promise.all([
     prisma.uniformDelivery.findMany({
       where: { empresaId: { in: empresaIds } },

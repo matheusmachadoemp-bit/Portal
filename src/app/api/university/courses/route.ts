@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { canManageUsers } from "@/lib/permissions";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { courseEmpresaWhere } from "@/lib/university-server";
 
 export async function GET() {
   const session = await auth();
@@ -16,7 +17,7 @@ export async function GET() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const courses = await prisma.trainingCourse.findMany({
-    where: { OR: [{ empresaId: null }, { empresaId: { in: empresaIds } }] },
+    where: courseEmpresaWhere(empresaIds),
     orderBy: [{ order: "asc" }, { name: "asc" }],
     include: {
       modules: {

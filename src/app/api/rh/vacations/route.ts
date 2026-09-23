@@ -29,6 +29,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
 
+  // Task #309: avaliado e decidido NÃO colocar `take` aqui (nem no caso sem employeeId, chamado
+  // pelo refresh() da página standalone .../rh/ferias/page.tsx) — mesma decisão e mesma conta de
+  // colaboradores/loja documentadas lá: Férias cresce devagar por natureza (~1 período aquisitivo/
+  // ano por colaborador), ficando na faixa de poucos milhares de registros mesmo no pior caso
+  // (Grupo Nord consolidado, toda a história da rede), então segue um SELECT indexado rápido sem
+  // teto. Mantém a página SSR e este refresh() consistentes (os dois sem `take`).
   const vacations = await prisma.vacation.findMany({
     where: {
       empresaId: { in: empresaIdsForContext(ctx) },
