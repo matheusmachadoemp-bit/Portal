@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { courseAllowedForActiveEmpresa } from "@/lib/university-server";
 import { redirect } from "next/navigation";
 import { PageContainer } from "@/components/page-container";
 import { PlayerClient } from "./player-client";
@@ -26,6 +27,15 @@ export default async function CoursePlayerPage({ params }: { params: Promise<{ i
     },
   });
   if (!course) redirect("/portal/universidade/cursos");
+
+  // Curso fora do escopo de loja do usuário (achado de auditoria de segurança, tarefa #312): sem
+  // essa checagem, bastava conhecer/adivinhar o id de um curso de outra loja para acessar o
+  // player e se auto-matricular por tabela, mesmo esse curso nunca aparecendo na listagem do
+  // usuário (GET /api/university/courses já aplica esse mesmo filtro). Mesmo tratamento de "não
+  // acessível" que o curso inexistente logo acima.
+  if (!(await courseAllowedForActiveEmpresa(course.empresaId))) {
+    redirect("/portal/universidade/cursos");
+  }
 
   const enrollment = await prisma.trainingEnrollment.upsert({
     where: { userId_courseId: { userId: session.user.id, courseId: id } },
