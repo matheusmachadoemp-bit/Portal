@@ -33,6 +33,15 @@ type TimeEntryDTO = TimeEntryLike & {
   employee: { name: string; setor: string };
 };
 
+/**
+ * Task #316 (mesma classe do achado do Teulis na revisão da task #309, ver
+ * src/lib/ponto-eletronico-server.ts pro racional completo): formato dos totais/gráfico "por mês"
+ * calculados no servidor via agregação no banco — nunca somando/contando `entries`/`visible` aqui
+ * no cliente, porque essa lista tem `take:2000` (task #282/#373).
+ */
+type TimeEntryTotals = { horas: number; atrasos: number; faltas: number; bancoMinutos: number };
+type TimeEntryMonthlyPoint = { mes: string; horas: number; atrasos: number; faltas: number; banco: number };
+
 function emptyForm(employeeId: string) {
   return {
     employeeId,
@@ -48,12 +57,23 @@ function emptyForm(employeeId: string) {
 
 export function PontoEletronicoClient({
   initialEntries,
+  initialTotals,
+  initialChartData,
   employees,
   fixedEmployeeId,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
   initialEntries: TimeEntryDTO[];
+  /**
+   * Task #316: StatCards ("Horas trabalhadas"/"Atrasos"/"Faltas"/"Banco de horas") e gráficos "por
+   * mês", calculados no servidor via agregação no banco (ver src/lib/ponto-eletronico-server.ts) —
+   * nunca somando/contando `entries`/`visible`/`visiblePeriodo`, que têm `take`. `initialTotals`
+   * já vem calculado para o período inicial da tela ("mes-atual"); atualizados a cada troca de
+   * período ou `refresh()` (POST/PATCH/DELETE/importação), sempre com uma query própria sem `take`.
+   */
+  initialTotals: TimeEntryTotals;
+  initialChartData: TimeEntryMonthlyPoint[];
   employees: { id: string; name: string; setor: string }[];
   fixedEmployeeId?: string;
   canCreate?: boolean;
@@ -61,6 +81,9 @@ export function PontoEletronicoClient({
   isGrupoNordMode?: boolean;
 }) {
   const [entries, setEntries] = useState(initialEntries);
+  const [totals, setTotals] = useState(initialTotals);
+  const [chartData, setChartData] = useState(initialChartData);
+  const [loadingTotals, setLoadingTotals] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TimeEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
@@ -74,24 +97,62 @@ export function PontoEletronicoClient({
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 
+  // `null` = sem filtro de data (só acontece, na prática, no instante em que "Personalizado" está
+  // selecionado mas as duas datas ainda não foram preenchidas — o botão "Aplicar" do
+  // `PeriodFilterBar` fica desabilitado até lá, então `applyPeriodo` nunca é chamado nesse estado;
+  // a função trata o caso mesmo assim, defensivamente).
+  function resolveSelectedRange(key: RollingPeriodKey, from: string, to: string): { from: Date; to: Date } | null {
+    if (key === "personalizado" && (!from || !to)) return null;
+    return resolveRollingPeriod(key, { from, to });
+  }
+
+  // Task #316: os StatCards ("Horas trabalhadas"/"Atrasos"/"Faltas"/"Banco de horas") vêm sempre de
+  // uma agregação no banco (`/api/rh/time-entries/totals`, ver racional em
+  // src/lib/ponto-eletronico-server.ts), nunca de somar/contar `entries`/`visiblePeriodo` aqui —
+  // essa lista tem `take:2000` (task #282/#373). O gráfico "por mês" (`chartData`) vem junto, sem
+  // filtro de período (mesmo comportamento de sempre — ver comentário de `visiblePeriodo` abaixo).
+  async function fetchTotals(range: { from: Date; to: Date } | null) {
+    setLoadingTotals(true);
+    try {
+      const params = new URLSearchParams();
+      if (fixedEmployeeId) params.set("employeeId", fixedEmployeeId);
+      if (range) {
+        params.set("from", range.from.toISOString());
+        params.set("to", range.to.toISOString());
+      }
+      const res = await fetch(`/api/rh/time-entries/totals?${params.toString()}`);
+      const data = await res.json();
+      setTotals(data.totals);
+      setChartData(data.chartData);
+    } finally {
+      setLoadingTotals(false);
+    }
+  }
+
   function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
     setPeriodo(key);
     if (key === "personalizado") {
       setCustomFrom(from ?? "");
       setCustomTo(to ?? "");
     }
+    // Calcula o range a partir dos argumentos recebidos (não do estado `periodo`/`customFrom`/
+    // `customTo` acima, que só reflete no próximo render — `setState` é assíncrono) para o fetch já
+    // sair com o período certo.
+    fetchTotals(resolveSelectedRange(key, from ?? "", to ?? ""));
   }
 
   const visible = useMemo(() => {
     return fixedEmployeeId ? entries.filter((e) => e.employeeId === fixedEmployeeId) : entries;
   }, [entries, fixedEmployeeId]);
 
-  // O filtro de período escopa a tabela e os cards de totais, mas não os gráficos "por mês"
-  // abaixo — esses são uma tendência de vários meses de propósito, igual à mini-série de 7 dias
-  // do painel de Início, que também fica fixa independente do período selecionado no resto da tela.
+  // O filtro de período escopa a TABELA (client-side, sobre a lista já cortada por `take` — isso
+  // nunca foi o problema desta task, só os StatCards/gráficos dependiam dela) e, via `alerts`
+  // abaixo, os alertas automáticos — mas não os gráficos "por mês", que são uma tendência de vários
+  // meses de propósito, igual à mini-série de 7 dias do painel de Início, que também fica fixa
+  // independente do período selecionado no resto da tela.
   const visiblePeriodo = useMemo(() => {
-    if (periodo === "personalizado" && (!customFrom || !customTo)) return visible;
-    const range = resolveRollingPeriod(periodo, { from: customFrom, to: customTo });
+    const range = resolveSelectedRange(periodo, customFrom, customTo);
+    if (!range) return visible;
     return visible.filter((e) => {
       const d = new Date(e.date);
       return d >= range.from && d <= range.to;
@@ -100,39 +161,13 @@ export function PontoEletronicoClient({
 
   const alerts = useMemo(() => pontoAlerts(visiblePeriodo), [visiblePeriodo]);
 
-  const totals = useMemo(() => {
-    const horas = visiblePeriodo.reduce((s, e) => s + e.horasTrabalhadas, 0);
-    const atrasos = visiblePeriodo.filter((e) => e.atrasoMinutos > 0).length;
-    const faltas = visiblePeriodo.filter((e) => e.falta).length;
-    const bancoMinutos = visiblePeriodo.reduce((s, e) => s + (e.horasTrabalhadas - 8) * 60, 0);
-    return { horas, atrasos, faltas, bancoMinutos };
-  }, [visiblePeriodo]);
-
-  const monthlyData = useMemo(() => {
-    const map = new Map<string, { horas: number; atrasos: number; faltas: number; banco: number }>();
-    [...visible]
-      .sort((a, b) => (a.date > b.date ? 1 : -1))
-      .forEach((e) => {
-        const key = format(new Date(e.date), "MM/yyyy");
-        const cur = map.get(key) ?? { horas: 0, atrasos: 0, faltas: 0, banco: 0 };
-        cur.horas += e.horasTrabalhadas;
-        if (e.atrasoMinutos > 0) cur.atrasos += 1;
-        if (e.falta) cur.faltas += 1;
-        cur.banco += (e.horasTrabalhadas - 8) * 60;
-        map.set(key, cur);
-      });
-    let cumulativeBanco = 0;
-    return [...map.entries()].map(([mes, v]) => {
-      cumulativeBanco += v.banco;
-      return { mes, horas: Math.round(v.horas * 10) / 10, atrasos: v.atrasos, faltas: v.faltas, banco: Math.round(cumulativeBanco / 60) };
-    });
-  }, [visible]);
-
   async function refresh() {
     const url = fixedEmployeeId ? `/api/rh/time-entries?employeeId=${fixedEmployeeId}` : "/api/rh/time-entries";
-    const res = await fetch(url);
-    const data = await res.json();
-    setEntries(data.entries);
+    const [entriesData] = await Promise.all([
+      fetch(url).then((res) => res.json()),
+      fetchTotals(resolveSelectedRange(periodo, customFrom, customTo)),
+    ]);
+    setEntries(entriesData.entries);
   }
 
   function openNew() {
@@ -288,7 +323,7 @@ export function PontoEletronicoClient({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Section title="Horas trabalhadas por mês">
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={monthlyData} margin={{ top: 16 }}>
+            <BarChart data={chartData} margin={{ top: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
               <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
               <YAxis stroke="#9a9aa2" fontSize={11} />
@@ -301,7 +336,7 @@ export function PontoEletronicoClient({
         </Section>
         <Section title="Atrasos e faltas por mês">
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={monthlyData} margin={{ top: 16 }}>
+            <BarChart data={chartData} margin={{ top: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
               <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
               <YAxis stroke="#9a9aa2" fontSize={11} />
@@ -318,7 +353,7 @@ export function PontoEletronicoClient({
         <div className="md:col-span-2">
           <Section title="Banco de horas acumulado">
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={monthlyData}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
                 <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
                 <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v}h`} />
@@ -330,7 +365,7 @@ export function PontoEletronicoClient({
         </div>
       </div>
 
-      <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} />
+      <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loadingTotals} />
 
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">

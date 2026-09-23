@@ -68,6 +68,8 @@ export function EmployeeProfileClient({
   vacations,
   uniformDeliveries,
   documents,
+  timeEntryTotals,
+  timeEntryChartData,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
@@ -84,6 +86,15 @@ export function EmployeeProfileClient({
   uniformDeliveries: any[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   documents: any[];
+  /**
+   * Task #316: totais/gráfico "por mês" de Ponto Eletrônico, calculados no servidor via agregação
+   * no banco (nunca somando/contando `timeEntries` acima, que tem `take`) — ver racional em
+   * src/lib/ponto-eletronico-server.ts e no comentário de ../[id]/page.tsx.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  timeEntryTotals: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  timeEntryChartData: any[];
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
@@ -457,6 +468,8 @@ export function EmployeeProfileClient({
       {tab === "Ponto Eletrônico" && (
         <PontoEletronicoClient
           initialEntries={timeEntries}
+          initialTotals={timeEntryTotals}
+          initialChartData={timeEntryChartData}
           employees={[]}
           fixedEmployeeId={employee.id}
           canCreate={canCreate}

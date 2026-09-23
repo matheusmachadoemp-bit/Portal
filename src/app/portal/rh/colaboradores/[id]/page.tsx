@@ -6,6 +6,8 @@ import { AccessDenied } from "@/components/ui/access-denied";
 import { EmployeeProfileClient } from "./employee-profile-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { notFound, redirect } from "next/navigation";
+import { computeTimeEntryTotals, computeTimeEntryMonthlyChart } from "@/lib/ponto-eletronico-server";
+import { resolveRollingPeriod } from "@/lib/periods";
 
 // Mesma checagem de cargo (MANAGER_ROLES) já usada pela página-lista irmã (`../page.tsx`, BUG-004)
 // e por todas as demais páginas do módulo RH — sem ela, qualquer COLABORADOR com o Perfil de
@@ -78,7 +80,26 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
   const FINANCE_ENTRIES_SAFETY_TAKE = 2000;
   const OCCURRENCES_SAFETY_TAKE = 300;
 
-  const [financeEntries, timeEntries, occurrences, vacations, uniformDeliveries, documents] = await Promise.all([
+  // Task #316 (mesma classe do #282/#287, já corrigido para a lista em si): os StatCards de Ponto
+  // Eletrônico ("Horas trabalhadas"/"Atrasos"/"Faltas"/"Banco de horas") e os gráficos "por mês" da
+  // aba "Ponto Eletrônico" desta ficha têm o MESMO problema apontado em ../ponto-eletronico/page.tsx
+  // (ver racional completo em src/lib/ponto-eletronico-server.ts): não podem vir de somar/contar
+  // `timeEntries` abaixo, porque essa lista tem `take`. Aqui o risco prático é bem menor (1
+  // colaborador só, dificilmente passa de 2000 registros de ponto), mas o mecanismo do bug é
+  // idêntico, e a ficha e a tela standalone precisam sempre concordar no mesmo número.
+  const initialRange = resolveRollingPeriod("mes-atual");
+  const timeEntryWhere = { employeeId: id, date: { gte: initialRange.from, lte: initialRange.to } };
+
+  const [
+    financeEntries,
+    timeEntries,
+    occurrences,
+    vacations,
+    uniformDeliveries,
+    documents,
+    timeEntryTotals,
+    timeEntryChartData,
+  ] = await Promise.all([
     prisma.employeeFinanceEntry.findMany({
       where: { employeeId: id },
       orderBy: { date: "desc" },
@@ -100,6 +121,8 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
     prisma.vacation.findMany({ where: { employeeId: id }, orderBy: { periodoAquisitivoInicio: "desc" }, include: { employee: employeeRef } }),
     prisma.uniformDelivery.findMany({ where: { employeeId: id }, orderBy: { dataEntrega: "desc" }, include: { employee: employeeRef } }),
     prisma.employeeDocument.findMany({ where: { employeeId: id }, orderBy: { createdAt: "desc" }, include: { employee: employeeRef } }),
+    computeTimeEntryTotals(timeEntryWhere),
+    computeTimeEntryMonthlyChart([employee.empresaId], id),
   ]);
 
   const employeeDTO = {
@@ -131,6 +154,8 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
         }))}
         uniformDeliveries={uniformDeliveries.map((u) => ({ ...u, dataEntrega: u.dataEntrega.toISOString() }))}
         documents={documents.map((d) => ({ ...d, validade: d.validade ? d.validade.toISOString() : null }))}
+        timeEntryTotals={timeEntryTotals}
+        timeEntryChartData={timeEntryChartData}
         canCreate={canCreate}
         isGrupoNordMode={ctx?.mode !== "single"}
       />
