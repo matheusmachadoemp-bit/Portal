@@ -318,7 +318,7 @@ export function PontoEletronicoClient({
         </div>
       )}
 
-      {alerts.length > 0 && (
+      {fixedEmployeeId && alerts.length > 0 && (
         <Section title="Alertas automáticos">
           <ul className="space-y-2">
             {alerts.map((a, i) => (

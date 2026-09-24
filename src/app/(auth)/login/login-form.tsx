@@ -5,6 +5,13 @@ import Image from "next/image";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { loginAction, forgotPasswordAction } from "./actions";
 
+// A Server Action devolve a mensagem de bloqueio por rate limit pelo mesmo
+// campo `message` usado pra confirmação de envio (ver forgotPasswordAction
+// em ./actions.ts) — aqui só reconhecemos esse texto específico pra exibir
+// em laranja/atenção em vez de verde/sucesso, sem precisar mudar o formato
+// que a action devolve.
+const FORGOT_PASSWORD_RATE_LIMIT_MESSAGE = "Muitas tentativas, aguarde alguns minutos.";
+
 export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
@@ -124,7 +131,13 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
               </Field>
 
               {forgotState?.message && (
-                <p className="text-sm text-emerald-400 bg-emerald-950/40 border border-emerald-900 rounded-lg px-3 py-2">
+                <p
+                  className={
+                    forgotState.message === FORGOT_PASSWORD_RATE_LIMIT_MESSAGE
+                      ? "text-sm text-amber-400 bg-amber-950/40 border border-amber-900 rounded-lg px-3 py-2"
+                      : "text-sm text-emerald-400 bg-emerald-950/40 border border-emerald-900 rounded-lg px-3 py-2"
+                  }
+                >
                   {forgotState.message}
                 </p>
               )}
