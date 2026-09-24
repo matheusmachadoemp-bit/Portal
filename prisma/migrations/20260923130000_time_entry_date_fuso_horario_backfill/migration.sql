@@ -1,0 +1,26 @@
+-- Backfill de dado (sem alteração de schema): task #318, achado do Teulis na revisão da #316
+-- (Ponto Eletrônico). `TimeEntry.date` era gravado com `new Date("YYYY-MM-DD")` cru (meia-noite
+-- UTC) em `POST`/`PATCH /api/rh/time-entries` e na importação de planilha — 3h ANTES da meia-noite
+-- de São Paulo (03:00 UTC) que `resolveRollingPeriod`/`spMonthStart` (@/lib/periods.ts) usam como
+-- limite `gte` de período. Isso fazia o registro do PRIMEIRO DIA de qualquer período ("Mês atual",
+-- "Mês passado", "7 dias") ficar sistematicamente fora da contagem (confirmado ao vivo pelo Teulis:
+-- 1 de 23 dias de um mês de teste ficava de fora, 176h em vez de 184h esperado).
+--
+-- A correção passou a gravar `TimeEntry.date` com `spStartOfDay` (@/lib/checklist — meia-noite de
+-- SP = 03:00 UTC), o MESMO padrão já usado em `DayOffEntry.date`/`Absence.dataInicio`/`dataFim`.
+-- Esse UPDATE alinha as linhas já gravadas ANTES dessa correção (convenção antiga: meia-noite UTC)
+-- pra a convenção nova (meia-noite de SP), somando exatas 3h — nunca cruza pra outro dia calendário
+-- (00:00 + 3h = 03:00 do MESMO dia), então o dia que o usuário escolheu na tela nunca muda.
+--
+-- Necessário mesmo com a comparação já corrigida do lado da leitura: `TimeEntry` tem
+-- `@@unique([employeeId, date])`, e a reimportação de planilha (POST /api/rh/time-entries/import)
+-- detecta "já existe" comparando o `Date` exato gravado — sem este backfill, uma linha antiga (meia-
+-- noite UTC) e uma reimportação depois da correção (meia-noite de SP) teriam VALORES DIFERENTES para
+-- o mesmo dia/colaborador, e a importação criaria uma segunda linha duplicada em vez de atualizar a
+-- existente.
+--
+-- Filtro `"date" = date_trunc('day', "date")` restringe às linhas ainda exatamente à meia-noite
+-- (convenção antiga) — nunca toca uma linha já na convenção nova (03:00, não bate mais com
+-- `date_trunc('day', ...)` depois de já corrigida). Naturalmente idempotente: rodar de novo não tem
+-- efeito nenhum, porque nenhuma linha sobra na condição depois da primeira execução.
+UPDATE "TimeEntry" SET "date" = "date" + INTERVAL '3 hours' WHERE "date" = date_trunc('day', "date");

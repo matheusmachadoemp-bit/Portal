@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { computeHorasTrabalhadas } from "@/lib/rh-helpers";
 import { hasModulePermission } from "@/lib/authz";
+import { spStartOfDay } from "@/lib/checklist";
+import { parseDateKeyInput } from "@/lib/escala-folgas";
 
 // BUG-004b: mesma checagem de cargo já usada nas rotas irmãs `/api/rh/employees` e
 // `/api/rh/finance` (desde o commit f109b8e) — sem ela, qualquer COLABORADOR com o Perfil de
@@ -120,6 +122,20 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+
+  // Task #318 (achado do Teulis na revisão da #316): `body.date` chega como "YYYY-MM-DD" pronto (o
+  // <input type="date"> de ponto-eletronico-client.tsx) — grava com `spStartOfDay` (meia-noite de
+  // São Paulo = 03:00 UTC), nunca `new Date(body.date)` cru (meia-noite UTC, 3h ANTES disso). Mesmo
+  // padrão já usado em `DayOffEntry.date`/`Absence.dataInicio` (ver POST /api/rh/escala-folgas/
+  // entries e /api/rh/absences). Antes desta correção, o registro do PRIMEIRO DIA de qualquer
+  // período ("Mês atual", "Mês passado", "7 dias") ficava sistematicamente fora do `gte` calculado
+  // por `resolveRollingPeriod`/`spMonthStart` (ancorado em meia-noite de SP), porque a gravação
+  // ficava 3h antes desse limite.
+  const dateKey = parseDateKeyInput(body?.date);
+  if (!dateKey) {
+    return NextResponse.json({ error: "Data inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
+  }
+
   const employee = await prisma.employee.findUnique({ where: { id: body.employeeId } });
   if (!employee || employee.empresaId !== empresa.id) {
     return NextResponse.json({ error: "Colaborador inválido para a loja ativa." }, { status: 400 });
@@ -133,11 +149,11 @@ export async function POST(req: Request) {
   });
 
   const entry = await prisma.timeEntry.upsert({
-    where: { employeeId_date: { employeeId: body.employeeId, date: new Date(body.date) } },
+    where: { employeeId_date: { employeeId: body.employeeId, date: spStartOfDay(dateKey) } },
     create: {
       employeeId: body.employeeId,
       empresaId: empresa.id,
-      date: new Date(body.date),
+      date: spStartOfDay(dateKey),
       entrada: body.entrada || null,
       saidaAlmoco: body.saidaAlmoco || null,
       retornoAlmoco: body.retornoAlmoco || null,

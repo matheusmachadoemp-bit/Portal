@@ -7,6 +7,7 @@ import { DashboardClient } from "./dashboard/dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeHrInsights } from "@/lib/rh-insights";
 import { startOfMonth, subMonths, addMonths, format, differenceInYears } from "date-fns";
+import { spMonthStart, spMonthEnd } from "@/lib/periods";
 
 export default async function RhPage() {
   const session = await auth();
@@ -18,8 +19,26 @@ export default async function RhPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
   const now = new Date();
+  // `monthStart`/`monthEnd` (date-fns, fuso do runtime) continuam servindo `Occurrence.date` (linha
+  // da query abaixo) e `Employee.admissionDate`/`terminationDate` (KPIs `desligamentosMes`/
+  // `admissoesMes` mais abaixo) — nenhum dos três é gravado com `spStartOfDay`: essas rotas ainda
+  // usam `new Date(body.date)` cru (meia-noite UTC), então o limite de "mês atual" para elas
+  // continua tendo que ser a meia-noite UTC pra bater com a convenção de gravação (ver
+  // src/app/api/rh/occurrences/route.ts e src/app/api/rh/employees/route.ts — fora do escopo da
+  // #318, que é só `TimeEntry.date`).
   const monthStart = startOfMonth(now);
   const monthEnd = addMonths(monthStart, 1);
+  // Task #318: só `TimeEntry.date` passou a ser gravado com `spStartOfDay` (meia-noite de São
+  // Paulo = 03:00 UTC — ver POST/PATCH /api/rh/time-entries e a importação de planilha). O "mês
+  // atual" desta query precisa do limite ancorado em SP (`spMonthStart`/`spMonthEnd`, mesmos
+  // helpers de `resolveRollingPeriod`), senão o StatCard "Horas trabalhadas"/"Banco de horas" perde
+  // sistematicamente o primeiro dia do mês (mesmo bug de "Ontem" documentado em @/lib/periods.ts).
+  // Usar essas mesmas variáveis pra `Occurrence`/`Employee` acima seria errado: aquelas datas ainda
+  // são gravadas em meia-noite UTC (`monthStart`/`monthEnd` de date-fns), não meia-noite de SP —
+  // reaproveitar o limite de SP ali faria o dia 1 sumir da contagem e o dia 1 do mês seguinte
+  // "vazar" pra dentro do mês atual.
+  const timeEntryMonthStart = spMonthStart(now);
+  const timeEntryMonthEnd = spMonthEnd(now);
   const sixMonthsAgo = startOfMonth(subMonths(now, 5));
 
   const [employees, occurrencesThisMonth, timeEntriesThisMonth, financeLast6Months, insights] = await Promise.all([
@@ -28,7 +47,9 @@ export default async function RhPage() {
       where: { date: { gte: monthStart, lt: monthEnd }, employee: { empresaId: { in: empresaIds } } },
       include: { employee: { select: { name: true, setor: true } } },
     }),
-    prisma.timeEntry.findMany({ where: { date: { gte: monthStart, lt: monthEnd }, empresaId: { in: empresaIds } } }),
+    prisma.timeEntry.findMany({
+      where: { date: { gte: timeEntryMonthStart, lte: timeEntryMonthEnd }, empresaId: { in: empresaIds } },
+    }),
     prisma.employeeFinanceEntry.findMany({ where: { date: { gte: sixMonthsAgo }, empresaId: { in: empresaIds } } }),
     computeHrInsights(empresaIds),
   ]);

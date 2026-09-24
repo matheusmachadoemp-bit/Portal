@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { computeHorasTrabalhadas } from "@/lib/rh-helpers";
 import { hasModulePermission } from "@/lib/authz";
+import { spStartOfDay } from "@/lib/checklist";
+import { parseDateKeyInput } from "@/lib/escala-folgas";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -27,6 +29,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const body = await req.json();
 
+  // Task #318 (mesmo achado do Teulis aplicado a POST /api/rh/time-entries): quando `body.date` vem
+  // preenchido, precisa ser um "YYYY-MM-DD" válido, gravado com `spStartOfDay` (meia-noite de São
+  // Paulo) — nunca `new Date(body.date)` cru (meia-noite UTC, 3h antes, que fazia o registro cair
+  // fora do `gte` de período calculado por `resolveRollingPeriod`/`spMonthStart`). `undefined`
+  // continua significando "não alterar a data" (mesmo comportamento de antes).
+  let dateUpdate: Date | undefined;
+  if (body.date) {
+    const dateKey = parseDateKeyInput(body.date);
+    if (!dateKey) {
+      return NextResponse.json({ error: "Data inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
+    }
+    dateUpdate = spStartOfDay(dateKey);
+  }
+
   const entrada = body.entrada !== undefined ? body.entrada : existing.entrada;
   const saidaAlmoco = body.saidaAlmoco !== undefined ? body.saidaAlmoco : existing.saidaAlmoco;
   const retornoAlmoco = body.retornoAlmoco !== undefined ? body.retornoAlmoco : existing.retornoAlmoco;
@@ -35,7 +51,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const entry = await prisma.timeEntry.update({
     where: { id },
     data: {
-      date: body.date ? new Date(body.date) : undefined,
+      date: dateUpdate,
       entrada: body.entrada !== undefined ? body.entrada || null : undefined,
       saidaAlmoco: body.saidaAlmoco !== undefined ? body.saidaAlmoco || null : undefined,
       retornoAlmoco: body.retornoAlmoco !== undefined ? body.retornoAlmoco || null : undefined,

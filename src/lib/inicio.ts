@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { pct, safeDiv } from "@/lib/calc";
 import { resolveCrmPeriod, type CrmPeriodKey } from "@/lib/crm";
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, format } from "date-fns";
+import { spDayStart, spDayEnd } from "@/lib/periods";
 import {
   spDateKey,
   computeOccurrenceStatus,
@@ -231,7 +232,15 @@ export async function loadEquipePresenteHoje(
   const presentes = await prisma.timeEntry.findMany({
     where: {
       empresaId,
-      date: { gte: startOfDay(now), lte: endOfDay(now) },
+      // Task #318: `startOfDay`/`endOfDay` (date-fns) calculam "hoje" no fuso LOCAL do runtime —
+      // UTC no servidor (Vercel) — não no fuso de São Paulo (mesmo bug de "Ontem" já documentado em
+      // @/lib/periods.ts). Isso fazia "Equipe de hoje" ficar sistematicamente vazio/errado bem no
+      // horário de funcionamento da loja (18h-23h30 SP): nesse intervalo, o calendário UTC já virou
+      // o dia seguinte, então `startOfDay(now)` calculava a meia-noite UTC de AMANHÃ (SP), e o ponto
+      // batido hoje (`TimeEntry.date` gravado com `spStartOfDay`) ficava ANTES desse limite —
+      // excluído. `spDayStart`/`spDayEnd` (@/lib/periods, mesmos helpers de fuso fixo usados por
+      // `resolveRollingPeriod`) resolvem "hoje" sempre no fuso de SP, igual à convenção de gravação.
+      date: { gte: spDayStart(now), lte: spDayEnd(now) },
       falta: false,
       entrada: { not: null },
     },
