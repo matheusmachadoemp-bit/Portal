@@ -71,6 +71,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       })
     : [];
 
+  // Grava a quantidade que REALMENTE chegou (já conferida item a item nesta tela) no próprio
+  // PurchaseItem — mesma finalidade do bloco análogo em POST /api/estoque/recebimento (tela
+  // interna): sem isso, o relatório "Gasto por Insumo" (computeGastoPorInsumoRows, src/lib/
+  // recebimento-server.ts) fica sem dado nenhum para todo recebimento concluído por este fluxo
+  // (link público), que é justamente o mais detalhado dos dois (conferência item a item, com
+  // preço da nota por item). NAO_RECEBIDO sempre vira 0, mesmo que `quantidadeRecebida` na
+  // ReceivingItem ainda esteja com o valor padrão (a UI não zera esse campo ao marcar divergência
+  // "produto não entregue" — só o status muda) — mesmo tratamento que `movimentos` acima já dá
+  // pra decidir se cria StockMovement.
+  const purchaseItemUpdates = responsavelId
+    ? purchase!.items.map((it) => {
+        const ri = it.receivingItem!;
+        const quantidadeRecebida = ri.status === "NAO_RECEBIDO" ? 0 : (ri.quantidadeRecebida ?? it.quantidade);
+        return prisma.purchaseItem.update({
+          where: { id: it.id },
+          data: { quantidadeRecebida },
+        });
+      })
+    : [];
+
   const valorPedido = purchase!.items.reduce((s, it) => s + it.valorTotal, 0) + purchase!.frete - purchase!.desconto;
   const valorNotaInformado = body.valorNota != null && body.valorNota !== "" ? Number(body.valorNota) : null;
 
@@ -93,6 +113,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       data: { status: houveDivergencia ? "DIVERGENCIA" : "RECEBIDO" },
     }),
     ...movimentos,
+    ...purchaseItemUpdates,
   ]);
 
   await logPurchaseEvent({

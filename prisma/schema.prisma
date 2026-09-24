@@ -2824,15 +2824,25 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id            String     @id @default(cuid())
-  purchaseId    String
-  purchase      Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  ingredientId  String
-  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
-  quantidade    Float
-  unidade       String
-  valorUnitario Float
-  valorTotal    Float
+  id                 String     @id @default(cuid())
+  purchaseId         String
+  purchase           Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  ingredientId       String
+  ingredient         Ingredient @relation(fields: [ingredientId], references: [id])
+  quantidade         Float
+  unidade            String
+  valorUnitario      Float
+  valorTotal         Float
+  /// Quantidade que REALMENTE chegou, confirmada na conferência de recebimento — `null` enquanto
+  /// o recebimento ainda não foi confirmado, sempre preenchido depois disso (mesmo que igual a
+  /// `quantidade`, quando não houve divergência). Gravado pelos dois fluxos que confirmam um
+  /// recebimento: `POST /api/estoque/recebimento` (tela interna) e
+  /// `POST /api/estoque/recebimento/responder/[token]/finalizar` (link público, conferência item a
+  /// item) — ver comentário em `computeGastoPorInsumoRows` (src/lib/recebimento-server.ts) para
+  /// como isso alimenta o relatório "Gasto por Insumo". Nullable de propósito: compras recebidas
+  /// antes deste campo existir ficam com `null` para sempre — não dá para reconstruir
+  /// retroativamente quanto realmente chegou, é um gap conhecido do histórico antigo.
+  quantidadeRecebida Float?
 
   receivingItem ReceivingItem?
 
@@ -2872,6 +2882,11 @@ model Receiving {
   createdAt           DateTime        @default(now())
 
   items ReceivingItem[]
+
+  /// Suporta o filtro de `computeGastoPorInsumoRows` (src/lib/recebimento-server.ts): empresaId +
+  /// intervalo de `dataHora` — mesmo padrão de `Purchase.@@index([empresaId, data])`. Sem índice
+  /// nenhum até aqui (`Receiving` nunca precisou de um pra nenhuma consulta anterior).
+  @@index([empresaId, dataHora])
 }
 
 enum ReceivingItemStatus {
