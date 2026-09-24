@@ -11,19 +11,23 @@ import { AvaliacaoDetailClient } from "./avaliacao-detail-client";
  * Início já apontam (`/portal/satisfacao-cliente/avaliacoes/[id]`).
  *
  * Só um shell de servidor: o gate de módulo abaixo evita expor a tela pra quem não tem canView na
- * subcategoria "satisfacao-cliente:avaliacoes" (mesmo gate que GET
- * /api/satisfacao-cliente/avaliacoes/[id] já aplica); o detalhe em si vem 100% daquela rota,
- * consumido pelo client component abaixo. `canExecute` é resolvido aqui (server) e repassado como
- * prop — o mesmo flag que `POST .../assumir` e `POST .../resolver` já exigem — pra a tela não
- * mostrar os botões de ação clicáveis pra quem a API vai rejeitar de qualquer forma.
+ * subcategoria "crm:avaliacoes" (mesmo gate que GET /api/satisfacao-cliente/avaliacoes/[id] já
+ * aplica); o detalhe em si vem 100% daquela rota, consumido pelo client component abaixo.
+ * `canExecute` é resolvido aqui (server) e repassado como prop — o mesmo flag que
+ * `POST .../assumir` e `POST .../resolver` já exigem — pra a tela não mostrar os botões de ação
+ * clicáveis pra quem a API vai rejeitar de qualquer forma.
+ *
+ * Módulo do gate é "crm" (não "satisfacao-cliente") desde a migração de menu que aninhou
+ * "Avaliações" dentro da categoria "crm" — ver comentário completo em
+ * src/app/portal/satisfacao-cliente/visao-geral/page.tsx.
  */
 export default async function SatisfacaoClienteAvaliacaoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "satisfacao-cliente", "canView", "avaliacoes"))) {
+  if (!session?.user || !(await hasModulePermission(session.user.id, "crm", "canView", "avaliacoes"))) {
     redirect("/portal/inicio");
   }
-  const canExecute = await hasModulePermission(session.user.id, "satisfacao-cliente", "canExecute", "avaliacoes");
+  const canExecute = await hasModulePermission(session.user.id, "crm", "canExecute", "avaliacoes");
 
   return (
     <PageContainer

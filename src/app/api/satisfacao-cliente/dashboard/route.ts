@@ -22,7 +22,10 @@ import {
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "satisfacao-cliente", "canView", "visao-geral"))) {
+  // Módulo "crm" (não "satisfacao-cliente") desde que "Visão Geral" passou a viver como
+  // subcategoria de CRM no menu lateral — ver comentário equivalente em
+  // src/app/portal/satisfacao-cliente/visao-geral/page.tsx.
+  if (!(await hasModulePermission(session.user.id, "crm", "canView", "visao-geral"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver o dashboard de Satisfação do Cliente." },
       { status: 403 }
