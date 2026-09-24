@@ -5,6 +5,7 @@ import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { computeHorasTrabalhadas, timeToMinutes } from "@/lib/rh-helpers";
 import { hasModulePermission } from "@/lib/authz";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
+import { spStartOfDay } from "@/lib/checklist";
 
 const HEADER_ALIASES: Record<string, string> = {
   colaborador: "colaborador",
@@ -29,18 +30,25 @@ function normalizeHeader(h: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-function parseDateFlexible(raw: string | number): Date | null {
+// Task #318 (mesma classe do achado do Teulis já corrigido em POST/PATCH de ../route.ts e
+// ../[id]/route.ts): devolve a chave "YYYY-MM-DD" — nunca um `Date` já convertido — pra quem grava
+// decidir o instante certo via `spStartOfDay` (meia-noite de São Paulo). Antes, esta função devolvia
+// `new Date(Date.UTC(y, m-1, d))` (meia-noite UTC), 3h ANTES da meia-noite de SP do mesmo dia, o que
+// fazia o primeiro dia de qualquer período importado ficar fora do `gte` calculado por
+// `resolveRollingPeriod`/`spMonthStart`.
+function parseDateKeyFlexible(raw: string | number): string | null {
+  const pad = (n: number) => String(n).padStart(2, "0");
   if (typeof raw === "number") {
     // Excel serial date
     const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
-    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+    return `${parsed.y}-${pad(parsed.m)}-${pad(parsed.d)}`;
   }
   const s = String(raw).trim();
   const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-  if (br) return new Date(Date.UTC(Number(br[3]), Number(br[2]) - 1, Number(br[1])));
+  if (br) return `${br[3]}-${pad(Number(br[2]))}-${pad(Number(br[1]))}`;
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-  if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+  if (iso) return `${iso[1]}-${pad(Number(iso[2]))}-${pad(Number(iso[3]))}`;
   return null;
 }
 
@@ -165,11 +173,12 @@ export async function POST(req: Request) {
     }
 
     const rawDate = columnMap.data !== undefined ? row[columnMap.data] : "";
-    const date = parseDateFlexible(rawDate);
-    if (!date) {
+    const dateKey = parseDateKeyFlexible(rawDate);
+    if (!dateKey) {
       errors.push(`Linha ${i + 1}: data inválida ("${rawDate}").`);
       continue;
     }
+    const date = spStartOfDay(dateKey);
 
     const entrada = parseTimeFlexible(getRaw("entrada"));
     const saidaAlmoco = parseTimeFlexible(getRaw("saidaAlmoco"));
