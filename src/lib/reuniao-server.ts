@@ -40,22 +40,36 @@ export async function computeCozinhaMetrics(empresaId: string, periodo: string) 
 
 /**
  * NPS geral (%), faturamento do salão (R$) e ticket médio (R$) do mês,
- * calculados a partir do CRM (NpsResponse) e Vendas (SalesEntry) já
- * existentes — sem precisar digitar nada.
+ * calculados a partir do módulo Satisfação do Cliente
+ * (CustomerSurveyResponse) e Vendas (SalesEntry) já existentes — sem
+ * precisar digitar nada.
+ *
+ * Migrado de `NpsResponse` pra `CustomerSurveyResponse.notaGeral` (achado da
+ * Nina revisando a migração da Tela de Início/CRM dashboard: este era um 3º
+ * lugar, num módulo diferente — Reuniões —, que ainda lia do modelo antigo.
+ * Mesmo padrão de `loadNpsScore`, em src/lib/inicio.ts: escala 0-10 igual,
+ * sem conversão, só trocando `nota`/`createdAt` por
+ * `notaGeral`/`submittedAt`. `POST /api/crm/nps` (única forma de criar
+ * `NpsResponse`) não tem nenhum caller em nenhuma tela do repo — este
+ * indicador já não recebia dado novo, pré-preenchendo o formulário mensal
+ * "Reunião de Salão" com `npsPercent: null` silenciosamente.
  */
 export async function computeSalaoMetrics(empresaId: string, periodo: string) {
   const { start, end } = periodoRange(periodo);
 
   const [respostas, salesEntries] = await Promise.all([
-    prisma.npsResponse.findMany({ where: { empresaId, createdAt: { gte: start, lt: end } }, select: { nota: true } }),
+    prisma.customerSurveyResponse.findMany({
+      where: { empresaId, submittedAt: { gte: start, lt: end } },
+      select: { notaGeral: true },
+    }),
     prisma.salesEntry.findMany({
       where: { empresaId, date: { gte: start, lt: end } },
       select: { faturamentoSalao: true, pedidosSalao: true },
     }),
   ]);
 
-  const promotores = respostas.filter((r) => r.nota >= 9).length;
-  const detratores = respostas.filter((r) => r.nota <= 6).length;
+  const promotores = respostas.filter((r) => r.notaGeral >= 9).length;
+  const detratores = respostas.filter((r) => r.notaGeral <= 6).length;
   const npsPercent = respostas.length > 0 ? ((promotores - detratores) / respostas.length) * 100 : null;
 
   const faturamentoValor = salesEntries.reduce((s, e) => s + e.faturamentoSalao, 0);
@@ -88,22 +102,35 @@ export async function computeMelhorVendedor(empresaId: string, periodo: string) 
 }
 
 /**
- * Comentários de clientes em destaque (notas altas, com texto) no
- * período — puxados automaticamente do CRM (NpsResponse) já existente.
+ * Comentários de clientes em destaque (notas altas, com texto) no período —
+ * puxados automaticamente do módulo Satisfação do Cliente
+ * (CustomerSurveyResponse) já existente.
+ *
+ * Migrado de `NpsResponse` pra `CustomerSurveyResponse` (ver comentário de
+ * `computeSalaoMetrics`, acima, sobre o achado da Nina). `nota`/`comentario`
+ * viram `notaGeral`/`sugestao` — `sugestao` é o campo de texto livre e
+ * opcional do último passo do formulário público ("Quer deixar alguma
+ * sugestão?", ver src/app/avaliar/[token]/avaliar-client.tsx), pedido pra
+ * qualquer nota, não só uma pergunta específica de nota baixa — o
+ * equivalente direto do antigo `NpsResponse.comentario`. `nome` vem de
+ * `nomeInformado` (a cópia própria do nome digitado na pesquisa, sempre
+ * preenchida — ver comentário do model `CustomerSurveyResponse` em
+ * schema.prisma), não de `cliente?.nome`: diferente de `NpsResponse`, aqui
+ * não existe um fallback "Cliente" porque `nomeInformado` nunca é nulo.
  */
 export async function computeComentariosDestaque(empresaId: string, periodo: string, take = 5) {
   const { start, end } = periodoRange(periodo);
 
-  const respostas = await prisma.npsResponse.findMany({
-    where: { empresaId, createdAt: { gte: start, lt: end }, nota: { gte: 9 }, comentario: { not: null } },
-    orderBy: { nota: "desc" },
+  const respostas = await prisma.customerSurveyResponse.findMany({
+    where: { empresaId, submittedAt: { gte: start, lt: end }, notaGeral: { gte: 9 }, sugestao: { not: null } },
+    orderBy: { notaGeral: "desc" },
     take,
-    select: { comentario: true, nota: true, cliente: { select: { nome: true } } },
+    select: { sugestao: true, notaGeral: true, nomeInformado: true },
   });
 
   return respostas
-    .filter((r) => r.comentario && r.comentario.trim())
-    .map((r) => ({ nome: r.cliente?.nome ?? "Cliente", comentario: r.comentario as string, nota: r.nota }));
+    .filter((r) => r.sugestao && r.sugestao.trim())
+    .map((r) => ({ nome: r.nomeInformado, comentario: r.sugestao as string, nota: r.notaGeral }));
 }
 
 /**
