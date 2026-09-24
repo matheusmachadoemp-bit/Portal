@@ -4217,36 +4217,42 @@ enum NotificationPriority {
 }
 
 model Notification {
-  id                     String                @id @default(cuid())
-  userId                 String
-  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type                   String
-  title                  String
-  body                   String?
-  priority               NotificationPriority?
-  taskId                 String?
-  task                   Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  checklistOccurrenceId  String?
-  checklistOccurrence    ChecklistOccurrence?  @relation(fields: [checklistOccurrenceId], references: [id], onDelete: Cascade)
-  chamadoId              String?
-  chamado                Chamado?              @relation(fields: [chamadoId], references: [id], onDelete: SetNull)
-  goalId                 String?
-  goal                   Goal?                 @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  purchaseId             String?
-  purchase               Purchase?             @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  fechamentoOcorrenciaId String?
-  fechamentoOcorrencia   FechamentoOcorrencia? @relation(fields: [fechamentoOcorrenciaId], references: [id], onDelete: Cascade)
+  id                       String                  @id @default(cuid())
+  userId                   String
+  user                     User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                     String
+  title                    String
+  body                     String?
+  priority                 NotificationPriority?
+  taskId                   String?
+  task                     Task?                   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  checklistOccurrenceId    String?
+  checklistOccurrence      ChecklistOccurrence?    @relation(fields: [checklistOccurrenceId], references: [id], onDelete: Cascade)
+  chamadoId                String?
+  chamado                  Chamado?                @relation(fields: [chamadoId], references: [id], onDelete: SetNull)
+  goalId                   String?
+  goal                     Goal?                   @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  purchaseId               String?
+  purchase                 Purchase?               @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  fechamentoOcorrenciaId   String?
+  fechamentoOcorrencia     FechamentoOcorrencia?   @relation(fields: [fechamentoOcorrenciaId], references: [id], onDelete: Cascade)
   /// Escala de Folgas (RH) — escala publicada / mês seguinte não publicado ainda.
-  schedulePeriodId       String?
-  schedulePeriod         SchedulePeriod?       @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
+  schedulePeriodId         String?
+  schedulePeriod           SchedulePeriod?         @relation(fields: [schedulePeriodId], references: [id], onDelete: Cascade)
   /// Escala de Folgas (RH) — lembrete de folga amanhã / conflito de escala.
-  dayOffEntryId          String?
-  dayOffEntry            DayOffEntry?          @relation(fields: [dayOffEntryId], references: [id], onDelete: Cascade)
+  dayOffEntryId            String?
+  dayOffEntry              DayOffEntry?            @relation(fields: [dayOffEntryId], references: [id], onDelete: Cascade)
   /// Escala de Folgas (RH) — solicitação/aceite/recusa/aprovação/reprovação de troca de folga.
-  shiftSwapRequestId     String?
-  shiftSwapRequest       ShiftSwapRequest?     @relation(fields: [shiftSwapRequestId], references: [id], onDelete: Cascade)
-  read                   Boolean               @default(false)
-  createdAt              DateTime              @default(now())
+  shiftSwapRequestId       String?
+  shiftSwapRequest         ShiftSwapRequest?       @relation(fields: [shiftSwapRequestId], references: [id], onDelete: Cascade)
+  /// Satisfação do Cliente — avaliação crítica recebida (Fase 3). `onDelete: SetNull` (não
+  /// Cascade, diferente de `fechamentoOcorrenciaId`/`checklistOccurrenceId`) — mesmo padrão de
+  /// `chamadoId`: hoje não existe rota nenhuma que apague uma `CustomerSurveyResponse`, mas se
+  /// um dia existir, o aviso no sino não deve sumir junto, só perde o link "VER AVALIAÇÃO".
+  customerSurveyResponseId String?
+  customerSurveyResponse   CustomerSurveyResponse? @relation(fields: [customerSurveyResponseId], references: [id], onDelete: SetNull)
+  read                     Boolean                 @default(false)
+  createdAt                DateTime                @default(now())
 
   @@index([userId, read])
   // O sino de notificações (`GET /api/notificacoes`) busca as 30 mais
@@ -5635,8 +5641,9 @@ model CustomerSurveyResponse {
   ip          String?
   submittedAt DateTime @default(now())
 
-  respostas    CustomerSurveyAnswer[]
-  rouletteSpin RouletteSpin?
+  respostas     CustomerSurveyAnswer[]
+  rouletteSpin  RouletteSpin?
+  notifications Notification[]
 
   @@index([empresaId, submittedAt])
   @@index([empresaId, critica, status])

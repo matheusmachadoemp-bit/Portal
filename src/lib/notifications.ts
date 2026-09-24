@@ -30,6 +30,8 @@ export type CreateNotificationInput = {
   goalId?: string | null;
   purchaseId?: string | null;
   fechamentoOcorrenciaId?: string | null;
+  /** Satisfação do Cliente — avaliação crítica (Fase 3). */
+  customerSurveyResponseId?: string | null;
   /** URL relativa (ex.: "/portal/tarefas") pra abrir/focar ao clicar no push. Default: "/portal". */
   url?: string | null;
 };
@@ -195,6 +197,7 @@ function toNotificationData(data: CreateNotificationInput) {
     goalId: data.goalId ?? null,
     purchaseId: data.purchaseId ?? null,
     fechamentoOcorrenciaId: data.fechamentoOcorrenciaId ?? null,
+    customerSurveyResponseId: data.customerSurveyResponseId ?? null,
   };
 }
 

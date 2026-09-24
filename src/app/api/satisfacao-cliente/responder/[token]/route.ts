@@ -9,6 +9,7 @@ import {
   getSelectableGarcons,
   isNotaCritica,
   isValidGarcomIndicado,
+  notifyCriticalResponse,
   onlyDigits,
   resolveTableByToken,
   tableState,
@@ -86,7 +87,9 @@ function extractAnswerData(tipo: CustomerSurveyQuestionType, resposta: RespostaI
  * (sempre o da MESA, resolvida pelo token). Grava `CustomerSurveyResponse` + `CustomerSurveyAnswer`
  * numa única escrita aninhada, calcula `critica` a partir de `CustomerSurveyConfig` da loja no
  * momento do submit (congelado, não recalculado depois — ver comentário no schema) e faz
- * find-or-create de `Cliente` por telefone (nunca duplica). Sem roleta/push aqui — Fases 3/6.
+ * find-or-create de `Cliente` por telefone (nunca duplica). Quando `critica = true`, dispara o
+ * push automático (Fase 3, `notifyCriticalResponse`) pros destinatários configurados da loja.
+ * Sem roleta ainda — Fase 6.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -171,6 +174,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       respostas: { create: answersToCreate },
     },
   });
+
+  if (response.critica) {
+    await notifyCriticalResponse(response);
+  }
 
   return NextResponse.json({ ok: true, responseId: response.id, critica: response.critica });
 }
