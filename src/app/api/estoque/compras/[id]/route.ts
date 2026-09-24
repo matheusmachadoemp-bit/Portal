@@ -70,6 +70,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           },
         })
       ),
+      // Este fluxo ("Marcar recebido" na tela de Compras) não tem conferência item a item — é
+      // "confirma tudo exatamente como foi pedido" (por isso o StockMovement acima já usa
+      // `item.quantidade` direto, sem nenhum mapa de quantidades recebidas vindo do body). Por
+      // isso, diferente de POST /api/estoque/recebimento e do link público de recebimento
+      // (responder/[token]/finalizar), aqui `quantidadeRecebida` só pode ser a quantidade PEDIDA —
+      // é o único dado disponível nesta tela. Sem isso, o relatório "Gasto por Insumo"
+      // (computeGastoPorInsumoRows, src/lib/recebimento-server.ts) ficava com `quantidadeRecebida`
+      // nula pra toda compra confirmada por este botão, caindo no fallback (mesmo valor, só que por
+      // acidente em vez de por gravação explícita) — grava explícito aqui pra não depender do
+      // fallback nesse caso, que é o normal (não uma exceção do histórico antigo).
+      ...existing.items.map((item) =>
+        prisma.purchaseItem.update({
+          where: { id: item.id },
+          data: { quantidadeRecebida: item.quantidade },
+        })
+      ),
     ]);
 
     await logPurchaseEvent({

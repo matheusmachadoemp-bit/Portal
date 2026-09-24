@@ -124,6 +124,14 @@ export async function POST(req: Request) {
               where: { id: item.ingredientId },
               data: { estoqueAtual: { increment: quantidadeRecebida }, precoAtual: item.valorUnitario, lastPurchaseDate: new Date() },
             }),
+            // Grava a quantidade que REALMENTE chegou no próprio PurchaseItem — sem isso, o
+            // relatório "Gasto por Insumo" (computeGastoPorInsumoRows, src/lib/recebimento-server.ts)
+            // não tem como saber depois quanto foi recebido de fato num recebimento parcial (só
+            // teria a quantidade PEDIDA). Mesmo valor já usado acima pro StockMovement.
+            prisma.purchaseItem.update({
+              where: { id: item.id },
+              data: { quantidadeRecebida },
+            }),
           ];
         })
       : []),
