@@ -253,6 +253,22 @@ const CATEGORIES = [
       // prisma/migrations/*_remove_satisfacao_subcategoria_crm para a remoção do registro que já
       // existia em produção.
       { key: "inteligencia", name: "Inteligência de Cliente", icon: "BrainCircuit" },
+      // "Visão Geral" e "Avaliações" do módulo "Satisfação do Cliente" (Fase 4, já publicado —
+      // ver docs/satisfacao-cliente-proposta.md): decisão do Matheus foi entrar como
+      // subcategorias de CRM (não da categoria "satisfacao-cliente", que fica só com
+      // Perguntas/QR Codes-Mesas). Apontam pras mesmas rotas de sempre
+      // (/portal/satisfacao-cliente/visao-geral e /portal/satisfacao-cliente/avaliacoes, únicas
+      // pastas físicas — ver src/app/portal/crm/visao-geral/page.tsx e
+      // src/app/portal/crm/avaliacoes/page.tsx, que reexportam essas páginas, mesmo padrão já
+      // usado por vendas/visao-geral e tarefas/tarefas) e ao módulo de permissão "crm" (não mais
+      // "satisfacao-cliente" — ver hasModulePermission nas duas páginas e nas rotas de API de
+      // dashboard/avaliacoes/motivos, atualizado junto com esta migração de menu pra não deixar
+      // o gate de acesso desalinhado de onde o item mora no menu/na tela de Permissões). Nome
+      // "Visão Geral (Satisfação)" (não só "Visão Geral") pra não duplicar o rótulo da
+      // subcategoria "dashboard" (a Visão Geral do próprio CRM) logo acima. Ver
+      // prisma/migrations/*_satisfacao_cliente_crm_menu.
+      { key: "visao-geral", name: "Visão Geral (Satisfação)", icon: "Smile" },
+      { key: "avaliacoes", name: "Avaliações", icon: "ClipboardCheck" },
     ],
   },
   {
@@ -353,14 +369,19 @@ const CATEGORIES = [
   },
   {
     // "Satisfação do Cliente" (módulo novo, ver docs/satisfacao-cliente-proposta.md) — SÓ com
-    // as 2 subcategorias que já têm página de verdade por trás (Perguntas e QR Codes/Mesas,
-    // publicadas pelo Caio em /portal/satisfacao-cliente/perguntas e /mesas). As outras 5
-    // (Visão Geral, Avaliações, Ranking de Garçons, Roleta de Prêmios, Configurações) continuam
-    // de fora até cada uma ganhar tela própria — mesmo raciocínio do Fechamento do Dia, e mesmo
-    // cuidado que já rendeu 2 reversões deste exato bloco antes (Fase 1: nenhuma tela ainda;
-    // Fase 2: API pronta mas tela do Caio ainda não — Teulis achou 404 ao vivo nas duas vezes).
-    // Desta vez a publicação deste seed é coordenada pelo líder pra só ir ao ar depois que a
-    // branch das telas do Caio já estiver em produção, nunca antes.
+    // as 2 subcategorias que já têm página de verdade por trás E que o Matheus decidiu manter
+    // aqui (Perguntas e QR Codes/Mesas, publicadas pelo Caio em
+    // /portal/satisfacao-cliente/perguntas e /mesas). "Visão Geral" e "Avaliações" (Fase 4)
+    // também já têm página publicada, mas viraram subcategorias da categoria "crm" em vez de
+    // entrarem aqui — decisão separada do Matheus, ver o bloco de "crm" acima (comentário junto
+    // de `{ key: "visao-geral", ... }`/`{ key: "avaliacoes", ... }` e
+    // prisma/migrations/*_satisfacao_cliente_crm_menu). As outras 3 pendentes desta categoria
+    // (Ranking de Garçons, Roleta de Prêmios, Configurações) continuam de fora até cada uma
+    // ganhar tela própria — mesmo raciocínio do Fechamento do Dia, e mesmo cuidado que já rendeu
+    // 2 reversões deste exato bloco antes (Fase 1: nenhuma tela ainda; Fase 2: API pronta mas
+    // tela do Caio ainda não — Teulis achou 404 ao vivo nas duas vezes). A publicação deste seed
+    // sempre coordenada pelo líder pra só ir ao ar depois que a branch da tela correspondente já
+    // estiver em produção, nunca antes.
     key: "satisfacao-cliente",
     name: "Satisfação do Cliente",
     icon: "Smile",

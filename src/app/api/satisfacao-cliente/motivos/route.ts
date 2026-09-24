@@ -26,7 +26,10 @@ import { hasModulePermission } from "@/lib/authz";
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "satisfacao-cliente", "canView", "avaliacoes"))) {
+  // Módulo "crm" (não "satisfacao-cliente"): esta rota só alimenta o formulário de "Registrar
+  // solução" da tela de Avaliações, que virou subcategoria de CRM — ver comentário completo em
+  // src/app/portal/satisfacao-cliente/visao-geral/page.tsx.
+  if (!(await hasModulePermission(session.user.id, "crm", "canView", "avaliacoes"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver os motivos de Satisfação do Cliente." },
       { status: 403 }
