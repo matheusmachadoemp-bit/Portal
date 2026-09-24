@@ -172,12 +172,25 @@ export function npsScore(notas: number[]): number {
   return ((promotores - detratores) / notas.length) * 100;
 }
 
+/**
+ * Migrado de `NpsResponse` pra `CustomerSurveyResponse.notaGeral` (achado do Teulis na revisão da
+ * Fase 4: este era um 3º lugar, no mesmo arquivo, que ainda lia do modelo antigo — além dos 2 já
+ * migrados abaixo, `loadAlertaAvaliacaoNegativa` neste arquivo e `npsPendentes` em
+ * src/lib/crm-dashboard.ts). Alimenta o StatCard "NPS" e o painel "Desempenho da loja" da tela de
+ * Início (`GET /api/inicio/indicadores` e `GET /api/inicio/desempenho-loja`). `POST /api/crm/nps`
+ * (única forma de criar `NpsResponse`) não tem nenhum caller em nenhuma tela do repo — esse KPI já
+ * não recebia dado novo, mostrando 0 silenciosamente.
+ *
+ * `notaGeral` é 0-10, mesma escala de `NpsResponse.nota` — `classifyNps`/`npsScore` (acima) não
+ * mudam, só a origem do dado. `submittedAt` no lugar de `createdAt` (nome do campo de data
+ * equivalente em `CustomerSurveyResponse`).
+ */
 export async function loadNpsScore(empresaId: string, from: Date, to: Date): Promise<number> {
-  const respostas = await prisma.npsResponse.findMany({
-    where: { empresaId, createdAt: { gte: from, lte: to } },
-    select: { nota: true },
+  const respostas = await prisma.customerSurveyResponse.findMany({
+    where: { empresaId, submittedAt: { gte: from, lte: to } },
+    select: { notaGeral: true },
   });
-  return npsScore(respostas.map((r) => r.nota));
+  return npsScore(respostas.map((r) => r.notaGeral));
 }
 
 // ---------------------------------------------------------------------------
@@ -806,27 +819,36 @@ export async function loadAlertaEstoqueBaixo(empresaId: string, nomeLoja: string
     );
 }
 
-/** Respostas de NPS de detrator (nota ≤ 6) dos últimos 7 dias que ainda não foram marcadas como resolvidas (`NpsResponse.status`). */
+/**
+ * Avaliações críticas (`CustomerSurveyResponse.critica = true`) dos últimos 7 dias que ainda não
+ * foram resolvidas (`status != RESOLVIDA` — inclui NOVA e EM_ATENDIMENTO, não só "ninguém
+ * assumiu ainda") — módulo Satisfação do Cliente, Fase 4.
+ *
+ * Migrado de `NpsResponse` (decisão #1 já validada com o Matheus, ver
+ * docs/satisfacao-cliente-proposta.md): a página CRM > Satisfação/NPS saiu do menu nesta mesma
+ * atualização (ver prisma/seed.ts), sem migrar o histórico antigo de `NpsResponse` — este widget
+ * passa a olhar só pra frente, a partir de quando o módulo novo entrou em produção.
+ */
 export async function loadAlertaAvaliacaoNegativa(
   empresaId: string,
   nomeLoja: string,
   now: Date = new Date()
 ): Promise<AlertaItem[]> {
-  const respostas = await prisma.npsResponse.findMany({
-    where: { empresaId, createdAt: { gte: subDays(now, 7) }, nota: { lte: 6 }, status: { not: "RESOLVIDO" } },
-    include: { cliente: { select: { nome: true } } },
-    orderBy: { createdAt: "desc" },
+  const respostas = await prisma.customerSurveyResponse.findMany({
+    where: { empresaId, submittedAt: { gte: subDays(now, 7) }, critica: true, status: { not: "RESOLVIDA" } },
+    select: { id: true, notaGeral: true, nomeInformado: true, submittedAt: true },
+    orderBy: { submittedAt: "desc" },
   });
 
   return respostas.map(
     (r): AlertaItem => ({
       tipo: "avaliacao_negativa",
-      titulo: `Avaliação negativa (nota ${r.nota})${r.cliente?.nome ? ` — ${r.cliente.nome}` : ""}`,
+      titulo: `Avaliação negativa (nota ${r.notaGeral}) — ${r.nomeInformado}`,
       loja: nomeLoja,
       setor: null,
-      tempoAtrasoOuPrazo: `recebida há ${formatDuracao(now.getTime() - r.createdAt.getTime())}`,
-      nivel: r.nota <= 3 ? "urgente" : "atencao",
-      actionHref: "/portal/crm/satisfacao",
+      tempoAtrasoOuPrazo: `recebida há ${formatDuracao(now.getTime() - r.submittedAt.getTime())}`,
+      nivel: r.notaGeral <= 3 ? "urgente" : "atencao",
+      actionHref: `/portal/satisfacao-cliente/avaliacoes/${r.id}`,
     })
   );
 }

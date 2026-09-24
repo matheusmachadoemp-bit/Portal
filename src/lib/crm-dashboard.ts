@@ -40,9 +40,15 @@ export async function getCrmDashboardData(
 ) {
   const { from: periodFrom, to: periodTo, prevFrom, prevTo } = resolveCrmPeriod(key, custom);
 
+  // `npsPendentes` migrado de `NpsResponse` pra `CustomerSurveyResponse` (decisão #1 já validada
+  // com o Matheus, módulo Satisfação do Cliente Fase 4 — ver
+  // docs/satisfacao-cliente-proposta.md): "crítica + não resolvida" (`status != RESOLVIDA`,
+  // inclui NOVA e EM_ATENDIMENTO — não só "ninguém assumiu ainda"). O nome da variável ficou
+  // como estava (evita mexer no resto da função por causa só disso); o `key`/`label` do card
+  // abaixo também não mudaram.
   const [clientes, npsPendentes] = await Promise.all([
     loadClientesComVendas(empresaIds),
-    prisma.npsResponse.count({ where: { empresaId: { in: empresaIds }, nota: { lte: 6 }, status: "PENDENTE" } }),
+    prisma.customerSurveyResponse.count({ where: { empresaId: { in: empresaIds }, critica: true, status: { not: "RESOLVIDA" } } }),
   ]);
 
   const summary = computeDashboardSummary(clientes, periodFrom, periodTo);
@@ -74,7 +80,15 @@ export async function getCrmDashboardData(
     { key: "reativar", label: "clientes para reativar", count: emRiscoOuInativo, icon: "AlertTriangle", href: "/portal/crm/clientes?status=EM_RISCO,INATIVO" },
     { key: "aniversariantes", label: "aniversariantes hoje", count: aniversariantesHoje, icon: "Cake", href: "/portal/crm/aniversariantes" },
     { key: "vip", label: "clientes VIP próximos da recompra", count: vipProximos, icon: "Crown", href: "/portal/crm/clientes?status=VIP" },
-    { key: "nps", label: "avaliações negativas aguardando contato", count: npsPendentes, icon: "Frown", href: "/portal/crm/satisfacao" },
+    // `href` também migrado (não só o `count`): apontar pra `/portal/crm/satisfacao` continuaria
+    // funcionando (a página não foi removida), mas mostraria os dados ANTIGOS de `NpsResponse` —
+    // um card cuja contagem já vem do módulo novo não pode linkar pra uma tela de outro dataset,
+    // ninguém bateria o número mostrado com o que a tela abre. A página de Avaliações
+    // (/portal/satisfacao-cliente/avaliacoes) ainda não existe fisicamente (Fase 4 é só API — a
+    // tela vem numa fase seguinte, do Caio), mas a rota já é o destino certo, mesmo padrão já
+    // usado antes do QR Code apontar pra /avaliar/[token] e do push apontar pro detalhe da
+    // avaliação antes de cada uma dessas telas existir.
+    { key: "nps", label: "avaliações negativas aguardando contato", count: npsPendentes, icon: "Frown", href: "/portal/satisfacao-cliente/avaliacoes?filtro=criticas" },
     { key: "segunda-compra", label: "novos clientes ainda sem segunda compra", count: novosSemSegunda, icon: "UserPlus", href: "/portal/crm/clientes?status=ATIVO" },
     { key: "frequencia", label: "clientes aumentaram a frequência de compra", count: aumentandoFrequencia, icon: "TrendingUp", href: "/portal/crm/clientes?status=RECORRENTE" },
   ].filter((o) => o.count > 0);
