@@ -1,16 +1,20 @@
-import { invitationState, loadInvitationByToken } from "@/lib/satisfaction-server";
+import { headers } from "next/headers";
+import { checkSatisfactionRateLimit, invitationState, loadInvitationByToken } from "@/lib/satisfaction-server";
 import { RespostaClient } from "./resposta-client";
 
 const STATE_MESSAGE: Record<string, { title: string; body: string }> = {
   invalido: { title: "Link inválido", body: "Esse link de pesquisa não existe ou já expirou." },
   encerrada: { title: "Pesquisa encerrada", body: "Essa pesquisa não está mais aceitando respostas." },
   "ja-respondido": { title: "Resposta já enviada", body: "Você já respondeu essa pesquisa. Obrigado pela participação!" },
+  "rate-limited": { title: "Muitas tentativas", body: "Aguarde alguns minutos antes de tentar de novo." },
 };
 
 export default async function ResponderPesquisaPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const invitation = await loadInvitationByToken(token);
-  const state = invitationState(invitation);
+
+  const allowed = await checkSatisfactionRateLimit(await headers(), token);
+  const invitation = allowed ? await loadInvitationByToken(token) : null;
+  const state = allowed ? invitationState(invitation) : ("rate-limited" as const);
 
   if (state !== "ok") {
     const msg = STATE_MESSAGE[state];

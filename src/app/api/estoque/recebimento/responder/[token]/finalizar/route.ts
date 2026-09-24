@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
+  checkRecebimentoRateLimit,
   loadPurchaseByToken,
   logPurchaseEvent,
   notifyReceivingCompleted,
@@ -11,6 +12,9 @@ import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (!(await checkRecebimentoRateLimit(req.headers, token))) {
+    return NextResponse.json({ error: "Muitas tentativas, aguarde alguns minutos." }, { status: 429 });
+  }
   const body = await req.json().catch(() => ({}));
   if (body.fotoNotaUrl && !isValidBlobUrl(body.fotoNotaUrl)) {
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });

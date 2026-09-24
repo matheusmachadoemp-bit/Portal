@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { loadPurchaseByToken, logPurchaseEvent, receivingState } from "@/lib/recebimento-server";
+import { checkRecebimentoRateLimit, loadPurchaseByToken, logPurchaseEvent, receivingState } from "@/lib/recebimento-server";
 import { RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO } from "@/lib/estoque";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ token: string; purchaseItemId: string }> }) {
   const { token, purchaseItemId } = await params;
+  if (!(await checkRecebimentoRateLimit(req.headers, token))) {
+    return NextResponse.json({ error: "Muitas tentativas, aguarde alguns minutos." }, { status: 429 });
+  }
   const purchase = await loadPurchaseByToken(token);
   const state = receivingState(purchase);
   if (state === "invalido") return NextResponse.json({ error: "Link inválido." }, { status: 404 });

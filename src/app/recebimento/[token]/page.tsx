@@ -1,16 +1,20 @@
-import { loadPurchaseByToken, receivingState } from "@/lib/recebimento-server";
+import { headers } from "next/headers";
+import { checkRecebimentoRateLimit, loadPurchaseByToken, receivingState } from "@/lib/recebimento-server";
 import { ConferenciaClient } from "./conferencia-client";
 
 const STATE_MESSAGE: Record<string, { title: string; body: string }> = {
   invalido: { title: "Link inválido", body: "Esse link de recebimento não existe." },
   cancelado: { title: "Pedido cancelado", body: "Esse pedido de compra foi cancelado e não aceita mais recebimento." },
   finalizado: { title: "Recebimento já finalizado", body: "Esse pedido já teve o recebimento concluído." },
+  "rate-limited": { title: "Muitas tentativas", body: "Aguarde alguns minutos antes de tentar de novo." },
 };
 
 export default async function RecebimentoTokenPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const purchase = await loadPurchaseByToken(token);
-  const state = receivingState(purchase);
+
+  const allowed = await checkRecebimentoRateLimit(await headers(), token);
+  const purchase = allowed ? await loadPurchaseByToken(token) : null;
+  const state = allowed ? receivingState(purchase) : ("rate-limited" as const);
 
   if (state !== "ok") {
     const msg = STATE_MESSAGE[state];

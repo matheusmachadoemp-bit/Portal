@@ -1,9 +1,11 @@
 "use server";
 
+import { headers } from "next/headers";
 import { signIn } from "@/auth";
-import { AuthError } from "next-auth";
+import { AuthError, CredentialsSignin } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { sendPasswordResetEmail } from "@/lib/email";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
@@ -27,6 +29,13 @@ const RESET_TOKEN_TTL_MS = 1000 * 60 * 60;
 const RESET_EMAIL_COOLDOWN_MS = 60 * 1000;
 const PASSWORD_RESET_TIMING_JITTER_MS = 1200;
 
+// Ver src/lib/rate-limit.ts — pontos de partida (task #320), fácil de
+// ajustar depois sem migration.
+const FORGOT_PASSWORD_RATE_LIMIT_MAX = 10;
+const FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const RESET_PASSWORD_RATE_LIMIT_MAX = 20;
+const RESET_PASSWORD_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+
 export async function loginAction(
   _prevState: { error?: string } | undefined,
   formData: FormData
@@ -43,6 +52,12 @@ export async function loginAction(
     });
     return {};
   } catch (err) {
+    // Rate limit por IP estourado (checado dentro de `authorize()`, ver
+    // `src/auth.ts`) — mesmo formato de resposta `{ error }` de sempre, só
+    // com uma mensagem diferente da de credenciais inválidas.
+    if (err instanceof CredentialsSignin && err.code === "rate_limited") {
+      return { error: "Muitas tentativas, aguarde alguns minutos." };
+    }
     if (err instanceof AuthError) {
       return { error: "E-mail ou senha incorretos." };
     }
@@ -54,6 +69,19 @@ export async function forgotPasswordAction(
   _prevState: { message?: string } | undefined,
   formData: FormData
 ): Promise<{ message?: string }> {
+  // Checado ANTES de tocar no banco — o cooldown de 60s por CONTA logo
+  // abaixo (`resetTokenExp`) já limita quantos e-mails uma única conta
+  // recebe, mas não impede alguém de martelar o formulário testando um
+  // e-mail atrás do outro; este contador por IP cobre esse caso.
+  const ip = getClientIp(await headers());
+  const allowed = await checkRateLimit(`forgot-password:${ip}`, {
+    windowMs: FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS,
+    max: FORGOT_PASSWORD_RATE_LIMIT_MAX,
+  });
+  if (!allowed) {
+    return { message: "Muitas tentativas, aguarde alguns minutos." };
+  }
+
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
   const user = await prisma.user.findUnique({ where: { email } });
 
@@ -119,6 +147,15 @@ export async function resetPasswordAction(
   _prevState: { error?: string; success?: boolean } | undefined,
   formData: FormData
 ): Promise<{ error?: string; success?: boolean }> {
+  const ip = getClientIp(await headers());
+  const allowed = await checkRateLimit(`reset-password:${ip}`, {
+    windowMs: RESET_PASSWORD_RATE_LIMIT_WINDOW_MS,
+    max: RESET_PASSWORD_RATE_LIMIT_MAX,
+  });
+  if (!allowed) {
+    return { error: "Muitas tentativas, aguarde alguns minutos." };
+  }
+
   const novaSenha = String(formData.get("password") ?? "");
   const confirmacao = String(formData.get("passwordConfirm") ?? "");
 

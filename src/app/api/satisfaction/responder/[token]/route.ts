@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { invitationState, loadInvitationByToken } from "@/lib/satisfaction-server";
+import { checkSatisfactionRateLimit, invitationState, loadInvitationByToken } from "@/lib/satisfaction-server";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (!(await checkSatisfactionRateLimit(req.headers, token))) {
+    return NextResponse.json({ error: "Muitas tentativas, aguarde alguns minutos." }, { status: 429 });
+  }
   const invitation = await loadInvitationByToken(token);
   const state = invitationState(invitation);
 
@@ -36,6 +39,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (!(await checkSatisfactionRateLimit(req.headers, token))) {
+    return NextResponse.json({ error: "Muitas tentativas, aguarde alguns minutos." }, { status: 429 });
+  }
   const invitation = await loadInvitationByToken(token);
   const state = invitationState(invitation);
   if (state === "invalido") return NextResponse.json({ error: "Link inválido." }, { status: 404 });

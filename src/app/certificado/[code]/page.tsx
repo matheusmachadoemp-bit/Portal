@@ -1,12 +1,30 @@
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Clock, CalendarDays, Flame } from "lucide-react";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+// Ver src/lib/rate-limit.ts — ponto de partida (task #320), fácil de
+// ajustar depois sem migration.
+const CERTIFICADO_RATE_LIMIT_MAX = 30;
+const CERTIFICADO_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 export default async function CertificateVerifyPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
+
+  // Sem formato de erro próprio nesta página hoje (só `notFound()` — 404
+  // genérico) — quando o limite bater, reaproveita o mesmo 404, em vez de
+  // inventar uma tela nova (ver nota da task #320: se quiserem uma mensagem
+  // amigável aqui no futuro, isso vira tarefa separada pro Caio).
+  const ip = getClientIp(await headers());
+  const allowed = await checkRateLimit(`certificado:${ip}`, {
+    windowMs: CERTIFICADO_RATE_LIMIT_WINDOW_MS,
+    max: CERTIFICADO_RATE_LIMIT_MAX,
+  });
+  if (!allowed) notFound();
 
   const certificate = await prisma.trainingCertificate.findUnique({
     where: { code: code.toUpperCase() },
