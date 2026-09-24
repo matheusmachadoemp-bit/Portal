@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { loadPurchaseByToken, logPurchaseEvent, receivingState } from "@/lib/recebimento-server";
+import { checkRecebimentoRateLimit, loadPurchaseByToken, logPurchaseEvent, receivingState } from "@/lib/recebimento-server";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (!(await checkRecebimentoRateLimit(req.headers, token))) {
+    return NextResponse.json({ error: "Muitas tentativas, aguarde alguns minutos." }, { status: 429 });
+  }
   const purchase = await loadPurchaseByToken(token);
   const state = receivingState(purchase);
 
@@ -14,8 +17,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
 }
 
 /** "Iniciar recebimento": cria o Receiving (se ainda não existir) e os ReceivingItem de cada item do pedido. */
-export async function POST(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (!(await checkRecebimentoRateLimit(req.headers, token))) {
+    return NextResponse.json({ error: "Muitas tentativas, aguarde alguns minutos." }, { status: 429 });
+  }
   const purchase = await loadPurchaseByToken(token);
   const state = receivingState(purchase);
   if (state === "invalido") return NextResponse.json({ error: "Link inválido." }, { status: 404 });

@@ -1,9 +1,10 @@
 import { cache } from "react";
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 // Proteção contra força bruta no login: contador gravado no próprio usuário
 // (`failedLoginAttempts`/`lockedUntil`), não em memória do processo — em
@@ -14,6 +15,25 @@ import { authConfig } from "@/auth.config";
 // mesma resposta genérica de credenciais inválidas.
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
+
+// Rate limiting POR IP (além do bloqueio por conta acima, que só entra em
+// jogo depois de identificar um e-mail válido): sem isso, alguém consegue
+// tentar 5 senhas contra CADA e-mail de uma lista enorme sem nunca disparar
+// o bloqueio de nenhuma conta individual. ~30 tentativas/IP a cada 15min é
+// só um ponto de partida (task #320) — dá pra ajustar depois sem migration,
+// só mudando estas duas constantes.
+const LOGIN_RATE_LIMIT_MAX = 30;
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+// Subclasse de erro dedicada (mesmo mecanismo que o Auth.js já usa pra
+// diferenciar "credenciais inválidas" de outros motivos de falha — ver
+// `code` em `CredentialsSignin` de `@auth/core/errors`) pra dar pro
+// `loginAction` (src/app/(auth)/login/actions.ts) como diferenciar "estourou
+// o rate limit" de "senha errada" no MESMO formato de resposta que já existe
+// (`{ error: string }`), sem inventar nenhuma tela/campo novo.
+class RateLimitedCredentialsSignin extends CredentialsSignin {
+  code = "rate_limited";
+}
 
 function isLockedOut(user: { lockedUntil: Date | null }): boolean {
   return !!user.lockedUntil && user.lockedUntil.getTime() > Date.now();
@@ -59,10 +79,26 @@ const { handlers, signIn, signOut, auth: uncachedAuth } = NextAuth({
         email: {},
         password: {},
       },
-      authorize: async (credentials) => {
+      authorize: async (credentials, request) => {
         const email = String(credentials?.email ?? "").toLowerCase().trim();
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;
+
+        // Checado ANTES de qualquer consulta ao banco por e-mail — não faz
+        // sentido gastar uma query (nem revelar timing) por tentativa óbvia
+        // de força bruta vinda de um único IP. `request` é o 2º argumento do
+        // `authorize()` do Auth.js — carrega os headers originais tanto no
+        // POST direto pra `/api/auth/callback/credentials` quanto no login
+        // via Server Action (`signIn()` repassa os headers da requisição
+        // atual pro `Request` sintético que monta — ver
+        // `node_modules/next-auth/lib/actions.js`), então os 2 pontos de
+        // entrada convergem aqui e ficam cobertos pelo mesmo contador.
+        const ip = getClientIp(request.headers);
+        const allowed = await checkRateLimit(`login:${ip}`, {
+          windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+          max: LOGIN_RATE_LIMIT_MAX,
+        });
+        if (!allowed) throw new RateLimitedCredentialsSignin();
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.active) return null;

@@ -1,5 +1,27 @@
 import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+// Ver src/lib/rate-limit.ts — ponto de partida (task #320), fácil de ajustar
+// depois sem migration. Chave combina IP+token, COMPARTILHADA entre a
+// página pública (src/app/pesquisa/[token]/page.tsx, que chama
+// `loadInvitationByToken` direto, sem passar pela rota de API) e a rota de
+// API (src/app/api/satisfaction/responder/[token]/route.ts, GET e POST) —
+// mesmo IP+token não deve contar em dobro só porque a página faz uma
+// consulta e a API faz outra: as duas fazem parte do mesmo fluxo de
+// responder UMA pesquisa. Recebe `Headers` (não `Request`) pra funcionar
+// tanto num Route Handler (`req.headers`) quanto num Server Component
+// (`await headers()` de `next/headers`).
+const SATISFACTION_RATE_LIMIT_MAX = 20;
+const SATISFACTION_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+
+export async function checkSatisfactionRateLimit(headers: Headers, token: string): Promise<boolean> {
+  const ip = getClientIp(headers);
+  return checkRateLimit(`satisfaction:${ip}:${token}`, {
+    windowMs: SATISFACTION_RATE_LIMIT_WINDOW_MS,
+    max: SATISFACTION_RATE_LIMIT_MAX,
+  });
+}
 
 export async function loadInvitationByToken(token: string) {
   return prisma.satisfactionInvitation.findUnique({

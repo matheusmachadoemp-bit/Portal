@@ -1,5 +1,31 @@
 import { prisma } from "@/lib/prisma";
 import { createNotifications } from "@/lib/notifications";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+// Ver src/lib/rate-limit.ts — ponto de partida (task #320), fácil de ajustar
+// depois sem migration. Chave combina IP+token: sem o token, um único IP
+// martelando o link de UM pedido específico não estoura o limite de todo
+// mundo que usa aquele IP (ex.: rede da loja) contra OUTROS pedidos.
+// Compartilhado pelas 4 rotas de API do link público de recebimento
+// (iniciar, finalizar, upload, conferir item) E pela página pública
+// (src/app/recebimento/[token]/page.tsx, que chama `loadPurchaseByToken`
+// direto, sem passar pela rota de API) — cada requisição em qualquer um
+// desses 5 pontos consome do MESMO contador (mesma `key`), já que todos
+// fazem parte do mesmo fluxo de conferência de um pedido (mesmo raciocínio
+// de `checkSatisfactionRateLimit`, em src/lib/satisfaction-server.ts).
+// Recebe `Headers` (não `Request`) pra funcionar tanto num Route Handler
+// (`req.headers`) quanto num Server Component (`await headers()` de
+// `next/headers`).
+const RECEBIMENTO_RATE_LIMIT_MAX = 60;
+const RECEBIMENTO_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+
+export async function checkRecebimentoRateLimit(headers: Headers, token: string): Promise<boolean> {
+  const ip = getClientIp(headers);
+  return checkRateLimit(`recebimento:${ip}:${token}`, {
+    windowMs: RECEBIMENTO_RATE_LIMIT_WINDOW_MS,
+    max: RECEBIMENTO_RATE_LIMIT_MAX,
+  });
+}
 
 const RECEIVING_INCLUDE = {
   empresa: { select: { name: true, color: true } },

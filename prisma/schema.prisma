@@ -3959,6 +3959,47 @@ model AuditLog {
 }
 
 // ---------------------------------------------------------------------------
+// RATE LIMITING — contador genérico usado por `checkRateLimit()`
+// (src/lib/rate-limit.ts) para proteger endpoints públicos/sensíveis sem
+// sessão (login, esqueci minha senha, links de token público de
+// recebimento/pesquisa/certificado) contra força bruta e abuso automatizado.
+// Mesmo padrão de update atômico do contador de tentativas de login
+// (`registerFailedAttempt` em src/auth.ts): um único contador por `key`
+// (ex.: "login:203.0.113.9"), reiniciado quando a janela de tempo
+// (`windowStart` + `windowMs` do chamador) já expirou — nunca em memória do
+// processo, porque em produção (Vercel, serverless) cada instância teria sua
+// própria memória e um contador só local não bloqueia nada de verdade sob
+// tráfego real distribuído entre instâncias.
+// Linhas antigas são limpas por um cron diário (ver
+// src/app/api/rate-limit/cleanup/route.ts + vercel.json) — sem isso a
+// tabela cresceria pra sempre, já que toda tentativa (mesmo dentro do
+// limite) grava/atualiza uma linha.
+// ---------------------------------------------------------------------------
+
+model RateLimitHit {
+  id          String   @id @default(cuid())
+  /// Identifica o que está sendo limitado — sempre `"<escopo>:<ip>"` ou
+  /// `"<escopo>:<ip>:<token>"` (quando o limite precisa ser por token além
+  /// de por IP, ex.: link de recebimento/pesquisa). Nunca um dado sensível
+  /// em texto puro que precise de criptografia (IP e token de uso único não
+  /// entram no mesmo critério de `vault.ts`), mas também não é exibido em
+  /// nenhuma tela — só lido/escrito por `checkRateLimit()`.
+  key         String   @unique
+  /// Início da janela atual. Quando `now - windowStart >= windowMs` (janela
+  /// expirada), `checkRateLimit()` reinicia `windowStart` e zera `count`
+  /// antes de contar a tentativa atual — sem isso o contador nunca "esfria".
+  windowStart DateTime @default(now())
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  // Usado pelo cron de limpeza para achar linhas velhas sem precisar
+  // calcular `windowStart + maior windowMs em uso` — qualquer linha não
+  // tocada há mais de RATE_LIMIT_CLEANUP_MAX_AGE_MS (ver rate-limit.ts) já
+  // teve sua janela expirada há muito tempo, então pode ser apagada.
+  @@index([updatedAt])
+}
+
+// ---------------------------------------------------------------------------
 // TAREFAS — Central de Execução Operacional
 // ---------------------------------------------------------------------------
 

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { loadPurchaseByToken, receivingState } from "@/lib/recebimento-server";
+import { checkRecebimentoRateLimit, loadPurchaseByToken, receivingState } from "@/lib/recebimento-server";
 
 /** Upload de fotos (mercadoria/divergência) a partir do link público de recebimento — sem sessão de usuário, validado pelo token. */
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (!(await checkRecebimentoRateLimit(req.headers, token))) {
+    return NextResponse.json({ error: "Muitas tentativas, aguarde alguns minutos." }, { status: 429 });
+  }
   const purchase = await loadPurchaseByToken(token);
   const state = receivingState(purchase);
   if (state !== "ok") {
