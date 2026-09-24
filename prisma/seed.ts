@@ -240,7 +240,6 @@ const CATEGORIES = [
     subs: [
       { key: "dashboard", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "clientes", name: "Clientes", icon: "BookUser" },
-      { key: "segmentos", name: "Segmentos", icon: "PieChart" },
       { key: "funil", name: "Funil de Clientes", icon: "Filter" },
       { key: "campanhas", name: "Campanhas", icon: "Megaphone" },
       { key: "automacoes", name: "Automações", icon: "Workflow" },
@@ -248,7 +247,6 @@ const CATEGORIES = [
       { key: "aniversariantes", name: "Aniversariantes", icon: "Cake" },
       { key: "satisfacao", name: "Satisfação / NPS", icon: "Smile" },
       { key: "inteligencia", name: "Inteligência de Cliente", icon: "BrainCircuit" },
-      { key: "relatorios", name: "Relatórios", icon: "FileBarChart" },
     ],
   },
   {
