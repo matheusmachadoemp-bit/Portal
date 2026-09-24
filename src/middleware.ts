@@ -13,6 +13,8 @@ const PUBLIC_PATHS = [
   "/api/satisfaction/responder",
   "/recebimento",
   "/api/estoque/recebimento/responder",
+  "/avaliar",
+  "/api/satisfacao-cliente/responder",
 ];
 
 export default auth((req) => {

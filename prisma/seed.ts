@@ -345,15 +345,21 @@ const CATEGORIES = [
       { key: "regras", name: "Regras de Pontuação", icon: "BookOpen" },
     ],
   },
-  // "Satisfação do Cliente" (módulo novo) ainda NÃO entra aqui nesta fase — decisão do líder:
-  // igual "Fechamento do Dia" (cuja Fase 1 também foi só schema/seed/rotas de submissão, sem
-  // menu, até a Fase 4a trazer a primeira tela navegável), a entrada de Category/Subcategory no
-  // menu lateral só é seedada quando existir pelo menos uma página de verdade por trás dela —
-  // senão usuários com acesso ao módulo (a maioria dos perfis, que ganha "Visualizar" por
-  // padrão) veriam links levando a 404 em produção. `src/lib/permissions.ts` já tem a entrada
-  // `satisfacao-cliente` em MODULES (não aparece sozinha no menu, é só o registro pra
-  // tela de Permissões/perfis) — só o menu lateral (Category/Subcategory) fica pra quando uma
-  // fase futura entregar a primeira tela navegável (ver docs/satisfacao-cliente-proposta.md).
+  // "Satisfação do Cliente" (módulo novo, Fases 1-2 de docs/satisfacao-cliente-proposta.md)
+  // ainda NÃO entra aqui — mesmo raciocínio do Fechamento do Dia: a entrada de
+  // Category/Subcategory no menu lateral só é seedada quando existir pelo menos uma PÁGINA de
+  // verdade por trás dela, senão qualquer usuário com acesso ao módulo (a maioria dos perfis,
+  // que ganha "Visualizar" por padrão em todo módulo listado em MODULES — inclusive
+  // "funcionário") veria o link e cairia num 404 clicando por curiosidade.
+  //
+  // Isso já foi tentado uma vez durante a Fase 2 (Perguntas/QR Codes-Mesas ganharam API admin
+  // nessa fase, então a entrada no menu foi trazida de volta antecipadamente, junto) e revertido
+  // na revisão do Teulis: ele testou o link de verdade, logado, e confirmou 404, porque a tela
+  // (trabalho do Caio) ainda não existia — mesmo a API já estando pronta. Volta a fazer parte do
+  // seed quando a fase do Caio publicar as telas de Perguntas e QR Codes/Mesas de verdade, dessa
+  // vez junto com a página, sem intervalo de link morto. `src/lib/permissions.ts` já tem a
+  // entrada `satisfacao-cliente` em MODULES (não aparece sozinha no menu, é só o registro pra
+  // tela de Permissões/perfis).
 ];
 
 async function main() {
@@ -734,6 +740,51 @@ async function main() {
       await prisma.customerSurveyReasonTag.update({ where: { id: existing.id }, data: { ordem: i, ativo: true } });
     } else {
       await prisma.customerSurveyReasonTag.create({ data: { empresaId: null, nome, ordem: i } });
+    }
+  }
+
+  // --- Satisfação do Cliente (Fase 2): catálogo inicial de perguntas (compartilhadas) ---
+  // Em produção a pergunta de nota geral se auto-cria sozinha na primeira vez que for precisa
+  // (`ensureFixedNotaGeralQuestion`, src/lib/customer-survey-server.ts — necessário porque o
+  // deploy automático nunca roda este seed, só `prisma migrate deploy`), mas sem rodar o seed
+  // não haveria NENHUMA pergunta regular de exemplo pra testar o fluxo público fim a fim — só a
+  // nota geral sozinha. `tema` usa os mesmos 5 exemplos já documentados no schema
+  // (`CustomerSurveyQuestion.tema`): atendimento, comida, tempo_espera, ambiente, limpeza.
+  //
+  // De propósito só CRIA se não existir (`update: {}`, nunca força de volta ordem/ativo/tipo/
+  // tema) — diferente de `CustomerSurveyReasonTag` acima (que força `ordem`/`ativo` a cada
+  // reseed): uma vez que a tela de Perguntas existir (próxima fase), um administrador pode
+  // reordenar/desativar/reformular qualquer uma destas — reseed não deve desfazer esse trabalho
+  // manual sem querer.
+  console.log("Seeding Satisfação do Cliente (catálogo de perguntas)...");
+  const notaGeralExistente = await prisma.customerSurveyQuestion.findFirst({ where: { fixaNotaGeral: true } });
+  if (!notaGeralExistente) {
+    await prisma.customerSurveyQuestion.create({
+      data: {
+        empresaId: null,
+        tipo: "NOTA_0_10",
+        titulo: "De 0 a 10, qual nota você dá para a sua experiência hoje?",
+        obrigatoria: true,
+        ordem: 0,
+        fixaNotaGeral: true,
+      },
+    });
+  }
+
+  const CUSTOMER_SURVEY_QUESTIONS: { tema: string; tipo: "NOTA_0_5" | "GOSTEI_NAO_GOSTEI"; titulo: string }[] = [
+    { tema: "atendimento", tipo: "GOSTEI_NAO_GOSTEI", titulo: "Você gostou do atendimento?" },
+    { tema: "comida", tipo: "NOTA_0_5", titulo: "Como você avalia a comida?" },
+    { tema: "tempo_espera", tipo: "GOSTEI_NAO_GOSTEI", titulo: "O tempo de espera foi bom?" },
+    { tema: "ambiente", tipo: "NOTA_0_5", titulo: "Como você avalia o ambiente?" },
+    { tema: "limpeza", tipo: "GOSTEI_NAO_GOSTEI", titulo: "O local estava limpo e organizado?" },
+  ];
+  for (let i = 0; i < CUSTOMER_SURVEY_QUESTIONS.length; i++) {
+    const q = CUSTOMER_SURVEY_QUESTIONS[i];
+    const existing = await prisma.customerSurveyQuestion.findFirst({ where: { empresaId: null, titulo: q.titulo } });
+    if (!existing) {
+      await prisma.customerSurveyQuestion.create({
+        data: { empresaId: null, tipo: q.tipo, titulo: q.titulo, tema: q.tema, ordem: i + 1, obrigatoria: true, fixaNotaGeral: false },
+      });
     }
   }
 

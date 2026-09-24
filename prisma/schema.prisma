@@ -5532,9 +5532,23 @@ model CustomerSurveyQuestion {
   /// Nunca hard-delete pergunta com resposta — mesma lição do
   /// Checklist/RH: uma pergunta removida do formulário fica `ativo = false`.
   ativo         Boolean                    @default(true)
-  /// Marca a pergunta obrigatória de nota 0-10. Só 1 ativa por empresa (mais
-  /// a compartilhada, se a loja não tiver override) — regra aplicada pela
-  /// API/tela de Perguntas, não dá para expressar como constraint de banco.
+  /// Marca a pergunta obrigatória de nota 0-10 — só 1 linha no sistema
+  /// inteiro pode ter `true` (nunca é própria de uma loja: a API de
+  /// Perguntas nunca aceita esse campo no corpo da requisição, só o
+  /// bootstrap automático cria/usa — ver `ensureFixedNotaGeralQuestion`,
+  /// src/lib/customer-survey-server.ts). Essa unicidade É garantida por
+  /// constraint de banco: um índice ÚNICO PARCIAL (`WHERE "fixaNotaGeral" =
+  /// true`), criado à mão em
+  /// prisma/migrations/20260924160000_customer_survey_question_fixa_nota_geral_unique
+  /// (o Prisma Schema Language não suporta unique parcial declarativamente —
+  /// mesma limitação já documentada no `@@index` parcial de
+  /// `ChecklistOccurrence` acima). De propósito SEM nenhum
+  /// `@@unique`/`@@index` "placeholder" aqui apontando pra esse índice: ao
+  /// contrário do caso do Checklist (um `@@index` comum como placeholder de
+  /// um índice parcial comum é só uma sub-descrição inofensiva), um
+  /// `@@unique([fixaNotaGeral])` comum descreveria algo FALSO e perigoso —
+  /// limitaria a tabela inteira a no máximo 1 linha com `fixaNotaGeral =
+  /// false` também, quebrando as perguntas regulares.
   fixaNotaGeral Boolean                    @default(false)
   createdAt     DateTime                   @default(now())
   updatedAt     DateTime                   @updatedAt
