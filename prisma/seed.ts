@@ -345,21 +345,38 @@ const CATEGORIES = [
       { key: "regras", name: "Regras de Pontuação", icon: "BookOpen" },
     ],
   },
-  // "Satisfação do Cliente" (módulo novo, Fases 1-2 de docs/satisfacao-cliente-proposta.md)
-  // ainda NÃO entra aqui — mesmo raciocínio do Fechamento do Dia: a entrada de
-  // Category/Subcategory no menu lateral só é seedada quando existir pelo menos uma PÁGINA de
-  // verdade por trás dela, senão qualquer usuário com acesso ao módulo (a maioria dos perfis,
-  // que ganha "Visualizar" por padrão em todo módulo listado em MODULES — inclusive
-  // "funcionário") veria o link e cairia num 404 clicando por curiosidade.
-  //
-  // Isso já foi tentado uma vez durante a Fase 2 (Perguntas/QR Codes-Mesas ganharam API admin
-  // nessa fase, então a entrada no menu foi trazida de volta antecipadamente, junto) e revertido
-  // na revisão do Teulis: ele testou o link de verdade, logado, e confirmou 404, porque a tela
-  // (trabalho do Caio) ainda não existia — mesmo a API já estando pronta. Volta a fazer parte do
-  // seed quando a fase do Caio publicar as telas de Perguntas e QR Codes/Mesas de verdade, dessa
-  // vez junto com a página, sem intervalo de link morto. `src/lib/permissions.ts` já tem a
-  // entrada `satisfacao-cliente` em MODULES (não aparece sozinha no menu, é só o registro pra
-  // tela de Permissões/perfis).
+  {
+    // "Satisfação do Cliente" (módulo novo, ver docs/satisfacao-cliente-proposta.md) — SÓ com
+    // as 2 subcategorias que já têm página de verdade por trás (Perguntas e QR Codes/Mesas,
+    // publicadas pelo Caio em /portal/satisfacao-cliente/perguntas e /mesas). As outras 5
+    // (Visão Geral, Avaliações, Ranking de Garçons, Roleta de Prêmios, Configurações) continuam
+    // de fora até cada uma ganhar tela própria — mesmo raciocínio do Fechamento do Dia, e mesmo
+    // cuidado que já rendeu 2 reversões deste exato bloco antes (Fase 1: nenhuma tela ainda;
+    // Fase 2: API pronta mas tela do Caio ainda não — Teulis achou 404 ao vivo nas duas vezes).
+    // Desta vez a publicação deste seed é coordenada pelo líder pra só ir ao ar depois que a
+    // branch das telas do Caio já estiver em produção, nunca antes.
+    key: "satisfacao-cliente",
+    name: "Satisfação do Cliente",
+    icon: "Smile",
+    order: 19,
+    contentType: "satisfacao-cliente",
+    linked: false,
+    subs: [
+      { key: "perguntas", name: "Perguntas", icon: "ListChecks" },
+      // `key: "mesas"` (NÃO "mesas-qrcode") de propósito: o link do menu lateral é montado como
+      // `/portal/${categoria.key}/${subcategoria.key}` (src/components/sidebar/sidebar.tsx) e a
+      // pasta de rota que o Caio criou é literalmente
+      // src/app/portal/satisfacao-cliente/mesas/page.tsx — "mesas", não "mesas-qrcode" (esse
+      // último continua sendo só a STRING de subcategoria usada nos checks de
+      // `hasModulePermission(..., "mesas-qrcode")`, tanto na API quanto na própria página do
+      // Caio — é um identificador separado do `key` do menu, não precisa bater com ele).
+      // Confirmado lendo o worktree do Caio (satisfacao-cliente-fase2-ui) antes de seedar isto;
+      // as duas vezes anteriores que criei este bloco eu tinha usado "mesas-qrcode" aqui também
+      // (na ausência da tela real pra conferir contra), o que teria gerado um link morto
+      // /portal/satisfacao-cliente/mesas-qrcode mesmo depois da tela existir.
+      { key: "mesas", name: "QR Codes / Mesas", icon: "QrCode" },
+    ],
+  },
 ];
 
 async function main() {
