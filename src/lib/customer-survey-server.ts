@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { createNotifications } from "@/lib/notifications";
 import type { CustomerSurveyQuestion } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -236,4 +237,53 @@ export async function isNotaCritica(empresaId: string, notaGeral: number): Promi
   const config = await prisma.customerSurveyConfig.findUnique({ where: { empresaId } });
   const limite = config?.notaCriticaAbaixoDe ?? NOTA_CRITICA_ABAIXO_DE_PADRAO;
   return notaGeral < limite;
+}
+
+// ---------------------------------------------------------------------------
+// Push de avaliação crítica (Fase 3) — reaproveita `createNotifications`
+// (src/lib/notifications.ts), mesmo padrão já usado por Manutenção/Tarefas/
+// Fechamento do Dia: grava a `Notification` (sino) e dispara Web Push de
+// verdade pra cada `CustomerSurveyAlertRecipient` ativo da loja.
+// ---------------------------------------------------------------------------
+
+/**
+ * Dispara pros destinatários configurados (`CustomerSurveyAlertRecipient.ativo = true`) da loja
+ * da avaliação — nunca lança (mesma garantia de `createNotifications`/`sendPushToUser`: falha de
+ * push é só logada, nunca derruba a submissão pública que acabou de gravar a avaliação). Sem
+ * destinatário nenhum configurado, não faz nada (nem grava `Notification` nem tenta push) — é o
+ * estado padrão de uma loja nova, até alguém configurar a lista na tela de Configurações (fase
+ * futura).
+ */
+export async function notifyCriticalResponse(response: {
+  id: string;
+  empresaId: string;
+  tableId: string | null;
+  nomeInformado: string;
+  notaGeral: number;
+}): Promise<void> {
+  const recipients = await prisma.customerSurveyAlertRecipient.findMany({
+    where: { empresaId: response.empresaId, ativo: true },
+    select: { userId: true },
+  });
+  if (recipients.length === 0) return;
+
+  const table = response.tableId
+    ? await prisma.customerSurveyTable.findUnique({ where: { id: response.tableId }, select: { numero: true } })
+    : null;
+  const mesaLabel = table ? ` (Mesa ${table.numero})` : "";
+
+  await createNotifications(
+    recipients.map((r) => ({
+      userId: r.userId,
+      type: "AVALIACAO_CRITICA",
+      title: "Avaliação crítica recebida",
+      body: `${response.nomeInformado} deu nota ${response.notaGeral}/10${mesaLabel} na pesquisa de satisfação.`,
+      priority: "CRITICA" as const,
+      customerSurveyResponseId: response.id,
+      // Fase 4 ainda não existe (página Avaliações) — o link já aponta pro lugar certo pra
+      // quando ela existir, sem precisar mexer aqui de novo (mesmo raciocínio já usado pro QR
+      // Code apontar pra `/avaliar/[token]` antes da tela existir, na Fase 2).
+      url: `/portal/satisfacao-cliente/avaliacoes/${response.id}`,
+    }))
+  );
 }
