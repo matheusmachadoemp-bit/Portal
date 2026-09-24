@@ -3,9 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, SlidersHorizontal, Download, Megaphone, PieChart, X } from "lucide-react";
+import { Search, SlidersHorizontal, Download, Megaphone, X } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
-import { Modal } from "@/components/ui/modal";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { STATUS_LABEL, STATUS_TONE, frequenciaLabel, matchesCriteria, type ClienteStatus, type SegmentCriteria } from "@/lib/crm";
 import { ClientesImportButton } from "./clientes-import-button";
@@ -71,9 +70,6 @@ export function ClientesClient({
   const [minPedidos, setMinPedidos] = useState("");
   const [produto, setProduto] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showSegmentModal, setShowSegmentModal] = useState(false);
-  const [segmentName, setSegmentName] = useState("");
-  const [savingSegment, setSavingSegment] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -160,24 +156,6 @@ export function ClientesClient({
     const ids = Array.from(selected);
     const qs = ids.length > 0 ? `?clientes=${ids.join(",")}` : "";
     router.push(`/portal/crm/campanhas/novo${qs}`);
-  }
-
-  async function salvarSegmento() {
-    if (!segmentName.trim() || selected.size === 0) return;
-    setSavingSegment(true);
-    await fetch("/api/crm/segmentos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: segmentName,
-        description: `Segmento criado manualmente com ${selected.size} clientes selecionados.`,
-        criteria: { clienteIds: Array.from(selected) },
-      }),
-    });
-    setSavingSegment(false);
-    setShowSegmentModal(false);
-    setSegmentName("");
-    router.push("/portal/crm/segmentos");
   }
 
   return (
@@ -276,9 +254,6 @@ export function ClientesClient({
             <button onClick={criarCampanha} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-blue hover:bg-nord-blue-light text-white">
               <Megaphone size={13} /> Criar campanha
             </button>
-            <button onClick={() => setShowSegmentModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-nord-border text-nord-gray hover:text-white">
-              <PieChart size={13} /> Salvar como segmento
-            </button>
             <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-nord-border text-nord-gray hover:text-white">
               <Download size={13} /> Exportar
             </button>
@@ -355,25 +330,6 @@ export function ClientesClient({
           </table>
         </div>
       </div>
-
-      <Modal open={showSegmentModal} onClose={() => setShowSegmentModal(false)} title="Salvar seleção como segmento" widthClass="max-w-sm">
-        <div className="space-y-4">
-          <p className="text-xs text-nord-gray">{selected.size} clientes serão salvos neste segmento fixo.</p>
-          <input
-            value={segmentName}
-            onChange={(e) => setSegmentName(e.target.value)}
-            placeholder="Nome do segmento"
-            className="w-full bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-nord-blue"
-          />
-          <button
-            onClick={salvarSegmento}
-            disabled={!segmentName.trim() || savingSegment}
-            className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
-          >
-            {savingSegment ? "Salvando..." : "Salvar segmento"}
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }
