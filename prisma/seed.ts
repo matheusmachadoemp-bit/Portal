@@ -345,6 +345,15 @@ const CATEGORIES = [
       { key: "regras", name: "Regras de Pontuação", icon: "BookOpen" },
     ],
   },
+  // "Satisfação do Cliente" (módulo novo) ainda NÃO entra aqui nesta fase — decisão do líder:
+  // igual "Fechamento do Dia" (cuja Fase 1 também foi só schema/seed/rotas de submissão, sem
+  // menu, até a Fase 4a trazer a primeira tela navegável), a entrada de Category/Subcategory no
+  // menu lateral só é seedada quando existir pelo menos uma página de verdade por trás dela —
+  // senão usuários com acesso ao módulo (a maioria dos perfis, que ganha "Visualizar" por
+  // padrão) veriam links levando a 404 em produção. `src/lib/permissions.ts` já tem a entrada
+  // `satisfacao-cliente` em MODULES (não aparece sozinha no menu, é só o registro pra
+  // tela de Permissões/perfis) — só o menu lateral (Category/Subcategory) fica pra quando uma
+  // fase futura entregar a primeira tela navegável (ver docs/satisfacao-cliente-proposta.md).
 ];
 
 async function main() {
@@ -679,6 +688,52 @@ async function main() {
     const profile = await prisma.permissionProfile.findUnique({ where: { key: profileKey } });
     if (profile) {
       await prisma.user.update({ where: { id: u.id }, data: { permissionProfileId: profile.id } });
+    }
+  }
+
+  // --- Satisfação do Cliente (Fase 1): config padrão + catálogo de motivos, por loja ---
+  // Só schema/seed nesta fase, sem nenhuma rota ainda (ver docs/satisfacao-cliente-proposta.md).
+  // CustomerSurveyConfig é 1 linha por empresa (mesmo padrão singleton de ProductionSettings/
+  // LoyaltyConfig, seedado acima), criada aqui só com os valores padrão do schema
+  // (notaCriticaAbaixoDe=6, notaPositivaAPartirDe=8, giroRoletaIntervaloDias=30) — ajustável
+  // depois pela tela de Configurações do módulo (Fase 8).
+  console.log("Seeding Satisfação do Cliente (config + catálogo de motivos)...");
+  for (const empresa of [nordPizza, zarkiSushi]) {
+    await prisma.customerSurveyConfig.upsert({
+      where: { empresaId: empresa.id },
+      update: {},
+      create: { empresaId: empresa.id },
+    });
+  }
+
+  // Catálogo inicial de motivos de avaliação negativa — compartilhado entre lojas (empresaId
+  // null), com as 7 opções do exemplo original do pedido. É uma tabela editável (não um enum
+  // fixo do Prisma), então qualquer motivo novo que o responsável precise no futuro é cadastrado
+  // direto na tela de Configurações (Fase 8), sem precisar de migration — mesma regra de "nunca
+  // deixar um valor novo cair em Outros de forma definitiva" do CLAUDE.md.
+  //
+  // `findFirst` + create/update em vez de `upsert` de propósito: o índice único
+  // `@@unique([empresaId, nome])` tem `empresaId` nulável, e o Postgres trata NULL como distinto
+  // de outro NULL em constraints de unicidade — o Prisma client reflete isso não aceitando
+  // `null` na chave composta do `where` de upsert (`empresaId` fica tipado como `string`
+  // obrigatório em `CustomerSurveyReasonTagEmpresaIdNomeCompoundUniqueInput`, mesmo a coluna
+  // sendo nulável no schema). `findFirst` funciona para qualquer valor, inclusive `null`.
+  const CUSTOMER_SURVEY_REASON_TAGS = [
+    "Demora no atendimento",
+    "Atendimento",
+    "Produto",
+    "Pedido errado",
+    "Ambiente",
+    "Limpeza",
+    "Outros",
+  ];
+  for (let i = 0; i < CUSTOMER_SURVEY_REASON_TAGS.length; i++) {
+    const nome = CUSTOMER_SURVEY_REASON_TAGS[i];
+    const existing = await prisma.customerSurveyReasonTag.findFirst({ where: { empresaId: null, nome } });
+    if (existing) {
+      await prisma.customerSurveyReasonTag.update({ where: { id: existing.id }, data: { ordem: i, ativo: true } });
+    } else {
+      await prisma.customerSurveyReasonTag.create({ data: { empresaId: null, nome, ordem: i } });
     }
   }
 
@@ -1332,6 +1387,10 @@ async function main() {
           admissionDate: new Date(2022, 3, 5),
           status: "ATIVO",
           gestorResponsavel: "Gerente Nord",
+          // Satisfação do Cliente (Fase 1, decisão #2): marca explícita de "atende salão" — os
+          // 3 colaboradores com cargo "Garçom" do seed são o caso óbvio, para o select de garçom
+          // da pesquisa (Fase 2) e os rankings (Fase 5) já terem dado de exemplo pra testar.
+          atendeSalao: true,
         },
       }),
       prisma.employee.create({
@@ -1343,6 +1402,7 @@ async function main() {
           admissionDate: new Date(2023, 7, 18),
           status: "ATIVO",
           gestorResponsavel: "Gerente Nord",
+          atendeSalao: true,
         },
       }),
       prisma.employee.create({
@@ -1354,6 +1414,7 @@ async function main() {
           admissionDate: new Date(2024, 0, 9),
           status: "ATIVO",
           gestorResponsavel: "Gerente Nord",
+          atendeSalao: true,
         },
       }),
     ]);
