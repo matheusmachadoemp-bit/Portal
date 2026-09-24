@@ -12,9 +12,8 @@ import { MesasClient } from "./mesas-client";
  * "satisfacao-cliente:mesas-qrcode" (mesmo gate que GET /api/satisfacao-cliente/mesas já aplica);
  * a lista em si vem 100% daquela rota, consumida pelo client component abaixo.
  *
- * Sem `backHref`: a categoria "Satisfação do Cliente" ainda não tem uma página "hub" (Visão
- * Geral, prevista para uma fase futura) nem entrada no menu lateral (chega numa tarefa backend
- * separada) — quando existir, aponte o botão de voltar pra ela.
+ * `backHref` aponta pra Visão Geral (Fase 4) — a página "hub" do módulo, que não existia quando
+ * esta tela foi criada (Fase 2).
  */
 export default async function SatisfacaoClienteMesasPage() {
   const session = await auth();
@@ -29,7 +28,12 @@ export default async function SatisfacaoClienteMesasPage() {
   ]);
 
   return (
-    <PageContainer title="Mesas e QR Codes" subtitle="Cadastro das mesas e QR Codes da pesquisa de satisfação do cliente">
+    <PageContainer
+      title="Mesas e QR Codes"
+      subtitle="Cadastro das mesas e QR Codes da pesquisa de satisfação do cliente"
+      backHref="/portal/satisfacao-cliente/visao-geral"
+      backLabel="Satisfação do Cliente"
+    >
       <MesasClient canCreate={canCreate} canEdit={canEdit} isGrupoNordMode={ctx?.mode !== "single"} />
     </PageContainer>
   );

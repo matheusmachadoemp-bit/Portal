@@ -13,9 +13,8 @@ import { PerguntasClient } from "./perguntas-client";
  * "satisfacao-cliente:perguntas" (mesmo gate que GET /api/satisfacao-cliente/perguntas já
  * aplica); a lista em si vem 100% daquela rota, consumida pelo client component abaixo.
  *
- * Sem `backHref`: a categoria "Satisfação do Cliente" ainda não tem uma página "hub" (Visão
- * Geral, prevista para uma fase futura) nem entrada no menu lateral (chega numa tarefa backend
- * separada) — quando existir, aponte o botão de voltar pra ela.
+ * `backHref` aponta pra Visão Geral (Fase 4) — a página "hub" do módulo, que não existia quando
+ * esta tela foi criada (Fase 2).
  */
 export default async function SatisfacaoClientePerguntasPage() {
   const session = await auth();
@@ -30,7 +29,12 @@ export default async function SatisfacaoClientePerguntasPage() {
   ]);
 
   return (
-    <PageContainer title="Perguntas" subtitle="Perguntas da pesquisa de satisfação do cliente">
+    <PageContainer
+      title="Perguntas"
+      subtitle="Perguntas da pesquisa de satisfação do cliente"
+      backHref="/portal/satisfacao-cliente/visao-geral"
+      backLabel="Satisfação do Cliente"
+    >
       <PerguntasClient canCreate={canCreate} canEdit={canEdit} isGrupoNordMode={ctx?.mode !== "single"} />
     </PageContainer>
   );

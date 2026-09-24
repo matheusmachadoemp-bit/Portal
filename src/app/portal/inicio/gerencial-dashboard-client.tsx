@@ -263,7 +263,12 @@ export function GerencialDashboardClient({
                   icon: "Smile",
                   delta: indicadores.nps.variacaoPercent,
                   color: npsColor(indicadores.nps.valor),
-                  href: "/portal/crm/satisfacao",
+                  // Migrado pro módulo novo (Fase 4 de Satisfação do Cliente): a página antiga
+                  // (/portal/crm/satisfacao) ainda existe mas lê o dataset ANTIGO (NpsResponse),
+                  // que este card não usa mais desde que passou a ler de CustomerSurveyResponse
+                  // (ver src/lib/inicio.ts) — apontar pra lá mostraria números que não batem com
+                  // o valor do próprio card.
+                  href: "/portal/satisfacao-cliente/visao-geral",
                 },
               ]}
             />
