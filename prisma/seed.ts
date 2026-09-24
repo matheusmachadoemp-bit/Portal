@@ -245,7 +245,13 @@ const CATEGORIES = [
       { key: "automacoes", name: "Automações", icon: "Workflow" },
       { key: "fidelidade", name: "Fidelidade", icon: "Gift" },
       { key: "aniversariantes", name: "Aniversariantes", icon: "Cake" },
-      { key: "satisfacao", name: "Satisfação / NPS", icon: "Smile" },
+      // "Satisfação / NPS" (key "satisfacao") saiu do menu na Fase 4 do módulo "Satisfação do
+      // Cliente" (decisão #1 já validada com o Matheus, ver docs/satisfacao-cliente-proposta.md):
+      // os widgets que liam de NpsResponse (Início, dashboard do CRM) migraram pra ler de
+      // CustomerSurveyResponse — a página antiga (src/app/portal/crm/satisfacao/) e o model
+      // NpsResponse continuam existindo, só não têm mais link nenhum no menu lateral. Ver
+      // prisma/migrations/*_remove_satisfacao_subcategoria_crm para a remoção do registro que já
+      // existia em produção.
       { key: "inteligencia", name: "Inteligência de Cliente", icon: "BrainCircuit" },
     ],
   },
