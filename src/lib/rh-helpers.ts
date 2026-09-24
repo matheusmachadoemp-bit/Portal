@@ -72,13 +72,34 @@ export type TimeEntryLike = {
   falta: boolean;
 };
 
-const JORNADA_DIARIA_HORAS = 8;
 const JORNADA_SEMANAL_HORAS = 44;
 
-/** Alertas automáticos do Ponto Eletrônico, calculados a partir dos registros já carregados. */
-export function pontoAlerts(entries: TimeEntryLike[]): string[] {
+/**
+ * Subconjunto de `TimeEntryTotals` (src/lib/ponto-eletronico-server.ts) usado por `pontoAlerts` —
+ * definido aqui (em vez de importado de lá) porque este arquivo é puro/client-safe e o arquivo
+ * server importa `prisma` diretamente, mesmo padrão já usado pelo tipo local `TimeEntryTotals` de
+ * `ponto-eletronico-client.tsx`.
+ */
+export type PontoAlertTotals = { bancoMinutos: number; semSaida: number };
+
+/**
+ * Alertas automáticos do Ponto Eletrônico.
+ *
+ * `entries` só alimenta os 2 alertas ancorados na SEMANA ATUAL (`atrasosSemana`/`horasSemana`) —
+ * seguros mesmo recebendo uma lista cortada por `take` (ex. `visiblePeriodo` no client, que tem
+ * `take:2000` desde a task #282/#373 e ainda é filtrada pelo período selecionado na tela), porque a
+ * semana atual está sempre entre os registros mais recentes.
+ *
+ * `totals` (`bancoMinutos`/`semSaida`) alimenta os outros 2 alertas (banco de horas e "sem saída"),
+ * que antes somavam/filtravam esse mesmo `entries` cortado — divergindo do StatCard "Banco de
+ * horas" (já correto desde a #316) assim que uma loja/colaborador passava de 2000 registros com um
+ * período antigo selecionado (task #319, achado do Teulis na revisão da #316). Precisa vir de uma
+ * agregação no banco sem `take` (ver `computeTimeEntryTotals`, mesmo racional de
+ * `ponto-eletronico-server.ts`), escopada pelo mesmo filtro (empresa/colaborador/período) que
+ * `entries`.
+ */
+export function pontoAlerts(entries: TimeEntryLike[], totals: PontoAlertTotals): string[] {
   const alerts: string[] = [];
-  if (entries.length === 0) return alerts;
 
   const now = new Date();
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -90,7 +111,7 @@ export function pontoAlerts(entries: TimeEntryLike[]): string[] {
     alerts.push(`Chegou atrasado ${atrasosSemana} vezes esta semana.`);
   }
 
-  const bancoTotalMinutos = entries.reduce((sum, e) => sum + (e.horasTrabalhadas - JORNADA_DIARIA_HORAS) * 60, 0);
+  const bancoTotalMinutos = totals.bancoMinutos;
   if (bancoTotalMinutos <= -60) {
     alerts.push(`Possui banco de horas negativo (${Math.round(bancoTotalMinutos / 60)}h).`);
   } else if (bancoTotalMinutos >= 60) {
@@ -102,9 +123,9 @@ export function pontoAlerts(entries: TimeEntryLike[]): string[] {
     alerts.push(`Ultrapassou a carga semanal (${horasSemana.toFixed(1)}h de ${JORNADA_SEMANAL_HORAS}h).`);
   }
 
-  const semSaida = entries.filter((e) => e.entrada && !e.saida);
-  if (semSaida.length > 0) {
-    alerts.push(`Não registrou saída em ${semSaida.length} dia${semSaida.length > 1 ? "s" : ""}.`);
+  const semSaida = totals.semSaida;
+  if (semSaida > 0) {
+    alerts.push(`Não registrou saída em ${semSaida} dia${semSaida > 1 ? "s" : ""}.`);
   }
 
   return alerts;

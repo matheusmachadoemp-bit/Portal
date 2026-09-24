@@ -45,6 +45,14 @@ export type TimeEntryTotals = {
   atrasos: number;
   faltas: number;
   bancoMinutos: number;
+  /**
+   * Task #319 (achado do Teulis na revisão da #316): quantidade de registros do `where` com
+   * entrada preenchida e sem saída registrada — alimenta o alerta "Não registrou saída em N
+   * dia(s)" de `pontoAlerts` (rh-helpers.ts). Antes vinha de filtrar a lista `entries`/
+   * `visiblePeriodo` já cortada por `take:2000` no client; agora é `count` direto no banco, mesmo
+   * racional de `atrasos`/`faltas` acima — nunca sofre o corte do `take`.
+   */
+  semSaida: number;
 };
 
 /**
@@ -55,17 +63,18 @@ export type TimeEntryTotals = {
  * (`computeTimeEntryMonthlyChart`) não, de propósito (ver lá).
  */
 export async function computeTimeEntryTotals(where: Prisma.TimeEntryWhereInput): Promise<TimeEntryTotals> {
-  const [agg, atrasos, faltas] = await Promise.all([
+  const [agg, atrasos, faltas, semSaida] = await Promise.all([
     prisma.timeEntry.aggregate({ where, _sum: { horasTrabalhadas: true }, _count: { _all: true } }),
     prisma.timeEntry.count({ where: { ...where, atrasoMinutos: { gt: 0 } } }),
     prisma.timeEntry.count({ where: { ...where, falta: true } }),
+    prisma.timeEntry.count({ where: { ...where, entrada: { not: null }, saida: null } }),
   ]);
   const horas = agg._sum.horasTrabalhadas ?? 0;
   // Mesma fórmula de `pontoAlerts` (rh-helpers.ts): cada registro do período (trabalhado ou falta)
   // soma/desconta `horasTrabalhadas - 8h` do banco — soma sobre TODOS os registros do `where`, não
   // só os com falta=false, igual o cálculo client-side original fazia.
   const bancoMinutos = horas * 60 - JORNADA_DIARIA_MINUTOS * agg._count._all;
-  return { horas, atrasos, faltas, bancoMinutos };
+  return { horas, atrasos, faltas, bancoMinutos, semSaida };
 }
 
 export type TimeEntryMonthlyPoint = { mes: string; horas: number; atrasos: number; faltas: number; banco: number };

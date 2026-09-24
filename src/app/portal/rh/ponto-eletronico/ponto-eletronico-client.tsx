@@ -39,7 +39,12 @@ type TimeEntryDTO = TimeEntryLike & {
  * calculados no servidor via agregação no banco — nunca somando/contando `entries`/`visible` aqui
  * no cliente, porque essa lista tem `take:2000` (task #282/#373).
  */
-type TimeEntryTotals = { horas: number; atrasos: number; faltas: number; bancoMinutos: number };
+/**
+ * Task #319 (achado do Teulis na revisão da #316): `semSaida` passa a vir junto de
+ * `computeTimeEntryTotals` (agregação no banco, sem `take`) — usado pelo alerta "Não registrou
+ * saída em N dia(s)" em vez de filtrar `visiblePeriodo` (que tem `take:2000`), ver rh-helpers.ts.
+ */
+type TimeEntryTotals = { horas: number; atrasos: number; faltas: number; bancoMinutos: number; semSaida: number };
 type TimeEntryMonthlyPoint = { mes: string; horas: number; atrasos: number; faltas: number; banco: number };
 
 function emptyForm(employeeId: string) {
@@ -147,9 +152,11 @@ export function PontoEletronicoClient({
 
   // O filtro de período escopa a TABELA (client-side, sobre a lista já cortada por `take` — isso
   // nunca foi o problema desta task, só os StatCards/gráficos dependiam dela) e, via `alerts`
-  // abaixo, os alertas automáticos — mas não os gráficos "por mês", que são uma tendência de vários
-  // meses de propósito, igual à mini-série de 7 dias do painel de Início, que também fica fixa
-  // independente do período selecionado no resto da tela.
+  // abaixo, os 2 alertas ancorados na semana atual (`atrasosSemana`/`horasSemana`, seguros mesmo
+  // sobre uma lista cortada — ver rh-helpers.ts) — mas não os gráficos "por mês", que são uma
+  // tendência de vários meses de propósito, igual à mini-série de 7 dias do painel de Início, que
+  // também fica fixa independente do período selecionado no resto da tela. Os outros 2 alertas
+  // (banco de horas / "sem saída") vêm de `totals`, não de `visiblePeriodo` (task #319).
   const visiblePeriodo = useMemo(() => {
     const range = resolveSelectedRange(periodo, customFrom, customTo);
     if (!range) return visible;
@@ -159,7 +166,11 @@ export function PontoEletronicoClient({
     });
   }, [visible, periodo, customFrom, customTo]);
 
-  const alerts = useMemo(() => pontoAlerts(visiblePeriodo), [visiblePeriodo]);
+  // Task #319: `totals` (bancoMinutos/semSaida) vem de agregação no banco sem `take`
+  // (computeTimeEntryTotals), escopada pelo mesmo employeeId/período que `visiblePeriodo` — ver
+  // racional completo em rh-helpers.ts. Só `atrasosSemana`/`horasSemana` (dentro de `pontoAlerts`)
+  // ainda usam `visiblePeriodo` diretamente, o que é seguro (ancorados na semana atual).
+  const alerts = useMemo(() => pontoAlerts(visiblePeriodo, totals), [visiblePeriodo, totals]);
 
   async function refresh() {
     const url = fixedEmployeeId ? `/api/rh/time-entries?employeeId=${fixedEmployeeId}` : "/api/rh/time-entries";
