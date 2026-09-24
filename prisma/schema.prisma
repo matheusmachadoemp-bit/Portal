@@ -132,6 +132,9 @@ model User {
   campaignsCreated                   Campaign[]                          @relation("CampaignCreatedBy")
   automationsCreated                 Automation[]                        @relation("AutomationCreatedBy")
   npsResponsesAssigned               NpsResponse[]                       @relation("NpsResponsavel")
+  customerSurveyResponsesAssigned    CustomerSurveyResponse[]            @relation("CustomerSurveyResponsavel")
+  customerSurveyAlertRecipients      CustomerSurveyAlertRecipient[]      @relation("CustomerSurveyAlertRecipient")
+  rouletteSpinsResgatados            RouletteSpin[]                      @relation("RouletteSpinResgatadoPor")
   tasksCreated                       Task[]                              @relation("TaskCreatedBy")
   tasksToValidate                    Task[]                              @relation("TaskValidator")
   taskAssignments                    TaskAssignee[]
@@ -315,6 +318,15 @@ model Empresa {
   loyaltyRewards                     LoyaltyReward[]
   loyaltyAccounts                    LoyaltyAccount[]
   npsResponses                       NpsResponse[]
+  customerSurveyTables               CustomerSurveyTable[]
+  customerSurveyQuestions            CustomerSurveyQuestion[]
+  customerSurveyReasonTags           CustomerSurveyReasonTag[]
+  customerSurveyResponses            CustomerSurveyResponse[]
+  customerSurveyConfig               CustomerSurveyConfig?
+  customerSurveyAlertRecipients      CustomerSurveyAlertRecipient[]
+  roulettePrizes                     RoulettePrize[]
+  rouletteSpins                      RouletteSpin[]
+  rouletteEligibilities              RouletteEligibility[]
   products                           Product[]
   ingredients                        Ingredient[]
   stockMovements                     StockMovement[]
@@ -728,12 +740,14 @@ model Cliente {
   ticketMedioImportado  Float?
   ultimaCompraImportada DateTime?
 
-  vendas             Sale[]
-  notas              CustomerNote[]
-  campaignRecipients CampaignRecipient[]
-  npsResponses       NpsResponse[]
-  loyaltyAccount     LoyaltyAccount?
-  historicoImportado ClienteHistoricoImportado[]
+  vendas                  Sale[]
+  notas                   CustomerNote[]
+  campaignRecipients      CampaignRecipient[]
+  npsResponses            NpsResponse[]
+  loyaltyAccount          LoyaltyAccount?
+  historicoImportado      ClienteHistoricoImportado[]
+  customerSurveyResponses CustomerSurveyResponse[]
+  rouletteSpins           RouletteSpin[]
 
   @@unique([empresaId, telefone])
   @@index([empresaId, dataNascimento])
@@ -1662,6 +1676,13 @@ model Employee {
   name                  String
   cargo                 String
   setor                 String
+  /// Marca explícita de "este colaborador atende salão" (select de garçom do módulo
+  /// Satisfação do Cliente e os rankings por garçom) — um campo próprio em vez de comparar
+  /// `cargo === "Garçom"` por texto, porque `cargo` é validado só contra o catálogo
+  /// `EmployeeCargo` POR LOJA (uma loja futura pode usar "Garçonete"/"Atendente de Salão" em
+  /// vez de "Garçom" e ainda assim marcar `atendeSalao = true`). Marcado manualmente na ficha
+  /// do colaborador (RH > Colaboradores) — não inferido a partir do cargo.
+  atendeSalao           Boolean        @default(false)
   photoUrl              String?
   admissionDate         DateTime
   terminationDate       DateTime?
@@ -1698,6 +1719,7 @@ model Employee {
   absences                Absence[]
   dayOffEntries           DayOffEntry[]
   scheduleChangeLogs      ScheduleChangeLog[]
+  garcomIndicacoes        CustomerSurveyResponse[] @relation("CustomerSurveyGarcomIndicado")
 
   @@index([empresaId])
 }
@@ -5440,4 +5462,309 @@ model FechamentoOcorrencia {
   @@index([empresaId, data])
   @@index([empresaId, status])
   @@index([categoriaId])
+}
+
+// ---------------------------------------------------------------------------
+// SATISFAÇÃO DO CLIENTE — Fase 1 (schema + seed + menu, sem rota nenhuma)
+//
+// Módulo novo, independente do `model NpsResponse` (CRM > Satisfação/NPS,
+// acima): decisão do Matheus foi aposentar a página antiga (tirar do menu)
+// assim que este módulo estiver pronto, migrando os widgets que hoje leem de
+// `NpsResponse` (Início, CRM dashboard) para lerem daqui — SEM migrar o
+// histórico de `NpsResponse` para cá. Isso só acontece na Fase 4 (dashboard);
+// até lá os dois modelos coexistem sem relação entre si. Ver
+// docs/satisfacao-cliente-proposta.md (worktree satisfacao-cliente-proposta)
+// para a investigação completa, as 10 decisões e as 9 fases propostas.
+//
+// Todo model novo leva `empresaId` (nunca compartilhado entre lojas, mesmo
+// padrão de Cliente/Sale/NpsResponse) e participa do filtro por
+// `empresaIdsForContext(ctx)` como qualquer outro módulo multiloja.
+// ---------------------------------------------------------------------------
+
+/// Mesa/QR física de uma loja. `token` é o identificador usado na URL pública
+/// `/avaliar/[token]` — nunca o `id` do registro (evita enumeração
+/// sequencial). `numero` é texto livre ("01", "12", "Balcão") de propósito:
+/// não reaproveita `Sale.mesaNumero` (conceito diferente — um é texto
+/// digitado numa venda, o outro é um registro de mesa com QR Code próprio,
+/// ativo/inativo).
+model CustomerSurveyTable {
+  id         String    @id @default(cuid())
+  empresaId  String
+  empresa    Empresa   @relation(fields: [empresaId], references: [id])
+  numero     String
+  token      String    @unique
+  ativo      Boolean   @default(true)
+  qrGeradoEm DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  avaliacoes CustomerSurveyResponse[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId])
+}
+
+enum CustomerSurveyQuestionType {
+  NOTA_0_5
+  /// Reservado para a pergunta fixa "nota geral" — ver `fixaNotaGeral`.
+  NOTA_0_10
+  GOSTEI_NAO_GOSTEI
+  TEXTO_LIVRE
+}
+
+/// Pergunta configurável da pesquisa. `empresaId = null` é uma pergunta
+/// compartilhada (padrão único usado por todas as lojas); preenchido é um
+/// override específico daquela loja — "Padrão único, com opção de
+/// customizar" (decisão do Matheus), sem necessidade de nenhum campo extra
+/// além deste já proposto.
+model CustomerSurveyQuestion {
+  id            String                     @id @default(cuid())
+  empresaId     String?
+  empresa       Empresa?                   @relation(fields: [empresaId], references: [id])
+  tipo          CustomerSurveyQuestionType
+  titulo        String
+  /// Ex.: "atendimento" | "comida" | "tempo_espera" | "ambiente" | "limpeza"
+  /// — agrupa perguntas nos gráficos de "satisfação por área" (Fase 4) e no
+  /// cálculo da nota de atendimento do garçom (Fase 5).
+  tema          String?
+  obrigatoria   Boolean                    @default(true)
+  ordem         Int                        @default(0)
+  /// Nunca hard-delete pergunta com resposta — mesma lição do
+  /// Checklist/RH: uma pergunta removida do formulário fica `ativo = false`.
+  ativo         Boolean                    @default(true)
+  /// Marca a pergunta obrigatória de nota 0-10. Só 1 ativa por empresa (mais
+  /// a compartilhada, se a loja não tiver override) — regra aplicada pela
+  /// API/tela de Perguntas, não dá para expressar como constraint de banco.
+  fixaNotaGeral Boolean                    @default(false)
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  respostas CustomerSurveyAnswer[]
+
+  @@index([empresaId])
+}
+
+/// Catálogo editável de motivos de avaliação negativa — mesma regra de
+/// "nunca deixar um valor novo cair em Outros de forma definitiva" do
+/// CLAUDE.md, já aplicada a `PaymentMethod`/`EmployeeCargo`. `empresaId =
+/// null` é um motivo compartilhado entre lojas (catálogo inicial do seed).
+model CustomerSurveyReasonTag {
+  id        String   @id @default(cuid())
+  empresaId String?
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+  nome      String
+  ativo     Boolean  @default(true)
+  ordem     Int      @default(0)
+
+  respostas CustomerSurveyResponse[]
+
+  // `@@unique([empresaId, nome])` protege de verdade os motivos POR LOJA (empresaId
+  // preenchido), mas não os compartilhados: o Postgres trata cada NULL como distinto de
+  // qualquer outro NULL numa constraint de unicidade, então nada no banco impede 2 linhas com
+  // `empresaId = null` e o mesmo `nome`. A idempotência do catálogo compartilhado (seed) é
+  // garantida só pelo `findFirst({ empresaId: null, nome })` antes de criar, em `prisma/seed.ts`
+  // — não pelo índice. Mesmo trade-off documentado perto de `FechamentoPergunta` neste arquivo;
+  // um refactor futuro do seed que troque esse `findFirst` por um `upsert` direto na chave
+  // composta reintroduziria o risco de duplicata silenciosa para os motivos compartilhados.
+  @@unique([empresaId, nome])
+}
+
+enum CustomerSurveyStatus {
+  NOVA
+  EM_ATENDIMENTO
+  RESOLVIDA
+}
+
+/// Uma pesquisa respondida por um cliente. Guarda uma cópia própria dos
+/// dados de identificação digitados (`nomeInformado`/`telefoneInformado`/
+/// `dataNascimentoInformada`), nunca só a FK para `Cliente` — mesmo
+/// raciocínio de `ClienteHistoricoImportado`: histórico fiel do momento da
+/// resposta, mesmo que o cadastro do `Cliente` seja editado depois.
+model CustomerSurveyResponse {
+  id        String               @id @default(cuid())
+  empresaId String
+  empresa   Empresa              @relation(fields: [empresaId], references: [id])
+  tableId   String?
+  table     CustomerSurveyTable? @relation(fields: [tableId], references: [id])
+
+  clienteId               String?
+  cliente                 Cliente?  @relation(fields: [clienteId], references: [id])
+  nomeInformado           String
+  telefoneInformado       String
+  dataNascimentoInformada DateTime?
+
+  garcomIndicadoId String?
+  garcomIndicado   Employee? @relation("CustomerSurveyGarcomIndicado", fields: [garcomIndicadoId], references: [id])
+
+  /// Nota geral 0-10 — resposta à pergunta fixa (`fixaNotaGeral`).
+  notaGeral   Int
+  /// Congelado no momento do submit a partir de `CustomerSurveyConfig`
+  /// vigente naquele instante — não recalcula se a config mudar depois
+  /// (senão o histórico do dashboard mudaria retroativamente toda vez que
+  /// `notaCriticaAbaixoDe` fosse ajustado).
+  critica     Boolean                  @default(false)
+  /// Preenchido pelo responsável, na triagem/tratamento da ocorrência (Fase
+  /// 3) — decisão do Matheus: o motivo NÃO é escolhido pelo cliente no
+  /// formulário público.
+  motivoTagId String?
+  motivoTag   CustomerSurveyReasonTag? @relation(fields: [motivoTagId], references: [id])
+  sugestao    String?
+
+  status         CustomerSurveyStatus @default(NOVA)
+  responsavelId  String?
+  responsavel    User?                @relation("CustomerSurveyResponsavel", fields: [responsavelId], references: [id])
+  assumidoEm     DateTime?
+  resolucaoTexto String?
+  resolvidoEm    DateTime?
+
+  /// Só para auditoria de abuso do formulário público — nunca exibido na tela.
+  ip          String?
+  submittedAt DateTime @default(now())
+
+  respostas    CustomerSurveyAnswer[]
+  rouletteSpin RouletteSpin?
+
+  @@index([empresaId, submittedAt])
+  @@index([empresaId, critica, status])
+  @@index([garcomIndicadoId])
+  @@index([tableId])
+  @@index([clienteId])
+}
+
+model CustomerSurveyAnswer {
+  id          String                 @id @default(cuid())
+  responseId  String
+  response    CustomerSurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    CustomerSurveyQuestion @relation(fields: [questionId], references: [id])
+  /// 0-5 ou 0-10, conforme o tipo da pergunta.
+  valorNota   Int?
+  /// true = 👍, false = 👎
+  valorGostei Boolean?
+  /// Texto livre, ou "o que não te agradou" quando `valorGostei = false`.
+  valorTexto  String?
+
+  /// No máximo 1 resposta por pergunta dentro da mesma submissão — mesma
+  /// constraint que `SatisfactionAnswer` (RH) já usa para a mesma situação.
+  /// Sem isso, um double-submit/retry no formulário público (Fase 2) podia
+  /// gravar 2 linhas para a mesma pergunta na mesma resposta, corrompendo
+  /// silenciosamente médias/agregados das Fases 4/5. O índice desta
+  /// constraint já cobre buscas só por `responseId` (prefixo esquerdo), por
+  /// isso não há um `@@index([responseId])` separado — mesmo padrão de
+  /// `SatisfactionAnswer`.
+  @@unique([responseId, questionId])
+  @@index([questionId])
+}
+
+/// Configuração por loja — 1 linha por `Empresa`, criada no seed com os
+/// valores padrão abaixo (mesmo padrão singleton de `LoyaltyConfig`/
+/// `ProductionSettings`: sem `createdAt`, só `updatedAt`).
+model CustomerSurveyConfig {
+  id                      String   @id @default(cuid())
+  empresaId               String   @unique
+  empresa                 Empresa  @relation(fields: [empresaId], references: [id])
+  /// Crítica = notaGeral < este valor.
+  notaCriticaAbaixoDe     Int      @default(6)
+  /// Positiva = notaGeral >= este valor (0-5 crítica / 6-7 neutra / 8-10
+  /// positiva, no padrão default).
+  notaPositivaAPartirDe   Int      @default(8)
+  giroRoletaIntervaloDias Int      @default(30)
+  updatedAt               DateTime @updatedAt
+}
+
+/// Multi-select de usuários específicos (não Role/cargo) que recebem o push
+/// automático de avaliação crítica — decisão do Matheus, igual proposto.
+model CustomerSurveyAlertRecipient {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  userId    String
+  user      User    @relation("CustomerSurveyAlertRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  ativo     Boolean @default(true)
+
+  @@unique([empresaId, userId])
+  @@index([empresaId])
+}
+
+// ---------------------------------------------------------------------------
+// SATISFAÇÃO DO CLIENTE — roleta de prêmios (schema só; sem rota/lógica de
+// giro nesta fase — ver Fase 6 em docs/satisfacao-cliente-proposta.md)
+// ---------------------------------------------------------------------------
+
+model RoulettePrize {
+  id                   String   @id @default(cuid())
+  empresaId            String
+  empresa              Empresa  @relation(fields: [empresaId], references: [id])
+  nome                 String
+  descricao            String?
+  imagemUrl            String?
+  /// Fallback lucide (DynamicIcon) quando não há imagem.
+  icone                String?
+  /// `null` = sem limite de estoque.
+  quantidadeDisponivel Int?
+  quantidadeGanha      Int      @default(0)
+  /// Validado na API: soma dos ativos de uma empresa = 100 (não dá para
+  /// garantir isso via constraint de banco).
+  probabilidadePercent Float
+  validadeDias         Int      @default(30)
+  ativo                Boolean  @default(true)
+  ordem                Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  spins RouletteSpin[]
+
+  @@index([empresaId, ativo])
+}
+
+enum RouletteSpinStatus {
+  DISPONIVEL
+  RESGATADO
+  EXPIRADO
+}
+
+model RouletteSpin {
+  id             String                 @id @default(cuid())
+  empresaId      String
+  empresa        Empresa                @relation(fields: [empresaId], references: [id])
+  /// 1 giro por avaliação concluída.
+  responseId     String                 @unique
+  response       CustomerSurveyResponse @relation(fields: [responseId], references: [id])
+  clienteId      String?
+  cliente        Cliente?               @relation(fields: [clienteId], references: [id])
+  /// Congelado no momento do giro — base da regra "1 giro por telefone a
+  /// cada X dias" (ver `RouletteEligibility`).
+  telefone       String
+  prizeId        String
+  prize          RoulettePrize          @relation(fields: [prizeId], references: [id])
+  /// `null` quando o resultado foi "Tente novamente".
+  codigo         String?                @unique
+  status         RouletteSpinStatus     @default(DISPONIVEL)
+  validadeAte    DateTime?
+  resgatadoEm    DateTime?
+  resgatadoPorId String?
+  resgatadoPor   User?                  @relation("RouletteSpinResgatadoPor", fields: [resgatadoPorId], references: [id])
+  createdAt      DateTime               @default(now())
+
+  /// Regra anti-fraude — ver `RouletteEligibility`.
+  @@index([empresaId, telefone, createdAt])
+  @@index([prizeId])
+}
+
+/// Suporte à regra anti-fraude "1 giro por telefone a cada X dias" — 1 linha
+/// por telefone+empresa, atualizada atomicamente (mesmo padrão de
+/// `checkRateLimit`: `updateMany` condicional, nunca ler-e-regravar) para
+/// dois giros simultâneos do mesmo telefone nunca gerarem dois prêmios. Não
+/// reaproveita `RateLimitHit` de propósito: aquela é uma janela deslizante
+/// curta (minutos) para throttle de abuso; esta é uma janela de dias,
+/// semanticamente uma regra de negócio de elegibilidade.
+model RouletteEligibility {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id])
+  telefone     String
+  ultimoGiroEm DateTime
+  updatedAt    DateTime @updatedAt
+
+  @@unique([empresaId, telefone])
 }

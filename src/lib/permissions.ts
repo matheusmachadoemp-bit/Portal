@@ -23,6 +23,7 @@ export const MODULES = [
   { key: "manutencao", label: "Manutenção" },
   { key: "producao", label: "Produção" },
   { key: "loja-nord", label: "Loja Nord" },
+  { key: "satisfacao-cliente", label: "Satisfação do Cliente" },
   { key: "fechamento-dia", label: "Fechamento do Dia" },
   { key: "configuracoes", label: "Configurações" },
   { key: "usuarios", label: "Usuários" },
