@@ -194,6 +194,112 @@ export async function loadSupplierReceivingHistory(supplierId: string) {
   return { totalRecebimentos, taxaConformidade, valorDivergencias, taxaAtraso };
 }
 
+export type GastoPorInsumoRow = {
+  ingredientId: string;
+  ingredientName: string;
+  unidade: string;
+  quantidadeRecebida: number;
+  valorGasto: number;
+  precoMedioPonderado: number;
+};
+
+/**
+ * Gasto por insumo no período: quanto foi de fato recebido — e pago — de cada insumo, pra
+ * entender quanto está sendo gasto com cada um ao longo do mês.
+ *
+ * Regras importantes:
+ * - Só entram compras já CONFIRMADAS como recebidas (`Purchase.status` RECEBIDO ou
+ *   RECEBIDO_PARCIAL). Nunca PEDIDO_REALIZADO/AGUARDANDO_ENTREGA/EM_CONFERENCIA (ainda não
+ *   chegou) nem CANCELADO. E nunca DIVERGENCIA (nem as recusadas, que também viram
+ *   DIVERGENCIA) — atenção: isso é por COMPRA inteira, não por item. Uma compra com só 1 item
+ *   em divergência entre vários fica de fora do relatório INTEIRA (os itens conformes dela
+ *   juntos) até a divergência ser resolvida — resolver uma divergência (central de
+ *   divergências) não muda `Purchase.status`, então uma compra que já foi meio "DIVERGENCIA"
+ *   fica fora do relatório pra sempre, mesmo depois de resolvida. Decisão deliberada (não é bug
+ *   desta função): enquanto há divergência em aberto, os números dessa compra ainda não são
+ *   tratados como "gasto final".
+ * - Filtra pela data do RECEBIMENTO (`Receiving.dataHora`), não da compra (`Purchase.data`) —
+ *   é quando o gasto "aconteceu de verdade" pro caixa da empresa.
+ * - Também exclui `Receiving.status === "AGUARDANDO_SOLUCAO"`, mesmo quando `Purchase.status`
+ *   já está em RECEBIDO/RECEBIDO_PARCIAL — isso é uma rede de segurança pra um comportamento
+ *   PRÉ-EXISTENTE de `POST /api/estoque/recebimento` (achado do Teulis na revisão, não desta
+ *   função): o dropdown "Aguardando solução" da tela de conferência corretamente NÃO gera
+ *   `StockMovement` (nada entra no estoque), mas erradamente deixa `Purchase.status` virar
+ *   "RECEBIDO" do mesmo jeito que um recebimento limpo (só "Recusado" mapeia certo pra
+ *   DIVERGENCIA) — sem este filtro extra, o relatório contaria o valor inteiro (via fallback
+ *   pra quantidade pedida, já que `quantidadeRecebida` também fica `null` nesse caso) de um
+ *   recebimento que na prática não confirmou nada. Corrigir o mapeamento de status em si fica de
+ *   fora do escopo desta tarefa (pode ter outra dependência fora do relatório) — só o relatório
+ *   é protegido aqui.
+ * - Quantidade usada por item é `PurchaseItem.quantidadeRecebida` (a que REALMENTE chegou,
+ *   gravada na confirmação do recebimento — ver `POST /api/estoque/recebimento` e `POST
+ *   /api/estoque/recebimento/responder/[token]/finalizar`, os dois fluxos que confirmam um
+ *   recebimento). Só cai para `quantidade` (a PEDIDA) como fallback quando `quantidadeRecebida`
+ *   está `null` — compras recebidas ANTES deste campo existir, que não têm como ser
+ *   reconstruídas retroativamente (gap conhecido do histórico antigo, não um bug).
+ * - Valor gasto de cada item = quantidade (recebida, ou pedida como fallback) × `valorUnitario`
+ *   do PEDIDO — nunca `PurchaseItem.valorTotal` direto, que reflete o valor do PEDIDO original e
+ *   fica errado sempre que o recebimento foi parcial (quantidade menor que a pedida).
+ * - Isolado por `empresaId` (suporta Grupo Nord — mais de uma empresaId agregada junto, mesmo
+ *   padrão de `computeItensVendidosRows` em src/lib/faturamento-analytics.ts).
+ * - Ordenado por valor gasto desc (insumo que mais pesou no bolso primeiro).
+ */
+export async function computeGastoPorInsumoRows(empresaIds: string[], from: Date, to: Date): Promise<GastoPorInsumoRow[]> {
+  if (empresaIds.length === 0) return [];
+
+  const receivings = await prisma.receiving.findMany({
+    where: {
+      empresaId: { in: empresaIds },
+      dataHora: { gte: from, lte: to },
+      status: { not: "AGUARDANDO_SOLUCAO" },
+      purchase: { status: { in: ["RECEBIDO", "RECEBIDO_PARCIAL"] } },
+    },
+    select: {
+      purchase: {
+        select: {
+          items: {
+            select: {
+              ingredientId: true,
+              quantidade: true,
+              quantidadeRecebida: true,
+              valorUnitario: true,
+              ingredient: { select: { name: true, unidade: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const byIngredient = new Map<string, { nome: string; unidade: string; quantidade: number; valor: number }>();
+  for (const { purchase } of receivings) {
+    for (const item of purchase.items) {
+      const quantidade = item.quantidadeRecebida ?? item.quantidade;
+      const valor = quantidade * item.valorUnitario;
+      const cur = byIngredient.get(item.ingredientId) ?? {
+        nome: item.ingredient.name,
+        unidade: item.ingredient.unidade,
+        quantidade: 0,
+        valor: 0,
+      };
+      cur.quantidade += quantidade;
+      cur.valor += valor;
+      byIngredient.set(item.ingredientId, cur);
+    }
+  }
+
+  return [...byIngredient.entries()]
+    .map(([ingredientId, r]) => ({
+      ingredientId,
+      ingredientName: r.nome,
+      unidade: r.unidade,
+      quantidadeRecebida: r.quantidade,
+      valorGasto: r.valor,
+      precoMedioPonderado: r.quantidade > 0 ? r.valor / r.quantidade : 0,
+    }))
+    .sort((a, b) => b.valorGasto - a.valorGasto);
+}
+
 /** ADMINISTRADOR/GESTOR (globais) + GERENTE com acesso a essa empresa — mesmo critério usado no escalonamento do Checklist. */
 async function loadManagers(empresaId: string) {
   return prisma.user.findMany({
