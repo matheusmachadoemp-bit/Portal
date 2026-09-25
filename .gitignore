@@ -44,5 +44,6 @@ next-env.d.ts
 /public/uploads/*
 !/public/uploads/.gitkeep
 
-# local agent tooling
-/.claude/
+# local agent tooling (definições de agentes compartilhadas ficam versionadas)
+/.claude/*
+!/.claude/agents/
