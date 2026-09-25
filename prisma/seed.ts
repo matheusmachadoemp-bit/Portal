@@ -212,6 +212,17 @@ const CATEGORIES = [
       { key: "compras", name: "Compras", icon: "ShoppingBasket" },
       { key: "fornecedores", name: "Fornecedores", icon: "Truck" },
       { key: "recebimento", name: "Recebimento de Mercadorias", icon: "PackageCheck" },
+      // Tela e rota (src/app/portal/estoque/gasto-por-insumo/page.tsx, rota física própria —
+      // não reexporta outra página) e backend (computeGastoPorInsumoRows, em
+      // src/lib/recebimento-server.ts) já publicados (PR #416 backend, PR #421 tela); só
+      // faltava o item de menu. Posicionada logo após "recebimento" porque é o mesmo dado de
+      // origem (quantidade/valor recebido por insumo no período). Gate de permissão da página é
+      // só `hasModulePermission(..., "estoque", "canView")`, sem subcategoria — igual às demais
+      // subcategorias de Estoque sem override próprio, então basta a permissão de módulo
+      // "estoque" (ver buildVisibilityResolver, @/lib/permissions, e hasModulePermission,
+      // @/lib/authz: sem linha composta "estoque:gasto-por-insumo" em perfil/override, ambos
+      // caem pro nível de módulo "estoque").
+      { key: "gasto-por-insumo", name: "Gasto por Insumo", icon: "ChartColumn" },
       { key: "divergencias-recebimento", name: "Divergências de Recebimento", icon: "TriangleAlert" },
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
       { key: "transferencias", name: "Transferências", icon: "Shuffle" },
