@@ -20,11 +20,30 @@ function isNumeroConflict(e: unknown): boolean {
  * `GET /mesas/[id]/qrcode`): gerar a imagem de TODAS as mesas numa listagem que pode ter
  * dezenas de linhas seria caro à toa numa tela que só precisa mostrar número/status na maioria
  * das vezes.
+ *
+ * Gate de leitura aceita QUALQUER UM dos dois módulos que legitimamente consomem esta rota — não
+ * é "ou o módulo A ou o módulo B te dá acesso a qualquer coisa", é duas telas diferentes
+ * precisando da mesma lista:
+ * - "satisfacao-cliente:mesas-qrcode" (canView): tela QR Codes/Mesas
+ *   (src/app/portal/satisfacao-cliente/mesas/), que administra as mesas em si (cadastrar, gerar/
+ *   reimprimir QR, ativar/desativar) — gate original desta rota.
+ * - "crm:avaliacoes" (canView): tela Avaliações (src/app/portal/satisfacao-cliente/avaliacoes/),
+ *   que só usa esta lista pra popular o dropdown de filtro "Mesa" — é o MESMO gate que já protege
+ *   aquela tela e a rota `GET /api/satisfacao-cliente/avaliacoes` por trás dela (ver
+ *   avaliacoes/page.tsx), então nenhum usuário ganha acesso à lista de mesas que já não teria pra
+ *   abrir a tela de Avaliações. Sem este segundo gate, um perfil com "crm" mas sem
+ *   "satisfacao-cliente" abre a tela de Avaliações normalmente (ela e a API de avaliações checam
+ *   "crm"), mas o dropdown "Mesa" fica sempre vazio (esta rota negava 403 pra ele).
+ * Quem não tem NENHUM dos dois continua bloqueado (403), igual antes.
  */
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "satisfacao-cliente", "canView", "mesas-qrcode"))) {
+  const [canViewMesasQrCode, canViewAvaliacoes] = await Promise.all([
+    hasModulePermission(session.user.id, "satisfacao-cliente", "canView", "mesas-qrcode"),
+    hasModulePermission(session.user.id, "crm", "canView", "avaliacoes"),
+  ]);
+  if (!canViewMesasQrCode && !canViewAvaliacoes) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver as mesas de Satisfação do Cliente." },
       { status: 403 }
