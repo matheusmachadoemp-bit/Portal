@@ -78,6 +78,9 @@ export function RecebimentoClient({
   const [status, setStatus] = useState("APROVADO");
   const [divergencias, setDivergencias] = useState<string[]>([]);
   const [observacao, setObservacao] = useState("");
+  // Mapa item.id -> valor digitado (string, pra não travar o input enquanto o usuário apaga/edita)
+  // pré-preenchido com a quantidade PEDIDA de cada item ao abrir a conferência.
+  const [quantidadesRecebidas, setQuantidadesRecebidas] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
@@ -123,7 +126,12 @@ export function RecebimentoClient({
     setStatus("APROVADO");
     setDivergencias([]);
     setObservacao("");
+    setQuantidadesRecebidas(Object.fromEntries(p.items.map((it) => [it.id, String(it.quantidade)])));
     setError(null);
+  }
+
+  function updateQuantidadeRecebida(itemId: string, value: string) {
+    setQuantidadesRecebidas((prev) => ({ ...prev, [itemId]: value }));
   }
 
   function toggleDivergencia(key: string) {
@@ -133,10 +141,31 @@ export function RecebimentoClient({
   async function confirmar() {
     if (!conferindo) return;
     setError(null);
+
+    // Valida cada quantidade recebida antes de enviar: precisa ser um número válido e nunca
+    // negativo (zero é permitido — item pedido que não chegou nada).
+    const quantidadesPayload: Record<string, number> = {};
+    for (const it of conferindo.items) {
+      const raw = quantidadesRecebidas[it.id] ?? "";
+      const parsed = Number(raw);
+      if (raw.trim() === "" || Number.isNaN(parsed) || parsed < 0) {
+        setError(`Informe uma quantidade recebida válida (maior ou igual a zero) para "${it.ingredientName}".`);
+        return;
+      }
+      quantidadesPayload[it.id] = parsed;
+    }
+
     const res = await fetch("/api/estoque/recebimento", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ purchaseId: conferindo.id, responsavel, status, divergencias, observacao }),
+      body: JSON.stringify({
+        purchaseId: conferindo.id,
+        responsavel,
+        status,
+        divergencias,
+        observacao,
+        quantidadesRecebidas: quantidadesPayload,
+      }),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
@@ -315,13 +344,26 @@ export function RecebimentoClient({
       <Modal open={!!conferindo} onClose={() => setConferindo(null)} title={`Conferência — ${conferindo?.supplierName ?? ""}`} widthClass="max-w-2xl">
         {conferindo && (
           <div className="space-y-4">
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {conferindo.items.map((it) => (
-                <div key={it.id} className="flex items-center justify-between text-sm border-b border-nord-border/60 pb-1.5 last:border-0">
+                <div key={it.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border-b border-nord-border/60 pb-2 last:border-0">
                   <span className="text-white">{it.ingredientName}</span>
-                  <span className="text-nord-gray">
-                    Pedido: {formatNumber(it.quantidade)} {it.unidade}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-nord-gray whitespace-nowrap">
+                      Pedido: {formatNumber(it.quantidade)} {it.unidade}
+                    </span>
+                    <label className="flex items-center gap-1.5 whitespace-nowrap">
+                      <span className="text-xs text-nord-gray">Recebido:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        className="input w-20 !py-1"
+                        value={quantidadesRecebidas[it.id] ?? ""}
+                        onChange={(e) => updateQuantidadeRecebida(it.id, e.target.value)}
+                      />
+                      <span className="text-xs text-nord-gray">{it.unidade}</span>
+                    </label>
+                  </div>
                 </div>
               ))}
             </div>
