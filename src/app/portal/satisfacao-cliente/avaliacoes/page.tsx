@@ -19,10 +19,13 @@ import { AvaliacoesClient } from "./avaliacoes-client";
  * subcategoria dentro da categoria "crm" — ver comentário completo em
  * src/app/portal/satisfacao-cliente/visao-geral/page.tsx. "Perguntas" e "QR Codes / Mesas"
  * continuam sob o módulo "satisfacao-cliente" (perfil próprio, inalterado) — inclusive a rota
- * `GET /api/satisfacao-cliente/mesas` que o filtro "Mesa" abaixo consulta: ela segue gated em
- * "satisfacao-cliente:mesas-qrcode" (acoplamento pré-existente, já era assim antes desta
- * mudança de menu, fora do escopo corrigir aqui) — um perfil com "crm" mas sem
- * "satisfacao-cliente" abre esta tela normalmente, só o dropdown "Mesa" pode vir vazio.
+ * `GET /api/satisfacao-cliente/mesas` que o filtro "Mesa" abaixo consulta: ela é dona de
+ * "satisfacao-cliente:mesas-qrcode" (tela QR Codes/Mesas), mas também aceita "crm:avaliacoes"
+ * (o mesmo gate desta página) especificamente porque esta tela consulta a lista só pra popular o
+ * dropdown "Mesa" — corrigido depois de notado que um perfil com "crm" mas sem
+ * "satisfacao-cliente" abria esta tela normalmente e via o dropdown "Mesa" sempre vazio (a rota
+ * negava 403 pra ele). Ver o comentário do GET em
+ * src/app/api/satisfacao-cliente/mesas/route.ts para o detalhe do gate duplo.
  *
  * `garcons` (pra popular o filtro "Garçom") é buscado aqui, direto pelo mesmo helper que a
  * pesquisa pública usa (`getSelectableGarcons`, src/lib/customer-survey-server.ts) — mesmo

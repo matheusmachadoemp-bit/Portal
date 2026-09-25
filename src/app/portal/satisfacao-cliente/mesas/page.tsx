@@ -8,9 +8,12 @@ import { MesasClient } from "./mesas-client";
 /**
  * QR Codes das mesas da pesquisa de Satisfação do Cliente — criar mesa, ver/baixar/imprimir o QR,
  * regenerar o token (invalida o QR físico já impresso) e ativar/desativar. Só um shell de
- * servidor: o gate de módulo abaixo evita expor a tela pra quem não tem canView na subcategoria
- * "satisfacao-cliente:mesas-qrcode" (mesmo gate que GET /api/satisfacao-cliente/mesas já aplica);
- * a lista em si vem 100% daquela rota, consumida pelo client component abaixo.
+ * servidor: o gate de módulo abaixo evita expor esta tela de administração pra quem não tem
+ * canView na subcategoria "satisfacao-cliente:mesas-qrcode" — mais estrito do que o gate do
+ * `GET /api/satisfacao-cliente/mesas` que a lista abaixo consulta (essa rota também aceita
+ * "crm:avaliacoes", pra atender o dropdown de filtro "Mesa" da tela de Avaliações, que só lê a
+ * lista e não expõe nenhuma ação de administrar mesa — ver comentário do GET naquela rota); a
+ * lista em si vem 100% daquela rota, consumida pelo client component abaixo.
  *
  * `backHref` aponta pra Visão Geral (Fase 4) — a página "hub" do módulo, que não existia quando
  * esta tela foi criada (Fase 2).
