@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, DoorClosed } from "lucide-react";
+import { ChevronLeft, ChevronRight, DoorClosed, Pencil, Plus, Trash2 } from "lucide-react";
 import { Section, ColorBadge } from "@/components/ui/stat-card";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { MonthCalendar } from "@/components/ui/month-calendar";
 
 /**
@@ -34,6 +34,25 @@ type CalendarioDiaDTO = {
   lojasFechadas: { empresaId: string; empresaName: string }[];
   indisponiveis: IndisponivelDTO[];
 };
+
+/**
+ * Catálogo de tipos de folga (`GET /api/rh/escala-folgas/day-off-types`) — mesmo formato de
+ * `DayOffTypeDTO` acima, mais `ativo` (o calendário não precisa disso, só o formulário desta fase,
+ * pra continuar mostrando o nome de um tipo já desativado numa folga antiga em vez de escondê-lo).
+ */
+type DayOffTypeCatalogItem = DayOffTypeDTO & { ativo: boolean };
+
+/** Colaborador ATIVO elegível pro select de "Colaborador" do formulário — já vem filtrado pelo
+ *  servidor (`page.tsx`): só ATIVOs, e só do próprio setor quando `isSupervisor` (Líder). */
+type EmployeeOptionDTO = { id: string; name: string; setor: string; cargo: string };
+
+/**
+ * Mesmo formato de `CoverageResult` (@/lib/escala-folgas) — tipado de novo aqui pelo mesmo motivo
+ * do comentário no topo deste arquivo: client component não importa módulo nenhum que este projeto
+ * trata como "camada de servidor", mesmo quando o módulo em si não faz I/O (mantém os dois lados
+ * desacoplados de propósito).
+ */
+type CoverageResult = { quantidadeMinima: number; escalados: number; deficit: number; insuficiente: boolean };
 
 const WEEKDAY_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const WEEKDAY_PLURAL = [
@@ -75,6 +94,13 @@ function monthRange(cursor: Date): { from: string; to: string } {
 
 function capitalize(s: string) {
   return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+/** Mensagem do `ConfirmDialog` de cobertura insuficiente (núcleo da Fase 2b) — mesmos números que
+ *  a API devolveu em `coverage`, nunca recalculados aqui (só ela conhece o total de ativos e quem
+ *  mais já está indisponível nesse dia). */
+function formatCoverageMessage(c: CoverageResult): string {
+  return `Só ficaria${c.escalados === 1 ? "" : "m"} ${c.escalados} colaborador(es) escalado(s) nesse setor nesse dia (mínimo configurado: ${c.quantidadeMinima}) — faltam ${c.deficit}. Confirma mesmo assim?`;
 }
 
 /** "YYYY-MM-DD" -> `Date` LOCAL (meio-dia irrelevante, só ano/mês/dia importam aqui) — usado só
@@ -191,6 +217,10 @@ export function EscalaFolgasClient({
   ownSetor,
   setores,
   isGrupoNordMode,
+  canCreate,
+  canEdit,
+  canDelete,
+  employees,
 }: {
   /** Líder — a API já restringe o resultado ao próprio setor dele, então o filtro fica fixo. */
   isSupervisor: boolean;
@@ -198,6 +228,17 @@ export function EscalaFolgasClient({
   /** Catálogo completo de setores (vazio quando `isSupervisor`, que não usa o filtro). */
   setores: string[];
   isGrupoNordMode: boolean;
+  /** Só true quando a permissão `rh:canCreate` permite E uma loja específica está selecionada — o
+   *  `POST` exige loja única (não dá pra saber em qual loja gravar no modo Grupo Nord consolidado). */
+  canCreate: boolean;
+  /** Editar/cancelar uma folga já existente não depende do modo de visualização (a folga já
+   *  pertence a uma loja definida) — só da permissão em si, mesmo padrão já usado em Marketing
+   *  (Tráfego Pago/Ideias/Parcerias/Tarefas). */
+  canEdit: boolean;
+  canDelete: boolean;
+  /** Colaboradores ATIVOS pro select de "Colaborador" do formulário — vazio quando `canCreate` é
+   *  falso (o servidor só busca quando o formulário pode de fato ser usado). */
+  employees: EmployeeOptionDTO[];
 }) {
   // Líder sem ficha de colaborador vinculada (setor desconhecido): a API sempre devolveria vazio
   // pra esse caso (ver `resolveOwnSetor`), então nem vale a pena buscar — a tela mostra a mensagem
@@ -212,40 +253,111 @@ export function EscalaFolgasClient({
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (skipFetch) return;
+  // Dia selecionado: alterna entre a LISTA de indisponíveis (padrão) e o FORMULÁRIO de
+  // adicionar/editar folga (Fase 2b). `editingEntry` não-nulo = editando essa folga; nulo = criando
+  // uma nova. Resetado sempre que `selectedDate` muda (novo dia aberto, ou modal fechado) no efeito
+  // logo abaixo — nunca precisa ser resetado à mão em cada botão que fecha o formulário.
+  const [dayModalView, setDayModalView] = useState<"list" | "form">("list");
+  const [editingEntry, setEditingEntry] = useState<IndisponivelDTO | null>(null);
+  const [entryForm, setEntryForm] = useState({ employeeId: "", dayOffTypeId: "", observacao: "" });
+  const [entrySubmitting, setEntrySubmitting] = useState(false);
+  const [entryFormError, setEntryFormError] = useState<string | null>(null);
+  // Não-nulo = a API avisou que a cobertura mínima do setor ficaria insuficiente e ainda não
+  // gravou nada (`{ saved: false, coverage }`) — mostra o `ConfirmDialog` de aviso com os números;
+  // confirmando, reenvia a mesma requisição com `confirmarApesarDoAviso: true`.
+  const [pendingCoverage, setPendingCoverage] = useState<CoverageResult | null>(null);
+  const [deletingEntry, setDeletingEntry] = useState<IndisponivelDTO | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Catálogo de tipos de folga pro select "Tipo de folga" — só busca quando o formulário pode
+  // aparecer de verdade (criar OU editar), nunca pra quem só visualiza o calendário.
+  const [dayOffTypes, setDayOffTypes] = useState<DayOffTypeCatalogItem[] | null>(null);
+
+  useEffect(() => {
+    if (!canCreate && !canEdit) return;
     let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      const { from, to } = monthRange(cursor);
-      const params = new URLSearchParams({ from, to });
-      if (!isSupervisor && setorFilter) params.set("setor", setorFilter);
-      try {
-        const res = await fetch(`/api/rh/escala-folgas/calendario?${params.toString()}`);
-        const data = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(data?.error ?? "Não foi possível carregar o calendário.");
-          setDias([]);
-          return;
-        }
-        setDias(data.dias ?? []);
-      } catch {
-        if (!cancelled) {
-          setError("Falha de conexão ao carregar o calendário. Verifique sua internet e tente novamente.");
-          setDias([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
+    fetch("/api/rh/escala-folgas/day-off-types")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setDayOffTypes(data.dayOffTypes ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setDayOffTypes([]);
+      });
     return () => {
       cancelled = true;
     };
-  }, [cursor, setorFilter, isSupervisor, skipFetch]);
+  }, [canCreate, canEdit]);
+
+  // Só linhas `kind: "FOLGA"` são cadastráveis por aqui (Férias/Afastamento são reservadas — ver
+  // comentário em `GET /api/rh/escala-folgas/day-off-types`). Mantém tipos já DESATIVADOS na lista
+  // (marcados "(inativo)" no rótulo) pra continuar mostrando corretamente o tipo de uma folga
+  // antiga já gravada com ele, em vez de aparecer em branco no select ao editar.
+  const folgaTypes = useMemo(() => (dayOffTypes ?? []).filter((t) => t.kind === "FOLGA"), [dayOffTypes]);
+
+  /**
+   * Abre o modal de um dia já resetando o estado do formulário (lista, nunca formulário; nenhuma
+   * edição/exclusão pendente) — chamado nos dois lugares que abrem um dia (grade desktop e lista
+   * mobile), nunca via `useEffect` reagindo a `selectedDate`: resetar direto no evento que causa a
+   * mudança é o padrão recomendado pelo React pra isso (evita "setState em cascata" dentro de um
+   * efeito, sinalizado pelo lint `react-hooks/set-state-in-effect`). Como fechar o modal não deixa
+   * nada visível (o `Modal` nem renderiza com `selectedDate` nulo), não precisa resetar de novo ao
+   * fechar — só ao abrir o próximo dia, o que já cobre inclusive reabrir o MESMO dia depois de
+   * fechado (fechar sempre passa por `selectedDate: null` antes).
+   */
+  function openDay(dateKey: string) {
+    setDayModalView("list");
+    setEditingEntry(null);
+    setEntryForm({ employeeId: "", dayOffTypeId: "", observacao: "" });
+    setEntryFormError(null);
+    setPendingCoverage(null);
+    setDeletingEntry(null);
+    setDeleteError(null);
+    setSelectedDate(dateKey);
+  }
+
+  const loadCalendario = useCallback(async (): Promise<{ dias: CalendarioDiaDTO[]; error: string | null }> => {
+    const { from, to } = monthRange(cursor);
+    const params = new URLSearchParams({ from, to });
+    if (!isSupervisor && setorFilter) params.set("setor", setorFilter);
+    try {
+      const res = await fetch(`/api/rh/escala-folgas/calendario?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { dias: [], error: data?.error ?? "Não foi possível carregar o calendário." };
+      return { dias: data.dias ?? [], error: null };
+    } catch {
+      return { dias: [], error: "Falha de conexão ao carregar o calendário. Verifique sua internet e tente novamente." };
+    }
+  }, [cursor, setorFilter, isSupervisor]);
+
+  useEffect(() => {
+    if (skipFetch) return;
+    let cancelled = false;
+    async function run() {
+      setLoading(true);
+      setError(null);
+      const { dias: newDias, error: newError } = await loadCalendario();
+      if (cancelled) return;
+      setDias(newDias);
+      setError(newError);
+      setLoading(false);
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadCalendario, skipFetch]);
+
+  /** Reaproveitado depois de criar/editar/cancelar uma folga (item 5 do pedido: atualiza o
+   *  calendário sem reload de página) — mesma busca do efeito acima, chamada sob demanda. */
+  async function refreshCalendario() {
+    setLoading(true);
+    const { dias: newDias, error: newError } = await loadCalendario();
+    setDias(newDias);
+    setError(newError);
+    setLoading(false);
+  }
 
   const diasByDate = useMemo(() => {
     const map = new Map<string, CalendarioDiaDTO>();
@@ -268,6 +380,130 @@ export function EscalaFolgasClient({
   const todosVazios = !!dias && dias.length > 0 && dias.every((d) => d.indisponiveis.length === 0 && d.lojasFechadas.length === 0);
   const selectedDia = selectedDate ? (diasByDate.get(selectedDate) ?? null) : null;
   const todayKey = localDateKey(new Date());
+
+  const dayModalTitle = !selectedDia
+    ? "Detalhes do dia"
+    : dayModalView === "list"
+      ? capitalize(format(dateFromKey(selectedDia.date), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR }))
+      : editingEntry
+        ? "Editar folga"
+        : "Adicionar folga";
+
+  function openCreateForm() {
+    setEditingEntry(null);
+    setEntryForm({ employeeId: "", dayOffTypeId: "", observacao: "" });
+    setEntryFormError(null);
+    setPendingCoverage(null);
+    setDayModalView("form");
+  }
+
+  function openEditForm(p: IndisponivelDTO) {
+    setEditingEntry(p);
+    setEntryForm({ employeeId: p.employeeId, dayOffTypeId: p.dayOffType.id, observacao: p.observacao ?? "" });
+    setEntryFormError(null);
+    setPendingCoverage(null);
+    setDayModalView("form");
+  }
+
+  function closeEntryForm() {
+    setDayModalView("list");
+    setEditingEntry(null);
+    setEntryFormError(null);
+    setPendingCoverage(null);
+  }
+
+  /**
+   * Cria (`editingEntry` nulo) ou edita uma folga. `confirmarApesarDoAviso` só vai `true` quando
+   * chamado de novo a partir do `ConfirmDialog` de cobertura insuficiente (ver `pendingCoverage`
+   * abaixo) — a 1ª tentativa é sempre sem esse campo, deixando a API decidir se precisa avisar.
+   * `employeeId`/`date` só entram no body ao CRIAR: o `PATCH` não aceita trocar o colaborador de
+   * uma folga já existente (só `date?`/`dayOffTypeId?`/`observacao?`), e a data já é a do dia
+   * clicado no calendário — por isso nenhum dos dois formulários (criar/editar) mostra um campo de
+   * data separado, só o colaborador (fixo ao editar) e o tipo.
+   */
+  async function submitEntry(confirmarApesarDoAviso: boolean) {
+    if (entrySubmitting || !selectedDate) return;
+    setEntryFormError(null);
+    if (!editingEntry && !entryForm.employeeId) {
+      setEntryFormError("Selecione o colaborador.");
+      return;
+    }
+    if (!entryForm.dayOffTypeId) {
+      setEntryFormError("Selecione o tipo de folga.");
+      return;
+    }
+
+    setEntrySubmitting(true);
+    try {
+      const body: Record<string, unknown> = {
+        dayOffTypeId: entryForm.dayOffTypeId,
+        observacao: entryForm.observacao.trim() || null,
+      };
+      if (!editingEntry) {
+        body.employeeId = entryForm.employeeId;
+        body.date = selectedDate;
+      }
+      if (confirmarApesarDoAviso) body.confirmarApesarDoAviso = true;
+
+      const res = editingEntry
+        ? await fetch(`/api/rh/escala-folgas/entries/${editingEntry.sourceId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        : await fetch("/api/rh/escala-folgas/entries", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPendingCoverage(null);
+        setEntryFormError(data?.error ?? "Não foi possível salvar a folga.");
+        return;
+      }
+      // `saved: false` (HTTP 200, não é erro): a API calculou a cobertura do setor e ela ficaria
+      // insuficiente — nada foi gravado ainda. Mostra o aviso com os números reais e espera
+      // confirmação explícita antes de reenviar com `confirmarApesarDoAviso: true`.
+      if (data.saved === false && data.coverage) {
+        setPendingCoverage(data.coverage);
+        return;
+      }
+      setPendingCoverage(null);
+      // Atualiza o calendário ANTES de voltar pra lista — nunca o contrário: fazer isso depois
+      // deixaria a lista aparecer por um instante ainda com o dado antigo (sem a folga recém-
+      // salva) até o fetch terminar, um "flash" desnecessário já que a folga foi confirmada salva.
+      await refreshCalendario();
+      closeEntryForm();
+    } catch {
+      setPendingCoverage(null);
+      setEntryFormError("Falha de conexão ao salvar. Verifique sua internet e tente novamente.");
+    } finally {
+      setEntrySubmitting(false);
+    }
+  }
+
+  async function doDeleteEntry() {
+    if (!deletingEntry || deleteSubmitting) return;
+    setDeleteSubmitting(true);
+    try {
+      const res = await fetch(`/api/rh/escala-folgas/entries/${deletingEntry.sourceId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data?.error ?? "Não foi possível cancelar esta folga.");
+        return;
+      }
+      // Mesmo motivo do `submitEntry`: atualiza antes de fechar o `ConfirmDialog`, pra lista por
+      // baixo já reaparecer sem a folga cancelada, em vez de mostrá-la por um instante ainda ali.
+      await refreshCalendario();
+      setDeletingEntry(null);
+      setDeleteError(null);
+    } catch {
+      setDeleteError("Falha de conexão ao cancelar. Verifique sua internet e tente novamente.");
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }
 
   if (isSupervisor && !ownSetor) {
     return (
@@ -358,14 +594,19 @@ export function EscalaFolgasClient({
                   const key = localDateKey(day);
                   const dia = diasByDate.get(key);
                   const hasData = !!dia && (dia.indisponiveis.length > 0 || dia.lojasFechadas.length > 0);
+                  // Fase 2b: um dia sem nada registrado ainda precisa abrir (pra oferecer
+                  // "Adicionar folga") sempre que dá pra criar — só fica de fato não-clicável
+                  // quando não há nem dado pra mostrar nem ação possível (calendário só-leitura
+                  // pra esse usuário, ou dia fora do mês carregado — `dia` indefinido).
+                  const clickable = !!dia && (hasData || canCreate);
                   return (
                     <button
                       type="button"
-                      disabled={!hasData}
-                      onClick={() => hasData && setSelectedDate(key)}
+                      disabled={!clickable}
+                      onClick={() => clickable && openDay(key)}
                       className={`w-full min-h-[92px] rounded-lg border p-1.5 text-left flex flex-col ${
                         isToday ? "border-nord-blue bg-nord-blue/10" : "border-nord-border/60 bg-nord-panel/40"
-                      } ${inMonth ? "" : "opacity-40"} ${hasData ? "hover:border-nord-blue/60 cursor-pointer" : "cursor-default"}`}
+                      } ${inMonth ? "" : "opacity-40"} ${clickable ? "hover:border-nord-blue/60 cursor-pointer" : "cursor-default"}`}
                     >
                       <div className="flex items-center justify-between">
                         <span className={`text-[11px] font-semibold ${isToday ? "text-nord-blue-light" : "text-nord-gray"}`}>
@@ -395,16 +636,18 @@ export function EscalaFolgasClient({
               <div className="space-y-1.5">
                 {(dias ?? []).map((dia) => {
                   const hasData = dia.indisponiveis.length > 0 || dia.lojasFechadas.length > 0;
+                  // Mesmo racional do desktop acima: dia vazio ainda abre se dá pra criar folga.
+                  const clickable = hasData || canCreate;
                   const isToday = dia.date === todayKey;
                   return (
                     <button
                       key={dia.date}
                       type="button"
-                      disabled={!hasData}
-                      onClick={() => setSelectedDate(dia.date)}
+                      disabled={!clickable}
+                      onClick={() => clickable && openDay(dia.date)}
                       className={`w-full flex items-center gap-3 rounded-lg border p-2.5 text-left ${
                         isToday ? "border-nord-blue bg-nord-blue/10" : "border-nord-border/60 bg-nord-panel/40"
-                      } ${hasData ? "hover:border-nord-blue/60 cursor-pointer" : "cursor-default"}`}
+                      } ${clickable ? "hover:border-nord-blue/60 cursor-pointer" : "cursor-default"}`}
                     >
                       <div className="w-11 shrink-0 text-center">
                         <p className={`text-[10px] uppercase ${isToday ? "text-nord-blue-light" : "text-nord-gray"}`}>
@@ -436,17 +679,26 @@ export function EscalaFolgasClient({
         )}
       </Section>
 
-      <Modal
-        open={!!selectedDate}
-        onClose={() => setSelectedDate(null)}
-        title={
-          selectedDia
-            ? capitalize(format(dateFromKey(selectedDia.date), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR }))
-            : "Detalhes do dia"
-        }
-      >
-        {selectedDia && (
+      <Modal open={!!selectedDate} onClose={() => setSelectedDate(null)} title={dayModalTitle}>
+        {selectedDia && dayModalView === "list" && (
           <div className="space-y-4">
+            {!canCreate && (
+              <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
+                {isGrupoNordMode
+                  ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para cadastrar folgas."
+                  : "Seu perfil de permissão não permite cadastrar folgas neste módulo."}
+              </p>
+            )}
+            {canCreate && (
+              <button
+                type="button"
+                onClick={openCreateForm}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+              >
+                <Plus size={13} /> Adicionar folga
+              </button>
+            )}
+
             {selectedDia.lojasFechadas.length > 0 && (
               <div className="rounded-lg border border-nord-warning/30 bg-nord-warning/10 p-3">
                 <p className="text-xs font-medium text-nord-warning flex items-center gap-1.5">
@@ -466,26 +718,167 @@ export function EscalaFolgasClient({
               <p className="text-sm text-nord-gray text-center py-4">Ninguém indisponível neste dia.</p>
             ) : (
               <div className="space-y-2">
-                {selectedDia.indisponiveis.map((p) => (
-                  <div key={`${p.fonte}-${p.sourceId}`} className="flex items-start gap-3 p-2.5 rounded-lg border border-nord-border/60">
-                    <PersonAvatar person={p} size={36} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm text-white font-medium truncate">{p.employeeName}</p>
-                        <ColorBadge color={p.dayOffType.cor}>{p.dayOffType.nome}</ColorBadge>
+                {selectedDia.indisponiveis.map((p) => {
+                  // Só `DayOffEntry` (fonte "DAY_OFF") é gerenciável por aqui — Férias/Afastamento
+                  // são cadastrados pelas rotinas próprias (RH > Férias / Afastamentos) e só
+                  // aparecem aqui pra leitura (ver comentário em `GET .../day-off-types`).
+                  const manageable = p.fonte === "DAY_OFF";
+                  return (
+                    <div key={`${p.fonte}-${p.sourceId}`} className="flex items-start gap-3 p-2.5 rounded-lg border border-nord-border/60">
+                      <PersonAvatar person={p} size={36} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm text-white font-medium truncate">{p.employeeName}</p>
+                          <ColorBadge color={p.dayOffType.cor}>{p.dayOffType.nome}</ColorBadge>
+                        </div>
+                        <p className="text-xs text-nord-gray mt-0.5">
+                          {p.cargo} · {p.setor}
+                        </p>
+                        {p.observacao && <p className="text-xs text-nord-gray italic mt-1">&ldquo;{p.observacao}&rdquo;</p>}
                       </div>
-                      <p className="text-xs text-nord-gray mt-0.5">
-                        {p.cargo} · {p.setor}
-                      </p>
-                      {p.observacao && <p className="text-xs text-nord-gray italic mt-1">&ldquo;{p.observacao}&rdquo;</p>}
+                      {manageable && (canEdit || canDelete) && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openEditForm(p)}
+                              className="text-nord-gray hover:text-white"
+                              aria-label={`Editar folga de ${p.employeeName}`}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeletingEntry(p);
+                              }}
+                              className="text-nord-gray hover:text-nord-danger"
+                              aria-label={`Cancelar folga de ${p.employeeName}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         )}
+
+        {selectedDia && dayModalView === "form" && (
+          <div className="space-y-3">
+            <FormError message={entryFormError} />
+            <p className="text-xs text-nord-gray">
+              Data: <span className="text-white">{format(dateFromKey(selectedDia.date), "dd/MM/yyyy")}</span>
+            </p>
+
+            {editingEntry ? (
+              <div>
+                <span className="block text-xs text-nord-gray mb-1">Colaborador</span>
+                <p className="text-sm text-white">
+                  {editingEntry.employeeName}{" "}
+                  <span className="text-nord-gray">
+                    — {editingEntry.setor} · {editingEntry.cargo}
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Colaborador</span>
+                <select
+                  value={entryForm.employeeId}
+                  onChange={(e) => setEntryForm({ ...entryForm, employeeId: e.target.value })}
+                  className="input"
+                >
+                  <option value="">Selecione...</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} — {emp.setor} · {emp.cargo}
+                    </option>
+                  ))}
+                </select>
+                {employees.length === 0 && (
+                  <span className="block text-xs text-nord-warning mt-1">
+                    Nenhum colaborador ativo disponível para cadastro de folga.
+                  </span>
+                )}
+              </label>
+            )}
+
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Tipo de folga</span>
+              <select
+                value={entryForm.dayOffTypeId}
+                onChange={(e) => setEntryForm({ ...entryForm, dayOffTypeId: e.target.value })}
+                className="input"
+              >
+                <option value="">Selecione...</option>
+                {folgaTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome}
+                    {!t.ativo ? " (inativo)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Observação (opcional)</span>
+              <input
+                value={entryForm.observacao}
+                onChange={(e) => setEntryForm({ ...entryForm, observacao: e.target.value })}
+                className="input"
+              />
+            </label>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button type="button" onClick={closeEntryForm} className="btn-outline text-sm px-4 py-2.5 flex-1">
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => submitEntry(false)}
+                disabled={entrySubmitting}
+                className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg py-2.5"
+              >
+                {entrySubmitting ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
+
+      <ConfirmDialog
+        open={!!pendingCoverage}
+        title="Cobertura mínima do setor"
+        message={pendingCoverage ? formatCoverageMessage(pendingCoverage) : ""}
+        onConfirm={() => submitEntry(true)}
+        onCancel={() => setPendingCoverage(null)}
+        confirmLabel={entrySubmitting ? "Confirmando..." : "Confirmar mesmo assim"}
+        danger
+      />
+
+      <ConfirmDialog
+        open={!!deletingEntry}
+        title="Cancelar folga"
+        message={
+          deleteError ??
+          `Tem certeza que deseja cancelar a folga de ${deletingEntry?.employeeName ?? ""}? Essa ação não pode ser desfeita.`
+        }
+        onConfirm={doDeleteEntry}
+        onCancel={() => {
+          setDeletingEntry(null);
+          setDeleteError(null);
+        }}
+        confirmLabel={deleteSubmitting ? "Cancelando..." : deleteError ? "Tentar novamente" : "Cancelar folga"}
+        danger
+      />
     </div>
   );
 }
