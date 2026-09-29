@@ -89,7 +89,10 @@ function extractAnswerData(tipo: CustomerSurveyQuestionType, resposta: RespostaI
  * momento do submit (congelado, não recalculado depois — ver comentário no schema) e faz
  * find-or-create de `Cliente` por telefone (nunca duplica). Quando `critica = true`, dispara o
  * push automático (Fase 3, `notifyCriticalResponse`) pros destinatários configurados da loja.
- * Sem roleta ainda — Fase 6.
+ *
+ * O giro da Roleta de Prêmios (Fase 6) NÃO acontece aqui — o client usa o `responseId` devolvido
+ * abaixo pra chamar, em seguida, `POST .../responder/[token]/girar` (rota própria, ver
+ * src/app/api/satisfacao-cliente/responder/[token]/girar/route.ts e src/lib/roulette-server.ts).
  */
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
