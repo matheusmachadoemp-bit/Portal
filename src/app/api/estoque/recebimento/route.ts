@@ -91,6 +91,14 @@ export async function POST(req: Request) {
         empresaId: purchase.empresaId,
         responsavel: body.responsavel || session.user.name || null,
         status,
+        // Diferente do fluxo do link público (responder/[token]/route.ts cria com dataInicio e só
+        // responder/[token]/finalizar/route.ts grava dataFim depois, quando o responsável termina a
+        // conferência item a item), este POST é síncrono: o funcionário preenche o formulário
+        // inteiro na tela e envia tudo de uma vez, sem fase "em andamento" intermediária — o
+        // recebimento já nasce concluído. Sem gravar dataFim aqui, o Receiving nunca aparecia nos
+        // KPIs do dashboard gerencial (loadRecebimentoDashboard, src/lib/recebimento-server.ts, que
+        // filtra tudo por dataFim), mesmo já concluído e listado no histórico da tela.
+        dataFim: new Date(),
         divergencias: Array.isArray(body.divergencias) ? body.divergencias.join(",") : null,
         detalhes: body.detalhes ? JSON.stringify(body.detalhes) : null,
         fotoMercadoriaUrl: body.fotoMercadoriaUrl || null,
