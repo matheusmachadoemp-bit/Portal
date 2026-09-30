@@ -2766,9 +2766,12 @@ model Supplier {
   email              String?
   endereco           String?
   prazoPagamentoDias Int?
-  prazoEntregaDias   Int?
-  pedidoMinimo       Float?
-  avaliacao          Float    @default(0)
+  /// Dias da semana em que o fornecedor costuma entregar (0 = domingo .. 6 = sábado, mesmo
+  /// vocabulário de `StoreClosedWeekday`/`ProductionWeekdayWeight`/`spWeekday` em
+  /// src/lib/checklist.ts). Substituiu `prazoEntregaDias` (Int?, quantidade de dias de prazo) —
+  /// são conceitos diferentes (prazo vs. dia da semana), então a migration que trocou o campo
+  /// descartou o valor antigo em vez de tentar converter (ver comentário na migration).
+  diasEntregaSemana  Int[]    @default([])
   active             Boolean  @default(true)
   observacao         String?
   createdAt          DateTime @default(now())
