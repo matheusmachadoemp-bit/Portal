@@ -6,9 +6,11 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { PURCHASE_STATUS, PURCHASE_STATUS_LABEL, PURCHASE_STATUS_TONE } from "@/lib/estoque";
+import { type RollingPeriodKey } from "@/lib/periods";
 
 type Item = { id: string; ingredientId: string; ingredientName: string; unidade: string; quantidade: number; valorUnitario: number; valorTotal: number; precoMedioAtual: number };
 type Purchase = {
@@ -34,18 +36,32 @@ type NewItem = { ingredientId: string; quantidade: string; unidade: string; valo
 
 export function ComprasClient({
   initialPurchases,
+  initialPendentesEntrega,
   suppliers,
   ingredients,
   canCreate,
 }: {
   initialPurchases: Purchase[];
+  /** Contagem de pedidos "Pedido realizado"/"Aguardando entrega", SEM filtro de data — ver
+   * comentário em `fetchPendentesEntrega` abaixo sobre por que esse card não pode vir do
+   * `purchases` (que agora é sempre filtrado pelo período escolhido na tela). */
+  initialPendentesEntrega: number;
   suppliers: { id: string; name: string }[];
   ingredients: { id: string; name: string; unidade: string; unidadeCompra: string | null; precoAtual: number }[];
   canCreate: boolean;
 }) {
   const [purchases, setPurchases] = useState(initialPurchases);
+  const [pendentesEntrega, setPendentesEntrega] = useState(initialPendentesEntrega);
   const [statusFilter, setStatusFilter] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
+  // Filtro de período (padrão do portal — ver CLAUDE.md): "mes-atual" bate com
+  // o período que a carga inicial do servidor já usa (page.tsx), pra não
+  // mostrar um período diferente do que o filtro exibe como selecionado.
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [loadingPeriodo, setLoadingPeriodo] = useState(false);
+  const [periodoError, setPeriodoError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Purchase | null>(null);
@@ -69,10 +85,26 @@ export function ComprasClient({
   );
 
   const valorTotalPeriodo = filtered.reduce((s, p) => s + p.valorTotal, 0);
-  const pendentes = purchases.filter((p) => p.status === "PEDIDO_REALIZADO" || p.status === "AGUARDANDO_ENTREGA").length;
 
-  async function refresh() {
-    const res = await fetch("/api/estoque/compras");
+  /**
+   * Busca as compras já filtradas por período no servidor (GET
+   * /api/estoque/compras?key=...&from=...&to=...) — mesmo padrão de
+   * src/app/portal/marketing/redes-sociais/redes-sociais-client.tsx e
+   * .../marketing/parcerias/partners-client.tsx. Agora que o backend aceita
+   * esse filtro, a tela SEMPRE manda uma `key` (nunca busca mais sem filtro
+   * nenhum) — inclusive no botão "Atualizar" e depois de qualquer ação (nova
+   * compra, marcar recebido), por isso `refresh()` abaixo reaplica o período
+   * já selecionado em vez de voltar a mostrar as últimas 300 compras sem
+   * filtro.
+   */
+  async function fetchPurchases(key: RollingPeriodKey, from?: string, to?: string) {
+    const params = new URLSearchParams({ key });
+    if (key === "personalizado" && from && to) {
+      params.set("from", from);
+      params.set("to", to);
+    }
+    const res = await fetch(`/api/estoque/compras?${params.toString()}`);
+    if (!res.ok) throw new Error();
     const data = await res.json();
     setPurchases(
       data.purchases.map((p: Record<string, unknown>) => {
@@ -106,6 +138,58 @@ export function ComprasClient({
         };
       })
     );
+  }
+
+  /**
+   * O card "Aguardando entrega" responde "esse pedido ainda está pendente?" —
+   * uma pergunta que não depende de quando o pedido foi feito, então NÃO pode
+   * vir de `purchases` (que agora é sempre filtrado pelo período escolhido na
+   * tela): um pedido feito em agosto e ainda pendente em outubro simplesmente
+   * sumiria desse card assim que "Este mês" (o padrão da tela) virasse o mês,
+   * escondendo um pendente de verdade (achado do Teulis na revisão desta
+   * tarefa). Por isso essa contagem busca à parte, sempre sem filtro de data,
+   * reaproveitando a MESMA rota/consulta de Estoque > Recebimento (GET
+   * /api/estoque/recebimento — `pendentes`, ver src/app/api/estoque/
+   * recebimento/route.ts) em vez de derivar de `purchases` — igual à contagem
+   * inicial feita no servidor em page.tsx.
+   */
+  async function fetchPendentesEntrega() {
+    try {
+      const res = await fetch("/api/estoque/recebimento");
+      if (!res.ok) return;
+      const data = await res.json();
+      const pendentes = (data.pendentes as { status: string }[]).filter(
+        (p) => p.status === "PEDIDO_REALIZADO" || p.status === "AGUARDANDO_ENTREGA"
+      ).length;
+      setPendentesEntrega(pendentes);
+    } catch {
+      // Não crítico — mantém o último valor conhecido em vez de quebrar a tela.
+    }
+  }
+
+  async function refresh() {
+    try {
+      await Promise.all([fetchPurchases(periodo, customFrom, customTo), fetchPendentesEntrega()]);
+    } catch {
+      setPeriodoError("Não foi possível atualizar os dados.");
+    }
+  }
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    if (key === "personalizado" && from && to) {
+      setCustomFrom(from);
+      setCustomTo(to);
+    }
+    setLoadingPeriodo(true);
+    setPeriodoError(null);
+    try {
+      await fetchPurchases(key, from, to);
+    } catch {
+      setPeriodoError("Não foi possível carregar os dados desse período.");
+    } finally {
+      setLoadingPeriodo(false);
+    }
   }
 
   function addItem() {
@@ -165,7 +249,7 @@ export function ComprasClient({
         cards={[
           { key: "compras-filtro", label: "Compras no filtro", value: String(filtered.length), icon: "ShoppingBasket" },
           { key: "valor-total", label: "Valor total", value: formatCurrency(valorTotalPeriodo), icon: "DollarSign", color: "#22c55e" },
-          { key: "aguardando-entrega", label: "Aguardando entrega", value: String(pendentes), icon: "Truck", color: pendentes ? "#f59e0b" : "#22c55e" },
+          { key: "aguardando-entrega", label: "Aguardando entrega", value: String(pendentesEntrega), icon: "Truck", color: pendentesEntrega ? "#f59e0b" : "#22c55e" },
         ]}
       />
 
@@ -206,6 +290,11 @@ export function ComprasClient({
           />
         }
       >
+        <div className="mb-4">
+          <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loadingPeriodo} />
+          {periodoError && <p className="text-xs text-nord-danger mt-2">{periodoError}</p>}
+        </div>
+
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>

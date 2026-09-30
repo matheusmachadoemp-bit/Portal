@@ -11,8 +11,31 @@ import {
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 import { hasModulePermission } from "@/lib/authz";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
-export async function GET() {
+/**
+ * Filtro de período opcional: mesmo padrão (`key`/`from`/`to` + `resolveRollingPeriod`,
+ * já tratando fuso de São Paulo) de src/app/api/vendas/faturamento/route.ts,
+ * src/app/api/marketing/redes-sociais/route.ts e src/app/api/marketing/partners/route.ts.
+ * Diferente daquelas rotas, aqui `key` é OPCIONAL e sem default: sem `key` (nenhum
+ * parâmetro na query, como o `refresh()` de compras-client.tsx chama hoje) o
+ * comportamento não muda em nada — todas as compras recentes, `take: 300`, sem
+ * filtro de data — para não quebrar a tela atual antes do Caio ligar o
+ * <PeriodFilterBar> a esses parâmetros numa fase seguinte.
+ *
+ * Com `key` presente, o `take` fixo de 300 deixa de valer: os KPIs da tela (Valor
+ * total, Compras no filtro) são somados no client sobre a lista retornada, então
+ * truncar em 300 dentro de um período efetivamente ativo sub-contaria o total
+ * silenciosamente. `empresaId+data` já tem índice composto (`@@index([empresaId,
+ * data])` em Purchase, schema.prisma) que cobre esse range scan, então não
+ * precisou de migration nova. Ainda assim mantemos um teto alto (2000) em vez de
+ * remover o limite por completo — só como rede de segurança contra um período
+ * "Personalizado" muito largo demais; se algum dia isso passar a ser atingido de
+ * verdade, o próximo passo é paginação de verdade (o mesmo padrão `page`/`pageSize`
+ * já usado em src/app/api/satisfacao-cliente/avaliacoes/route.ts), não um teto
+ * ainda maior.
+ */
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "estoque", "canView"))) {
@@ -25,10 +48,19 @@ export async function GET() {
   const ctx = await getActiveEmpresaContext();
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
 
+  const { searchParams } = new URL(req.url);
+  const key = searchParams.get("key") as RollingPeriodKey | null;
+  const from = searchParams.get("from") ?? undefined;
+  const to = searchParams.get("to") ?? undefined;
+  const dateFilter = key ? resolveRollingPeriod(key, { from, to }) : null;
+
   const purchases = await prisma.purchase.findMany({
-    where: { empresaId: { in: empresaIdsForContext(ctx) } },
+    where: {
+      empresaId: { in: empresaIdsForContext(ctx) },
+      ...(dateFilter ? { data: { gte: dateFilter.from, lte: dateFilter.to } } : {}),
+    },
     orderBy: { data: "desc" },
-    take: 300,
+    take: dateFilter ? 2000 : 300,
     include: {
       supplier: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
       items: { include: { ingredient: { select: { id: true, name: true, unidade: true, precoAtual: true, quantidadeEmbalagem: true } } } },
