@@ -741,6 +741,47 @@ async function main() {
         canDelete: flags.canDelete,
       },
     });
+
+    // Satisfação do Cliente > Roleta de Prêmios > resgate (Fase 7, `POST
+    // /api/satisfacao-cliente/roleta/resgatar`) — decisão do Matheus (Torre de Controle):
+    // além dos cargos de gestão (administrador/gestor/gerente/supervisor, que já têm
+    // `canExecute` herdado do nível EDITAR/TOTAL da chave do módulo inteiro
+    // "satisfacao-cliente", `flags` acima — nenhuma linha nova precisa pra eles), os perfis
+    // Funcionário e Líder (quem de fato opera caixa/salão no dia a dia — o Matheus usou a
+    // expressão "líder e caixa"; não existe perfil "Caixa" separado no catálogo
+    // `PERMISSION_PROFILES`, então "caixa" foi mapeado pra "funcionario", o perfil padrão de
+    // quem opera caixa/balcão) também devem conseguir resgatar prêmios.
+    //
+    // Linha PRÓPRIA só pra estes 2 perfis, restrita à subcategoria "roleta" (não ao módulo
+    // inteiro): "Perguntas"/"Mesas" (as outras 2 subcategorias de "satisfacao-cliente")
+    // continuam fora do alcance de Funcionário/Líder, que ficam só com o `canView` herdado da
+    // chave do módulo inteiro pra essas 2 — e só com `canExecute` (não `canCreate`/`canEdit`/
+    // `canDelete`): resgatar não administra o catálogo de prêmios, só executa o resgate de um
+    // giro já existente (mesmo racional documentado no comentário de
+    // `POST /api/satisfacao-cliente/roleta/resgatar`).
+    //
+    // Os demais perfis (gestor/gerente/supervisor/administrador — já com `canExecute` via
+    // `flags`; marketing/financeiro — sem `canExecute`, por decisão de não mudar nada pra
+    // eles) de propósito NÃO ganham linha aqui: continuam herdando da chave do módulo inteiro
+    // sem nenhuma mudança. Criar uma linha pra gestor/gerente/supervisor aqui também exigiria
+    // replicar `canCreate`/`canEdit` manualmente (só pra não regredir o CRUD de prêmios que
+    // eles já têm hoje via o fallback pro módulo inteiro, ver `hasModulePermission`) — risco
+    // desnecessário: sem linha nenhuma, o fallback já resolve certo pra eles.
+    if (profile.key === "funcionario" || profile.key === "lider") {
+      await prisma.modulePermission.upsert({
+        where: { profileId_moduleKey: { profileId: record.id, moduleKey: "satisfacao-cliente:roleta" } },
+        update: {},
+        create: {
+          profileId: record.id,
+          moduleKey: "satisfacao-cliente:roleta",
+          canView: true,
+          canExecute: true,
+          canCreate: false,
+          canEdit: false,
+          canDelete: false,
+        },
+      });
+    }
   }
 
   const usersWithoutProfile = await prisma.user.findMany({ where: { permissionProfileId: null } });

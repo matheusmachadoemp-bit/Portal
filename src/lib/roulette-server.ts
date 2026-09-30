@@ -506,3 +506,167 @@ export async function girarRoleta(params: { responseId: string; empresaIdEsperad
   // Inalcançável (o loop sempre retorna ou lança antes de sair naturalmente) — só pra satisfazer o TypeScript.
   throw new Error("Não foi possível concluir o giro após múltiplas tentativas.");
 }
+
+// ---------------------------------------------------------------------------
+// Resgate do prêmio (Fase 7) — funcionário digita o `codigo` na loja
+// ---------------------------------------------------------------------------
+
+/**
+ * Normaliza o código digitado por um funcionário: maiúsculas, sem espaços/traços. O formato
+ * gravado é sempre 12 hex maiúsculas sem separador nenhum (ver `gerarCodigoCandidato`), mas quem
+ * digita à mão pode incluir espaço ou traço (ex.: se uma tela futura exibir o código formatado em
+ * blocos tipo "AB12-CD34-EF56" pra ficar mais legível) — normaliza aqui, uma única vez na
+ * fonte de verdade do resgate, pra não depender de nenhuma tela específica (a tela de resgate é a
+ * Fase 7-UI, ainda não construída) fazer isso certo.
+ */
+function normalizarCodigoResgate(input: unknown): string {
+  if (typeof input !== "string") return "";
+  return input.trim().toUpperCase().replace(/[\s-]/g, "");
+}
+
+const FUSO_LOJA = "America/Sao_Paulo"; // Brasil não observa horário de verão desde 2019 — sempre UTC-3 (mesmo racional de src/lib/satisfaction.ts).
+
+function mensagemJaResgatado(info: { resgatadoEm: Date | null; resgatadoPorNome: string | null }): string {
+  const quando = info.resgatadoEm ? ` em ${info.resgatadoEm.toLocaleString("pt-BR", { timeZone: FUSO_LOJA })}` : "";
+  const quem = info.resgatadoPorNome ? ` por ${info.resgatadoPorNome}` : "";
+  return `Este prêmio já foi resgatado${quando}${quem}.`;
+}
+
+const MENSAGEM_EXPIRADO = "Este código expirou e não pode mais ser resgatado.";
+
+/** Tag "de passagem": marca `EXPIRADO` só quando alguém de fato tenta resgatar um código vencido
+ *  (chamada dos dois pontos de `resgatarPremio` que podem detectar isso — a pré-checagem no
+ *  caminho comum, e a re-checagem depois de uma corrida perdida no `updateMany` do resgate de
+ *  verdade). Não existe nenhum cron varrendo todos os spins vencidos por enquanto (fora do escopo
+ *  desta fase) — um código vencido que ninguém nunca tenta resgatar continua `DISPONIVEL` pra
+ *  sempre, o que é inofensivo pra este fluxo (só afetaria relatórios futuros que porventura
+ *  dependam de `status` sozinho, sem olhar `validadeAte`). Condicional (`status: "DISPONIVEL"` no
+ *  WHERE) por segurança: nunca sobrescreve um resgate que porventura já tenha vencido a corrida. */
+async function marcarExpiradoSeAindaDisponivel(spinId: string): Promise<void> {
+  await prisma.rouletteSpin.updateMany({ where: { id: spinId, status: "DISPONIVEL" }, data: { status: "EXPIRADO" } });
+}
+
+export type ResultadoResgate =
+  | {
+      ok: true;
+      spin: {
+        id: string;
+        codigo: string;
+        resgatadoEm: Date;
+        resgatadoPor: { id: string; name: string | null };
+        premio: { id: string; nome: string; descricao: string | null; imagemUrl: string | null; icone: string | null };
+      };
+    }
+  | { ok: false; status: 400 | 404 | 409; error: string };
+
+/**
+ * Resgata um prêmio da Roleta pelo `codigo` digitado por um funcionário (garçom, caixa, gerente
+ * etc.) — Fase 7. Ao contrário de `girarRoleta` (rota pública, sem autenticação, que por isso
+ * achata todo erro em HTTP 400 — ver comentário do route handler irmão), esta função devolve um
+ * `status` HTTP específico por tipo de erro: quem chama é sempre uma rota autenticada/com gate de
+ * permissão (`POST /api/satisfacao-cliente/roleta/resgatar`), no mesmo estilo 401/403/404/409 já
+ * usado pelas outras rotas administrativas deste módulo (`avaliacoes/[id]/assumir`, `.../resolver`,
+ * `roleta/premios`).
+ *
+ * `empresaId` deve ser sempre a loja ATIVA de quem está operando o resgate (resolvida no servidor
+ * via `requireActiveSingleEmpresa()` — nunca um id vindo do corpo da requisição): um código válido
+ * de OUTRA loja é tratado exatamente como "não encontrado" — nunca revela que o código existe em
+ * outro lugar, mesmo pra um funcionário autenticado (não há motivo de negócio pra essa informação
+ * vazar entre lojas).
+ *
+ * Validação em 2 passos, mesmo racional de `POST .../avaliacoes/[id]/assumir` e `.../resolver`:
+ * 1. Pré-checagem (leitura, fora de qualquer update) só pra devolver uma mensagem específica e
+ *    amigável no caminho comum (sem corrida): já resgatado (diz quando e por quem) ou expirado.
+ *    Se encontrar um código vencido ainda `DISPONIVEL`, aproveita pra marcá-lo `EXPIRADO` agora
+ *    (tag "de passagem" — não existe nenhum cron varrendo todos os spins vencidos por enquanto,
+ *    fora do escopo desta fase; um código vencido que ninguém nunca tenta resgatar continua
+ *    `DISPONIVEL` pra sempre, o que é inofensivo — só afeta relatórios futuros que porventura
+ *    dependam de `status`, não este fluxo).
+ * 2. Atualização atômica condicional (`updateMany` com `status: "DISPONIVEL"` E não-expirado no
+ *    próprio WHERE, mesmo padrão de `RouletteEligibility`/`checkRateLimit` — nunca "lê, decide no
+ *    código, grava depois") como a fonte de verdade de fato contra corrida: dois funcionários
+ *    digitando o mesmo código ao mesmo tempo (ex.: dois caixas em terminais diferentes) nunca
+ *    resgatam os dois com sucesso. Se a corrida for perdida (ou o prazo expirar exatamente entre
+ *    os passos 1 e 2), busca de novo só pra relatar o motivo certo — nunca solta um sucesso falso.
+ */
+export async function resgatarPremio(params: {
+  codigoDigitado: unknown;
+  empresaId: string;
+  resgatadoPorId: string;
+  resgatadoPorNome: string | null;
+}): Promise<ResultadoResgate> {
+  const codigo = normalizarCodigoResgate(params.codigoDigitado);
+  if (!codigo) return { ok: false, status: 400, error: "Informe o código do prêmio." };
+
+  const spin = await prisma.rouletteSpin.findFirst({
+    where: { codigo, empresaId: params.empresaId },
+    include: {
+      prize: { select: { id: true, nome: true, descricao: true, imagemUrl: true, icone: true } },
+      // Só usado na mensagem de erro "já foi resgatado" (branch logo abaixo) — trazido já aqui,
+      // junto com `prize`, pra cobrir o caminho comum (sem corrida) sem precisar de uma 2ª ida ao
+      // banco: a maioria das tentativas de resgatar um código já usado acontece bem depois do
+      // resgate original, não na janela estreita de corrida que a re-checagem no fim da função
+      // (após o `updateMany`) existe pra cobrir.
+      resgatadoPor: { select: { name: true } },
+    },
+  });
+  if (!spin) return { ok: false, status: 404, error: "Código não encontrado." };
+
+  if (spin.status === "RESGATADO") {
+    return {
+      ok: false,
+      status: 409,
+      error: mensagemJaResgatado({ resgatadoEm: spin.resgatadoEm, resgatadoPorNome: spin.resgatadoPor?.name ?? null }),
+    };
+  }
+
+  const now = new Date();
+  const expirado = spin.status === "EXPIRADO" || (spin.validadeAte !== null && spin.validadeAte < now);
+  if (expirado) {
+    if (spin.status === "DISPONIVEL") await marcarExpiradoSeAindaDisponivel(spin.id);
+    return { ok: false, status: 409, error: MENSAGEM_EXPIRADO };
+  }
+
+  const result = await prisma.rouletteSpin.updateMany({
+    where: {
+      id: spin.id,
+      status: "DISPONIVEL",
+      OR: [{ validadeAte: null }, { validadeAte: { gte: now } }],
+    },
+    data: { status: "RESGATADO", resgatadoEm: now, resgatadoPorId: params.resgatadoPorId },
+  });
+
+  if (result.count === 0) {
+    // Perdeu a corrida entre a pré-checagem acima e este UPDATE (outro resgate concorrente pro
+    // MESMO código, ou o prazo expirou nesse meio-tempo) — busca de novo só pra relatar o motivo
+    // certo, nunca solta um sucesso falso nem duplica o resgate.
+    const atual = await prisma.rouletteSpin.findUnique({
+      where: { id: spin.id },
+      select: { status: true, resgatadoEm: true, resgatadoPor: { select: { name: true } } },
+    });
+    if (atual?.status === "RESGATADO") {
+      return {
+        ok: false,
+        status: 409,
+        error: mensagemJaResgatado({ resgatadoEm: atual.resgatadoEm, resgatadoPorNome: atual.resgatadoPor?.name ?? null }),
+      };
+    }
+    // Não foi corrida de resgate (`atual.status` não virou RESGATADO) — só pode ter sido o prazo
+    // expirando bem entre a pré-checagem e o UPDATE acima. `status` ainda pode estar `DISPONIVEL`
+    // neste instante exato (só a pré-checagem tagueia `EXPIRADO`, ver `marcarExpiradoSeAindaDisponivel`)
+    // — tagueia agora, já que estamos aqui e já confirmamos que não foi resgatado por ninguém.
+    if (atual?.status === "DISPONIVEL") await marcarExpiradoSeAindaDisponivel(spin.id);
+    return { ok: false, status: 409, error: MENSAGEM_EXPIRADO };
+  }
+
+  return {
+    ok: true,
+    spin: {
+      id: spin.id,
+      codigo: spin.codigo!,
+      resgatadoEm: now,
+      resgatadoPor: { id: params.resgatadoPorId, name: params.resgatadoPorNome },
+      premio: spin.prize,
+    },
+  };
+}
