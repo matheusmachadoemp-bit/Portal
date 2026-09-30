@@ -128,7 +128,6 @@ export default async function ComparativoPage() {
             createdByName: p.createdBy.name,
           }))}
           canCreate={canCreate}
-          canEditMeta={ctx?.mode === "single"}
         />
       </div>
     </PageContainer>

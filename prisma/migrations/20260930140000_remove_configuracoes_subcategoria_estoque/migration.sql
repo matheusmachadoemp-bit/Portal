@@ -1,0 +1,32 @@
+-- A pedido do usuário: remove do menu lateral a subcategoria "Configurações"
+-- da categoria "Estoque". A tela (src/app/portal/estoque/configuracoes/,
+-- page.tsx + configuracoes-client.tsx) foi removida por completo nesta
+-- mesma leva de atualizações, junto com a rota de API que só servia essa
+-- tela (src/app/api/estoque/configuracoes/route.ts) — as duas
+-- configurações que ela expunha deixaram de existir por lá: o "Limiar de
+-- divergência de contagem (%)" (`Empresa.metaDivergenciaContagemPercent`)
+-- foi removido de vez (schema + enforcement, ver migration
+-- 20260930130000_remove_meta_divergencia_contagem_percent) e a edição da
+-- "Meta de CMV por loja" (`Empresa.metaCmvPercent`) mudou de lugar: saiu
+-- também de CMV → Comparativo Real x Teórico (que agora só mostra a meta,
+-- sem editar) e passou a viver na categoria global "Configurações"
+-- (src/app/portal/configuracoes/, nova seção "Metas de CMV por loja",
+-- servida por uma rota nova: src/app/api/configuracoes/meta-cmv/route.ts).
+--
+-- Mesmo padrão de hard delete já usado em
+-- prisma/migrations/20260915120000_remove_relatorios_subcategoria_manutencao/migration.sql,
+-- prisma/migrations/20260920100000_remove_relatorios_subcategoria_financeiro/migration.sql
+-- e prisma/migrations/20260921100000_remove_relatorios_subcategoria_estoque/migration.sql
+-- (o próprio Estoque já tinha perdido a subcategoria "Relatórios" por esse
+-- mesmo motivo, antes desta).
+--
+-- Importante: NÃO mexe em outras subcategorias "configuracoes" de outras
+-- categorias (ex.: Manutenção, Produção também têm uma subcategoria própria
+-- de mesma key) — o filtro por categoryId = estoque garante isso. Também
+-- não mexe na CATEGORIA "configuracoes" (a global, do topo do menu) —
+-- essa continua existindo normalmente, só ganhou uma seção nova dentro da
+-- própria tela (não modelada como Subcategory, igual as demais seções
+-- daquela página).
+DELETE FROM "Subcategory"
+WHERE key = 'configuracoes'
+  AND "categoryId" = (SELECT id FROM "Category" WHERE key = 'estoque');
