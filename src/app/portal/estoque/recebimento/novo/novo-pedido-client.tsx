@@ -108,6 +108,9 @@ export function NovoPedidoClient({
         <div>
           <h2 className="text-white font-semibold text-lg">Pedido criado com sucesso!</h2>
           <p className="text-nord-gray text-sm mt-1">O pedido #{success.numero} foi enviado para recebimento.</p>
+          <p className="text-nord-gray text-sm">
+            Fornecedor: <span className="text-white font-medium">{success.supplierName}</span>
+          </p>
         </div>
         <div className="nord-card bg-nord-panel p-3 text-left space-y-2">
           <p className="text-xs text-nord-gray">Envie este link para o responsável realizar a conferência de recebimento.</p>
