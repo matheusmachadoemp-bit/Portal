@@ -224,10 +224,22 @@ const CATEGORIES = [
       // caem pro nível de módulo "estoque").
       { key: "gasto-por-insumo", name: "Gasto por Insumo", icon: "ChartColumn" },
       { key: "divergencias-recebimento", name: "Divergências de Recebimento", icon: "TriangleAlert" },
+      // "Transferências" (key "transferencias") deixou de existir como subcategoria separada —
+      // a tela /portal/estoque/transferencias foi removida por completo e a capacidade de
+      // solicitar/gerenciar transferência entre lojas passou a viver dentro de "Movimentações"
+      // (reaproveitando o mesmo model Transfer/TransferItem e as mesmas rotas
+      // /api/estoque/transferencias/**). Ver migration
+      // remove_transferencias_subcategoria_estoque, que apaga a linha já seedada em produção
+      // (esta lista de `subs` só faz upsert — nunca deleta uma entrada removida daqui).
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
-      { key: "transferencias", name: "Transferências", icon: "Shuffle" },
       { key: "perdas", name: "Perdas e Desperdícios", icon: "TriangleAlert" },
-      { key: "configuracoes", name: "Configurações", icon: "Settings" },
+      // A subcategoria "Configurações" (tela própria em
+      // src/app/portal/estoque/configuracoes/) deixou de existir por completo a
+      // pedido do usuário — as duas configurações que ela expunha foram embora
+      // (limiar de divergência de contagem, removido junto com o enforcement) ou
+      // se mudaram (meta de CMV por loja, agora editada na categoria global
+      // "Configurações"). Ver
+      // prisma/migrations/20260930140000_remove_configuracoes_subcategoria_estoque.
     ],
   },
   {
@@ -379,20 +391,23 @@ const CATEGORIES = [
     ],
   },
   {
-    // "Satisfação do Cliente" (módulo novo, ver docs/satisfacao-cliente-proposta.md) — SÓ com
-    // as 2 subcategorias que já têm página de verdade por trás E que o Matheus decidiu manter
-    // aqui (Perguntas e QR Codes/Mesas, publicadas pelo Caio em
-    // /portal/satisfacao-cliente/perguntas e /mesas). "Visão Geral" e "Avaliações" (Fase 4)
-    // também já têm página publicada, mas viraram subcategorias da categoria "crm" em vez de
-    // entrarem aqui — decisão separada do Matheus, ver o bloco de "crm" acima (comentário junto
-    // de `{ key: "visao-geral", ... }`/`{ key: "avaliacoes", ... }` e
-    // prisma/migrations/*_satisfacao_cliente_crm_menu). As outras 3 pendentes desta categoria
-    // (Ranking de Garçons, Roleta de Prêmios, Configurações) continuam de fora até cada uma
-    // ganhar tela própria — mesmo raciocínio do Fechamento do Dia, e mesmo cuidado que já rendeu
-    // 2 reversões deste exato bloco antes (Fase 1: nenhuma tela ainda; Fase 2: API pronta mas
-    // tela do Caio ainda não — Teulis achou 404 ao vivo nas duas vezes). A publicação deste seed
-    // sempre coordenada pelo líder pra só ir ao ar depois que a branch da tela correspondente já
-    // estiver em produção, nunca antes.
+    // "Satisfação do Cliente" (módulo novo, ver docs/satisfacao-cliente-proposta.md) — com as 3
+    // subcategorias que já têm página de verdade por trás E que o Matheus decidiu manter aqui
+    // (Perguntas e QR Codes/Mesas, publicadas pelo Caio em /portal/satisfacao-cliente/perguntas
+    // e /mesas; Roleta de Prêmios — admin em /portal/satisfacao-cliente/roleta, resgate em
+    // /roleta/resgatar, Fase 6/7 — adicionada ao menu só agora, pela migration
+    // prisma/migrations/20260930130000_satisfacao_cliente_roleta_menu_subcategoria, depois da
+    // tela já estar publicada em produção). "Visão Geral" e "Avaliações" (Fase 4) também já têm
+    // página publicada, mas viraram subcategorias da categoria "crm" em vez de entrarem aqui —
+    // decisão separada do Matheus, ver o bloco de "crm" acima (comentário junto de
+    // `{ key: "visao-geral", ... }`/`{ key: "avaliacoes", ... }` e
+    // prisma/migrations/*_satisfacao_cliente_crm_menu). As outras 2 pendentes desta categoria
+    // (Ranking de Garçons, Configurações) continuam de fora até cada uma ganhar tela própria —
+    // mesmo raciocínio do Fechamento do Dia, e mesmo cuidado que já rendeu 2 reversões deste
+    // exato bloco antes (Fase 1: nenhuma tela ainda; Fase 2: API pronta mas tela do Caio ainda
+    // não — Teulis achou 404 ao vivo nas duas vezes). A publicação deste seed sempre coordenada
+    // pelo líder pra só ir ao ar depois que a branch da tela correspondente já estiver em
+    // produção, nunca antes.
     key: "satisfacao-cliente",
     name: "Satisfação do Cliente",
     icon: "Smile",
@@ -413,6 +428,19 @@ const CATEGORIES = [
       // (na ausência da tela real pra conferir contra), o que teria gerado um link morto
       // /portal/satisfacao-cliente/mesas-qrcode mesmo depois da tela existir.
       { key: "mesas", name: "QR Codes / Mesas", icon: "QrCode" },
+      // `key: "roleta"` é a MESMA chave já usada pela API de permissão desde a Fase 6/7 —
+      // `hasModulePermission(session.user.id, "satisfacao-cliente", "canView"/"canExecute"/etc.,
+      // "roleta")`, ver src/app/api/satisfacao-cliente/roleta/**/route.ts e
+      // src/app/portal/satisfacao-cliente/roleta/page.tsx — não inventar uma chave nova aqui. A
+      // pasta de rota real é src/app/portal/satisfacao-cliente/roleta/page.tsx, então o link
+      // `/portal/${categoria.key}/${subcategoria.key}` bate certinho sem precisar de nenhuma
+      // página de redirecionamento. Ícone "Gift" reaproveitado de `DEFAULT_PRIZE_ICON` da
+      // própria tela (roleta-client.tsx) — é o mesmo ícone que a tela já usa no card "Prêmios
+      // cadastrados". A tela de resgate (/roleta/resgatar) não ganha item de menu próprio —
+      // continua acessada a partir da tela de admin, não pelo menu lateral. Linha de produção
+      // inserida por prisma/migrations/20260930130000_satisfacao_cliente_roleta_menu_subcategoria
+      // (deploy automático nunca roda este seed).
+      { key: "roleta", name: "Roleta de Prêmios", icon: "Gift" },
     ],
   },
 ];
@@ -1711,11 +1739,11 @@ async function main() {
   const existingIngredients = await prisma.ingredient.count();
   if (existingIngredients === 0) {
     const [moinhoSul, laticiniosNord, hortifrutiCentral, distribuidoraBebidas, embalagensExpress] = await Promise.all([
-      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Moinho Sul Alimentos Ltda", nomeFantasia: "Moinho Sul", cnpj: "12.345.678/0001-90", telefone: "(11) 4002-8900", whatsapp: "(11) 94002-8900", email: "vendas@moinhosul.com.br", endereco: "Rod. Anhanguera, km 32 — Cajamar/SP", prazoPagamentoDias: 30, prazoEntregaDias: 2, pedidoMinimo: 500, avaliacao: 4.5 } }),
-      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Laticínios Nord Distribuidora Ltda", nomeFantasia: "Laticínios Nord", cnpj: "23.456.789/0001-01", telefone: "(11) 3345-7700", whatsapp: "(11) 93345-7700", email: "comercial@laticiniosnord.com.br", endereco: "Av. dos Laticínios, 450 — São Paulo/SP", prazoPagamentoDias: 15, prazoEntregaDias: 1, pedidoMinimo: 300, avaliacao: 4.2 } }),
-      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Hortifruti Central Comércio Ltda", nomeFantasia: "Hortifruti Central", cnpj: "34.567.890/0001-12", telefone: "(11) 3221-5500", email: "pedidos@hortifruticentral.com.br", endereco: "CEAGESP, Box 112 — São Paulo/SP", prazoPagamentoDias: 7, prazoEntregaDias: 1, pedidoMinimo: 150, avaliacao: 3.8 } }),
-      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Distribuidora de Bebidas SP Ltda", nomeFantasia: "Bebidas SP", cnpj: "45.678.901/0001-23", telefone: "(11) 3556-9900", email: "vendas@bebidassp.com.br", endereco: "Rua das Bebidas, 780 — São Paulo/SP", prazoPagamentoDias: 30, prazoEntregaDias: 3, pedidoMinimo: 800, avaliacao: 4.6 } }),
-      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Embalagens Express Ltda", nomeFantasia: "Embalagens Express", cnpj: "56.789.012/0001-34", telefone: "(11) 3778-4400", email: "comercial@embalagensexpress.com.br", endereco: "Distrito Industrial, 220 — Guarulhos/SP", prazoPagamentoDias: 30, prazoEntregaDias: 5, pedidoMinimo: 400, avaliacao: 4.0 } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Moinho Sul Alimentos Ltda", nomeFantasia: "Moinho Sul", cnpj: "12.345.678/0001-90", telefone: "(11) 4002-8900", whatsapp: "(11) 94002-8900", email: "vendas@moinhosul.com.br", endereco: "Rod. Anhanguera, km 32 — Cajamar/SP", prazoPagamentoDias: 30, diasEntregaSemana: [1, 4] } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Laticínios Nord Distribuidora Ltda", nomeFantasia: "Laticínios Nord", cnpj: "23.456.789/0001-01", telefone: "(11) 3345-7700", whatsapp: "(11) 93345-7700", email: "comercial@laticiniosnord.com.br", endereco: "Av. dos Laticínios, 450 — São Paulo/SP", prazoPagamentoDias: 15, diasEntregaSemana: [1, 3, 5] } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Hortifruti Central Comércio Ltda", nomeFantasia: "Hortifruti Central", cnpj: "34.567.890/0001-12", telefone: "(11) 3221-5500", email: "pedidos@hortifruticentral.com.br", endereco: "CEAGESP, Box 112 — São Paulo/SP", prazoPagamentoDias: 7, diasEntregaSemana: [1, 2, 3, 4, 5] } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Distribuidora de Bebidas SP Ltda", nomeFantasia: "Bebidas SP", cnpj: "45.678.901/0001-23", telefone: "(11) 3556-9900", email: "vendas@bebidassp.com.br", endereco: "Rua das Bebidas, 780 — São Paulo/SP", prazoPagamentoDias: 30, diasEntregaSemana: [2, 5] } }),
+      prisma.supplier.create({ data: { empresaId: nordPizza.id, razaoSocial: "Embalagens Express Ltda", nomeFantasia: "Embalagens Express", cnpj: "56.789.012/0001-34", telefone: "(11) 3778-4400", email: "comercial@embalagensexpress.com.br", endereco: "Distrito Industrial, 220 — Guarulhos/SP", prazoPagamentoDias: 30, diasEntregaSemana: [3] } }),
     ]);
 
     const massa = await prisma.ingredient.create({
@@ -1968,9 +1996,9 @@ async function main() {
 
     // --- Ficha técnica + Estoque: insumos, fornecedores, produto exemplo (Zarki Sushi) ---
     const [salmaoBrasil, distribuidoraOriental, embalagensOrientais] = await Promise.all([
-      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Salmão Brasil Importadora Ltda", nomeFantasia: "Salmão Brasil", cnpj: "67.890.123/0001-45", telefone: "(11) 3667-2200", whatsapp: "(11) 93667-2200", email: "vendas@salmaobrasil.com.br", endereco: "Terminal Frigorificado, Box 8 — Guarulhos/SP", prazoPagamentoDias: 15, prazoEntregaDias: 2, pedidoMinimo: 600, avaliacao: 4.7 } }),
-      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Distribuidora Oriental Alimentos Ltda", nomeFantasia: "Distribuidora Oriental", cnpj: "78.901.234/0001-56", telefone: "(11) 3229-8800", email: "comercial@distoriental.com.br", endereco: "Rua da Liberdade, 900 — São Paulo/SP", prazoPagamentoDias: 21, prazoEntregaDias: 2, pedidoMinimo: 350, avaliacao: 4.3 } }),
-      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Embalagens Orientais Design Ltda", nomeFantasia: "Embalagens Orientais", cnpj: "89.012.345/0001-67", telefone: "(11) 3990-1100", email: "pedidos@embalagensorientais.com.br", endereco: "Av. Industrial, 340 — São Paulo/SP", prazoPagamentoDias: 30, prazoEntregaDias: 4, pedidoMinimo: 300, avaliacao: 3.9 } }),
+      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Salmão Brasil Importadora Ltda", nomeFantasia: "Salmão Brasil", cnpj: "67.890.123/0001-45", telefone: "(11) 3667-2200", whatsapp: "(11) 93667-2200", email: "vendas@salmaobrasil.com.br", endereco: "Terminal Frigorificado, Box 8 — Guarulhos/SP", prazoPagamentoDias: 15, diasEntregaSemana: [2, 5] } }),
+      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Distribuidora Oriental Alimentos Ltda", nomeFantasia: "Distribuidora Oriental", cnpj: "78.901.234/0001-56", telefone: "(11) 3229-8800", email: "comercial@distoriental.com.br", endereco: "Rua da Liberdade, 900 — São Paulo/SP", prazoPagamentoDias: 21, diasEntregaSemana: [1, 4] } }),
+      prisma.supplier.create({ data: { empresaId: zarkiSushi.id, razaoSocial: "Embalagens Orientais Design Ltda", nomeFantasia: "Embalagens Orientais", cnpj: "89.012.345/0001-67", telefone: "(11) 3990-1100", email: "pedidos@embalagensorientais.com.br", endereco: "Av. Industrial, 340 — São Paulo/SP", prazoPagamentoDias: 30, diasEntregaSemana: [4] } }),
     ]);
 
     const salmao = await prisma.ingredient.create({
@@ -2191,6 +2219,10 @@ async function main() {
           purchaseId: purchase.id,
           empresaId: opts.empresaId,
           dataHora: data,
+          // Sem isso, este recebimento de seed nunca aparecia nos KPIs do dashboard gerencial
+          // (loadRecebimentoDashboard, src/lib/recebimento-server.ts, filtra tudo por dataFim) —
+          // mesma causa raiz do bug corrigido em POST /api/estoque/recebimento.
+          dataFim: data,
           responsavel: opts.responsavel,
           status: "APROVADO",
           observacao: "Mercadoria conferida sem divergências.",

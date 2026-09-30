@@ -56,7 +56,7 @@ export default async function EstoquePage() {
   const earliestPeriodStart = weekBoundaries.reduce((min, w) => (w.weekStart < min ? w.weekStart : min), since);
   const snapshotDates = [since, now, ...weekBoundaries.flatMap((w) => [w.weekStart, w.weekEnd])];
 
-  const [ingredients, snapshots, movements, products, losses, purchases, pendingCounts, divergenciasAbertas, salesEntries] = await Promise.all([
+  const [ingredients, snapshots, movements, products, losses, purchases, pendingCounts, salesEntries] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
     // Valor do estoque em cada instante (início/fim do período de
     // PERIOD_DAYS dias e de cada semana do gráfico) resolvido no banco, 1
@@ -85,7 +85,6 @@ export default async function EstoquePage() {
     prisma.loss.findMany({ where: { empresaId: { in: empresaIds }, data: { gte: since } } }),
     prisma.purchase.findMany({ where: { empresaId: { in: empresaIds }, data: { gte: since } }, include: { items: true } }),
     prisma.stockCount.count({ where: { empresaId: { in: empresaIds }, status: { in: ["RASCUNHO", "EM_ANDAMENTO"] } } }),
-    prisma.stockCountItem.count({ where: { status: "DIVERGENCIA", justificativa: null, count: { empresaId: { in: empresaIds } } } }),
     prisma.salesEntry.findMany({
       where: { empresaId: { in: empresaIds }, date: { gte: startOfWeek(subWeeks(now, WEEKS_SERIE), { weekStartsOn: 1 }) } },
     }),
@@ -205,7 +204,6 @@ export default async function EstoquePage() {
           valorCompras={valorCompras}
           valorPerdas={valorPerdas}
           contagensPendentes={pendingCounts}
-          divergenciasAbertas={divergenciasAbertas}
           evolucaoCmv={evolucaoCmv}
           alertas={alertas}
         />

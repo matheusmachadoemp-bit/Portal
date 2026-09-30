@@ -41,6 +41,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           empresaId: existing.empresaId,
           responsavel: body.responsavel || session.user.name || null,
           status: "APROVADO",
+          // Mesmo caso de POST /api/estoque/recebimento: este fluxo ("Marcar recebido" na tela de
+          // Compras) é síncrono e sem conferência item a item — o recebimento já nasce concluído,
+          // sem fase "em andamento" intermediária. Sem dataFim, nunca apareceria nos KPIs do
+          // dashboard gerencial (loadRecebimentoDashboard, src/lib/recebimento-server.ts, que filtra
+          // tudo por dataFim), igual ao bug original encontrado no fluxo interno da tela Recebimento.
+          dataFim: new Date(),
           observacao: body.observacao || "Recebimento confirmado a partir da tela de Compras.",
         },
       }),

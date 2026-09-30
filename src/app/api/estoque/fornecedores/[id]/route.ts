@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { parseDiasEntregaSemana } from "@/lib/supplier";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -33,9 +34,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       email: body.email !== undefined ? body.email || null : undefined,
       endereco: body.endereco !== undefined ? body.endereco || null : undefined,
       prazoPagamentoDias: body.prazoPagamentoDias !== undefined ? (body.prazoPagamentoDias === "" ? null : Number(body.prazoPagamentoDias)) : undefined,
-      prazoEntregaDias: body.prazoEntregaDias !== undefined ? (body.prazoEntregaDias === "" ? null : Number(body.prazoEntregaDias)) : undefined,
-      pedidoMinimo: body.pedidoMinimo !== undefined ? (body.pedidoMinimo === "" ? null : Number(body.pedidoMinimo)) : undefined,
-      avaliacao: body.avaliacao !== undefined ? Number(body.avaliacao) : undefined,
+      diasEntregaSemana: body.diasEntregaSemana !== undefined ? parseDiasEntregaSemana(body.diasEntregaSemana) : undefined,
       active: body.active !== undefined ? !!body.active : undefined,
       observacao: body.observacao !== undefined ? body.observacao || null : undefined,
     },

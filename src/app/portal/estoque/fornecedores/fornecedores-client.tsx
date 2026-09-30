@@ -1,12 +1,30 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Star } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/calc";
+
+/**
+ * Mesmo vocabulário de dia da semana usado no resto do projeto (0=domingo..6=sábado — ver
+ * `StoreClosedWeekday`/`ProductionWeekdayWeight`/`WEEKDAY_LABELS` em
+ * `src/app/api/rh/escala-folgas/closed-weekdays/route.ts`), repetido aqui porque este é um
+ * componente client e aquele é um arquivo de rota de API.
+ */
+const WEEKDAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const WEEKDAY_SHORT_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+/** Exibição compacta dos dias de entrega na tabela e no export (ex.: "Seg, Qua, Sex"). */
+function formatDiasEntregaSemana(dias: number[]): string {
+  if (dias.length === 0) return "—";
+  if (dias.length === 7) return "Todos os dias";
+  return [...dias]
+    .sort((a, b) => a - b)
+    .map((d) => WEEKDAY_SHORT_LABELS[d])
+    .join(", ");
+}
 
 type Supplier = {
   id: string;
@@ -18,9 +36,7 @@ type Supplier = {
   email: string | null;
   endereco: string | null;
   prazoPagamentoDias: number | null;
-  prazoEntregaDias: number | null;
-  pedidoMinimo: number | null;
-  avaliacao: number;
+  diasEntregaSemana: number[];
   active: boolean;
   observacao: string | null;
   produtos: number;
@@ -38,9 +54,7 @@ const emptyForm = {
   email: "",
   endereco: "",
   prazoPagamentoDias: "",
-  prazoEntregaDias: "",
-  pedidoMinimo: "",
-  avaliacao: "5",
+  diasEntregaSemana: [] as number[],
   observacao: "",
 };
 
@@ -63,8 +77,6 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
     () => suppliers.filter((s) => (s.nomeFantasia ?? s.razaoSocial).toLowerCase().includes(search.toLowerCase())),
     [suppliers, search]
   );
-
-  const ranking = useMemo(() => [...suppliers].sort((a, b) => b.avaliacao - a.avaliacao).slice(0, 5), [suppliers]);
 
   async function refresh() {
     const res = await fetch("/api/estoque/fornecedores");
@@ -99,13 +111,20 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
       email: s.email ?? "",
       endereco: s.endereco ?? "",
       prazoPagamentoDias: s.prazoPagamentoDias !== null ? String(s.prazoPagamentoDias) : "",
-      prazoEntregaDias: s.prazoEntregaDias !== null ? String(s.prazoEntregaDias) : "",
-      pedidoMinimo: s.pedidoMinimo !== null ? String(s.pedidoMinimo) : "",
-      avaliacao: String(s.avaliacao),
+      diasEntregaSemana: s.diasEntregaSemana,
       observacao: s.observacao ?? "",
     });
     setError(null);
     setShowForm(true);
+  }
+
+  function toggleDiaEntrega(dia: number) {
+    setForm((f) => ({
+      ...f,
+      diasEntregaSemana: f.diasEntregaSemana.includes(dia)
+        ? f.diasEntregaSemana.filter((d) => d !== dia)
+        : [...f.diasEntregaSemana, dia].sort((a, b) => a - b),
+    }));
   }
 
   async function submit() {
@@ -134,21 +153,6 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
 
   return (
     <div className="space-y-6">
-      <Section title="Ranking de fornecedores (avaliação)">
-        <div className="space-y-2">
-          {ranking.map((s, idx) => (
-            <div key={s.id} className="flex items-center justify-between text-sm border-b border-nord-border/60 pb-2 last:border-0">
-              <span className="text-white">
-                {idx + 1}. {s.nomeFantasia ?? s.razaoSocial}
-              </span>
-              <span className="flex items-center gap-1 text-amber-400 text-xs">
-                <Star size={12} fill="currentColor" /> {s.avaliacao.toFixed(1)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Section>
-
       <Section
         title="Fornecedores"
         action={
@@ -162,8 +166,7 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
                 CNPJ: s.cnpj ?? "",
                 Telefone: s.telefone ?? "",
                 "Prazo pagamento (dias)": s.prazoPagamentoDias ?? "",
-                "Prazo entrega (dias)": s.prazoEntregaDias ?? "",
-                Avaliação: s.avaliacao,
+                "Dias de entrega": formatDiasEntregaSemana(s.diasEntregaSemana),
                 Produtos: s.produtos,
               }))
             }
@@ -180,9 +183,7 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
                 <th className="py-2 pr-4">Fornecedor</th>
                 <th className="py-2 pr-4">Contato</th>
                 <th className="py-2 pr-4">Prazo pagto.</th>
-                <th className="py-2 pr-4">Prazo entrega</th>
-                <th className="py-2 pr-4">Pedido mín.</th>
-                <th className="py-2 pr-4">Avaliação</th>
+                <th className="py-2 pr-4">Dias de entrega</th>
                 <th className="py-2 pr-4">Última compra</th>
                 <th className="py-2 pr-4">Produtos</th>
                 <th className="py-2 pr-4" />
@@ -197,13 +198,7 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
                   </td>
                   <td className="py-2.5 pr-4 text-nord-gray">{s.telefone ?? s.whatsapp ?? s.email ?? "—"}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{s.prazoPagamentoDias ? `${s.prazoPagamentoDias} dias` : "—"}</td>
-                  <td className="py-2.5 pr-4 text-nord-gray">{s.prazoEntregaDias ? `${s.prazoEntregaDias} dias` : "—"}</td>
-                  <td className="py-2.5 pr-4 text-nord-gray">{s.pedidoMinimo ? `R$ ${s.pedidoMinimo}` : "—"}</td>
-                  <td className="py-2.5 pr-4">
-                    <span className="flex items-center gap-1 text-amber-400 text-xs">
-                      <Star size={12} fill="currentColor" /> {s.avaliacao.toFixed(1)}
-                    </span>
-                  </td>
+                  <td className="py-2.5 pr-4 text-nord-gray">{formatDiasEntregaSemana(s.diasEntregaSemana)}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{s.ultimaCompra ? format(new Date(s.ultimaCompra), "dd/MM/yyyy") : "—"}</td>
                   <td className="py-2.5 pr-4 text-nord-gray">{s.produtos}</td>
                   <td className="py-2.5 pr-4 text-right space-x-2 whitespace-nowrap">
@@ -220,7 +215,7 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-6 text-center text-nord-gray">
+                  <td colSpan={7} className="py-6 text-center text-nord-gray">
                     Nenhum fornecedor encontrado.
                   </td>
                 </tr>
@@ -264,18 +259,28 @@ export function FornecedoresClient({ initialSuppliers, canCreate }: { initialSup
             <span className="block text-xs text-nord-gray mb-1">Prazo de pagamento (dias)</span>
             <input className="input" type="number" value={form.prazoPagamentoDias} onChange={(e) => setForm({ ...form, prazoPagamentoDias: e.target.value })} />
           </label>
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Prazo médio de entrega (dias)</span>
-            <input className="input" type="number" value={form.prazoEntregaDias} onChange={(e) => setForm({ ...form, prazoEntregaDias: e.target.value })} />
-          </label>
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Pedido mínimo (R$)</span>
-            <input className="input" type="number" value={form.pedidoMinimo} onChange={(e) => setForm({ ...form, pedidoMinimo: e.target.value })} />
-          </label>
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Avaliação (0 a 5)</span>
-            <input className="input" type="number" min="0" max="5" step="0.1" value={form.avaliacao} onChange={(e) => setForm({ ...form, avaliacao: e.target.value })} />
-          </label>
+          <div className="block md:col-span-2">
+            <span className="block text-xs text-nord-gray mb-1">Dias de entrega</span>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAY_LABELS.map((label, dia) => {
+                const selected = form.diasEntregaSemana.includes(dia);
+                return (
+                  <button
+                    key={dia}
+                    type="button"
+                    onClick={() => toggleDiaEntrega(dia)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      selected
+                        ? "bg-nord-blue border-nord-blue text-white"
+                        : "border-nord-border text-nord-gray hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <label className="block md:col-span-2">
             <span className="block text-xs text-nord-gray mb-1">Observação</span>
             <input className="input" value={form.observacao} onChange={(e) => setForm({ ...form, observacao: e.target.value })} />

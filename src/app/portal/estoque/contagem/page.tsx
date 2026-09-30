@@ -52,7 +52,6 @@ export default async function ContagemEstoquePage() {
             status: c.status,
             totalItens: c.items.length,
             conferidos: c.items.filter((i) => i.quantidadeContada !== null).length,
-            divergencias: c.items.filter((i) => i.status === "DIVERGENCIA").length,
             createdByName: c.createdBy.name,
           }))}
           initialMensais={mensais.map((c) => ({
@@ -68,7 +67,6 @@ export default async function ContagemEstoquePage() {
             aprovadoEm: c.aprovadoEm ? c.aprovadoEm.toISOString() : null,
             totalItens: c.items.length,
             conferidos: c.items.filter((i) => i.quantidadeContada !== null).length,
-            divergencias: c.items.filter((i) => i.status === "DIVERGENCIA").length,
             createdByName: c.createdBy.name,
           }))}
           employees={employees.map((e) => ({ id: e.id, name: e.name }))}
