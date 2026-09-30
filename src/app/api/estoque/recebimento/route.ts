@@ -3,11 +3,29 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { logPurchaseEvent, notifyReceivingCompleted, notifyReceivingDivergence } from "@/lib/recebimento-server";
+import {
+  loadRecebimentoDashboard,
+  logPurchaseEvent,
+  notifyReceivingCompleted,
+  notifyReceivingDivergence,
+  resolveRecebimentoDashboardRange,
+} from "@/lib/recebimento-server";
 import { RECEIVING_DIVERGENCE_LABEL } from "@/lib/estoque";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import type { RollingPeriodKey } from "@/lib/periods";
 
-export async function GET() {
+/**
+ * Filtro de período do card "Dashboard gerencial" — mesmo padrão (`key`/`from`/`to` +
+ * `resolveRollingPeriod`, já tratando fuso de São Paulo) de src/app/api/estoque/compras/route.ts
+ * (Otavio). Diferente daquela rota, aqui `key` ausente NÃO significa "sem filtro nenhum": o
+ * dashboard sempre foi (e continua sendo) uma janela fechada — sem `key`, a janela é "últimos 30
+ * dias" idêntica à de antes deste filtro existir (ver `resolveRecebimentoDashboardRange`,
+ * src/lib/recebimento-server.ts, para o motivo de não usar `resolveRollingPeriod("30dias", ...)`
+ * no caso ausente). `pendentes`/`recebimentos` (as duas listas da tela) nunca tiveram filtro de
+ * data nenhum e continuam sem — só o `dashboard`, que é novo nesta resposta, respeita `key`/
+ * `from`/`to`.
+ */
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "estoque", "canView"))) {
@@ -21,7 +39,13 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
   const empresaIds = empresaIdsForContext(ctx);
 
-  const [pendentes, recebimentos] = await Promise.all([
+  const { searchParams } = new URL(req.url);
+  const key = searchParams.get("key") as RollingPeriodKey | null;
+  const from = searchParams.get("from") ?? undefined;
+  const to = searchParams.get("to") ?? undefined;
+  const { since, until } = resolveRecebimentoDashboardRange(key, from, to);
+
+  const [pendentes, recebimentos, dashboard] = await Promise.all([
     prisma.purchase.findMany({
       where: { empresaId: { in: empresaIds }, status: { in: ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "EM_CONFERENCIA", "RECEBIDO_PARCIAL"] } },
       orderBy: { data: "desc" },
@@ -44,9 +68,10 @@ export async function GET() {
         },
       },
     }),
+    loadRecebimentoDashboard(empresaIds, since, until),
   ]);
 
-  return NextResponse.json({ pendentes, recebimentos });
+  return NextResponse.json({ pendentes, recebimentos, dashboard });
 }
 
 export async function POST(req: Request) {
