@@ -2219,6 +2219,10 @@ async function main() {
           purchaseId: purchase.id,
           empresaId: opts.empresaId,
           dataHora: data,
+          // Sem isso, este recebimento de seed nunca aparecia nos KPIs do dashboard gerencial
+          // (loadRecebimentoDashboard, src/lib/recebimento-server.ts, filtra tudo por dataFim) —
+          // mesma causa raiz do bug corrigido em POST /api/estoque/recebimento.
+          dataFim: data,
           responsavel: opts.responsavel,
           status: "APROVADO",
           observacao: "Mercadoria conferida sem divergências.",

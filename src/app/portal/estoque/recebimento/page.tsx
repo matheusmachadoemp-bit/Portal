@@ -4,11 +4,16 @@ import { RecebimentoClient } from "./recebimento-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
-import { loadRecebimentoDashboard } from "@/lib/recebimento-server";
+import { loadRecebimentoDashboard, resolveRecebimentoDashboardRange } from "@/lib/recebimento-server";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
+import type { RollingPeriodKey } from "@/lib/periods";
 
-export default async function RecebimentoPage() {
+export default async function RecebimentoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ key?: string; from?: string; to?: string }>;
+}) {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
     redirect("/portal/inicio");
@@ -18,8 +23,13 @@ export default async function RecebimentoPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canCreate = ctx?.mode === "single" && RECEBIMENTO_MANAGE_ROLES.includes(session?.user?.role ?? "");
 
-  const since = new Date();
-  since.setDate(since.getDate() - 30);
+  // Aceita os mesmos `key`/`from`/`to` da rota de API (GET /api/estoque/recebimento) para a
+  // carga inicial já vir com o período certo, evitando um "flash" de 30 dias seguido de refetch
+  // quando a tela (Caio, numa fase seguinte) ganhar um filtro de período de verdade. Nenhuma
+  // tela hoje manda esses parâmetros — sem eles, `resolveRecebimentoDashboardRange` devolve
+  // exatamente os mesmos "últimos 30 dias" de antes.
+  const sp = await searchParams;
+  const { since, until } = resolveRecebimentoDashboardRange(sp.key as RollingPeriodKey | undefined, sp.from, sp.to);
 
   const [pendentes, recebimentos, dashboard] = await Promise.all([
     prisma.purchase.findMany({
@@ -44,7 +54,7 @@ export default async function RecebimentoPage() {
         },
       },
     }),
-    loadRecebimentoDashboard(empresaIds, since),
+    loadRecebimentoDashboard(empresaIds, since, until),
   ]);
 
   return (

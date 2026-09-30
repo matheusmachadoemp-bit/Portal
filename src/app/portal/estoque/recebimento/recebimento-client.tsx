@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, CheckCheck, Send, History } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import {
@@ -18,6 +19,7 @@ import {
   RECEIVING_STATUS_LABEL,
   RECEIVING_STATUS_TONE,
 } from "@/lib/estoque";
+import { STANDARD_PERIOD_OPTIONS, type RollingPeriodKey } from "@/lib/periods";
 
 type PendingItem = { id: string; ingredientId: string; ingredientName: string; unidade: string; quantidade: number };
 type Pending = {
@@ -59,7 +61,7 @@ export function RecebimentoClient({
   initialPendentes,
   initialRecebimentos,
   canCreate,
-  dashboard,
+  dashboard: initialDashboard,
 }: {
   initialPendentes: Pending[];
   initialRecebimentos: Receiving[];
@@ -69,6 +71,25 @@ export function RecebimentoClient({
   const router = useRouter();
   const [pendentes, setPendentes] = useState(initialPendentes);
   const [recebimentos, setRecebimentos] = useState(initialRecebimentos);
+  const [dashboard, setDashboard] = useState(initialDashboard);
+  // Filtro de período do card "Dashboard gerencial" (padrão do portal — ver CLAUDE.md): afeta só
+  // o `dashboard` (KPIs de recebimento) buscado à parte, nunca as listas `pendentes`/
+  // `recebimentos` abaixo — um pedido aguardando recebimento continua na lista e um recebimento já
+  // registrado continua no histórico independente do período escolhido aqui (mesmo raciocínio do
+  // card "Aguardando entrega" de Compras: contagem/lista que não deve "sumir" só porque o pedido é
+  // de fora do período filtrado). Default "mes-atual" ("Este mês", mesmo padrão das outras telas)
+  // é reaplicado assim que a tela monta (useEffect mais abaixo) porque a carga inicial do servidor
+  // (page.tsx) sempre calcula "últimos 30 dias" quando a URL não tem `key` — nenhuma tela ainda
+  // linka pra cá com esse parâmetro, então sem isso o filtro apareceria em "Este mês" com números
+  // que na verdade são de 30 dias corridos.
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [loadingPeriodo, setLoadingPeriodo] = useState(false);
+  const [periodoError, setPeriodoError] = useState<string | null>(null);
+  const [periodoLabel, setPeriodoLabel] = useState(
+    STANDARD_PERIOD_OPTIONS.find((o) => o.key === "mes-atual")?.label ?? "Este mês"
+  );
   const [conferindo, setConferindo] = useState<Pending | null>(null);
   const [linkPedido, setLinkPedido] = useState<Pending | null>(null);
   const [copied, setCopied] = useState(false);
@@ -118,7 +139,53 @@ export function RecebimentoClient({
         numeroNota: (r.purchase as { numeroNota: string | null }).numeroNota,
       }))
     );
+    // `data.dashboard` acima já veio nessa mesma resposta, mas sempre SEM filtro (a rota só
+    // aplica key/from/to quando a URL os manda) — reaplica à parte o período que o usuário tinha
+    // selecionado, pra uma ação (ex.: confirmar um recebimento) não descartar o filtro escolhido.
+    fetchDashboard(periodo, customFrom, customTo).catch(() => {
+      setPeriodoError("Não foi possível atualizar o dashboard.");
+    });
   }
+
+  async function fetchDashboard(key: RollingPeriodKey, from?: string, to?: string) {
+    const params = new URLSearchParams({ key });
+    if (key === "personalizado" && from && to) {
+      params.set("from", from);
+      params.set("to", to);
+    }
+    const res = await fetch(`/api/estoque/recebimento?${params.toString()}`);
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    setDashboard(data.dashboard);
+  }
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    if (key === "personalizado" && from && to) {
+      setCustomFrom(from);
+      setCustomTo(to);
+    }
+    setLoadingPeriodo(true);
+    setPeriodoError(null);
+    try {
+      await fetchDashboard(key, from, to);
+      setPeriodoLabel(STANDARD_PERIOD_OPTIONS.find((o) => o.key === key)?.label ?? "Personalizado");
+    } catch {
+      setPeriodoError("Não foi possível carregar os dados desse período.");
+    } finally {
+      setLoadingPeriodo(false);
+    }
+  }
+
+  useEffect(() => {
+    // Carga inicial do servidor (page.tsx) sempre calcula "últimos 30 dias" quando a URL não tem
+    // `key` — reaplica o default "Este mês" assim que a tela monta, pra não deixar o filtro
+    // mostrando "Este mês" selecionado enquanto os números exibidos ainda são de 30 dias corridos.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega o dashboard no mount
+    applyPeriodo("mes-atual");
+    // Roda só na montagem (deps vazio de propósito, ver comentário do estado `periodo` acima).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openConferencia(p: Pending) {
     setConferindo(p);
@@ -200,7 +267,12 @@ export function RecebimentoClient({
 
   return (
     <div className="space-y-6">
-      <Section title="Dashboard gerencial (últimos 30 dias)">
+      <Section title={`Dashboard gerencial (${periodoLabel})`}>
+        <div className="mb-4">
+          <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loadingPeriodo} />
+          {loadingPeriodo && <span className="text-xs text-nord-gray mt-2 inline-block">Atualizando...</span>}
+          {periodoError && <p className="text-xs text-nord-danger mt-2">{periodoError}</p>}
+        </div>
         <SortableStatCards
           storageKey="estoque-recebimento-kpi-order"
           className="grid grid-cols-2 md:grid-cols-4 gap-3"
