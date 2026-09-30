@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { SECTORS } from "@/lib/estoque";
@@ -35,6 +36,22 @@ type Ingredient = {
   active: boolean;
 };
 
+// Resultado por item da exclusão em lote (POST /api/ficha-tecnica/insumos/excluir-lote).
+// `nome` vem `null` quando o item não foi encontrado ou não pertence a uma loja que o
+// usuário tem acesso — nesses 2 casos a UI não pode exibir o nome real do produto.
+type LoteResultado = {
+  id: string;
+  nome: string | null;
+  excluido: boolean;
+  motivo?: string;
+};
+
+type LoteResponse = {
+  resultados: LoteResultado[];
+  totalExcluidos: number;
+  totalBloqueados: number;
+};
+
 const emptyForm = {
   id: "",
   name: "",
@@ -65,11 +82,13 @@ export function ProdutosClient({
   categories,
   suppliers,
   canCreate,
+  canDelete,
 }: {
   initialIngredients: Ingredient[];
   categories: { id: string; name: string; color: string }[];
   suppliers: { id: string; name: string }[];
   canCreate: boolean;
+  canDelete: boolean;
 }) {
   const [ingredients, setIngredients] = useState(initialIngredients);
   const [search, setSearch] = useState("");
@@ -80,6 +99,13 @@ export function ProdutosClient({
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [bulkResult, setBulkResult] = useState<LoteResponse | null>(null);
 
   const vencimentoLimite = useMemo(() => new Date().getTime() + 7 * 86400000, []);
 
@@ -137,6 +163,72 @@ export function ProdutosClient({
         active: i.active,
       }))
     );
+  }
+
+  function toggleRow(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map((i) => i.id)));
+  }
+
+  async function doDelete() {
+    if (!confirmDeleteId) return;
+    const res = await fetch(`/api/ficha-tecnica/insumos/${confirmDeleteId}`, { method: "DELETE" });
+    setConfirmDeleteId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error ?? "Não foi possível excluir o produto.");
+      return;
+    }
+    setDeleteError(null);
+    // O item excluído pode também estar marcado na seleção em lote (checkbox da
+    // própria linha) — remove do Set pra barra "N selecionados" não ficar com
+    // contagem inflada, nem um "Excluir selecionados" posterior incluir um id
+    // que já não existe mais.
+    setSelected((prev) => {
+      if (!prev.has(confirmDeleteId)) return prev;
+      const next = new Set(prev);
+      next.delete(confirmDeleteId);
+      return next;
+    });
+    refresh();
+  }
+
+  async function doBulkDelete() {
+    if (selected.size === 0 || bulkDeleting) return;
+    setBulkDeleting(true);
+    const ids = Array.from(selected);
+    try {
+      const res = await fetch("/api/ficha-tecnica/insumos/excluir-lote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setBulkResult(null);
+        setDeleteError(data?.error ?? "Não foi possível excluir os produtos selecionados.");
+      } else {
+        setDeleteError(null);
+        setBulkResult(data as LoteResponse);
+      }
+    } finally {
+      // Sempre limpa a seleção e atualiza a lista ao final, mesmo se parte (ou
+      // todo) o lote foi bloqueado — os itens que excluíram de verdade precisam
+      // sumir da tela, e manter itens bloqueados selecionados só confundiria.
+      setConfirmBulkDelete(false);
+      setSelected(new Set());
+      setBulkDeleting(false);
+      refresh();
+    }
   }
 
   function openEdit(i: Ingredient) {
@@ -238,10 +330,42 @@ export function ProdutosClient({
         </select>
       </div>
 
+      {deleteError && (
+        <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
+          <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+          <p className="text-xs text-nord-danger">{deleteError}</p>
+        </div>
+      )}
+
+      {canDelete && selected.size > 0 && (
+        <div className="mb-4 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-nord-blue/10 border border-nord-blue/30">
+          <span className="text-sm text-white font-medium">{selected.size} produtos selecionados</span>
+          <button
+            onClick={() => {
+              setDeleteError(null);
+              setConfirmBulkDelete(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-danger/90 hover:bg-nord-danger text-white"
+          >
+            <Trash2 size={13} /> Excluir selecionados
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+              {canDelete && (
+                <th className="py-2 pr-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    onChange={toggleAll}
+                    className="accent-nord-blue"
+                  />
+                </th>
+              )}
               <th className="py-2 pr-4">Produto</th>
               <th className="py-2 pr-4">Categoria</th>
               <th className="py-2 pr-4">Setor</th>
@@ -264,6 +388,16 @@ export function ProdutosClient({
               if (!i.unidadeCompra) alerts.push("Conversão não configurada");
               return (
                 <tr key={i.id} className="border-b border-nord-border/50 hover:bg-white/5">
+                  {canDelete && (
+                    <td className="py-2.5 pr-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(i.id)}
+                        onChange={() => toggleRow(i.id)}
+                        className="accent-nord-blue"
+                      />
+                    </td>
+                  )}
                   <td className="py-2.5 pr-4 text-white">
                     {i.name}
                     {!i.active && <Badge tone="default"> Inativo</Badge>}
@@ -299,13 +433,24 @@ export function ProdutosClient({
                         Editar
                       </button>
                     )}
+                    {canDelete && (
+                      <button
+                        onClick={() => {
+                          setDeleteError(null);
+                          setConfirmDeleteId(i.id);
+                        }}
+                        className={`text-xs text-nord-danger hover:underline${canCreate ? " ml-3" : ""}`}
+                      >
+                        Excluir
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-6 text-center text-nord-gray">
+                <td colSpan={canDelete ? 9 : 8} className="py-6 text-center text-nord-gray">
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -419,6 +564,65 @@ export function ProdutosClient({
         {error && <p className="text-xs text-nord-danger mt-3">{error}</p>}
         <button onClick={submit} disabled={!form.name.trim() || submitting} className="btn-primary w-full mt-4 py-2.5">
           {submitting ? "Salvando..." : "Salvar"}
+        </button>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Excluir produto"
+        message="Tem certeza que deseja excluir este produto? Essa ação não pode ser desfeita. Se ele estiver em uso — em uma ficha técnica, compra, perda, transferência, contagem ou movimentação de estoque — a exclusão será bloqueada e você poderá desativá-lo em vez de excluir."
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+        confirmLabel="Excluir"
+        danger
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Excluir produtos selecionados"
+        message={`Tem certeza que deseja excluir ${selected.size} produto(s)? Essa ação não pode ser desfeita. Produtos em uso (em ficha técnica, compras, perdas, transferências, contagens ou movimentações de estoque) não serão excluídos — a exclusão desses será bloqueada automaticamente e você verá quais foram bloqueados e o motivo de cada um.`}
+        onConfirm={doBulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+        confirmLabel={bulkDeleting ? "Excluindo..." : "Excluir"}
+        danger
+      />
+
+      <Modal open={!!bulkResult} onClose={() => setBulkResult(null)} title="Resultado da exclusão em lote">
+        {bulkResult && (
+          <div className="space-y-3">
+            {bulkResult.totalExcluidos > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-nord-success/10 border border-nord-success/30">
+                <CheckCircle2 size={14} className="text-nord-success mt-0.5 shrink-0" />
+                <p className="text-xs text-nord-success">
+                  {bulkResult.totalExcluidos} produto(s) excluído(s) com sucesso.
+                </p>
+              </div>
+            )}
+            {bulkResult.totalBloqueados > 0 && (
+              <div className="p-3 rounded-lg bg-nord-warning/10 border border-nord-warning/30">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-nord-warning mt-0.5 shrink-0" />
+                  <p className="text-xs text-nord-warning">
+                    {bulkResult.totalBloqueados} produto(s) não puderam ser excluídos:
+                  </p>
+                </div>
+                <ul className="mt-2 ml-6 list-disc space-y-1 text-xs text-nord-gray">
+                  {bulkResult.resultados
+                    .filter((r) => !r.excluido)
+                    .map((r) => (
+                      <li key={r.id}>
+                        <span className="text-white">{r.nome ?? "Um item"}</span>
+                        {" — "}
+                        {r.motivo ?? "Não foi possível excluir."}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        <button onClick={() => setBulkResult(null)} className="btn-primary w-full mt-4 py-2.5">
+          Fechar
         </button>
       </Modal>
     </Section>
