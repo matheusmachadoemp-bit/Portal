@@ -88,6 +88,37 @@ export async function logPurchaseEvent(params: {
   });
 }
 
+type ReceivingDivergenceCheck = {
+  status: string;
+  divergencias: string | null;
+  items: { status: string }[];
+};
+
+/**
+ * Um `Receiving` "tem divergência" de duas formas possíveis, dependendo de qual dos três fluxos
+ * que o criam foi usado:
+ * - Conferência item a item (link público, `POST .../responder/[token]/finalizar`): granularidade
+ *   real por produto — usa o `status` de cada `ReceivingItem` (`items` só existe pra este fluxo).
+ * - Registro do pedido inteiro numa tacada só (`POST /api/estoque/recebimento`, tela interna, e
+ *   `PATCH /api/estoque/compras/[id]` "Marcar recebido") — os dois nunca criam `ReceivingItem`
+ *   nenhum (sem conferência produto a produto), então não tem como saber QUAL item divergiu, só
+ *   SE o pedido inteiro teve problema. Usa o `status`/`divergencias` gravados no próprio
+ *   `Receiving`: `status !== "APROVADO"` cobre quem só mexeu no dropdown de status (ex.:
+ *   "Recusado" sem marcar nenhum tipo específico), e `divergencias` não vazio cobre quem marcou um
+ *   tipo mas deixou o status em "Aprovado" por engano — os dois campos são independentes na tela
+ *   (`recebimento-client.tsx`), nenhum obriga o outro.
+ * Sem este fallback, todo `Receiving` sem `ReceivingItem` sempre "parecia" sem divergência nos
+ * KPIs abaixo (achado do líder na revisão do fix de `dataFim`, junto com o gap original de
+ * `POST /api/estoque/recebimento` nunca aparecer no dashboard — ver histórico de
+ * `src/app/api/estoque/recebimento/route.ts`).
+ */
+function receivingHasDivergencia(r: ReceivingDivergenceCheck): boolean {
+  if (r.items.length > 0) {
+    return r.items.some((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO");
+  }
+  return r.status !== "APROVADO" || Boolean(r.divergencias && r.divergencias.trim() !== "");
+}
+
 /**
  * KPIs do dashboard gerencial de Recebimento: volume, % sem divergência, atrasos,
  * divergências em aberto, valor acumulado das divergências, tempo médio de resolução
@@ -122,40 +153,62 @@ export async function loadRecebimentoDashboard(empresaIds: string[], since: Date
   });
 
   const totalRecebimentos = receivings.length;
-  const semDivergencia = receivings.filter(
-    (r) => !r.items.some((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO")
-  ).length;
+  const semDivergencia = receivings.filter((r) => !receivingHasDivergencia(r)).length;
   const pctSemDivergencia = totalRecebimentos ? (semDivergencia / totalRecebimentos) * 100 : 0;
 
   const pedidosAtrasados = receivings.filter(
     (r) => r.purchase.previsaoEntrega && r.dataFim && r.dataFim > r.purchase.previsaoEntrega
   ).length;
 
-  const divergentes = receivings.flatMap((r) =>
+  // Divergências com detalhe por produto (só existe pra quem passou pela conferência item a item
+  // do link público) — usado pro valor acumulado e pro tempo médio de resolução, que dependem de
+  // dado (preço/quantidade divergente, data de resolução) que os outros dois fluxos não coletam.
+  const divergentesComItem = receivings.flatMap((r) =>
     r.items
       .filter((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO")
       .map((it) => ({ ...it, supplier: r.purchase.supplier }))
   );
 
-  const divergenciasAbertas = divergentes.filter((it) => it.resolucaoTipo === "AGUARDANDO").length;
+  // Recebimentos com divergência registrada pelo fluxo interno ou pelo "Marcar recebido" da tela
+  // de Compras (sem ReceivingItem, ver `receivingHasDivergencia` acima) — sem detalhe por produto,
+  // mas contam pro card "Divergências abertas": a Central de Divergências (que resolve
+  // ReceivingItem um a um) nunca enxerga esses registros, então pra eles não existe um jeito de
+  // marcar "resolvido" — ficam sempre em aberto pro dashboard, igual ao estado padrão
+  // (`AGUARDANDO`) de quem nunca foi resolvido no fluxo item a item.
+  const divergentesSemItem = receivings.filter((r) => r.items.length === 0 && receivingHasDivergencia(r));
 
-  const valorDivergencias = divergentes.reduce((sum, it) => {
+  const divergenciasAbertas =
+    divergentesComItem.filter((it) => it.resolucaoTipo === "AGUARDANDO").length + divergentesSemItem.length;
+
+  // Só o fluxo item a item registra preço/quantidade divergente por produto — não dá pra inventar
+  // um valor monetário pros outros dois fluxos, então eles não entram nesta soma (mesmo raciocínio
+  // já usado pra excluir "AGUARDANDO_SOLUCAO" de computeGastoPorInsumoRows, mais abaixo).
+  const valorDivergencias = divergentesComItem.reduce((sum, it) => {
     const precoRef = it.precoInformado ?? it.purchaseItem.valorUnitario;
     const qtdDif = (it.quantidadeRecebida ?? 0) - it.purchaseItem.quantidade;
     return sum + Math.abs(qtdDif) * precoRef;
   }, 0);
 
-  const resolvidos = divergentes.filter((it) => it.resolvidoEm);
+  const resolvidos = divergentesComItem.filter((it) => it.resolvidoEm);
   const tempoMedioResolucaoDias = resolvidos.length
     ? resolvidos.reduce((sum, it) => sum + (it.resolvidoEm!.getTime() - it.createdAt.getTime()) / 86400000, 0) / resolvidos.length
     : null;
 
+  // Fornecedor com mais problemas: aqui dá pra somar os dois grupos sem inventar nada — mesmo sem
+  // detalhe por produto, o fornecedor de um recebimento com divergência (mesmo sem item) é um dado
+  // real já carregado junto (`r.purchase.supplier`).
   const porFornecedor = new Map<string, { nome: string; count: number }>();
-  for (const it of divergentes) {
+  for (const it of divergentesComItem) {
     const nome = it.supplier.nomeFantasia ?? it.supplier.razaoSocial;
     const entry = porFornecedor.get(it.supplier.id) ?? { nome, count: 0 };
     entry.count += 1;
     porFornecedor.set(it.supplier.id, entry);
+  }
+  for (const r of divergentesSemItem) {
+    const nome = r.purchase.supplier.nomeFantasia ?? r.purchase.supplier.razaoSocial;
+    const entry = porFornecedor.get(r.purchase.supplier.id) ?? { nome, count: 0 };
+    entry.count += 1;
+    porFornecedor.set(r.purchase.supplier.id, entry);
   }
   const fornecedorMaisProblemas = [...porFornecedor.values()].sort((a, b) => b.count - a.count)[0] ?? null;
 
@@ -217,9 +270,11 @@ export async function loadSupplierReceivingHistory(supplierId: string) {
   });
 
   const totalRecebimentos = receivings.length;
-  const comDivergencia = receivings.filter((r) =>
-    r.items.some((it) => it.status === "DIVERGENCIA" || it.status === "NAO_RECEBIDO")
-  ).length;
+  // `receivingHasDivergencia` (definida acima, mesma usada por `loadRecebimentoDashboard`) cai
+  // pra status/divergencias do Receiving quando não há ReceivingItem — sem isso, todo recebimento
+  // do fluxo interno ou do "Marcar recebido" da tela de Compras contava como "sem divergência"
+  // aqui também, mesmo com uma divergência real registrada.
+  const comDivergencia = receivings.filter((r) => receivingHasDivergencia(r)).length;
   const taxaConformidade = totalRecebimentos ? ((totalRecebimentos - comDivergencia) / totalRecebimentos) * 100 : null;
 
   const valorDivergencias = receivings
