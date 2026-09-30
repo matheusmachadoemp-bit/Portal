@@ -379,20 +379,23 @@ const CATEGORIES = [
     ],
   },
   {
-    // "Satisfação do Cliente" (módulo novo, ver docs/satisfacao-cliente-proposta.md) — SÓ com
-    // as 2 subcategorias que já têm página de verdade por trás E que o Matheus decidiu manter
-    // aqui (Perguntas e QR Codes/Mesas, publicadas pelo Caio em
-    // /portal/satisfacao-cliente/perguntas e /mesas). "Visão Geral" e "Avaliações" (Fase 4)
-    // também já têm página publicada, mas viraram subcategorias da categoria "crm" em vez de
-    // entrarem aqui — decisão separada do Matheus, ver o bloco de "crm" acima (comentário junto
-    // de `{ key: "visao-geral", ... }`/`{ key: "avaliacoes", ... }` e
-    // prisma/migrations/*_satisfacao_cliente_crm_menu). As outras 3 pendentes desta categoria
-    // (Ranking de Garçons, Roleta de Prêmios, Configurações) continuam de fora até cada uma
-    // ganhar tela própria — mesmo raciocínio do Fechamento do Dia, e mesmo cuidado que já rendeu
-    // 2 reversões deste exato bloco antes (Fase 1: nenhuma tela ainda; Fase 2: API pronta mas
-    // tela do Caio ainda não — Teulis achou 404 ao vivo nas duas vezes). A publicação deste seed
-    // sempre coordenada pelo líder pra só ir ao ar depois que a branch da tela correspondente já
-    // estiver em produção, nunca antes.
+    // "Satisfação do Cliente" (módulo novo, ver docs/satisfacao-cliente-proposta.md) — com as 3
+    // subcategorias que já têm página de verdade por trás E que o Matheus decidiu manter aqui
+    // (Perguntas e QR Codes/Mesas, publicadas pelo Caio em /portal/satisfacao-cliente/perguntas
+    // e /mesas; Roleta de Prêmios — admin em /portal/satisfacao-cliente/roleta, resgate em
+    // /roleta/resgatar, Fase 6/7 — adicionada ao menu só agora, pela migration
+    // prisma/migrations/20260930130000_satisfacao_cliente_roleta_menu_subcategoria, depois da
+    // tela já estar publicada em produção). "Visão Geral" e "Avaliações" (Fase 4) também já têm
+    // página publicada, mas viraram subcategorias da categoria "crm" em vez de entrarem aqui —
+    // decisão separada do Matheus, ver o bloco de "crm" acima (comentário junto de
+    // `{ key: "visao-geral", ... }`/`{ key: "avaliacoes", ... }` e
+    // prisma/migrations/*_satisfacao_cliente_crm_menu). As outras 2 pendentes desta categoria
+    // (Ranking de Garçons, Configurações) continuam de fora até cada uma ganhar tela própria —
+    // mesmo raciocínio do Fechamento do Dia, e mesmo cuidado que já rendeu 2 reversões deste
+    // exato bloco antes (Fase 1: nenhuma tela ainda; Fase 2: API pronta mas tela do Caio ainda
+    // não — Teulis achou 404 ao vivo nas duas vezes). A publicação deste seed sempre coordenada
+    // pelo líder pra só ir ao ar depois que a branch da tela correspondente já estiver em
+    // produção, nunca antes.
     key: "satisfacao-cliente",
     name: "Satisfação do Cliente",
     icon: "Smile",
@@ -413,6 +416,19 @@ const CATEGORIES = [
       // (na ausência da tela real pra conferir contra), o que teria gerado um link morto
       // /portal/satisfacao-cliente/mesas-qrcode mesmo depois da tela existir.
       { key: "mesas", name: "QR Codes / Mesas", icon: "QrCode" },
+      // `key: "roleta"` é a MESMA chave já usada pela API de permissão desde a Fase 6/7 —
+      // `hasModulePermission(session.user.id, "satisfacao-cliente", "canView"/"canExecute"/etc.,
+      // "roleta")`, ver src/app/api/satisfacao-cliente/roleta/**/route.ts e
+      // src/app/portal/satisfacao-cliente/roleta/page.tsx — não inventar uma chave nova aqui. A
+      // pasta de rota real é src/app/portal/satisfacao-cliente/roleta/page.tsx, então o link
+      // `/portal/${categoria.key}/${subcategoria.key}` bate certinho sem precisar de nenhuma
+      // página de redirecionamento. Ícone "Gift" reaproveitado de `DEFAULT_PRIZE_ICON` da
+      // própria tela (roleta-client.tsx) — é o mesmo ícone que a tela já usa no card "Prêmios
+      // cadastrados". A tela de resgate (/roleta/resgatar) não ganha item de menu próprio —
+      // continua acessada a partir da tela de admin, não pelo menu lateral. Linha de produção
+      // inserida por prisma/migrations/20260930130000_satisfacao_cliente_roleta_menu_subcategoria
+      // (deploy automático nunca roda este seed).
+      { key: "roleta", name: "Roleta de Prêmios", icon: "Gift" },
     ],
   },
 ];
