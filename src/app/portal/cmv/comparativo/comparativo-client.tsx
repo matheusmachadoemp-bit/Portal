@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend, LabelList } from "recharts";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -35,7 +34,6 @@ export function ComparativoClient({
   perdasPorSetorChart,
   plans: initialPlans,
   canCreate,
-  canEditMeta,
 }: {
   cmvRealPercent: number;
   cmvTeoricoPercent: number;
@@ -46,49 +44,16 @@ export function ComparativoClient({
   perdasPorSetorChart: { name: string; value: number }[];
   plans: Plan[];
   canCreate: boolean;
-  canEditMeta: boolean;
 }) {
   const [plans, setPlans] = useState(initialPlans);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [metaCmv, setMetaCmv] = useState(metaCmvPercent);
-  const [editingMeta, setEditingMeta] = useState(false);
-  const [metaDraft, setMetaDraft] = useState(String(metaCmvPercent));
-  const [metaError, setMetaError] = useState<string | null>(null);
-  const [metaSaving, setMetaSaving] = useState(false);
 
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaValor = custoConsumido - cmvTeoricoValor;
-  const classificacao = classificarCmv(cmvRealPercent, metaCmv, cmvRealPercent > 0 || cmvTeoricoPercent > 0);
-
-  async function salvarMeta() {
-    if (metaSaving) return;
-    setMetaError(null);
-    const valor = Number(metaDraft);
-    if (!Number.isFinite(valor) || valor <= 0 || valor >= 100) {
-      setMetaError("Informe uma meta válida entre 0 e 100.");
-      return;
-    }
-    setMetaSaving(true);
-    try {
-      const res = await fetch("/api/estoque/configuracoes", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metaCmvPercent: valor }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setMetaError(d.error ?? "Não foi possível salvar a meta.");
-        return;
-      }
-      setMetaCmv(valor);
-      setEditingMeta(false);
-    } finally {
-      setMetaSaving(false);
-    }
-  }
+  const classificacao = classificarCmv(cmvRealPercent, metaCmvPercent, cmvRealPercent > 0 || cmvTeoricoPercent > 0);
 
   async function refreshPlans() {
     const res = await fetch("/api/estoque/planos-acao");
@@ -159,36 +124,13 @@ export function ComparativoClient({
           <span className="text-xs text-nord-gray">{formatCurrency(diferencaValor)}</span>
           <div className="flex items-center gap-2 flex-wrap pt-1">
             <Badge tone={classificacao.tone}>{classificacao.label}</Badge>
-            {editingMeta ? (
-              <div className="flex items-center gap-1.5">
-                <input
-                  className="input w-16 py-1 text-xs"
-                  type="number"
-                  value={metaDraft}
-                  onChange={(e) => setMetaDraft(e.target.value)}
-                  autoFocus
-                />
-                <span className="text-xs text-nord-gray">%</span>
-                <button onClick={salvarMeta} disabled={metaSaving} className="text-xs text-nord-blue-light hover:underline">
-                  Salvar
-                </button>
-                <button onClick={() => { setEditingMeta(false); setMetaDraft(String(metaCmv)); setMetaError(null); }} className="text-xs text-nord-gray hover:text-white">
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => canEditMeta && setEditingMeta(true)}
-                disabled={!canEditMeta}
-                className="flex items-center gap-1 text-xs text-nord-gray hover:text-white disabled:hover:text-nord-gray disabled:cursor-default"
-              >
-                Meta: {metaCmv}% {canEditMeta && <Pencil size={11} />}
-              </button>
-            )}
+            <span className="text-xs text-nord-gray">Meta: {metaCmvPercent}%</span>
           </div>
-          {metaError && <p className="text-xs text-nord-danger">{metaError}</p>}
         </div>
       </div>
+      <p className="text-xs text-nord-gray -mt-3">
+        A meta de CMV por loja agora é editada em Configurações → Metas de CMV por loja.
+      </p>
 
       <Section title="CMV Real x Teórico por semana">
         <ResponsiveContainer width="100%" height={260}>

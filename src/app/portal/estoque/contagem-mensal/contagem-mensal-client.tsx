@@ -20,7 +20,6 @@ type CountRow = {
   aprovadoEm: string | null;
   totalItens: number;
   conferidos: number;
-  divergencias: number;
   createdByName: string;
 };
 
@@ -81,7 +80,6 @@ export function ContagemMensalClient({
         aprovadoEm: c.aprovadoEm,
         totalItens: (c.items as unknown[]).length,
         conferidos: (c.items as { quantidadeContada: number | null }[]).filter((i) => i.quantidadeContada !== null).length,
-        divergencias: (c.items as { status: string }[]).filter((i) => i.status === "DIVERGENCIA").length,
         createdByName: (c.createdBy as { name: string }).name,
       }))
     );
@@ -137,7 +135,6 @@ export function ContagemMensalClient({
   }
 
   const pendentes = items.filter((i) => i.quantidadeContada === null).length;
-  const divergentesSemJustificativa = items.filter((i) => i.status === "DIVERGENCIA" && !i.justificativa).length;
   const checklistCompleto = MONTHLY_COUNT_CHECKLIST.every((c) => checklist[c.key]);
   const valorEsperado = items.reduce((s, i) => s + i.estoqueEsperado * (i.ingredient.precoAtual / (i.ingredient.quantidadeEmbalagem || 1)), 0);
   const valorContado = items.reduce((s, i) => s + (i.quantidadeContada ?? i.estoqueEsperado) * (i.ingredient.precoAtual / (i.ingredient.quantidadeEmbalagem || 1)), 0);
@@ -356,9 +353,9 @@ export function ContagemMensalClient({
               podeAprovar && (
                 <button
                   onClick={aprovarFechamento}
-                  disabled={pendentes > 0 || divergentesSemJustificativa > 0 || !checklistCompleto}
+                  disabled={pendentes > 0 || !checklistCompleto}
                   className="btn-primary w-full py-2.5"
-                  title={!checklistCompleto ? "Complete o checklist antes de aprovar" : pendentes > 0 ? "Existem itens pendentes de contagem" : divergentesSemJustificativa > 0 ? "Justifique as divergências antes de aprovar" : undefined}
+                  title={!checklistCompleto ? "Complete o checklist antes de aprovar" : pendentes > 0 ? "Existem itens pendentes de contagem" : undefined}
                 >
                   Aprovar fechamento e gerar CMV Real
                 </button>
