@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { createNotifications } from "@/lib/notifications";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 // Ver src/lib/rate-limit.ts — ponto de partida (task #320), fácil de ajustar
 // depois sem migration. Chave combina IP+token: sem o token, um único IP
@@ -123,12 +124,20 @@ function receivingHasDivergencia(r: ReceivingDivergenceCheck): boolean {
  * divergências em aberto, valor acumulado das divergências, tempo médio de resolução
  * e o fornecedor com mais problemas — tudo calculado a partir de Receiving/ReceivingItem
  * (nada é armazenado à parte; o dashboard é sempre um retrato atual dos dados já registrados).
+ *
+ * `until` (limite superior, default = agora) foi adicionado para suportar período FECHADO
+ * (ex.: "mês passado", que tem início E fim) — antes só existia `since` (limite inferior,
+ * sempre "desde X até agora"). Único caller até aqui era a carga inicial da página
+ * (`src/app/portal/estoque/recebimento/page.tsx`, sempre com 2 argumentos), por isso o default
+ * não quebra nada — mas o parâmetro é posicional (antes de `supplierId`), então qualquer novo
+ * caller precisa passar os 4 argumentos (ou `undefined` no lugar de `until`) se quiser usar
+ * `supplierId`.
  */
-export async function loadRecebimentoDashboard(empresaIds: string[], since: Date, supplierId?: string) {
+export async function loadRecebimentoDashboard(empresaIds: string[], since: Date, until: Date = new Date(), supplierId?: string) {
   const receivings = await prisma.receiving.findMany({
     where: {
       empresaId: { in: empresaIds },
-      dataFim: { gte: since },
+      dataFim: { gte: since, lte: until },
       ...(supplierId ? { purchase: { supplierId } } : {}),
     },
     include: {
@@ -212,6 +221,38 @@ export async function loadRecebimentoDashboard(empresaIds: string[], since: Date
     tempoMedioResolucaoDias,
     fornecedorMaisProblemas,
   };
+}
+
+/**
+ * Resolve o período (since/until) do dashboard gerencial de Recebimento a partir dos mesmos
+ * parâmetros `key`/`from`/`to` do filtro de período de Compras (Otavio,
+ * `src/app/api/estoque/compras/route.ts`) — mesmo padrão (`resolveRollingPeriod`, que já trata o
+ * fuso de São Paulo corretamente) reaproveitado aqui. Compartilhada entre a rota de API (`GET
+ * /api/estoque/recebimento`) e a carga inicial da página (Server Component,
+ * `src/app/portal/estoque/recebimento/page.tsx`) para as duas nunca divergirem.
+ *
+ * `key` ausente preserva o comportamento ANTIGO ao pé da letra — de propósito NÃO usa
+ * `resolveRollingPeriod("30dias", ...)` aqui: "últimos 30 dias" continua calculado como
+ * `now - 30*24h` corrido (sem ancorar em início/fim de dia de São Paulo), exatamente como
+ * `page.tsx` já calculava antes deste filtro existir (`new Date(); since.setDate(since.getDate()
+ * - 30)`). Trocar pelo equivalente "correto" mudaria o resultado por até algumas horas — o
+ * pedido foi explícito que o comportamento padrão (sem parâmetro nenhum) precisa continuar
+ * EXATAMENTE igual a hoje. Com `key` presente, usa o mesmo `resolveRollingPeriod` das demais
+ * telas (inclusive o mesmo detalhe de Compras: uma `key` desconhecida cai no `default` de
+ * `resolveRollingPeriod`, que é o "30dias" ancorado em SP — não é um caso novo introduzido aqui).
+ */
+export function resolveRecebimentoDashboardRange(
+  key?: RollingPeriodKey | null,
+  from?: string,
+  to?: string
+): { since: Date; until: Date } {
+  if (key) {
+    const range = resolveRollingPeriod(key, { from, to });
+    return { since: range.from, until: range.to };
+  }
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+  return { since, until: new Date() };
 }
 
 /**
