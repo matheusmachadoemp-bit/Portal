@@ -224,8 +224,14 @@ const CATEGORIES = [
       // caem pro nível de módulo "estoque").
       { key: "gasto-por-insumo", name: "Gasto por Insumo", icon: "ChartColumn" },
       { key: "divergencias-recebimento", name: "Divergências de Recebimento", icon: "TriangleAlert" },
+      // "Transferências" (key "transferencias") deixou de existir como subcategoria separada —
+      // a tela /portal/estoque/transferencias foi removida por completo e a capacidade de
+      // solicitar/gerenciar transferência entre lojas passou a viver dentro de "Movimentações"
+      // (reaproveitando o mesmo model Transfer/TransferItem e as mesmas rotas
+      // /api/estoque/transferencias/**). Ver migration
+      // remove_transferencias_subcategoria_estoque, que apaga a linha já seedada em produção
+      // (esta lista de `subs` só faz upsert — nunca deleta uma entrada removida daqui).
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
-      { key: "transferencias", name: "Transferências", icon: "Shuffle" },
       { key: "perdas", name: "Perdas e Desperdícios", icon: "TriangleAlert" },
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
