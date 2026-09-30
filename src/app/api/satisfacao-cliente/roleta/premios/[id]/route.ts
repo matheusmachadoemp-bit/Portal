@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { tenteNovamentePrizeId, validarProbabilidadeAtiva } from "@/lib/roulette-server";
+import {
+  tenteNovamentePrizeId,
+  validarProbabilidadeAtiva,
+  travarProbabilidadeRoleta,
+  ProbabilidadeInvalidaError,
+} from "@/lib/roulette-server";
 
 async function findOwnedPrize(id: string, empresaId: string) {
   const existing = await prisma.roulettePrize.findUnique({ where: { id } });
@@ -27,6 +32,13 @@ async function findOwnedPrize(id: string, empresaId: string) {
  * a soma dos ativos passar de 100 por uma edição (ver `validarProbabilidadeAtiva`). Desativar um
  * prêmio (`ativo: false`) nunca precisa dessa validação — ao contrário, LIBERA orçamento de
  * probabilidade pros outros.
+ *
+ * Quando a validação é necessária, ela roda dentro da MESMA transação que grava o `update`,
+ * travada por `travarProbabilidadeRoleta` (achado #354 da Fase 6: sem isso, duas edições
+ * concorrentes na mesma loja podiam ler a mesma soma "ainda cabe" e as duas passarem,
+ * ultrapassando 100% juntas) — ver comentário da função no lib. `ProbabilidadeInvalidaError` é a
+ * forma de a validação abortar a transação (rollback, sem gravar nada) e ainda assim devolver a
+ * MESMA mensagem de erro de sempre pro cliente.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -105,13 +117,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const ativoEfetivo = ativo ?? existing.ativo;
-  if (ativoEfetivo) {
-    const percentEfetivo = probabilidadePercent ?? existing.probabilidadePercent;
-    const erro = await validarProbabilidadeAtiva(empresa.id, percentEfetivo, existing.id);
-    if (erro) return NextResponse.json({ error: erro }, { status: 400 });
+
+  let premio;
+  try {
+    premio = await prisma.$transaction(async (tx) => {
+      if (ativoEfetivo) {
+        // Trava a concorrência de validação/gravação de probabilidade desta loja ANTES de
+        // conferir o orçamento (ver `travarProbabilidadeRoleta`) — evita 2 edições concorrentes
+        // lendo a mesma soma "ainda cabe" e as duas passando, juntas ultrapassando 100%.
+        await travarProbabilidadeRoleta(tx, empresa.id);
+        const percentEfetivo = probabilidadePercent ?? existing.probabilidadePercent;
+        const erro = await validarProbabilidadeAtiva(empresa.id, percentEfetivo, existing.id, tx);
+        if (erro) throw new ProbabilidadeInvalidaError(erro);
+      }
+      return tx.roulettePrize.update({ where: { id }, data });
+    });
+  } catch (e) {
+    if (e instanceof ProbabilidadeInvalidaError) return NextResponse.json({ error: e.message }, { status: 400 });
+    throw e;
   }
 
-  const premio = await prisma.roulettePrize.update({ where: { id }, data });
   return NextResponse.json({ premio });
 }
 

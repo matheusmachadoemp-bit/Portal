@@ -3,7 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { adminPrizeWhereExcludingSentinela, somaProbabilidadeAtivos, validarProbabilidadeAtiva } from "@/lib/roulette-server";
+import {
+  adminPrizeWhereExcludingSentinela,
+  somaProbabilidadeAtivos,
+  validarProbabilidadeAtiva,
+  travarProbabilidadeRoleta,
+  ProbabilidadeInvalidaError,
+} from "@/lib/roulette-server";
 
 /**
  * Catálogo de prêmios da Roleta (`RoulettePrize`) da loja ativa — mesmo formato de catálogo
@@ -54,6 +60,12 @@ export async function GET() {
  * novamente" no sorteio, ver src/lib/roulette-server.ts) — só quando o prêmio já nasce `ativo`
  * (o padrão): um prêmio criado já desativado não compete pelo orçamento de probabilidade até ser
  * ativado de verdade (ver PATCH).
+ *
+ * Validação + criação rodam dentro da MESMA transação, travada por `travarProbabilidadeRoleta`
+ * (achado #354 da Fase 6: sem isso, duas criações concorrentes na mesma loja podiam ler a mesma
+ * soma "ainda cabe" e as duas passarem, ultrapassando 100% juntas) — ver comentário da função no
+ * lib. `ProbabilidadeInvalidaError` é a forma de a validação abortar a transação (rollback, sem
+ * criar nada) e ainda assim devolver a MESMA mensagem de erro de sempre pro cliente.
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -85,10 +97,6 @@ export async function POST(req: Request) {
   }
 
   const ativo = body.ativo !== false;
-  if (ativo) {
-    const erro = await validarProbabilidadeAtiva(empresa.id, probabilidadePercent);
-    if (erro) return NextResponse.json({ error: erro }, { status: 400 });
-  }
 
   let quantidadeDisponivel: number | null = null;
   if (body.quantidadeDisponivel !== undefined && body.quantidadeDisponivel !== null && body.quantidadeDisponivel !== "") {
@@ -119,20 +127,36 @@ export async function POST(req: Request) {
     ordem = (maxOrdem._max.ordem ?? -1) + 1;
   }
 
-  const premio = await prisma.roulettePrize.create({
-    data: {
-      empresaId: empresa.id,
-      nome,
-      descricao: body.descricao ? String(body.descricao).trim() : null,
-      imagemUrl: body.imagemUrl ? String(body.imagemUrl).trim() : null,
-      icone: body.icone ? String(body.icone).trim() : null,
-      quantidadeDisponivel,
-      probabilidadePercent,
-      validadeDias,
-      ativo,
-      ordem,
-    },
-  });
+  let premio;
+  try {
+    premio = await prisma.$transaction(async (tx) => {
+      if (ativo) {
+        // Trava a concorrência de validação/gravação de probabilidade desta loja ANTES de
+        // conferir o orçamento (ver `travarProbabilidadeRoleta`) — evita 2 criações concorrentes
+        // lendo a mesma soma "ainda cabe" e as duas passando, juntas ultrapassando 100%.
+        await travarProbabilidadeRoleta(tx, empresa.id);
+        const erro = await validarProbabilidadeAtiva(empresa.id, probabilidadePercent, undefined, tx);
+        if (erro) throw new ProbabilidadeInvalidaError(erro);
+      }
+      return tx.roulettePrize.create({
+        data: {
+          empresaId: empresa.id,
+          nome,
+          descricao: body.descricao ? String(body.descricao).trim() : null,
+          imagemUrl: body.imagemUrl ? String(body.imagemUrl).trim() : null,
+          icone: body.icone ? String(body.icone).trim() : null,
+          quantidadeDisponivel,
+          probabilidadePercent,
+          validadeDias,
+          ativo,
+          ordem,
+        },
+      });
+    });
+  } catch (e) {
+    if (e instanceof ProbabilidadeInvalidaError) return NextResponse.json({ error: e.message }, { status: 400 });
+    throw e;
+  }
 
   return NextResponse.json({ premio });
 }
