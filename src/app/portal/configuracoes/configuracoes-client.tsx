@@ -20,6 +20,9 @@ export function ConfiguracoesClient({
   auditLogs,
   taxaIfoodPadrao,
   empresaNome,
+  metasCmv,
+  activeEmpresaId,
+  canEditMetaCmv,
   saipos,
   metaAds,
 }: {
@@ -30,6 +33,9 @@ export function ConfiguracoesClient({
   auditLogs: { id: string; action: string; entityType: string; entityId: string | null; createdAt: string; userName: string }[];
   taxaIfoodPadrao: number | null;
   empresaNome: string | null;
+  metasCmv: { id: string; name: string; metaCmvPercent: number }[];
+  activeEmpresaId: string | null;
+  canEditMetaCmv: boolean;
   saipos: { lojaId: string | null; syncEnabled: boolean; hasToken: boolean; lastSyncAt: string | null } | null;
   metaAds: {
     adAccountId: string | null;
@@ -46,6 +52,36 @@ export function ConfiguracoesClient({
   const [ifoodValue, setIfoodValue] = useState(taxaIfoodPadrao !== null ? String(taxaIfoodPadrao) : "");
   const [ifoodSaving, setIfoodSaving] = useState(false);
   const [ifoodMessage, setIfoodMessage] = useState<string | null>(null);
+
+  const activeMetaCmv = metasCmv.find((e) => e.id === activeEmpresaId);
+  const [metaCmvValue, setMetaCmvValue] = useState(activeMetaCmv ? String(activeMetaCmv.metaCmvPercent) : "");
+  const [metaCmvList, setMetaCmvList] = useState(metasCmv);
+  const [metaCmvSaving, setMetaCmvSaving] = useState(false);
+  const [metaCmvMessage, setMetaCmvMessage] = useState<string | null>(null);
+
+  async function saveMetaCmv() {
+    setMetaCmvSaving(true);
+    setMetaCmvMessage(null);
+    const valor = Number(metaCmvValue);
+    if (!Number.isFinite(valor) || valor <= 0 || valor >= 100) {
+      setMetaCmvSaving(false);
+      setMetaCmvMessage("Informe uma meta válida entre 0 e 100.");
+      return;
+    }
+    const res = await fetch("/api/configuracoes/meta-cmv", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metaCmvPercent: valor }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setMetaCmvSaving(false);
+    if (res.ok) {
+      setMetaCmvList((prev) => prev.map((e) => (e.id === activeEmpresaId ? { ...e, metaCmvPercent: valor } : e)));
+      setMetaCmvMessage("Meta de CMV atualizada com sucesso.");
+    } else {
+      setMetaCmvMessage(data.error ?? "Não foi possível salvar a meta de CMV.");
+    }
+  }
 
   const [saiposToken, setSaiposToken] = useState("");
   const [saiposLojaId, setSaiposLojaId] = useState(saipos?.lojaId ?? "");
@@ -264,6 +300,71 @@ export function ConfiguracoesClient({
           <p className="text-xs text-nord-gray mt-3">
             Usada para calcular o preço sugerido no iFood em cada ficha técnica. Pode ser sobrescrita
             individualmente em cada produto.
+          </p>
+        </Section>
+      )}
+
+      {isAdmin && (
+        <Section title="Metas de CMV por loja">
+          <div className="overflow-x-auto nord-scrollbar">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                  <th className="py-2 pr-4">Loja</th>
+                  <th className="py-2 pr-4">Meta de CMV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metaCmvList.map((e) => (
+                  <tr key={e.id} className="border-b border-nord-border/50">
+                    <td className="py-2.5 pr-4 text-white">{e.name}</td>
+                    <td className="py-2.5 pr-4 text-nord-gray">{e.metaCmvPercent}%</td>
+                  </tr>
+                ))}
+                {metaCmvList.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="py-4 text-center text-nord-gray">
+                      Nenhuma loja encontrada.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {activeEmpresaId === null ? (
+            <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2 mt-4">
+              Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para
+              editar a meta de CMV dela.
+            </p>
+          ) : canEditMetaCmv ? (
+            <div className="flex items-end gap-3 max-w-md mt-4">
+              <label className="block flex-1">
+                <span className="block text-xs text-nord-gray mb-1">Meta de CMV para {activeMetaCmv?.name} (%)</span>
+                <input
+                  type="number"
+                  value={metaCmvValue}
+                  onChange={(e) => setMetaCmvValue(e.target.value)}
+                  className="input"
+                />
+              </label>
+              <button
+                onClick={saveMetaCmv}
+                disabled={metaCmvSaving}
+                className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
+              >
+                {metaCmvSaving ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          ) : null}
+          {metaCmvMessage && (
+            <p className={`text-xs mt-2 ${metaCmvMessage.includes("sucesso") ? "text-nord-success" : "text-nord-danger"}`}>
+              {metaCmvMessage}
+            </p>
+          )}
+          <p className="text-xs text-nord-gray mt-3">
+            Usada como referência de comparação em CMV → Comparativo Real x Teórico, CMV Real, CMV Teórico e na
+            Visão Geral do Estoque.
           </p>
         </Section>
       )}

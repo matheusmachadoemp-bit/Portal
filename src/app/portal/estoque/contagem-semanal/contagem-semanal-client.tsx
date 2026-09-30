@@ -20,7 +20,6 @@ type CountRow = {
   status: string;
   totalItens: number;
   conferidos: number;
-  divergencias: number;
   createdByName: string;
 };
 
@@ -67,7 +66,6 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
         status: c.status,
         totalItens: (c.items as unknown[]).length,
         conferidos: (c.items as { quantidadeContada: number | null }[]).filter((i) => i.quantidadeContada !== null).length,
-        divergencias: (c.items as { status: string }[]).filter((i) => i.status === "DIVERGENCIA").length,
         createdByName: (c.createdBy as { name: string }).name,
       }))
     );
@@ -135,7 +133,6 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
   }
 
   const pendentes = items.filter((i) => i.quantidadeContada === null).length;
-  const divergentesSemJustificativa = items.filter((i) => i.status === "DIVERGENCIA" && !i.justificativa).length;
 
   return (
     <div className="space-y-6">
@@ -151,7 +148,6 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
                 <th className="py-2 pr-4">Setor</th>
                 <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4">Progresso</th>
-                <th className="py-2 pr-4">Divergências</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4" />
               </tr>
@@ -169,9 +165,6 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
                     </div>
                   </td>
                   <td className="py-2.5 pr-4">
-                    <Badge tone={c.divergencias ? "danger" : "default"}>{c.divergencias}</Badge>
-                  </td>
-                  <td className="py-2.5 pr-4">
                     <Badge tone={COUNT_STATUS_TONE[c.status]}>{COUNT_STATUS_LABEL[c.status] ?? c.status}</Badge>
                   </td>
                   <td className="py-2.5 pr-4 text-right">
@@ -183,7 +176,7 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
               ))}
               {counts.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-nord-gray">
+                  <td colSpan={6} className="py-6 text-center text-nord-gray">
                     Nenhuma contagem semanal registrada ainda.
                   </td>
                 </tr>
@@ -291,9 +284,9 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
             {active.status !== "CONCLUIDA" && active.status !== "APROVADA" && (
               <button
                 onClick={finalizar}
-                disabled={pendentes > 0 || divergentesSemJustificativa > 0}
+                disabled={pendentes > 0}
                 className="btn-primary w-full py-2.5"
-                title={pendentes > 0 ? "Existem itens pendentes de contagem" : divergentesSemJustificativa > 0 ? "Justifique as divergências antes de finalizar" : undefined}
+                title={pendentes > 0 ? "Existem itens pendentes de contagem" : undefined}
               >
                 Finalizar contagem
               </button>

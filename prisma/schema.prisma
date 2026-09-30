@@ -236,29 +236,28 @@ model ModulePermission {
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id                             String    @id @default(cuid())
-  key                            String    @unique
-  name                           String
-  logo                           String?
-  color                          String    @default("#2952E3")
-  active                         Boolean   @default(true)
-  order                          Int       @default(0)
-  driveFolderUrl                 String?
-  taxaIfoodPadrao                Float     @default(30)
-  metaCmvPercent                 Float     @default(30)
-  metaDivergenciaContagemPercent Float     @default(3)
-  saiposApiToken                 String?
-  saiposLojaId                   String?
-  saiposSyncEnabled              Boolean   @default(false)
-  saiposLastSyncAt               DateTime?
-  metaAdsAccessToken             String?
-  metaAdsAdAccountId             String?
-  metaAdsAdAccountName           String?
-  metaAdsGraphVersion            String    @default("v21.0")
-  metaAdsSyncEnabled             Boolean   @default(false)
-  metaAdsLastSyncAt              DateTime?
-  metaAdsInstagramAccountId      String?
-  metaAdsInstagramUsername       String?
+  id                        String    @id @default(cuid())
+  key                       String    @unique
+  name                      String
+  logo                      String?
+  color                     String    @default("#2952E3")
+  active                    Boolean   @default(true)
+  order                     Int       @default(0)
+  driveFolderUrl            String?
+  taxaIfoodPadrao           Float     @default(30)
+  metaCmvPercent            Float     @default(30)
+  saiposApiToken            String?
+  saiposLojaId              String?
+  saiposSyncEnabled         Boolean   @default(false)
+  saiposLastSyncAt          DateTime?
+  metaAdsAccessToken        String?
+  metaAdsAdAccountId        String?
+  metaAdsAdAccountName      String?
+  metaAdsGraphVersion       String    @default("v21.0")
+  metaAdsSyncEnabled        Boolean   @default(false)
+  metaAdsLastSyncAt         DateTime?
+  metaAdsInstagramAccountId String?
+  metaAdsInstagramUsername  String?
   /// Credenciais OAuth2 (client_credentials) da API de Parceiro do iFood — ver
   /// `src/lib/ifood-client.ts`. Diferente da Saipos/Meta Ads (um único token
   /// colado pelo usuário), o iFood exige um par clientId/clientSecret: o
@@ -270,14 +269,14 @@ model Empresa {
   /// deixa explícito, só pelo nome da coluna, que o conteúdo é criptografado
   /// (`encryptSecret`/`decryptSecret` de `src/lib/vault.ts`, igual
   /// `saiposApiToken`/`metaAdsAccessToken`) — nunca gravar texto puro aqui.
-  ifoodClientId                  String?
-  ifoodClientSecretCipher        String?
-  ifoodMerchantId                String?
-  ifoodMerchantName              String?
-  ifoodSyncEnabled               Boolean   @default(false)
-  ifoodLastSyncAt                DateTime?
-  createdAt                      DateTime  @default(now())
-  updatedAt                      DateTime  @updatedAt
+  ifoodClientId             String?
+  ifoodClientSecretCipher   String?
+  ifoodMerchantId           String?
+  ifoodMerchantName         String?
+  ifoodSyncEnabled          Boolean   @default(false)
+  ifoodLastSyncAt           DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   userAccess                         UserEmpresaAccess[]
   suppliers                          Supplier[]
@@ -2766,9 +2765,12 @@ model Supplier {
   email              String?
   endereco           String?
   prazoPagamentoDias Int?
-  prazoEntregaDias   Int?
-  pedidoMinimo       Float?
-  avaliacao          Float    @default(0)
+  /// Dias da semana em que o fornecedor costuma entregar (0 = domingo .. 6 = sábado, mesmo
+  /// vocabulário de `StoreClosedWeekday`/`ProductionWeekdayWeight`/`spWeekday` em
+  /// src/lib/checklist.ts). Substituiu `prazoEntregaDias` (Int?, quantidade de dias de prazo) —
+  /// são conceitos diferentes (prazo vs. dia da semana), então a migration que trocou o campo
+  /// descartou o valor antigo em vez de tentar converter (ver comentário na migration).
+  diasEntregaSemana  Int[]    @default([])
   active             Boolean  @default(true)
   observacao         String?
   createdAt          DateTime @default(now())

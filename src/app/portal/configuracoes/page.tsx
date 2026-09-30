@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { ConfiguracoesClient } from "./configuracoes-client";
-import { getActiveEmpresaContext } from "@/lib/empresa";
+import { getActiveEmpresaContext, getUserEmpresas } from "@/lib/empresa";
 
 export default async function ConfiguracoesPage() {
   const session = await auth();
@@ -39,6 +39,15 @@ export default async function ConfiguracoesPage() {
     userName: l.user?.name ?? "Sistema",
   }));
 
+  // "Metas de CMV por loja" — mudou pra cá (categoria global "Configurações") vindo de duas
+  // telas que foram embora/perderam a edição: Estoque → Configurações (tela inteira removida,
+  // ver prisma/migrations/20260930140000_remove_configuracoes_subcategoria_estoque) e CMV →
+  // Comparativo Real x Teórico (manteve só a visualização). `getUserEmpresas` já traz
+  // `metaCmvPercent` no seu select "de vitrine" (`EmpresaSummary`), então não precisa de uma
+  // consulta própria — só filtramos pra ninguém que não seja admin pagar o custo da query à toa.
+  const metasCmv = isAdmin ? await getUserEmpresas(session.user.id, session.user.role) : [];
+  const canEditMetaCmv = ctx?.mode === "single" && (await hasModulePermission(session.user.id, "configuracoes", "canEdit"));
+
   return (
     <PageContainer title="Configurações" subtitle="Conta, integrações e auditoria">
       <ConfiguracoesClient
@@ -50,6 +59,9 @@ export default async function ConfiguracoesPage() {
         auditLogs={serializedLogs}
         taxaIfoodPadrao={isAdmin && ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : null}
         empresaNome={isAdmin && ctx?.mode === "single" ? ctx.empresa.name : null}
+        metasCmv={metasCmv.map((e) => ({ id: e.id, name: e.name, metaCmvPercent: e.metaCmvPercent }))}
+        activeEmpresaId={ctx?.mode === "single" ? ctx.empresa.id : null}
+        canEditMetaCmv={canEditMetaCmv}
         saipos={
           isAdmin && ctx?.mode === "single"
             ? {

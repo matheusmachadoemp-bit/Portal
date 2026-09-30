@@ -39,7 +39,6 @@ export function EstoqueDashboardClient({
   valorCompras,
   valorPerdas,
   contagensPendentes,
-  divergenciasAbertas,
   evolucaoCmv,
   alertas,
 }: {
@@ -65,7 +64,6 @@ export function EstoqueDashboardClient({
   valorCompras: number;
   valorPerdas: number;
   contagensPendentes: number;
-  divergenciasAbertas: number;
   evolucaoCmv: { periodo: string; meta: number; teorico: number; real: number }[];
   alertas: { label: string; tone: "warning" | "danger" }[];
 }) {
@@ -116,7 +114,7 @@ export function EstoqueDashboardClient({
         <StatCard label="Contagens pendentes" value={String(contagensPendentes)} icon="ClipboardCheck" color={contagensPendentes ? "#f59e0b" : "#22c55e"} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <button onClick={() => setOpenAlert("zerados")} className="text-left">
           <StatCard label="Produtos zerados" value={String(zerados.length)} icon="CircleSlash" color="#ef4444" />
         </button>
@@ -126,7 +124,6 @@ export function EstoqueDashboardClient({
         <button onClick={() => setOpenAlert("consumo")} className="text-left">
           <StatCard label="Consumo anormal" value={String(consumoAnormal.length)} icon="TrendingUp" color="#f59e0b" />
         </button>
-        <StatCard label="Divergências sem justificativa" value={String(divergenciasAbertas)} icon="AlertOctagon" color={divergenciasAbertas ? "#ef4444" : "#22c55e"} />
       </div>
 
       <Section title="Evolução do CMV (últimas 8 semanas) — Meta x Teórico x Real">

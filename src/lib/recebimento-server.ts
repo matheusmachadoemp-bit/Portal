@@ -163,7 +163,8 @@ export async function loadRecebimentoDashboard(empresaIds: string[], since: Date
 
 /**
  * Histórico de recebimento de um fornecedor: taxa de conformidade, valor de divergências
- * acumulado e atraso médio — complementa a `avaliacao` manual do fornecedor com dados reais.
+ * acumulado e atraso médio — dados reais de recebimento sobre o fornecedor (o campo manual
+ * `avaliacao` que este texto complementava foi removido do model `Supplier`).
  */
 export async function loadSupplierReceivingHistory(supplierId: string) {
   const receivings = await prisma.receiving.findMany({
