@@ -9,6 +9,7 @@ export const ICON_CHOICES = [
   "Pizza", "Package", "Sandwich", "Soup", "Beef", "CupSoda", "Martini", "Boxes",
   "TrendingUp", "TrendingDown", "DollarSign", "BarChart3", "PieChart", "Calendar",
   "FileText", "Star", "Award", "Bell", "Folder", "LayoutGrid", "Circle",
+  "Gift", "Trophy", "PartyPopper",
 ];
 
 export const COLOR_CHOICES = [
