@@ -208,7 +208,16 @@ const CATEGORIES = [
       { key: "contagem", name: "Contagem de Estoque", icon: "ClipboardCheck" },
       { key: "historico-contagens", name: "Histórico de Contagens", icon: "History" },
       { key: "produtos", name: "Produtos", icon: "Package" },
-      { key: "categorias", name: "Categorias", icon: "Tags" },
+      // A subcategoria "Categorias" (tela própria em
+      // src/app/portal/estoque/categorias/) deixou de existir separada no menu
+      // lateral — a pedido do usuário, seu conteúdo foi absorvido pela
+      // subcategoria "Produtos" acima (mesma categoria "estoque"), que virou
+      // uma tela unificada Produtos + Categorias. As rotas de API
+      // /api/estoque/categorias/** continuam existindo normalmente,
+      // consumidas agora pela tela de Produtos. Ver migration
+      // remove_categorias_subcategoria_estoque, que apaga a linha já seedada
+      // em produção (esta lista de `subs` só faz upsert — nunca deleta uma
+      // entrada removida daqui).
       { key: "compras", name: "Compras", icon: "ShoppingBasket" },
       { key: "fornecedores", name: "Fornecedores", icon: "Truck" },
       { key: "recebimento", name: "Recebimento de Mercadorias", icon: "PackageCheck" },
