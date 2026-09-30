@@ -8,7 +8,7 @@ import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { SECTORS } from "@/lib/estoque";
 
-type Category = {
+export type StockCategoryDTO = {
   id: string;
   name: string;
   color: string;
@@ -23,15 +23,23 @@ type Category = {
 const emptyForm = { id: "", name: "", color: "#2952E3", icon: "Boxes", setor: "", metaPerdaPercent: "2", periodicidadeContagem: "SEMANAL" };
 
 export function CategoriasClient({
-  initialCategories,
+  categories,
+  onCategoriesChange,
   canCreate,
   canEdit,
 }: {
-  initialCategories: Category[];
+  /** Lista completa de categorias de estoque (ativas e inativas). O estado vive no
+   *  ProdutosClient (componente pai da aba "Produtos" + aba "Categorias") — é a mesma lista
+   *  usada para derivar as opções dos dropdowns de categoria na aba "Produtos" (filtro e
+   *  formulário), então criar/editar/ativar uma categoria aqui precisa refletir lá na hora,
+   *  sem recarregar a página. Mesmo padrão de src/app/portal/financeiro/caixa-da-empresa/
+   *  (CaixaClient + ContasBancariasClient). */
+  categories: StockCategoryDTO[];
+  /** Chamado com a lista atualizada (buscada de novo da API) após qualquer criação/edição/ativação. */
+  onCategoriesChange: (categories: StockCategoryDTO[]) => void;
   canCreate: boolean;
   canEdit: boolean;
 }) {
-  const [categories, setCategories] = useState(initialCategories);
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +48,7 @@ export function CategoriasClient({
   async function refresh() {
     const res = await fetch("/api/estoque/categorias");
     const data = await res.json();
-    setCategories(
+    onCategoriesChange(
       data.categories.map((c: Record<string, unknown>) => ({
         id: c.id,
         name: c.name,
@@ -55,7 +63,7 @@ export function CategoriasClient({
     );
   }
 
-  function openEdit(c: Category) {
+  function openEdit(c: StockCategoryDTO) {
     if (!canEdit) return;
     setForm({
       id: c.id,
@@ -95,7 +103,7 @@ export function CategoriasClient({
     }
   }
 
-  async function toggleActive(c: Category) {
+  async function toggleActive(c: StockCategoryDTO) {
     if (!canEdit) return;
     await fetch(`/api/estoque/categorias/${c.id}`, {
       method: "PATCH",
@@ -153,6 +161,9 @@ export function CategoriasClient({
             )}
           </button>
         ))}
+        {categories.length === 0 && (
+          <p className="text-sm text-nord-gray py-6 text-center md:col-span-2 xl:col-span-3">Nenhuma categoria cadastrada.</p>
+        )}
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={form.id ? "Editar categoria" : "Nova categoria"}>
