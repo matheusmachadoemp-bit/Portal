@@ -3,6 +3,12 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 type TxClient = Prisma.TransactionClient;
+/** Cliente Prisma "normal" ou o `tx` de uma transação em andamento — mesmo padrão de
+ *  `PrismaOrTx` em src/lib/loja-nord-server.ts (`getSaldoAtual`). Usado por
+ *  `somaProbabilidadeAtivos`/`validarProbabilidadeAtiva` para poder rodar tanto fora de
+ *  transação (leitura avulsa, ex. `GET` do catálogo) quanto dentro de uma, já sob a trava de
+ *  `travarProbabilidadeRoleta` (ver bloco "CRUD admin" abaixo). */
+type PrismaOrTx = typeof prisma | TxClient;
 
 // ---------------------------------------------------------------------------
 // Prêmio-sentinela "Tente novamente"
@@ -66,14 +72,54 @@ const PROBABILIDADE_EPSILON = 1e-6;
 const PROBABILIDADE_MAX = 100;
 
 /**
+ * Trava (advisory lock do Postgres, com escopo da própria transação — liberado sozinho no
+ * commit/rollback) a concorrência de criação/edição de prêmios de UMA loja que competem pelo
+ * orçamento de probabilidade (soma dos ativos <= 100, ver `validarProbabilidadeAtiva`). Mesmo
+ * padrão de `travarGiroPorResponse` (acima) e `travarSaldoLojaNord` (src/lib/loja-nord-server.ts).
+ *
+ * Existe pra resolver a corrida do backlog #354 (Fase 6): o CRUD admin de prêmios era do tipo
+ * "lê o estado atual (soma dos ativos), calcula (ainda cabe X%?), decide, grava" sem travar nada
+ * entre a leitura e a escrita — dois admins criando/editando prêmios da MESMA loja ao mesmo tempo
+ * podiam os dois ler a mesma soma-base (antes de qualquer um gravar) e os dois passarem na
+ * validação, mesmo que a soma FINAL ultrapasse 100%. Travando por `empresaId` como o PRIMEIRO
+ * passo da transação que também faz a escrita (create/update — ver rotas `POST`/`PATCH` de
+ * `roleta/premios`), o segundo request concorrente para a MESMA loja espera o primeiro terminar
+ * (commit ou rollback) antes de sequer somar os prêmios ativos: a leitura de
+ * `somaProbabilidadeAtivos` feita, dentro da mesma transação, logo depois deste lock, passa a ser
+ * confiável — e como a escrita também acontece antes do commit (que é quando a trava é liberada),
+ * o próximo request só enxerga a soma já atualizada com a escrita anterior.
+ */
+export async function travarProbabilidadeRoleta(tx: TxClient, empresaId: string): Promise<void> {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('roulette_probabilidade'), hashtext(${empresaId}))::text`;
+}
+
+/**
+ * Erro "de negócio" (não uma falha técnica) lançado de dentro da transação de criação/edição de
+ * prêmio (ver rotas `POST`/`PATCH` de `roleta/premios`) quando `validarProbabilidadeAtiva` rejeita
+ * o valor, já com `travarProbabilidadeRoleta` em vigor. Precisa ser um `throw` (não um valor de
+ * retorno) para que a transação inteira seja revertida — nenhum `create`/`update` chega a
+ * acontecer — e a trava seja liberada no rollback. As rotas capturam especificamente esta classe
+ * e devolvem `error: e.message` com HTTP 400 — a MESMA mensagem que `validarProbabilidadeAtiva`
+ * sempre devolveu como valor de retorno; só o mecanismo de entrega mudou (exceção em vez de
+ * retorno direto), necessário porque a validação agora roda dentro de `prisma.$transaction`.
+ */
+export class ProbabilidadeInvalidaError extends Error {}
+
+/**
  * Soma de `probabilidadePercent` dos prêmios ATIVOS de uma loja, sempre excluindo a
  * sentinela "Tente novamente" (nunca é um prêmio "de verdade", ver bloco acima) e,
  * quando informado (edição), excluindo também `excludeId` — o próprio prêmio sendo editado,
  * pra somar contra o RESTANTE do catálogo antes de decidir se o valor novo cabe.
+ *
+ * Recebe opcionalmente `client` (o `tx` de uma transação em andamento) — sempre usado pelas
+ * rotas `POST`/`PATCH` (via `validarProbabilidadeAtiva`), já dentro da transação travada por
+ * `travarProbabilidadeRoleta`, pra ler o estado com garantia atômica. O padrão (`prisma`, fora de
+ * transação) continua servindo leituras avulsas sem necessidade de trava (ex.: `GET` do catálogo,
+ * só informativo).
  */
-export async function somaProbabilidadeAtivos(empresaId: string, excludeId?: string): Promise<number> {
+export async function somaProbabilidadeAtivos(empresaId: string, excludeId?: string, client: PrismaOrTx = prisma): Promise<number> {
   const excludeIds = [tenteNovamentePrizeId(empresaId), ...(excludeId ? [excludeId] : [])];
-  const agg = await prisma.roulettePrize.aggregate({
+  const agg = await client.roulettePrize.aggregate({
     where: { empresaId, ativo: true, id: { notIn: excludeIds } },
     _sum: { probabilidadePercent: true },
   });
@@ -93,16 +139,19 @@ export async function somaProbabilidadeAtivos(empresaId: string, excludeId?: str
  * que o total.
  *
  * Devolve `null` quando é válido, ou uma mensagem de erro pronta pra devolver ao cliente da API.
+ * `client` (ver `somaProbabilidadeAtivos`): sempre o `tx` já travado por `travarProbabilidadeRoleta`
+ * quando chamada pelas rotas `POST`/`PATCH`.
  */
 export async function validarProbabilidadeAtiva(
   empresaId: string,
   novoPercent: number,
-  excludeId?: string
+  excludeId?: string,
+  client: PrismaOrTx = prisma
 ): Promise<string | null> {
   if (!Number.isFinite(novoPercent) || novoPercent < 0 || novoPercent > PROBABILIDADE_MAX) {
     return "A probabilidade deve ser um número entre 0 e 100.";
   }
-  const somaOutros = await somaProbabilidadeAtivos(empresaId, excludeId);
+  const somaOutros = await somaProbabilidadeAtivos(empresaId, excludeId, client);
   const total = somaOutros + novoPercent;
   if (total > PROBABILIDADE_MAX + PROBABILIDADE_EPSILON) {
     const restante = Math.max(0, PROBABILIDADE_MAX - somaOutros);
