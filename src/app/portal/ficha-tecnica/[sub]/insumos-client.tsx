@@ -258,7 +258,7 @@ export function InsumosClient({
           </button>
         )}
         <Link
-          href="/portal/estoque/categorias"
+          href="/portal/estoque/produtos?tab=categorias"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-dashed border-nord-border text-nord-gray hover:text-white hover:border-white/30 ml-auto"
         >
           <Settings2 size={13} /> Gerenciar categorias
