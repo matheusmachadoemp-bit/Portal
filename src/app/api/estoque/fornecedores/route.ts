@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { parseDiasEntregaSemana } from "@/lib/supplier";
 
 export async function GET() {
   const session = await auth();
@@ -57,9 +58,7 @@ export async function POST(req: Request) {
       email: body.email || null,
       endereco: body.endereco || null,
       prazoPagamentoDias: body.prazoPagamentoDias !== undefined && body.prazoPagamentoDias !== "" ? Number(body.prazoPagamentoDias) : null,
-      prazoEntregaDias: body.prazoEntregaDias !== undefined && body.prazoEntregaDias !== "" ? Number(body.prazoEntregaDias) : null,
-      pedidoMinimo: body.pedidoMinimo !== undefined && body.pedidoMinimo !== "" ? Number(body.pedidoMinimo) : null,
-      avaliacao: body.avaliacao !== undefined ? Number(body.avaliacao) : 0,
+      diasEntregaSemana: parseDiasEntregaSemana(body.diasEntregaSemana),
       observacao: body.observacao || null,
     },
   });
