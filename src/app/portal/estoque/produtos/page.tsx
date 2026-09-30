@@ -21,6 +21,11 @@ export default async function ProdutosPage() {
   // pra quem a API aceitaria).
   const canManageFichaTecnica = await hasModulePermission(session.user.id, "ficha-tecnica", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageFichaTecnica;
+  // Mesma lógica do canCreate acima, mas para exclusão: a exclusão (individual
+  // e em lote) desta tela também acontece via /api/ficha-tecnica/insumos, que
+  // é protegida pelo módulo "ficha-tecnica" (canDelete), não "estoque".
+  const canDeleteFichaTecnica = await hasModulePermission(session.user.id, "ficha-tecnica", "canDelete");
+  const canDelete = ctx?.mode === "single" && canDeleteFichaTecnica;
 
   const [ingredients, categories, suppliers] = await Promise.all([
     prisma.ingredient.findMany({
@@ -68,6 +73,7 @@ export default async function ProdutosPage() {
           categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color }))}
           suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
           canCreate={canCreate}
+          canDelete={canDelete}
         />
       </div>
     </PageContainer>
