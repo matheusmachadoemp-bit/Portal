@@ -96,6 +96,38 @@ export async function fetchSaiposSales(
   return { ok: true, sales: allSales };
 }
 
+const BRASILIA_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * A Saipos espera as datas no horário local da loja (Brasília, UTC-3, sem
+ * horário de verão desde 2019), não em UTC — por isso o offset abaixo antes
+ * de formatar.
+ *
+ * Esta correção já tinha sido feita 2 vezes antes (commits 4322c17 e
+ * 68be325) e perdida nas 2 vezes num merge que trouxe uma versão antiga do
+ * arquivo por cima (mesma classe de incidente documentada no CLAUDE.md sobre
+ * trabalho perdido em merge) — nunca foi reintroduzida depois disso, e o
+ * código ficou mandando a janela de busca para a API da Saipos em UTC puro
+ * desde então. Efeito prático: o filtro `p_filter_date_start`/
+ * `p_filter_date_end` enviado à Saipos fica sistematicamente deslocado 3h
+ * PARA FRENTE (mais tarde) em relação ao pretendido — ambos os limites da
+ * janela (início e fim) são interpretados pela Saipos como 3h depois do que
+ * o código pretendia, então o início efetivo da janela de busca "come" 3h
+ * logo no começo do intervalo pretendido. Quando a sincronização (cron
+ * diário ou botão "Sincronizar agora") acontece durante o horário de
+ * funcionamento da loja (18h-23h30, quando o Matheus mais costuma estar no
+ * sistema), essas 3h perdidas caem dentro do próprio expediente — vendas
+ * reais desse intervalo nunca chegam a ser gravadas em SaiposSale/Sale (não
+ * é um problema de exibição/fuso na leitura, é a linha nunca existir no
+ * banco), subcontando corretamente qualquer métrica agregada que dependa
+ * delas (total do dia, ticket médio geral/por canal, soma do mês). Achado
+ * durante a investigação do sumiço de vendas do Saipos no Faturamento
+ * (worktree investigar-faturamento-mes) — reproduzido com dado fabricado:
+ * linhas realmente ausentes (não só mal bucketizadas por hora) reproduzem os
+ * 3 sintomas relatados (buraco de horário + ticket médio + mês errados) de
+ * forma unificada, enquanto um mero erro de parsing de horário por venda
+ * reproduz só o buraco no gráfico por hora, sem afetar totais/médias.
+ */
 function formatSaiposDate(date: Date): string {
-  return date.toISOString().slice(0, 19);
+  return new Date(date.getTime() - BRASILIA_OFFSET_MS).toISOString().slice(0, 19);
 }
