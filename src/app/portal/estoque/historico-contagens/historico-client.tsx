@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, ClipboardList, Boxes, User, Package, AlertTriangle, DollarSign, CircleCheck } from "lucide-react";
+import { CalendarDays, ClipboardList, Boxes, User, Package, DollarSign, CircleCheck } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -25,7 +25,6 @@ type CountRow = {
   responsavel: string | null;
   status: string;
   totalItens: number;
-  divergencias: number;
   valorDiferenca: number;
   aprovadoPor: string | null;
   aprovadoEm: string | null;
@@ -99,7 +98,6 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
               Setor: c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : ""),
               Responsável: c.responsavel ?? "",
               Itens: c.totalItens,
-              Divergências: c.divergencias,
               "Valor diferença": c.valorDiferenca,
               Status: COUNT_STATUS_LABEL[c.status] ?? c.status,
             }))
@@ -131,9 +129,6 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
                 <span className="inline-flex items-center gap-1.5"><Package size={13} className="text-nord-blue-light" /> Itens</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={13} className="text-nord-blue-light" /> Divergências</span>
-              </th>
-              <th className="py-2 pr-4">
                 <span className="inline-flex items-center gap-1.5"><DollarSign size={13} className="text-nord-blue-light" /> Diferença</span>
               </th>
               <th className="py-2 pr-4">
@@ -150,7 +145,6 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
                 <td className="py-2.5 pr-4 text-white">{c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : `Sem. ${c.semana}/${c.ano}`)}</td>
                 <td className="py-2.5 pr-4 text-white">{c.responsavel ?? "—"}</td>
                 <td className="py-2.5 pr-4 text-white">{c.totalItens}</td>
-                <td className="py-2.5 pr-4"><Badge tone={c.divergencias ? "danger" : "default"}>{c.divergencias}</Badge></td>
                 <td className="py-2.5 pr-4">
                   <span className={c.valorDiferenca < 0 ? "text-nord-danger" : "text-nord-success"}>{formatCurrency(c.valorDiferenca)}</span>
                 </td>
@@ -164,7 +158,7 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-6 text-center text-nord-gray">
+                <td colSpan={8} className="py-6 text-center text-nord-gray">
                   Nenhuma contagem encontrada.
                 </td>
               </tr>

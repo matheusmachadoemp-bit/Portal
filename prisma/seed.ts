@@ -233,7 +233,13 @@ const CATEGORIES = [
       // (esta lista de `subs` só faz upsert — nunca deleta uma entrada removida daqui).
       { key: "movimentacoes", name: "Movimentações", icon: "ArrowRightLeft" },
       { key: "perdas", name: "Perdas e Desperdícios", icon: "TriangleAlert" },
-      { key: "configuracoes", name: "Configurações", icon: "Settings" },
+      // A subcategoria "Configurações" (tela própria em
+      // src/app/portal/estoque/configuracoes/) deixou de existir por completo a
+      // pedido do usuário — as duas configurações que ela expunha foram embora
+      // (limiar de divergência de contagem, removido junto com o enforcement) ou
+      // se mudaram (meta de CMV por loja, agora editada na categoria global
+      // "Configurações"). Ver
+      // prisma/migrations/20260930140000_remove_configuracoes_subcategoria_estoque.
     ],
   },
   {

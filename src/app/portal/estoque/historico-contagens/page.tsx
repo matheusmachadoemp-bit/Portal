@@ -50,7 +50,6 @@ export default async function HistoricoContagensPage() {
               responsavel: c.responsavel,
               status: c.status,
               totalItens: c.items.length,
-              divergencias: c.items.filter((i) => i.status === "DIVERGENCIA").length,
               valorDiferenca,
               aprovadoPor: c.aprovadoPor,
               aprovadoEm: c.aprovadoEm ? c.aprovadoEm.toISOString() : null,

@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const count = await prisma.stockCount.findUnique({
     where: { id },
-    include: { items: { include: { ingredient: true } }, empresa: true },
+    include: { items: { include: { ingredient: true } } },
   });
   if (!count) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, count.empresaId))) {
@@ -35,7 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existing = await prisma.stockCount.findUnique({
     where: { id },
-    include: { items: { include: { ingredient: true } }, empresa: true },
+    include: { items: { include: { ingredient: true } } },
   });
   if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
@@ -60,7 +60,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "URL de foto inválida em um dos itens." }, { status: 400 });
     }
 
-    const limiar = existing.empresa.metaDivergenciaContagemPercent;
     // Cada item atualiza uma linha diferente de StockCountItem — são
     // independentes entre si, então rodam em paralelo em vez de um de cada vez.
     await Promise.all(
@@ -78,7 +77,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             diferencaQtd = contada - item.estoqueEsperado;
             diferencaPercent = item.estoqueEsperado ? (diferencaQtd / item.estoqueEsperado) * 100 : contada > 0 ? 100 : 0;
             diferencaReais = diferencaQtd * custoUnit;
-            status = Math.abs(diferencaPercent) > limiar ? "DIVERGENCIA" : "CONTADO";
+            // Antes disso, um item cuja diferença passasse do "Limiar de divergência de
+            // contagem (%)" configurável por loja (`Empresa.metaDivergenciaContagemPercent`)
+            // virava status DIVERGENCIA, o que exigia justificativa antes de aprovar/finalizar
+            // a contagem (ver contagem-mensal-client.tsx/contagem-semanal-client.tsx). Essa
+            // configuração e todo o enforcement em cima dela foram removidos a pedido do
+            // usuário — todo item contado agora vira CONTADO, sem nenhuma trava de justificativa
+            // baseada em percentual de diferença. `diferencaPercent`/`diferencaReais` continuam
+            // calculados normalmente (são só informativos, exibidos na tela).
+            status = "CONTADO";
           }
           await prisma.stockCountItem.update({
             where: { id: upd.itemId },
