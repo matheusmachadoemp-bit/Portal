@@ -9,6 +9,7 @@ import {
   travarProbabilidadeRoleta,
   ProbabilidadeInvalidaError,
 } from "@/lib/roulette-server";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 async function findOwnedPrize(id: string, empresaId: string) {
   const existing = await prisma.roulettePrize.findUnique({ where: { id } });
@@ -73,7 +74,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data.nome = nome;
   }
   if (body.descricao !== undefined) data.descricao = body.descricao ? String(body.descricao).trim() : null;
-  if (body.imagemUrl !== undefined) data.imagemUrl = body.imagemUrl ? String(body.imagemUrl).trim() : null;
+  if (body.imagemUrl !== undefined) {
+    if (body.imagemUrl && !isValidBlobUrl(body.imagemUrl)) {
+      return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+    }
+    data.imagemUrl = body.imagemUrl ? String(body.imagemUrl).trim() : null;
+  }
   if (body.icone !== undefined) data.icone = body.icone ? String(body.icone).trim() : null;
 
   if (body.quantidadeDisponivel !== undefined) {
