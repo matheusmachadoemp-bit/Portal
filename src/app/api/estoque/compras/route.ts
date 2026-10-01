@@ -45,11 +45,12 @@ import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 // tem uma tela própria pra isso — Estoque > Recebimento de Mercadorias
 // (src/app/portal/estoque/recebimento/page.tsx, mesmo card "Aguardando entrega" que existe aqui),
 // que continua liberada pra qualquer COLABORADOR com estoque:canView e cuja UI não exibe preço
-// por item hoje (só o agregado "Valor em divergências" do dashboard gerencial). Atenção: a rota
-// GET /api/estoque/recebimento por trás dessa tela NÃO filtra `valorUnitario`/`valorTotal` do
-// JSON (só o `select` do insumo embutido exclui `precoAtual` — os campos de preço do próprio
-// PurchaseItem passam direto) — ela não é uma das 4 telas deste achado e não foi alterada aqui,
-// mas é uma lacuna correlata que vale auditar à parte (reportada no relatório desta tarefa).
+// por item hoje (só o agregado "Valor em divergências" do dashboard gerencial). A rota GET
+// /api/estoque/recebimento por trás dessa tela NÃO filtrava `valorUnitario`/`valorTotal` do JSON
+// (só o `select` do insumo embutido excluía `precoAtual` — os campos de preço do próprio
+// PurchaseItem passavam direto); essa lacuna correlata (não era uma das 4 telas deste achado, por
+// isso não foi corrigida aqui) foi fechada depois, numa tarefa separada, com um `select` explícito
+// removendo os 2 campos — ver comentário em GET /api/estoque/recebimento/route.ts.
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
