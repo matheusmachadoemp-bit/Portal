@@ -224,22 +224,26 @@ export async function loadRecebimentoDashboard(empresaIds: string[], since: Date
 }
 
 /**
- * Resolve o período (since/until) do dashboard gerencial de Recebimento a partir dos mesmos
- * parâmetros `key`/`from`/`to` do filtro de período de Compras (Otavio,
- * `src/app/api/estoque/compras/route.ts`) — mesmo padrão (`resolveRollingPeriod`, que já trata o
- * fuso de São Paulo corretamente) reaproveitado aqui. Compartilhada entre a rota de API (`GET
+ * Resolve o período (since/until) do dashboard gerencial de Recebimento a partir dos parâmetros
+ * `key`/`from`/`to` do filtro de período padrão do portal (`resolveRollingPeriod`, que já trata o
+ * fuso de São Paulo corretamente — ver CLAUDE.md). Compartilhada entre a rota de API (`GET
  * /api/estoque/recebimento`) e a carga inicial da página (Server Component,
  * `src/app/portal/estoque/recebimento/page.tsx`) para as duas nunca divergirem.
  *
- * `key` ausente preserva o comportamento ANTIGO ao pé da letra — de propósito NÃO usa
- * `resolveRollingPeriod("30dias", ...)` aqui: "últimos 30 dias" continua calculado como
- * `now - 30*24h` corrido (sem ancorar em início/fim de dia de São Paulo), exatamente como
- * `page.tsx` já calculava antes deste filtro existir (`new Date(); since.setDate(since.getDate()
- * - 30)`). Trocar pelo equivalente "correto" mudaria o resultado por até algumas horas — o
- * pedido foi explícito que o comportamento padrão (sem parâmetro nenhum) precisa continuar
- * EXATAMENTE igual a hoje. Com `key` presente, usa o mesmo `resolveRollingPeriod` das demais
- * telas (inclusive o mesmo detalhe de Compras: uma `key` desconhecida cai no `default` de
- * `resolveRollingPeriod`, que é o "30dias" ancorado em SP — não é um caso novo introduzido aqui).
+ * `key` ausente usa `resolveRollingPeriod("mes-atual", ...)` — mesmo default já usado como carga
+ * inicial do servidor em `src/app/portal/marketing/parcerias/page.tsx` (e em
+ * `marketing/redes-sociais/page.tsx`/`estoque/compras/page.tsx`), pra bater com o que o cliente
+ * (`recebimento-client.tsx`) sempre mostra por padrão ("Este mês"). ANTES, por decisão deliberada
+ * do Mylon ao introduzir este filtro, o default aqui era "últimos 30 dias corridos"
+ * (`now - 30*24h`, sem ancorar em início/fim de dia de SP) — de propósito, pra preservar ao pé da
+ * letra o comportamento de ANTES deste filtro existir. Só que isso divergia do "Este mês" que o
+ * cliente sempre assume como estado inicial e busca de novo assim que a tela monta (`useEffect`
+ * em `recebimento-client.tsx`) — causando um flash visível nos KPIs logo no primeiro carregamento
+ * (mais perceptível perto do início de cada mês) e uma consulta a mais no banco em toda visita à
+ * tela (achado do Teulis na revisão do filtro de período, não-bloqueante). Com `key` presente,
+ * nada muda: mesmo `resolveRollingPeriod` das demais telas (uma `key` desconhecida cai no
+ * `default` de `resolveRollingPeriod`, que é o "30dias" ancorado em SP — não é um caso novo
+ * introduzido aqui).
  */
 export function resolveRecebimentoDashboardRange(
   key?: RollingPeriodKey | null,
@@ -250,9 +254,8 @@ export function resolveRecebimentoDashboardRange(
     const range = resolveRollingPeriod(key, { from, to });
     return { since: range.from, until: range.to };
   }
-  const since = new Date();
-  since.setDate(since.getDate() - 30);
-  return { since, until: new Date() };
+  const range = resolveRollingPeriod("mes-atual");
+  return { since: range.from, until: range.to };
 }
 
 /**

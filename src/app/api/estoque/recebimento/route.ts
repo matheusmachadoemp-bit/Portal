@@ -16,14 +16,13 @@ import type { RollingPeriodKey } from "@/lib/periods";
 
 /**
  * Filtro de período do card "Dashboard gerencial" — mesmo padrão (`key`/`from`/`to` +
- * `resolveRollingPeriod`, já tratando fuso de São Paulo) de src/app/api/estoque/compras/route.ts
- * (Otavio). Diferente daquela rota, aqui `key` ausente NÃO significa "sem filtro nenhum": o
- * dashboard sempre foi (e continua sendo) uma janela fechada — sem `key`, a janela é "últimos 30
- * dias" idêntica à de antes deste filtro existir (ver `resolveRecebimentoDashboardRange`,
- * src/lib/recebimento-server.ts, para o motivo de não usar `resolveRollingPeriod("30dias", ...)`
- * no caso ausente). `pendentes`/`recebimentos` (as duas listas da tela) nunca tiveram filtro de
- * data nenhum e continuam sem — só o `dashboard`, que é novo nesta resposta, respeita `key`/
- * `from`/`to`.
+ * `resolveRollingPeriod`, já tratando fuso de São Paulo) de outras rotas do portal (ver CLAUDE.md).
+ * `key` ausente NÃO significa "sem filtro nenhum": o dashboard sempre foi (e continua sendo) uma
+ * janela fechada — sem `key`, a janela agora é "mês atual" (ver `resolveRecebimentoDashboardRange`,
+ * src/lib/recebimento-server.ts, para o detalhe de por que o default mudou de "últimos 30 dias
+ * corridos" pra "mês atual" — elimina o flash de KPI no primeiro carregamento da tela).
+ * `pendentes`/`recebimentos` (as duas listas da tela) nunca tiveram filtro de data nenhum e
+ * continuam sem — só o `dashboard`, que é novo nesta resposta, respeita `key`/`from`/`to`.
  */
 export async function GET(req: Request) {
   const session = await auth();

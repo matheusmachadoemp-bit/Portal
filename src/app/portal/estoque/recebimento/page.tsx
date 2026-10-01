@@ -24,10 +24,15 @@ export default async function RecebimentoPage({
   const canCreate = ctx?.mode === "single" && RECEBIMENTO_MANAGE_ROLES.includes(session?.user?.role ?? "");
 
   // Aceita os mesmos `key`/`from`/`to` da rota de API (GET /api/estoque/recebimento) para a
-  // carga inicial já vir com o período certo, evitando um "flash" de 30 dias seguido de refetch
-  // quando a tela (Caio, numa fase seguinte) ganhar um filtro de período de verdade. Nenhuma
-  // tela hoje manda esses parâmetros — sem eles, `resolveRecebimentoDashboardRange` devolve
-  // exatamente os mesmos "últimos 30 dias" de antes.
+  // carga inicial do servidor já vir com o mesmo período que o cliente (`recebimento-client.tsx`)
+  // mostra por padrão ("Este mês") — sem `key`/`from`/`to` na URL (nenhuma tela ainda linka pra cá
+  // com esses parâmetros), `resolveRecebimentoDashboardRange` agora usa
+  // `resolveRollingPeriod("mes-atual", ...)`, o mesmo default de `marketing/parcerias/page.tsx`.
+  // Antes calculava "últimos 30 dias corridos", divergindo do "Este mês" que o cliente sempre
+  // assume e busca de novo assim que a tela monta — causando um flash visível nos KPIs (mais
+  // perceptível perto do início de cada mês) e uma consulta a mais no banco em toda visita à tela
+  // (achado do Teulis na revisão do filtro de período). Ver `resolveRecebimentoDashboardRange`
+  // (src/lib/recebimento-server.ts) para o detalhe completo.
   const sp = await searchParams;
   const { since, until } = resolveRecebimentoDashboardRange(sp.key as RollingPeriodKey | undefined, sp.from, sp.to);
 
