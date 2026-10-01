@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
+import {
+  empresaIdsForContext,
+  findUsersWithoutEmpresaAccess,
+  getActiveEmpresaContext,
+  requireActiveSingleEmpresa,
+} from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
 const WEEKDAY_FIELDS = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"] as const;
@@ -62,6 +67,15 @@ export async function POST(req: Request) {
   if (body.responsavelId) {
     const responsavel = await prisma.user.findUnique({ where: { id: body.responsavelId }, select: { id: true } });
     if (!responsavel) return NextResponse.json({ error: "Responsável inválido." }, { status: 400 });
+    // Sem essa checagem, um usuário com acesso só a OUTRA loja podia ser configurado como
+    // responsável pelo lembrete — e passaria a receber, todo dia no horário agendado, uma
+    // notificação de uma tarefa de uma loja à qual não tem acesso nenhum. Mesmo padrão já
+    // usado em outras rotas que gravam um id de usuário vindo do corpo da requisição (ver
+    // comentário de `findUsersWithoutEmpresaAccess` em src/lib/empresa.ts).
+    const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], empresa.id);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
   }
 
   const weekdayData: Record<string, boolean> = {};
