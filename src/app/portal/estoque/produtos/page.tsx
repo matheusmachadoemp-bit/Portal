@@ -11,11 +11,39 @@ import { redirect } from "next/navigation";
 // precedente em src/app/portal/financeiro/caixa-da-empresa/). A tela mostra
 // três abas internas (Produtos / Categorias / Setores); a URL
 // /portal/estoque/categorias deixou de existir.
+
+// Checagem de cargo (MANAGER_ROLES) — mesmo padrão já usado nas demais telas que expõem custo de
+// insumo (Gasto por Insumo, CMV, Ficha Técnica > Produtos — ver
+// src/app/portal/estoque/gasto-por-insumo/page.tsx). Achado pelo Otavio (tarefa de Ficha Técnica
+// > Insumos/Recebimento) como um 3º gap da mesma classe: esta página faz a query de `Ingredient`
+// (precoAtual + fornecedor) direto, só com `estoque:canView`, sem nenhuma trava de cargo — por
+// isso qualquer Colaborador com o perfil padrão "Funcionário" (canView=true de fábrica) via
+// quanto a empresa paga por cada insumo e de quem compra.
+//
+// Diferença para as telas-irmãs acima: lá o bloqueio é da PÁGINA inteira, porque a tela só existe
+// pra mostrar dado sensível. Aqui NÃO — as abas "Categorias" e "Setores" desta mesma tela não têm
+// nenhum campo de valor (ver `StockCategoryDTO`/`StockSectorDTO` abaixo: nome, ícone, cor, setor,
+// meta de perda %, periodicidade de contagem, contagem de produtos — nada em R$) e servem pra
+// organizar o estoque (setor de prateleira, categoria de produto), uso operacional legítimo pra
+// um Colaborador comum mesmo sem acesso a preço — bloquear a página inteira tiraria isso sem
+// necessidade. Por isso o bloqueio aqui é só dos 3 campos sensíveis (precoAtual,
+// fornecedorPrincipalId, fornecedorNome) dentro de `serializedIngredients`, usados exclusivamente
+// pela aba "Produtos" — ver produtos-client.tsx (prop `canViewCustos`) para como a aba lida com a
+// ausência desses campos sem quebrar (coluna "Custo" mostra "—", alertas "Sem custo"/"Sem
+// fornecedor" ficam desligados pra esse perfil, já que senão apareceriam em 100% das linhas).
+//
+// fornecedorPrincipalId entra no bloqueio junto (não só fornecedorNome): sem isso, bastaria cruzar
+// o id com a prop `suppliers` (lista completa de fornecedores da loja, enviada pra alimentar o
+// dropdown do formulário de criar/editar) pra descobrir o nome igual — por isso `suppliers`
+// também só vai completa pra quem tem `canCreateProduto` (quem de fato usa o formulário) abaixo.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function ProdutosPage() {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
     redirect("/portal/inicio");
   }
+  const canViewCustos = MANAGER_ROLES.includes(session.user.role);
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
@@ -84,7 +112,8 @@ export default async function ProdutosPage() {
     unidade: i.unidade,
     unidadeCompra: i.unidadeCompra,
     fatorConversao: i.fatorConversao,
-    precoAtual: i.precoAtual,
+    // null pra quem não é MANAGER_ROLES — ver comentário acima de `canViewCustos`.
+    precoAtual: canViewCustos ? i.precoAtual : null,
     quantidadeEmbalagem: i.quantidadeEmbalagem,
     rendimentoAproveitavel: i.rendimentoAproveitavel,
     percentualPerda: i.percentualPerda,
@@ -93,8 +122,9 @@ export default async function ProdutosPage() {
     estoqueMaximo: i.estoqueMaximo,
     pontoReposicao: i.pontoReposicao,
     localArmazenamento: i.localArmazenamento,
-    fornecedorPrincipalId: i.fornecedorPrincipalId,
-    fornecedorNome: i.fornecedorPrincipal?.nomeFantasia ?? i.fornecedorPrincipal?.razaoSocial ?? null,
+    // Ambos null pra quem não é MANAGER_ROLES — ver comentário acima de `canViewCustos`.
+    fornecedorPrincipalId: canViewCustos ? i.fornecedorPrincipalId : null,
+    fornecedorNome: canViewCustos ? (i.fornecedorPrincipal?.nomeFantasia ?? i.fornecedorPrincipal?.razaoSocial ?? null) : null,
     validade: i.validade ? i.validade.toISOString() : null,
     perecivel: i.perecivel,
     active: i.active,
@@ -126,12 +156,18 @@ export default async function ProdutosPage() {
           initialIngredients={serializedIngredients}
           initialCategories={serializedCategories}
           initialSectors={serializedSectors}
-          suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
+          // Lista completa só pra quem de fato usa o formulário (criar/editar produto); pra quem
+          // não tem canCreateProduto ela nem seria exibida (dropdown só existe dentro do
+          // formulário), mas o valor ainda viria embutido no payload da página pra qualquer
+          // Colaborador com canView — e, combinado com fornecedorPrincipalId em cada produto,
+          // bastaria pra reconstruir o nome do fornecedor mesmo com fornecedorNome omitido acima.
+          suppliers={canCreateProduto ? suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial })) : []}
           canCreate={canCreateProduto}
           canDelete={canDeleteProduto}
           canCreateCategoria={canCreateCategoria}
           canEditCategoria={canEditCategoria}
           canDeleteSetor={canDeleteSetor}
+          canViewCustos={canViewCustos}
         />
       </div>
     </PageContainer>
