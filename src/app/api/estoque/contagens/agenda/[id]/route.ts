@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { assertEmpresaAccess } from "@/lib/empresa";
+import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
 const WEEKDAY_FIELDS = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"] as const;
@@ -35,6 +35,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.responsavelId) {
     const responsavel = await prisma.user.findUnique({ where: { id: body.responsavelId }, select: { id: true } });
     if (!responsavel) return NextResponse.json({ error: "Responsável inválido." }, { status: 400 });
+    // Mesma checagem do POST desta agenda (ver comentário lá): o responsável precisa ter
+    // acesso à loja deste agendamento, senão alguém de outra loja passaria a receber o
+    // lembrete diário de uma tarefa à qual não tem acesso.
+    const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], existing.empresaId);
+    if (invalidIds.length > 0) {
+      return NextResponse.json({ error: "Esse responsável não tem acesso a esta loja." }, { status: 400 });
+    }
   }
 
   const weekdayData: Record<string, boolean> = {};
