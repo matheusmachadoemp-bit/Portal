@@ -41,7 +41,7 @@ export default async function ProdutosPage() {
   const canCreateCategoria = await hasModulePermission(session.user.id, "estoque", "canCreate");
   const canEditCategoria = await hasModulePermission(session.user.id, "estoque", "canEdit");
 
-  const [ingredients, categories, suppliers] = await Promise.all([
+  const [ingredients, categories, suppliers, setores] = await Promise.all([
     prisma.ingredient.findMany({
       where: { empresaId: { in: empresaIds } },
       orderBy: { name: "asc" },
@@ -56,6 +56,7 @@ export default async function ProdutosPage() {
       include: { _count: { select: { ingredients: true } } },
     }),
     prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
+    prisma.stockSector.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
   ]);
 
   const serializedIngredients = ingredients.map((i) => ({
@@ -105,6 +106,7 @@ export default async function ProdutosPage() {
           initialIngredients={serializedIngredients}
           initialCategories={serializedCategories}
           suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
+          setores={setores.map((s) => s.name)}
           canCreate={canCreateProduto}
           canDelete={canDeleteProduto}
           canCreateCategoria={canCreateCategoria}

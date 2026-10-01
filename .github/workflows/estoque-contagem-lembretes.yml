@@ -1,0 +1,36 @@
+name: Lembrete de contagem de estoque
+
+# Lembra o responsável configurado (ver StockCountSchedule em prisma/schema.prisma e
+# processStockCountReminders em src/lib/estoque-server.ts) de iniciar a contagem de estoque no
+# dia/horário agendado — nunca cria a StockCount automaticamente, só a notificação (sino + push);
+# iniciar a contagem continua sendo uma ação manual na tela de Estoque > Contagem de Estoque.
+#
+# Roda 1x por dia via Vercel Cron (ver vercel.json, mantido como reforço) e, mesmo padrão já
+# usado em checklist-escalations.yml/fechamento-dia-alertas.yml/manutencao-chamados-atrasados.yml,
+# também aqui a cada 15 minutos via GitHub Actions: GitHub Actions aceita intervalos curtos de
+# graça, diferente do cron nativo do Vercel Hobby, que só permite 1 execução diária por cron E
+# não garante disparar exatamente no minuto agendado — e um "lembrete de contagem" perde o
+# sentido se só chegar horas depois do horário configurado.
+#
+# Sem restrição de horário no próprio cron (roda o dia inteiro, 24/7): cada StockCountSchedule já
+# tem seu próprio horário configurado e só é notificado dentro da janela de tolerância de 30
+# minutos depois dele (REMINDER_WINDOW_MINUTES em processStockCountReminders) — restringir este
+# cron a uma janela fixa (ex. "só horário comercial") arriscaria nunca notificar um agendamento
+# configurado fora dela por engano. GET /api/estoque/contagens/lembretes/run é idempotente
+# (StockCountSchedule.ultimoLembreteData garante um único lembrete por agendamento por dia), então
+# rodar com essa frequência nunca duplica aviso.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a rota de lembrete de contagem de estoque
+        run: |
+          curl -sS -o /dev/null -w "status=%{http_code}\n" \
+            --max-time 30 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://www.portalnord.com.br/api/estoque/contagens/lembretes/run"

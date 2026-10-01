@@ -10,7 +10,7 @@ import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
-import { LOSS_REASONS, LOSS_REASON_LABEL, SECTORS } from "@/lib/estoque";
+import { LOSS_REASONS, LOSS_REASON_LABEL } from "@/lib/estoque";
 import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type Loss = {
@@ -30,7 +30,17 @@ type IngredientOption = { id: string; name: string; unidade: string; setor: stri
 
 const emptyForm = { ingredientId: "", quantidade: "", setor: "", motivo: "VENCIMENTO", responsavel: "", observacao: "" };
 
-export function PerdasClient({ initialLosses, ingredients, canCreate }: { initialLosses: Loss[]; ingredients: IngredientOption[]; canCreate: boolean }) {
+export function PerdasClient({
+  initialLosses,
+  ingredients,
+  setores,
+  canCreate,
+}: {
+  initialLosses: Loss[];
+  ingredients: IngredientOption[];
+  setores: string[];
+  canCreate: boolean;
+}) {
   const [losses, setLosses] = useState(initialLosses);
   const [motivoFilter, setMotivoFilter] = useState("");
   const [setorFilter, setSetorFilter] = useState("");
@@ -186,7 +196,7 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
                 </select>
                 <select className="input w-48" value={setorFilter} onChange={(e) => setSetorFilter(e.target.value)}>
                   <option value="">Todos os setores</option>
-                  {SECTORS.map((s) => (
+                  {setores.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
@@ -278,7 +288,7 @@ export function PerdasClient({ initialLosses, ingredients, canCreate }: { initia
             <span className="block text-xs text-nord-gray mb-1">Setor</span>
             <select className="input" value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })}>
               <option value="">Selecione...</option>
-              {SECTORS.map((s) => (
+              {setores.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>

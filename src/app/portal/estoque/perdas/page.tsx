@@ -17,7 +17,7 @@ export default async function PerdasPage() {
   const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageEstoque;
 
-  const [losses, ingredients] = await Promise.all([
+  const [losses, ingredients, setores] = await Promise.all([
     prisma.loss.findMany({
       where: { empresaId: { in: empresaIds } },
       orderBy: { data: "desc" },
@@ -25,6 +25,7 @@ export default async function PerdasPage() {
       include: { ingredient: { select: { id: true, name: true, unidade: true } }, createdBy: { select: { name: true } } },
     }),
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { name: "asc" } }),
+    prisma.stockSector.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
   ]);
 
   return (
@@ -44,6 +45,7 @@ export default async function PerdasPage() {
             observacao: l.observacao,
           }))}
           ingredients={ingredients.map((i) => ({ id: i.id, name: i.name, unidade: i.unidade, setor: i.setor, precoAtual: i.precoAtual, quantidadeEmbalagem: i.quantidadeEmbalagem, estoqueAtual: i.estoqueAtual }))}
+          setores={setores.map((s) => s.name)}
           canCreate={canCreate}
         />
       </div>

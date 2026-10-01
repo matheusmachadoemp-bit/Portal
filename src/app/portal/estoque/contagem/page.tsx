@@ -17,7 +17,7 @@ export default async function ContagemEstoquePage() {
   const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageEstoque;
 
-  const [semanais, mensais, employees] = await Promise.all([
+  const [semanais, mensais, employees, setores] = await Promise.all([
     prisma.stockCount.findMany({
       where: { empresaId: { in: empresaIds }, type: "SEMANAL" },
       orderBy: { dataContagem: "desc" },
@@ -34,6 +34,7 @@ export default async function ContagemEstoquePage() {
       where: { empresaId: { in: empresaIds }, status: "ATIVO" },
       orderBy: { name: "asc" },
     }),
+    prisma.stockSector.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
   ]);
 
   return (
@@ -70,6 +71,7 @@ export default async function ContagemEstoquePage() {
             createdByName: c.createdBy.name,
           }))}
           employees={employees.map((e) => ({ id: e.id, name: e.name }))}
+          setores={setores.map((s) => s.name)}
           canCreate={canCreate}
           userRole={session?.user?.role ?? ""}
         />

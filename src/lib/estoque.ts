@@ -37,21 +37,11 @@ export function ingredientCostPerUnit(ingredient: { precoAtual: number; quantida
 
 // ---------------------------------------------------------------------------
 // Setores (locais de contagem/armazenamento) — usados nas telas de Contagem,
-// Produtos e Categorias.
+// Produtos e Categorias. Antes um array hardcoded aqui (`SECTORS`), agora uma
+// tabela editável (`StockSector`, ver schema.prisma) consumida via
+// `GET /api/estoque/setores` e repassada por prop a partir de cada `page.tsx`
+// (contagem, produtos, perdas) — não existe mais uma constante local.
 // ---------------------------------------------------------------------------
-
-export const SECTORS = [
-  "Sushibar",
-  "Cozinha quente",
-  "Pizzaria",
-  "Chapa",
-  "Produção",
-  "Câmara fria",
-  "Freezer",
-  "Estoque seco",
-  "Bar e bebidas",
-  "Delivery e embalagens",
-] as const;
 
 // ---------------------------------------------------------------------------
 // Compras

@@ -5,7 +5,7 @@ import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST, SECTORS } from "@/lib/estoque";
+import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST } from "@/lib/estoque";
 
 type CountRow = {
   id: string;
@@ -42,11 +42,13 @@ const APPROVER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
 export function ContagemMensalClient({
   initialCounts,
   employees,
+  setores,
   canCreate,
   userRole,
 }: {
   initialCounts: CountRow[];
   employees: EmployeeOption[];
+  setores: string[];
   canCreate: boolean;
   userRole: string;
 }) {
@@ -235,7 +237,7 @@ export function ContagemMensalClient({
             <span className="block text-xs text-nord-gray mb-1">Setor</span>
             <select className="input" value={setor} onChange={(e) => setSetor(e.target.value)}>
               <option value="">Todos os setores</option>
-              {SECTORS.map((s) => (
+              {setores.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>

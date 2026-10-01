@@ -7,7 +7,6 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { SECTORS } from "@/lib/estoque";
 import { CategoriasClient, type StockCategoryDTO } from "./categorias-client";
 
 type Ingredient = {
@@ -83,6 +82,7 @@ export function ProdutosClient({
   initialIngredients,
   initialCategories,
   suppliers,
+  setores,
   canCreate,
   canDelete,
   canCreateCategoria,
@@ -96,6 +96,9 @@ export function ProdutosClient({
    *  Mesmo padrão de src/app/portal/financeiro/caixa-da-empresa/ (CaixaClient + accounts). */
   initialCategories: StockCategoryDTO[];
   suppliers: { id: string; name: string }[];
+  /** Setores ativos (`StockSector`, ver schema.prisma) — usados no filtro "Setor" da listagem,
+   *  no formulário de produto e repassados pra `CategoriasClient` (campo "Setor responsável"). */
+  setores: string[];
   canCreate: boolean;
   canDelete: boolean;
   canCreateCategoria: boolean;
@@ -373,7 +376,7 @@ export function ProdutosClient({
             </select>
             <select className="input w-48" value={setorFilter} onChange={(e) => setSetorFilter(e.target.value)}>
               <option value="">Todos os setores</option>
-              {SECTORS.map((s) => (
+              {setores.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
@@ -540,7 +543,7 @@ export function ProdutosClient({
                 <span className="block text-xs text-nord-gray mb-1">Setor</span>
                 <select className="input" value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })}>
                   <option value="">Selecione...</option>
-                  {SECTORS.map((s) => (
+                  {setores.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
@@ -686,6 +689,7 @@ export function ProdutosClient({
         <CategoriasClient
           categories={categories}
           onCategoriesChange={setCategories}
+          setores={setores}
           canCreate={canCreateCategoria}
           canEdit={canEditCategoria}
         />

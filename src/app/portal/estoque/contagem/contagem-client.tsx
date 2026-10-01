@@ -17,12 +17,14 @@ export function ContagemClient({
   initialSemanais,
   initialMensais,
   employees,
+  setores,
   canCreate,
   userRole,
 }: {
   initialSemanais: SemanalRow[];
   initialMensais: MensalRow[];
   employees: EmployeeOption[];
+  setores: string[];
   canCreate: boolean;
   userRole: string;
 }) {
@@ -45,9 +47,9 @@ export function ContagemClient({
       </div>
 
       {tab === "semanal" ? (
-        <ContagemSemanalClient initialCounts={initialSemanais} canCreate={canCreate} />
+        <ContagemSemanalClient initialCounts={initialSemanais} employees={employees} setores={setores} canCreate={canCreate} />
       ) : (
-        <ContagemMensalClient initialCounts={initialMensais} employees={employees} canCreate={canCreate} userRole={userRole} />
+        <ContagemMensalClient initialCounts={initialMensais} employees={employees} setores={setores} canCreate={canCreate} userRole={userRole} />
       )}
     </div>
   );

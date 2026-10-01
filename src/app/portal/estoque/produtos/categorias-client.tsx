@@ -6,8 +6,6 @@ import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { SECTORS } from "@/lib/estoque";
-
 export type StockCategoryDTO = {
   id: string;
   name: string;
@@ -25,6 +23,7 @@ const emptyForm = { id: "", name: "", color: "#2952E3", icon: "Boxes", setor: ""
 export function CategoriasClient({
   categories,
   onCategoriesChange,
+  setores,
   canCreate,
   canEdit,
 }: {
@@ -37,6 +36,8 @@ export function CategoriasClient({
   categories: StockCategoryDTO[];
   /** Chamado com a lista atualizada (buscada de novo da API) após qualquer criação/edição/ativação. */
   onCategoriesChange: (categories: StockCategoryDTO[]) => void;
+  /** Setores ativos (`StockSector`) — opções do campo "Setor responsável". */
+  setores: string[];
   canCreate: boolean;
   canEdit: boolean;
 }) {
@@ -184,7 +185,7 @@ export function CategoriasClient({
             <span className="block text-xs text-nord-gray mb-1.5">Setor responsável</span>
             <select className="input" value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })}>
               <option value="">Selecione...</option>
-              {SECTORS.map((s) => (
+              {setores.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>

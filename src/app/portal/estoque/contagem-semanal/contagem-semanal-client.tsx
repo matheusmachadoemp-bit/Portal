@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
-import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, SECTORS } from "@/lib/estoque";
+import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "@/lib/estoque";
 
 type CountRow = {
   id: string;
@@ -38,10 +38,22 @@ type CountItem = {
   ingredient: { name: string; unidade: string; precoAtual: number; quantidadeEmbalagem: number; categoryId: string | null };
 };
 
-export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCounts: CountRow[]; canCreate: boolean }) {
+type EmployeeOption = { id: string; name: string };
+
+export function ContagemSemanalClient({
+  initialCounts,
+  employees,
+  setores,
+  canCreate,
+}: {
+  initialCounts: CountRow[];
+  employees: EmployeeOption[];
+  setores: string[];
+  canCreate: boolean;
+}) {
   const [counts, setCounts] = useState(initialCounts);
   const [showNew, setShowNew] = useState(false);
-  const [setor, setSetor] = useState<string>(SECTORS[0]);
+  const [setor, setSetor] = useState<string>(setores[0] ?? "");
   const [responsavel, setResponsavel] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -191,14 +203,19 @@ export function ContagemSemanalClient({ initialCounts, canCreate }: { initialCou
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Setor</span>
             <select className="input" value={setor} onChange={(e) => setSetor(e.target.value)}>
-              {SECTORS.map((s) => (
+              {setores.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Responsável</span>
-            <input className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} />
+            <select className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}>
+              <option value="">Selecione...</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.name}>{emp.name}</option>
+              ))}
+            </select>
           </label>
           {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={iniciarContagem} className="btn-primary w-full py-2.5">
