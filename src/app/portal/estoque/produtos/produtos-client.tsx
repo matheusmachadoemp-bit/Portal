@@ -22,7 +22,10 @@ type Ingredient = {
   unidade: string;
   unidadeCompra: string | null;
   fatorConversao: number;
-  precoAtual: number;
+  // null quando o usuário não é MANAGER_ROLES (ADMINISTRADOR/GESTOR/GERENTE/SUPERVISOR) — ver
+  // `canViewCustos` abaixo e o comentário em page.tsx. Mesma coisa pra fornecedorPrincipalId/
+  // fornecedorNome mais abaixo neste tipo.
+  precoAtual: number | null;
   quantidadeEmbalagem: number;
   rendimentoAproveitavel: number | null;
   percentualPerda: number;
@@ -89,6 +92,7 @@ export function ProdutosClient({
   canCreateCategoria,
   canEditCategoria,
   canDeleteSetor,
+  canViewCustos,
 }: {
   initialIngredients: Ingredient[];
   /** Lista completa de categorias de estoque (ativas e inativas, com contagem de produtos).
@@ -108,6 +112,12 @@ export function ProdutosClient({
   canCreateCategoria: boolean;
   canEditCategoria: boolean;
   canDeleteSetor: boolean;
+  /** true só pra MANAGER_ROLES (ADMINISTRADOR/GESTOR/GERENTE/SUPERVISOR) — controla a aba
+   *  "Produtos": coluna "Custo", alertas "Sem custo"/"Sem fornecedor", colunas de preço/
+   *  fornecedor no Excel exportado e o botão "Atualizar" (que recarrega via GET
+   *  /api/ficha-tecnica/insumos — rota que dá 403 pra quem não é MANAGER_ROLES). Não afeta as
+   *  abas "Categorias"/"Setores" (sem dado de preço, abertas a qualquer `estoque:canView`). */
+  canViewCustos: boolean;
 }) {
   // Estoque > Produtos e Estoque > Categorias foram unificadas nesta única tela (subcategoria
   // "Produtos" absorveu "Categorias" — a URL /portal/estoque/categorias não existe mais). O
@@ -174,6 +184,13 @@ export function ProdutosClient({
 
   async function refresh() {
     const res = await fetch("/api/ficha-tecnica/insumos");
+    // Quem não é MANAGER_ROLES recebe 403 desta rota (mesmo critério de `canViewCustos` usado na
+    // carga inicial via page.tsx) — mantém a lista já carregada em vez de tentar ler
+    // `data.ingredients` de um corpo `{ error }` e quebrar. Na prática o botão "Atualizar" já
+    // fica escondido pra esse perfil (abaixo), mas submit()/doDelete()/doBulkDelete() também
+    // chamam refresh() ao final e precisam do mesmo cuidado pra quem tem canCreate/canDelete de
+    // ficha-tecnica sem ser MANAGER_ROLES (perfil de permissão customizado).
+    if (!res.ok) return;
     const data = await res.json();
     setIngredients(
       data.ingredients.map((i: Record<string, unknown>) => ({
@@ -188,7 +205,18 @@ export function ProdutosClient({
         unidade: i.unidade,
         unidadeCompra: i.unidadeCompra,
         fatorConversao: i.fatorConversao,
-        precoAtual: i.precoAtual,
+        // canViewCustos reaplicado aqui (não só confiar que a API nunca manda o valor real pra
+        // quem não deveria ver): esta rota, hoje, não tem NENHUM gate de cargo própria (só exige
+        // ficha-tecnica:canView) — um usuário com um `UserPermission` pontual de "ficha-tecnica:
+        // EDITAR" (tela Usuários > editar, sem precisar trocar o cargo) já tem canCreate=true
+        // (então vê o formulário e aciona refresh() via submit()/doDelete()/doBulkDelete()) mas
+        // pode não ser MANAGER_ROLES — sem este guard, o preço/fornecedor reais que a API devolve
+        // pra esse usuário iriam direto pro state depois de qualquer criar/editar/excluir, mesmo
+        // a carga inicial (SSR) tendo escondido os dois corretamente. Mesmo depois do gate de
+        // cargo entrar nesta rota (tarefa do Otavio), este componente não deve depender só do
+        // outro lado estar sempre coerente — por isso o filtro é reaplicado aqui também, igual
+        // `page.tsx` faz no SSR.
+        precoAtual: canViewCustos ? i.precoAtual : null,
         quantidadeEmbalagem: i.quantidadeEmbalagem,
         rendimentoAproveitavel: i.rendimentoAproveitavel,
         percentualPerda: i.percentualPerda,
@@ -197,10 +225,13 @@ export function ProdutosClient({
         estoqueMaximo: i.estoqueMaximo,
         pontoReposicao: i.pontoReposicao,
         localArmazenamento: i.localArmazenamento,
-        fornecedorPrincipalId: i.fornecedorPrincipalId,
-        fornecedorNome: (i.fornecedorPrincipal as { nomeFantasia: string | null; razaoSocial: string } | null)
-          ? (i.fornecedorPrincipal as { nomeFantasia: string | null; razaoSocial: string }).nomeFantasia ??
-            (i.fornecedorPrincipal as { nomeFantasia: string | null; razaoSocial: string }).razaoSocial
+        // Mesmo motivo do precoAtual acima.
+        fornecedorPrincipalId: canViewCustos ? i.fornecedorPrincipalId : null,
+        fornecedorNome: canViewCustos
+          ? (i.fornecedorPrincipal as { nomeFantasia: string | null; razaoSocial: string } | null)
+            ? (i.fornecedorPrincipal as { nomeFantasia: string | null; razaoSocial: string }).nomeFantasia ??
+              (i.fornecedorPrincipal as { nomeFantasia: string | null; razaoSocial: string }).razaoSocial
+            : null
           : null,
         validade: i.validade,
         perecivel: i.perecivel,
@@ -286,7 +317,9 @@ export function ProdutosClient({
       unidade: i.unidade,
       unidadeCompra: i.unidadeCompra ?? "",
       fatorConversao: String(i.fatorConversao),
-      precoAtual: String(i.precoAtual),
+      // i.precoAtual vem null pra quem não é MANAGER_ROLES (canViewCustos) — String(null) daria a
+      // string literal "null" no campo; usa "" como qualquer outro campo numérico ausente.
+      precoAtual: i.precoAtual !== null ? String(i.precoAtual) : "",
       quantidadeEmbalagem: String(i.quantidadeEmbalagem),
       rendimentoAproveitavel: i.rendimentoAproveitavel !== null ? String(i.rendimentoAproveitavel) : "",
       percentualPerda: String(i.percentualPerda),
@@ -369,18 +402,30 @@ export function ProdutosClient({
               exportFilename="produtos-estoque"
               exportSheetName="Produtos"
               exportRows={() =>
-                filtered.map((i) => ({
-                  Código: i.codigoInterno ?? "",
-                  Produto: i.name,
-                  Categoria: i.categoryName ?? "",
-                  Setor: i.setor ?? "",
-                  "Estoque atual": i.estoqueAtual,
-                  "Estoque mínimo": i.estoqueMinimo,
-                  "Custo unitário": i.precoAtual,
-                  Fornecedor: i.fornecedorNome ?? "",
-                }))
+                filtered.map((i) => {
+                  // "Custo unitário"/Fornecedor só entram na planilha pra quem tem canViewCustos —
+                  // pra quem não tem, i.precoAtual/i.fornecedorNome já vêm null do servidor; omitir
+                  // as colunas é mais claro do que exportar 0/"" (que pareceria "sem custo
+                  // cadastrado" em vez de "oculto pro seu perfil").
+                  const row: Record<string, string | number> = {
+                    Código: i.codigoInterno ?? "",
+                    Produto: i.name,
+                    Categoria: i.categoryName ?? "",
+                    Setor: i.setor ?? "",
+                    "Estoque atual": i.estoqueAtual,
+                    "Estoque mínimo": i.estoqueMinimo,
+                  };
+                  if (canViewCustos) {
+                    row["Custo unitário"] = i.precoAtual ?? 0;
+                    row["Fornecedor"] = i.fornecedorNome ?? "";
+                  }
+                  return row;
+                })
               }
-              onRefresh={refresh}
+              // Escondido pra quem não tem canViewCustos: o GET que este botão recarrega
+              // (/api/ficha-tecnica/insumos) dá 403 pra esse perfil (mesmo critério de
+              // canViewCustos), então o botão só funcionaria de "mentira" — ver guard em refresh().
+              onRefresh={canViewCustos ? refresh : undefined}
               onAdd={canCreate ? () => { setForm(emptyForm); setError(null); setShowForm(true); } : undefined}
               addLabel="Novo produto"
             />
@@ -456,8 +501,12 @@ export function ProdutosClient({
               <tbody>
                 {filtered.map((i) => {
                   const alerts: string[] = [];
-                  if (!i.precoAtual) alerts.push("Sem custo");
-                  if (!i.fornecedorPrincipalId) alerts.push("Sem fornecedor");
+                  // Só avalia pra quem tem canViewCustos: pra quem não tem, precoAtual/
+                  // fornecedorPrincipalId vêm null em TODO produto (oculto, não "ausente") — sem
+                  // este guard os dois alertas apareceriam em 100% das linhas, ruído sem sentido
+                  // pra um perfil que nem teria como corrigir isso.
+                  if (canViewCustos && !i.precoAtual) alerts.push("Sem custo");
+                  if (canViewCustos && !i.fornecedorPrincipalId) alerts.push("Sem fornecedor");
                   if (i.estoqueAtual <= i.estoqueMinimo) alerts.push("Abaixo do mínimo");
                   if (i.estoqueMaximo && i.estoqueAtual > i.estoqueMaximo) alerts.push("Acima do máximo");
                   if (i.validade && new Date(i.validade).getTime() <= vencimentoLimite) alerts.push("Vencendo");
@@ -493,7 +542,11 @@ export function ProdutosClient({
                       <td className="py-2.5 pr-4 text-nord-gray">
                         {formatNumber(i.estoqueAtual, 1)} {i.unidade}
                       </td>
-                      <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(i.precoAtual)}</td>
+                      {/* "—" (não "R$ 0,00") pra quem não tem canViewCustos: i.precoAtual vem null
+                          nesse caso, e formatCurrency(null) cairia no fallback "value || 0" —
+                          mostraria um custo zerado, dando a entender (errado) que o produto não
+                          tem custo cadastrado, quando na verdade só está oculto pro perfil. */}
+                      <td className="py-2.5 pr-4 text-nord-gray">{canViewCustos ? formatCurrency(i.precoAtual ?? 0) : "—"}</td>
                       <td className="py-2.5 pr-4 text-nord-gray">{i.fornecedorNome ?? "—"}</td>
                       <td className="py-2.5 pr-4">
                         <div className="flex flex-wrap gap-1">
