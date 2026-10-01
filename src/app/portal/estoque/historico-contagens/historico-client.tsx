@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, ClipboardList, Boxes, User, Package, DollarSign, CircleCheck } from "lucide-react";
+import { CalendarDays, ClipboardList, Boxes, User, Coins, DollarSign, CircleCheck } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -24,7 +24,7 @@ type CountRow = {
   dataContagem: string;
   responsavel: string | null;
   status: string;
-  totalItens: number;
+  valorEstoque: number;
   valorDiferenca: number;
   aprovadoPor: string | null;
   aprovadoEm: string | null;
@@ -97,7 +97,7 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
               Tipo: c.type === "MENSAL" ? "Mensal" : "Semanal",
               Setor: c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : ""),
               Responsável: c.responsavel ?? "",
-              Itens: c.totalItens,
+              "Valor do estoque": c.valorEstoque,
               "Valor diferença": c.valorDiferenca,
               Status: COUNT_STATUS_LABEL[c.status] ?? c.status,
             }))
@@ -126,7 +126,7 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
                 <span className="inline-flex items-center gap-1.5"><User size={13} className="text-nord-blue-light" /> Responsável</span>
               </th>
               <th className="py-2 pr-4">
-                <span className="inline-flex items-center gap-1.5"><Package size={13} className="text-nord-blue-light" /> Itens</span>
+                <span className="inline-flex items-center gap-1.5"><Coins size={13} className="text-nord-blue-light" /> Valor do estoque</span>
               </th>
               <th className="py-2 pr-4">
                 <span className="inline-flex items-center gap-1.5"><DollarSign size={13} className="text-nord-blue-light" /> Diferença</span>
@@ -144,7 +144,7 @@ export function HistoricoContagensClient({ counts }: { counts: CountRow[] }) {
                 <td className="py-2.5 pr-4 text-white">{c.type === "MENSAL" ? "Mensal" : "Semanal"}</td>
                 <td className="py-2.5 pr-4 text-white">{c.setor ?? (c.mes ? `${MESES[c.mes - 1]}/${c.ano}` : `Sem. ${c.semana}/${c.ano}`)}</td>
                 <td className="py-2.5 pr-4 text-white">{c.responsavel ?? "—"}</td>
-                <td className="py-2.5 pr-4 text-white">{c.totalItens}</td>
+                <td className="py-2.5 pr-4 text-white">{formatCurrency(c.valorEstoque)}</td>
                 <td className="py-2.5 pr-4">
                   <span className={c.valorDiferenca < 0 ? "text-nord-danger" : "text-nord-success"}>{formatCurrency(c.valorDiferenca)}</span>
                 </td>

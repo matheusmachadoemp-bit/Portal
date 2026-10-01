@@ -37,6 +37,11 @@ export default async function HistoricoContagensPage() {
               const diff = (it.quantidadeContada ?? it.estoqueEsperado) - it.estoqueEsperado;
               return sum + diff * custo;
             }, 0);
+            const valorEstoque = c.items.reduce((sum, it) => {
+              const custo = ingredientCostPerUnit(it.ingredient);
+              const quantidade = it.quantidadeContada ?? it.estoqueEsperado;
+              return sum + quantidade * custo;
+            }, 0);
             return {
               id: c.id,
               empresaNome: c.empresa.name,
@@ -49,7 +54,7 @@ export default async function HistoricoContagensPage() {
               dataContagem: c.dataContagem.toISOString(),
               responsavel: c.responsavel,
               status: c.status,
-              totalItens: c.items.length,
+              valorEstoque,
               valorDiferenca,
               aprovadoPor: c.aprovadoPor,
               aprovadoEm: c.aprovadoEm ? c.aprovadoEm.toISOString() : null,
