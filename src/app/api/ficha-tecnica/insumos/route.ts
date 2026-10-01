@@ -73,6 +73,16 @@ export async function POST(req: Request) {
     }
   }
 
+  if (body.categoryId) {
+    const category = await prisma.stockCategory.findUnique({
+      where: { id: body.categoryId },
+      select: { empresaId: true },
+    });
+    if (!category || category.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Categoria inválida para esta loja." }, { status: 400 });
+    }
+  }
+
   const ingredient = await prisma.ingredient.create({
     data: {
       empresaId: empresa.id,

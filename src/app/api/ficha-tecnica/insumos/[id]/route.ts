@@ -48,6 +48,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  if (body.categoryId) {
+    const category = await prisma.stockCategory.findUnique({
+      where: { id: body.categoryId },
+      select: { empresaId: true },
+    });
+    if (!category || category.empresaId !== existing.empresaId) {
+      return NextResponse.json({ error: "Categoria inválida para esta loja." }, { status: 400 });
+    }
+  }
+
   const ingredient = await prisma.ingredient.update({
     where: { id },
     data: {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -15,6 +16,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
   const { id } = await params;
+
+  const existing = await prisma.stockCategory.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+
   const body = await req.json();
 
   const category = await prisma.stockCategory.update({
@@ -46,6 +54,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     );
   }
   const { id } = await params;
+
+  const existing = await prisma.stockCategory.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
 
   const inUse = await prisma.ingredient.count({ where: { categoryId: id } });
   if (inUse > 0) {

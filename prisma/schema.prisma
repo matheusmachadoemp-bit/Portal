@@ -330,6 +330,8 @@ model Empresa {
   rouletteEligibilities              RouletteEligibility[]
   products                           Product[]
   ingredients                        Ingredient[]
+  stockCategories                    StockCategory[]
+  stockSectors                       StockSector[]
   stockMovements                     StockMovement[]
   bankAccounts                       BankAccount[]
   payables                           Payable[]
@@ -2738,9 +2740,21 @@ model CategoryQualityConfig {
 // transferências, perdas, contagens, planos de ação)
 // ---------------------------------------------------------------------------
 
+/// Categorias de produto/insumo do Estoque — POR LOJA desde a migration
+/// `20261001120000_estoque_setores_categorias_por_loja`. Antes era um cadastro global (sem
+/// `empresaId`, só `key` único), compartilhado entre todas as lojas — inofensivo enquanto Setores/
+/// Categorias eram listas fixas no código, mas virou falha de isolamento assim que a tela
+/// "Estoque > Produtos" (abas Setores/Categorias) passou a deixar qualquer usuário com permissão
+/// de Estoque EM QUALQUER LOJA renomear/excluir uma categoria usada por TODAS as outras lojas ao
+/// mesmo tempo (achado em auditoria funcional do Teulis, confirmado ao vivo: criar uma categoria
+/// na Nord Pizza & Burger aparecia imediatamente também na Zarki Sushi). A migration acima
+/// duplicou cada categoria já existente, uma cópia por loja (preservando nome/ordem/cor/ícone
+/// etc.) e repontou `Ingredient.categoryId` pra a cópia da MESMA loja do ingrediente.
 model StockCategory {
   id                    String   @id @default(cuid())
-  key                   String   @unique
+  empresaId             String
+  empresa               Empresa  @relation(fields: [empresaId], references: [id])
+  key                   String
   name                  String
   color                 String   @default("#2952E3")
   icon                  String   @default("Boxes")
@@ -2753,26 +2767,35 @@ model StockCategory {
   updatedAt             DateTime @updatedAt
 
   ingredients Ingredient[]
+
+  @@unique([empresaId, key])
 }
 
 /// Setores (locais de contagem/armazenamento) — antes um array hardcoded (`SECTORS` em
-/// `src/lib/estoque.ts`), agora uma tabela editável para que o usuário possa cadastrar/excluir
-/// setores sem depender de deploy. Cadastro global (sem `empresaId`), mesmo padrão de
-/// `StockCategory` acima — compartilhado entre todas as lojas.
+/// `src/lib/estoque.ts`), depois uma tabela editável GLOBAL (sem `empresaId`, só `name` único),
+/// agora POR LOJA desde a migration `20261001120000_estoque_setores_categorias_por_loja` — mesmo
+/// motivo e mesmo achado do Teulis documentados no comentário de `StockCategory` acima (um setor
+/// criado numa loja aparecia imediatamente em todas as outras). A migration duplicou cada setor
+/// já existente, uma cópia por loja, preservando nome/ordem.
 ///
-/// Decisão de arquitetura: `Ingredient.setor` e `StockCount.setor` continuam `String?` (texto
-/// livre), NÃO viram foreign key pra esta tabela — evita qualquer risco de migration tocando
-/// dado histórico existente (produto/contagem antigos continuam exibindo o nome do setor que já
-/// tinham, mesmo que a linha correspondente aqui seja excluída depois). Por isso não há proteção
-/// de "bloqueia se estiver em uso" no DELETE desta tabela: diferente de `Ingredient`, não existe
-/// nenhuma FK restringindo a exclusão — excluir aqui só remove a opção da lista pra novos
-/// cadastros, nunca afeta texto já salvo em produtos/contagens existentes.
+/// Decisão de arquitetura mantida da fase global: `Ingredient.setor` e `StockCount.setor`
+/// continuam `String?` (texto livre), NÃO viram foreign key pra esta tabela — evita qualquer
+/// risco de migration tocando dado histórico existente (produto/contagem antigos continuam
+/// exibindo o nome do setor que já tinham, mesmo que a linha correspondente aqui seja excluída
+/// depois). Por isso não há proteção de "bloqueia se estiver em uso" no DELETE desta tabela:
+/// diferente de `Ingredient`, não existe nenhuma FK restringindo a exclusão — excluir aqui só
+/// remove a opção da lista pra novos cadastros (dentro da mesma loja), nunca afeta texto já salvo
+/// em produtos/contagens existentes.
 model StockSector {
   id        String   @id @default(cuid())
-  name      String   @unique
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  name      String
   order     Int      @default(0)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  @@unique([empresaId, name])
 }
 
 model Supplier {

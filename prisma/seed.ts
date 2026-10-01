@@ -1686,11 +1686,15 @@ async function main() {
     });
   }
 
-  // --- Estoque: setores (locais de contagem/armazenamento, compartilhados entre lojas) ---
+  // --- Estoque: setores (locais de contagem/armazenamento), por loja ---
   // Mesmos 10 valores que viviam hardcoded em `SECTORS` (src/lib/estoque.ts) antes de virarem uma
   // tabela editável — na mesma ordem, pra nenhum produto/contagem já existente "perder" o setor
   // que já tinha (o texto salvo em `Ingredient.setor`/`StockCount.setor` continua batendo com o
-  // nome da linha aqui).
+  // nome da linha aqui). Até a migration `20261001120000_estoque_setores_categorias_por_loja`
+  // este cadastro era GLOBAL (compartilhado entre todas as lojas) — virou por loja depois de uma
+  // auditoria do Teulis mostrar que um setor criado numa loja aparecia na hora em todas as
+  // outras (ver comentário do model `StockSector` em schema.prisma). Cada loja ganha sua própria
+  // cópia idêntica (mesmos nomes/ordem).
   const STOCK_SECTORS = [
     "Sushibar",
     "Cozinha quente",
@@ -1703,15 +1707,17 @@ async function main() {
     "Bar e bebidas",
     "Delivery e embalagens",
   ];
-  for (const [idx, name] of STOCK_SECTORS.entries()) {
-    await prisma.stockSector.upsert({
-      where: { name },
-      update: { order: idx },
-      create: { name, order: idx },
-    });
+  for (const empresa of [nordPizza, zarkiSushi]) {
+    for (const [idx, name] of STOCK_SECTORS.entries()) {
+      await prisma.stockSector.upsert({
+        where: { empresaId_name: { empresaId: empresa.id, name } },
+        update: { order: idx },
+        create: { empresaId: empresa.id, name, order: idx },
+      });
+    }
   }
 
-  // --- Estoque: categorias de produto (compartilhadas entre lojas) ---
+  // --- Estoque: categorias de produto, por loja (mesmo motivo do StockSector acima) ---
   const STOCK_CATEGORIES = [
     { key: "carnes", name: "Carnes", color: "#ef4444", icon: "Beef", setor: "Câmara fria", metaPerdaPercent: 2, periodicidadeContagem: "SEMANAL" },
     { key: "pescados", name: "Pescados", color: "#0ea5e9", icon: "Fish", setor: "Sushibar", metaPerdaPercent: 3, periodicidadeContagem: "SEMANAL" },
@@ -1726,15 +1732,27 @@ async function main() {
     { key: "embalagens", name: "Embalagens", color: "#64748b", icon: "Package", setor: "Delivery e embalagens", metaPerdaPercent: 1, periodicidadeContagem: "MENSAL" },
     { key: "limpeza", name: "Produtos de Limpeza", color: "#06b6d4", icon: "SprayCan", setor: "Estoque seco", metaPerdaPercent: 1, periodicidadeContagem: "MENSAL" },
   ];
-  const stockCategoryByKey = new Map<string, Awaited<ReturnType<typeof prisma.stockCategory.upsert>>>();
-  for (const [idx, cat] of STOCK_CATEGORIES.entries()) {
-    const record = await prisma.stockCategory.upsert({
-      where: { key: cat.key },
-      update: { name: cat.name, color: cat.color, icon: cat.icon, setor: cat.setor, metaPerdaPercent: cat.metaPerdaPercent, periodicidadeContagem: cat.periodicidadeContagem, order: idx },
-      create: { ...cat, order: idx },
-    });
-    stockCategoryByKey.set(cat.key, record);
+  // Mapa aninhado (empresaId -> key -> registro) — cada loja tem sua própria cópia de cada
+  // categoria, usada logo abaixo para ligar `Ingredient.categoryId` à categoria da LOJA CERTA
+  // (nunca à cópia de outra loja).
+  const stockCategoryByEmpresaAndKey = new Map<string, Map<string, Awaited<ReturnType<typeof prisma.stockCategory.upsert>>>>();
+  for (const empresa of [nordPizza, zarkiSushi]) {
+    const byKey = new Map<string, Awaited<ReturnType<typeof prisma.stockCategory.upsert>>>();
+    for (const [idx, cat] of STOCK_CATEGORIES.entries()) {
+      const record = await prisma.stockCategory.upsert({
+        where: { empresaId_key: { empresaId: empresa.id, key: cat.key } },
+        update: { name: cat.name, color: cat.color, icon: cat.icon, setor: cat.setor, metaPerdaPercent: cat.metaPerdaPercent, periodicidadeContagem: cat.periodicidadeContagem, order: idx },
+        create: { ...cat, empresaId: empresa.id, order: idx },
+      });
+      byKey.set(cat.key, record);
+    }
+    stockCategoryByEmpresaAndKey.set(empresa.id, byKey);
   }
+  const stockCategoryByKey = (empresaId: string) => {
+    const byKey = stockCategoryByEmpresaAndKey.get(empresaId);
+    if (!byKey) throw new Error(`Nenhuma StockCategory semeada para empresaId=${empresaId}`);
+    return byKey;
+  };
 
   // --- Produção: categorias (compartilhadas entre lojas) ---
   const PRODUCTION_CATEGORIES = [
@@ -1790,7 +1808,7 @@ async function main() {
         quantidadeEmbalagem: 25,
         estoqueMinimo: 20,
         estoqueAtual: 80,
-        categoryId: stockCategoryByKey.get("massas-graos")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("massas-graos")!.id,
         setor: "Estoque seco",
         codigoInterno: "ND-001",
         codigoBarras: "7891000100103",
@@ -1815,7 +1833,7 @@ async function main() {
         quantidadeEmbalagem: 5,
         estoqueMinimo: 10,
         estoqueAtual: 18,
-        categoryId: stockCategoryByKey.get("laticinios")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("laticinios")!.id,
         setor: "Câmara fria",
         codigoInterno: "ND-002",
         codigoBarras: "7891000100202",
@@ -1841,7 +1859,7 @@ async function main() {
         quantidadeEmbalagem: 5,
         estoqueMinimo: 8,
         estoqueAtual: 15,
-        categoryId: stockCategoryByKey.get("molhos-temperos")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("molhos-temperos")!.id,
         setor: "Estoque seco",
         codigoInterno: "ND-003",
         localArmazenamento: "Prateleira A3",
@@ -1863,7 +1881,7 @@ async function main() {
         quantidadeEmbalagem: 3,
         estoqueMinimo: 6,
         estoqueAtual: 9,
-        categoryId: stockCategoryByKey.get("frios")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("frios")!.id,
         setor: "Câmara fria",
         codigoInterno: "ND-004",
         localArmazenamento: "Câmara 1 — Prateleira B3",
@@ -1885,7 +1903,7 @@ async function main() {
         quantidadeEmbalagem: 20,
         estoqueMinimo: 60,
         estoqueAtual: 32,
-        categoryId: stockCategoryByKey.get("carnes")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("carnes")!.id,
         setor: "Freezer",
         codigoInterno: "ND-005",
         localArmazenamento: "Freezer 2 — Gaveta 1",
@@ -1907,7 +1925,7 @@ async function main() {
         quantidadeEmbalagem: 12,
         estoqueMinimo: 48,
         estoqueAtual: 96,
-        categoryId: stockCategoryByKey.get("massas-graos")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("massas-graos")!.id,
         setor: "Estoque seco",
         codigoInterno: "ND-006",
         localArmazenamento: "Prateleira A2",
@@ -1929,7 +1947,7 @@ async function main() {
         quantidadeEmbalagem: 2.5,
         estoqueMinimo: 15,
         estoqueAtual: 22,
-        categoryId: stockCategoryByKey.get("congelados")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("congelados")!.id,
         setor: "Freezer",
         codigoInterno: "ND-007",
         localArmazenamento: "Freezer 1 — Gaveta 3",
@@ -1951,7 +1969,7 @@ async function main() {
         quantidadeEmbalagem: 24,
         estoqueMinimo: 96,
         estoqueAtual: 240,
-        categoryId: stockCategoryByKey.get("bebidas")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("bebidas")!.id,
         setor: "Bar e bebidas",
         codigoInterno: "ND-008",
         localArmazenamento: "Estoque de bebidas — Prateleira C1",
@@ -1973,7 +1991,7 @@ async function main() {
         quantidadeEmbalagem: 50,
         estoqueMinimo: 150,
         estoqueAtual: 400,
-        categoryId: stockCategoryByKey.get("embalagens")!.id,
+        categoryId: stockCategoryByKey(nordPizza.id).get("embalagens")!.id,
         setor: "Delivery e embalagens",
         codigoInterno: "ND-009",
         localArmazenamento: "Depósito de embalagens",
@@ -2045,7 +2063,7 @@ async function main() {
         quantidadeEmbalagem: 1,
         estoqueMinimo: 5,
         estoqueAtual: 12,
-        categoryId: stockCategoryByKey.get("pescados")!.id,
+        categoryId: stockCategoryByKey(zarkiSushi.id).get("pescados")!.id,
         setor: "Sushibar",
         codigoInterno: "ZK-001",
         codigoBarras: "7892000200101",
@@ -2070,7 +2088,7 @@ async function main() {
         quantidadeEmbalagem: 5,
         estoqueMinimo: 10,
         estoqueAtual: 25,
-        categoryId: stockCategoryByKey.get("massas-graos")!.id,
+        categoryId: stockCategoryByKey(zarkiSushi.id).get("massas-graos")!.id,
         setor: "Estoque seco",
         codigoInterno: "ZK-002",
         localArmazenamento: "Estoque seco — Prateleira 2",
@@ -2092,7 +2110,7 @@ async function main() {
         quantidadeEmbalagem: 50,
         estoqueMinimo: 30,
         estoqueAtual: 90,
-        categoryId: stockCategoryByKey.get("orientais")!.id,
+        categoryId: stockCategoryByKey(zarkiSushi.id).get("orientais")!.id,
         setor: "Sushibar",
         codigoInterno: "ZK-003",
         localArmazenamento: "Estoque seco — Prateleira 3",
@@ -2114,7 +2132,7 @@ async function main() {
         quantidadeEmbalagem: 2,
         estoqueMinimo: 6,
         estoqueAtual: 4,
-        categoryId: stockCategoryByKey.get("laticinios")!.id,
+        categoryId: stockCategoryByKey(zarkiSushi.id).get("laticinios")!.id,
         setor: "Câmara fria",
         codigoInterno: "ZK-004",
         localArmazenamento: "Câmara fria — Prateleira 2",
@@ -2136,7 +2154,7 @@ async function main() {
         quantidadeEmbalagem: 5,
         estoqueMinimo: 8,
         estoqueAtual: 18,
-        categoryId: stockCategoryByKey.get("orientais")!.id,
+        categoryId: stockCategoryByKey(zarkiSushi.id).get("orientais")!.id,
         setor: "Estoque seco",
         codigoInterno: "ZK-005",
         localArmazenamento: "Estoque seco — Prateleira 3",
@@ -2158,7 +2176,7 @@ async function main() {
         quantidadeEmbalagem: 50,
         estoqueMinimo: 100,
         estoqueAtual: 320,
-        categoryId: stockCategoryByKey.get("embalagens")!.id,
+        categoryId: stockCategoryByKey(zarkiSushi.id).get("embalagens")!.id,
         setor: "Delivery e embalagens",
         codigoInterno: "ZK-006",
         localArmazenamento: "Depósito de embalagens",

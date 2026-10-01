@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
+import { assertEmpresaAccess } from "@/lib/empresa";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -15,6 +16,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
   const { id } = await params;
+
+  const existing = await prisma.stockSector.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+
   const body = await req.json();
 
   const name = body.name !== undefined ? String(body.name).trim() : undefined;
@@ -34,7 +42,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ sector });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "name") ?? true)) {
-      return NextResponse.json({ error: "Já existe um setor com esse nome." }, { status: 400 });
+      return NextResponse.json({ error: "Já existe um setor com esse nome nesta loja." }, { status: 400 });
     }
     throw e;
   }
@@ -60,6 +68,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const existing = await prisma.stockSector.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
 
   await prisma.stockSector.delete({ where: { id } });
   return NextResponse.json({ ok: true });
