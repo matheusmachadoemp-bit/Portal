@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ContagemClient } from "./contagem-client";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getSelectableTeamMembers } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
@@ -16,8 +16,18 @@ export default async function ContagemEstoquePage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageEstoque;
+  // Editar/excluir uma contagem já criada (PATCH/DELETE /api/estoque/contagens/[id]) — a API
+  // checa acesso à empresa específica da contagem (não exige "loja única ativa" como o
+  // `canCreate` acima), então não trava por `ctx?.mode === "single"` aqui.
+  const canEdit = await hasModulePermission(session.user.id, "estoque", "canEdit");
+  const canDelete = await hasModulePermission(session.user.id, "estoque", "canDelete");
+  // Agenda de lembretes (StockCountSchedule): configuração protegida por canEdit em todos os
+  // verbos (ver comentário em GET /api/estoque/contagens/agenda) — "criar" (POST) também exige
+  // uma loja única ativa (`requireActiveSingleEmpresa`), igual `canCreate` de contagem acima.
+  const canManageAgenda = await hasModulePermission(session.user.id, "estoque", "canEdit");
+  const canCreateAgenda = ctx?.mode === "single" && canManageAgenda;
 
-  const [semanais, mensais, employees] = await Promise.all([
+  const [semanais, mensais, employees, setores, users] = await Promise.all([
     prisma.stockCount.findMany({
       where: { empresaId: { in: empresaIds }, type: "SEMANAL" },
       orderBy: { dataContagem: "desc" },
@@ -34,6 +44,13 @@ export default async function ContagemEstoquePage() {
       where: { empresaId: { in: empresaIds }, status: "ATIVO" },
       orderBy: { name: "asc" },
     }),
+    prisma.stockSector.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    // Usuários (`User`, não `Employee`) selecionáveis como responsável pelo lembrete de
+    // notificação — a agenda notifica por sessão de login (push via `PushSubscription`, ligada
+    // a `User`), diferente do responsável "de chão de fábrica" da contagem em si, que é um nome
+    // livre escolhido entre `Employee` (ver `employees` acima). Mesmo helper usado por Tarefas,
+    // Checklist, Produção, Manutenção, Marketing, Loja Nord e Recebimento de estoque.
+    getSelectableTeamMembers(empresaIds),
   ]);
 
   return (
@@ -70,7 +87,13 @@ export default async function ContagemEstoquePage() {
             createdByName: c.createdBy.name,
           }))}
           employees={employees.map((e) => ({ id: e.id, name: e.name }))}
+          setores={setores.map((s) => s.name)}
+          users={users}
           canCreate={canCreate}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          canCreateAgenda={canCreateAgenda}
+          canManageAgenda={canManageAgenda}
           userRole={session?.user?.role ?? ""}
         />
       </div>

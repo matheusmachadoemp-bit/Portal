@@ -95,6 +95,7 @@ model User {
   transfersCreated                   Transfer[]                          @relation("TransferCreatedBy")
   lossesCreated                      Loss[]                              @relation("LossCreatedBy")
   stockCountsCreated                 StockCount[]                        @relation("StockCountCreatedBy")
+  stockCountSchedulesResponsavel     StockCountSchedule[]                @relation("StockCountScheduleResponsavel")
   actionPlansCreated                 ActionPlan[]                        @relation("ActionPlanCreatedBy")
   salesCreated                       Sale[]                              @relation("SaleCreatedBy")
   vaultEntries                       VaultEntry[]
@@ -286,6 +287,7 @@ model Empresa {
   transfersDestino                   Transfer[]                          @relation("TransferDestino")
   losses                             Loss[]
   stockCounts                        StockCount[]
+  stockCountSchedules                StockCountSchedule[]
   actionPlans                        ActionPlan[]
   usersDefault                       User[]                              @relation("UserDefaultEmpresa")
   salesEntries                       SalesEntry[]
@@ -2753,6 +2755,26 @@ model StockCategory {
   ingredients Ingredient[]
 }
 
+/// Setores (locais de contagem/armazenamento) — antes um array hardcoded (`SECTORS` em
+/// `src/lib/estoque.ts`), agora uma tabela editável para que o usuário possa cadastrar/excluir
+/// setores sem depender de deploy. Cadastro global (sem `empresaId`), mesmo padrão de
+/// `StockCategory` acima — compartilhado entre todas as lojas.
+///
+/// Decisão de arquitetura: `Ingredient.setor` e `StockCount.setor` continuam `String?` (texto
+/// livre), NÃO viram foreign key pra esta tabela — evita qualquer risco de migration tocando
+/// dado histórico existente (produto/contagem antigos continuam exibindo o nome do setor que já
+/// tinham, mesmo que a linha correspondente aqui seja excluída depois). Por isso não há proteção
+/// de "bloqueia se estiver em uso" no DELETE desta tabela: diferente de `Ingredient`, não existe
+/// nenhuma FK restringindo a exclusão — excluir aqui só remove a opção da lista pra novos
+/// cadastros, nunca afeta texto já salvo em produtos/contagens existentes.
+model StockSector {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 model Supplier {
   id                 String   @id @default(cuid())
   empresaId          String
@@ -3400,6 +3422,43 @@ model StockCountItem {
   justificativa     String?
 
   @@index([countId])
+}
+
+/// Agenda de lembretes de contagem de estoque — não cria a `StockCount` automaticamente, só
+/// dispara uma notificação (sino + push) pro responsável nos dias/horário configurados,
+/// lembrando de iniciar a contagem manualmente. Mesmo padrão de recorrência (booleanos de dia da
+/// semana + "HH:mm" em vez de array) já usado por `ChecklistTemplate` e `FechamentoCargo` — ver
+/// comentário de `StockSector` acima sobre `setor` continuar texto livre, não FK. Diferente de
+/// `StockSector`, esta é por loja (tem `empresaId`): cada loja agenda seus próprios lembretes.
+model StockCountSchedule {
+  id            String    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
+  type          CountType
+  /// null = "todos os setores", mesma semântica de `StockCount.setor`.
+  setor         String?
+  /// Quem recebe a notificação — `User` (login), não `Employee`: o push é por sessão/
+  /// `PushSubscription`, que é ligada a `User` (ver `src/lib/notifications.ts`).
+  responsavelId String?
+  responsavel   User?     @relation("StockCountScheduleResponsavel", fields: [responsavelId], references: [id])
+  horario       String // "HH:mm" America/Sao_Paulo
+  segunda       Boolean   @default(true)
+  terca         Boolean   @default(true)
+  quarta        Boolean   @default(true)
+  quinta        Boolean   @default(true)
+  sexta         Boolean   @default(true)
+  sabado        Boolean   @default(true)
+  domingo       Boolean   @default(true)
+  active        Boolean   @default(true)
+  /// "YYYY-MM-DD" (fuso São Paulo) do último lembrete efetivamente enviado — garante que o cron
+  /// (que roda a cada poucos minutos, ver GET /api/estoque/contagens/lembretes/run) nunca envie
+  /// duplicado pro mesmo agendamento no mesmo dia, mesmo rodando várias vezes dentro da janela de
+  /// tolerância do horário configurado.
+  ultimoLembreteData String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([empresaId, type])
 }
 
 enum ActionPlanStatus {

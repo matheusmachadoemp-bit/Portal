@@ -110,6 +110,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: Record<string, unknown> = {
     horaFim: novoStatus === "CONCLUIDA" ? new Date().toTimeString().slice(0, 5) : undefined,
     checklistJson: body.checklistJson !== undefined ? JSON.stringify(body.checklistJson) : undefined,
+    // Edição dos metadados da contagem (setor/responsável) depois de criada — não tem relação
+    // com a atualização de itens/status acima, só mais 2 campos possíveis no mesmo update.
+    setor: body.setor !== undefined ? body.setor || null : undefined,
+    responsavel: body.responsavel !== undefined ? body.responsavel || null : undefined,
   };
 
   if (novoStatus === "CONCLUIDA" || novoStatus === "EM_ANDAMENTO") {
@@ -192,4 +196,52 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   });
 
   return NextResponse.json({ count });
+}
+
+/**
+ * Exclui uma contagem — bloqueada para status "APROVADA" e "REABERTA". Nos dois casos a
+ * contagem já teve efeito real e permanente no estoque: aprovar (ver bloco `if (novoStatus ===
+ * "APROVADA")` acima) cria `StockMovement`s de verdade e atualiza `Ingredient.estoqueAtual`.
+ * "REABERTA" só é alcançável a partir de "APROVADA" (a UI só mostra o botão de reabrir com a
+ * contagem já aprovada, e `aprovadoPor`/`aprovadoEm` não são limpos ao reabrir) — ou seja,
+ * mesmo reaberta, a contagem carrega o histórico de uma aprovação que já mexeu no estoque.
+ *
+ * `StockMovement` não tem nenhuma foreign key para `StockCount` (é só um texto solto em
+ * `motivo`, ex. "Contagem mensal aprovada") — excluir a contagem NÃO reverteria o estoque já
+ * alterado, só apagaria o registro de origem, deixando os movimentos já lançados órfãos sem
+ * explicação. Por isso a exclusão livre é restrita a contagens que nunca chegaram a mexer no
+ * estoque de verdade (RASCUNHO/EM_ANDAMENTO/CONCLUIDA — "concluída" só fecha a contagem semanal,
+ * sem nenhum lançamento em `StockMovement`).
+ */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  const existing = await prisma.stockCount.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
+  if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
+    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
+  }
+  if (!(await hasModulePermission(session.user.id, "estoque", "canDelete"))) {
+    return NextResponse.json(
+      { error: "Seu perfil de permissão não permite excluir contagens de estoque." },
+      { status: 403 }
+    );
+  }
+
+  if (existing.status === "APROVADA" || existing.status === "REABERTA") {
+    return NextResponse.json(
+      {
+        error:
+          "Esta contagem já foi aprovada e já atualizou o estoque real (criou movimentações de estoque e alterou a quantidade atual dos insumos) — não pode ser excluída. Reabra o fechamento e corrija os itens, se necessário, em vez de excluir.",
+      },
+      { status: 400 }
+    );
+  }
+
+  // onDelete: Cascade em StockCountItem.count — os itens somem junto, sem precisar de uma
+  // segunda chamada.
+  await prisma.stockCount.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
 }

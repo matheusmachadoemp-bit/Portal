@@ -1,8 +1,8 @@
 import type { Task, TaskRecurrence } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
-// Setores (organizacional — diferente do SECTORS de src/lib/estoque.ts, que é
-// por área física de armazenamento)
+// Setores (organizacional — diferente do StockSector de prisma/schema.prisma,
+// que é por área física de armazenamento/contagem de estoque)
 // ---------------------------------------------------------------------------
 
 export const TASK_SECTORS = [

@@ -13,17 +13,31 @@ const TABS = [
   { key: "mensal", label: "Mensal" },
 ] as const;
 
+type UserOption = { id: string; name: string };
+
 export function ContagemClient({
   initialSemanais,
   initialMensais,
   employees,
+  setores,
+  users,
   canCreate,
+  canEdit,
+  canDelete,
+  canCreateAgenda,
+  canManageAgenda,
   userRole,
 }: {
   initialSemanais: SemanalRow[];
   initialMensais: MensalRow[];
   employees: EmployeeOption[];
+  setores: string[];
+  users: UserOption[];
   canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canCreateAgenda: boolean;
+  canManageAgenda: boolean;
   userRole: string;
 }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("semanal");
@@ -45,9 +59,30 @@ export function ContagemClient({
       </div>
 
       {tab === "semanal" ? (
-        <ContagemSemanalClient initialCounts={initialSemanais} canCreate={canCreate} />
+        <ContagemSemanalClient
+          initialCounts={initialSemanais}
+          employees={employees}
+          setores={setores}
+          users={users}
+          canCreate={canCreate}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          canCreateAgenda={canCreateAgenda}
+          canManageAgenda={canManageAgenda}
+        />
       ) : (
-        <ContagemMensalClient initialCounts={initialMensais} employees={employees} canCreate={canCreate} userRole={userRole} />
+        <ContagemMensalClient
+          initialCounts={initialMensais}
+          employees={employees}
+          setores={setores}
+          users={users}
+          canCreate={canCreate}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          canCreateAgenda={canCreateAgenda}
+          canManageAgenda={canManageAgenda}
+          userRole={userRole}
+        />
       )}
     </div>
   );

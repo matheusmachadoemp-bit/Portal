@@ -1686,6 +1686,31 @@ async function main() {
     });
   }
 
+  // --- Estoque: setores (locais de contagem/armazenamento, compartilhados entre lojas) ---
+  // Mesmos 10 valores que viviam hardcoded em `SECTORS` (src/lib/estoque.ts) antes de virarem uma
+  // tabela editável — na mesma ordem, pra nenhum produto/contagem já existente "perder" o setor
+  // que já tinha (o texto salvo em `Ingredient.setor`/`StockCount.setor` continua batendo com o
+  // nome da linha aqui).
+  const STOCK_SECTORS = [
+    "Sushibar",
+    "Cozinha quente",
+    "Pizzaria",
+    "Chapa",
+    "Produção",
+    "Câmara fria",
+    "Freezer",
+    "Estoque seco",
+    "Bar e bebidas",
+    "Delivery e embalagens",
+  ];
+  for (const [idx, name] of STOCK_SECTORS.entries()) {
+    await prisma.stockSector.upsert({
+      where: { name },
+      update: { order: idx },
+      create: { name, order: idx },
+    });
+  }
+
   // --- Estoque: categorias de produto (compartilhadas entre lojas) ---
   const STOCK_CATEGORIES = [
     { key: "carnes", name: "Carnes", color: "#ef4444", icon: "Beef", setor: "Câmara fria", metaPerdaPercent: 2, periodicidadeContagem: "SEMANAL" },
