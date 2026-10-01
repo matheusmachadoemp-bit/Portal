@@ -1902,6 +1902,16 @@ model TimeEntry {
   horasTrabalhadas Float    @default(0)
   atrasoMinutos    Int      @default(0)
   falta            Boolean  @default(false)
+  /// Nota visível sobre o dia, sem campo estruturado equivalente no modelo hoje — usada pela
+  /// importação de PDF (Relatório Espelho Ponto / Tecnoponto, RH > Ponto Eletrônico) pra nunca
+  /// descartar informação em silêncio (ver CLAUDE.md, "Importação de arquivos: não deixar valores
+  /// novos caírem em 'Outros'"): guarda a "Ocorrência" do dia quando o PDF trouxer uma (ex.:
+  /// "Feriado: Independência do Brasil", "Folga") e/ou marcações de ponto que não deram pra
+  /// classificar com confiança em entrada/saída/saída almoço/retorno almoço (ex.: batida de
+  /// madrugada isolada, provável sobra do fechamento do turno anterior, ou batida duplicada) — ver
+  /// `src/lib/ponto-pdf-import.ts`. `null` pra registros lançados manualmente ou importados de
+  /// planilha (sem equivalente nesses fluxos).
+  observacao       String?
   createdAt        DateTime @default(now())
 
   @@unique([employeeId, date])

@@ -59,6 +59,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       horasTrabalhadas: computeHorasTrabalhadas({ entrada, saidaAlmoco, retornoAlmoco, saida }),
       atrasoMinutos: body.atrasoMinutos !== undefined ? Number(body.atrasoMinutos) : undefined,
       falta: body.falta !== undefined ? !!body.falta : undefined,
+      // `undefined` (não altera) quando o form de edição não manda o campo — não existe campo de
+      // observação no formulário manual hoje, então isso preserva a nota deixada pela importação do
+      // PDF (ver ponto-pdf-import.ts) ao editar só os horários de um registro importado.
+      observacao: body.observacao !== undefined ? body.observacao || null : undefined,
     },
   });
 
