@@ -85,8 +85,19 @@ type ValidEntry = {
   horasTrabalhadas: number;
   atrasoMinutos: number;
   falta: boolean;
-  /** Nota visível sobre o dia (Ocorrência do PDF e/ou marcação não classificada) — sempre `null` pra importação de planilha, que não tem equivalente. Ver TimeEntry.observacao no schema. */
-  observacao: string | null;
+  /**
+   * Nota visível sobre o dia (Ocorrência do PDF e/ou marcação não classificada). `undefined`
+   * (diferente de `null`) significa "não alterar a observação já gravada" — usado pela importação
+   * de planilha, que não tem coluna equivalente a este campo. Achado do Teulis na revisão da task
+   * de importação de PDF: antes, a planilha mandava `null` incondicionalmente, e o
+   * `UPDATE ... FROM UNNEST` de `upsertTimeEntries` sobrescrevia `observacao` pra TODA linha
+   * reimportada — apagando silenciosamente uma observação deixada por uma importação de PDF
+   * anterior do mesmo colaborador+data. A importação de PDF continua sempre preenchendo este campo
+   * (com a Ocorrência do dia, ou `null` se não houver nenhuma) — `upsertTimeEntries` agora respeita
+   * essa distinção `undefined`/valor explícito mesmo no UPDATE em lote, mesma semântica "undefined
+   * preserva" já usada nas rotas de edição manual (route.ts:177, [id]/route.ts:65).
+   */
+  observacao: string | null | undefined;
 };
 
 /**
@@ -132,7 +143,15 @@ async function upsertTimeEntries(empresaId: string, validEntries: ValidEntry[]):
     const horasTrabalhadas = toUpdate.map((e) => e.horasTrabalhadas);
     const atrasosMinutos = toUpdate.map((e) => e.atrasoMinutos);
     const faltas = toUpdate.map((e) => e.falta);
-    const observacoes = toUpdate.map((e) => e.observacao);
+    // `observacao === undefined` (importação de planilha, ver comentário de `ValidEntry.observacao`
+    // acima) significa "não alterar a observação atual". Como este UPDATE é 1 statement só pra N
+    // linhas (ver comentário acima sobre UNNEST), não dá pra simplesmente omitir a coluna linha a
+    // linha como um `prisma.update` faria com um campo `undefined` — por isso um 2º array paralelo
+    // `touchObservacao` diz, linha a linha, se o valor de `observacao` (convertido pra `null` só pra
+    // caber no array ::text[], nunca gravado de fato quando `touch` é falso) deve ser aplicado ou
+    // ignorado (CASE WHEN na query abaixo), preservando o que já estava gravado nessa linha.
+    const observacoes = toUpdate.map((e) => (e.observacao === undefined ? null : e.observacao));
+    const touchObservacao = toUpdate.map((e) => e.observacao !== undefined);
 
     await prisma.$executeRaw`
       UPDATE "TimeEntry" AS t
@@ -144,13 +163,13 @@ async function upsertTimeEntries(empresaId: string, validEntries: ValidEntry[]):
         "horasTrabalhadas" = v.horas_trabalhadas,
         "atrasoMinutos" = v.atraso_minutos,
         "falta" = v.falta,
-        "observacao" = v.observacao
+        "observacao" = CASE WHEN v.touch_observacao THEN v.observacao ELSE t."observacao" END
       FROM UNNEST(
         ${employeeIds}::text[], ${dates}::timestamp[], ${entradas}::text[],
         ${saidasAlmoco}::text[], ${retornosAlmoco}::text[], ${saidas}::text[],
         ${horasTrabalhadas}::float8[], ${atrasosMinutos}::int[], ${faltas}::boolean[],
-        ${observacoes}::text[]
-      ) AS v(employee_id, date, entrada, saida_almoco, retorno_almoco, saida, horas_trabalhadas, atraso_minutos, falta, observacao)
+        ${observacoes}::text[], ${touchObservacao}::boolean[]
+      ) AS v(employee_id, date, entrada, saida_almoco, retorno_almoco, saida, horas_trabalhadas, atraso_minutos, falta, observacao, touch_observacao)
       WHERE t."employeeId" = v.employee_id AND t."date" = v.date
     `;
   }
@@ -289,7 +308,11 @@ export async function POST(req: Request) {
       horasTrabalhadas,
       atrasoMinutos,
       falta: !entrada,
-      observacao: null,
+      // `undefined`, não `null`: a planilha não tem coluna de observação, então reimportar um
+      // período já importado (ex. por PDF, que preenche este campo com a Ocorrência do dia) não
+      // deve apagar a observação existente — ver comentário de `ValidEntry.observacao` acima e
+      // `upsertTimeEntries` (achado do Teulis na revisão da importação de PDF).
+      observacao: undefined,
     });
   }
 
@@ -347,6 +370,17 @@ async function importFromTecnopontoPdf(buffer: Buffer, empresaId: string, fixedE
   let casadosPorNome = 0;
   const semMatch: typeof parsed.colaboradores = [];
   let foraDoEscopo = 0;
+  // Achado do Teulis na revisão da task de importação de PDF (teste adversarial): sem este Set, um
+  // 2º colaborador do PDF podia casar (por CPF OU por nome) com o mesmo `employee.id` já usado por
+  // um colaborador ANTERIOR do mesmo arquivo — plausível com homônimos ou CPF não cadastrado (ex.:
+  // o CPF do colaborador A bate com o Employee de A, mas o NOME do colaborador B, sem CPF
+  // cadastrado, também bate com esse mesmo Employee de A) — e os dois conjuntos de dias ficavam
+  // misturados nas mesmas linhas de `TimeEntry` desse Employee, sem erro nenhum (HTTP 200). Cada
+  // `employee.id` só pode ser consumido por 1 colaborador do PDF por importação; o 2º que colidir
+  // é tratado como "sem correspondência utilizável" (mesmo efeito prático: nenhum dia importado
+  // para ele) e reportado separadamente no resumo, nunca em silêncio.
+  const employeeIdsUsados = new Set<string>();
+  const colisoes: string[] = [];
 
   for (const colaborador of parsed.colaboradores) {
     let employee = colaborador.cpfDigits ? byCpf.get(colaborador.cpfDigits) : undefined;
@@ -358,6 +392,13 @@ async function importFromTecnopontoPdf(buffer: Buffer, empresaId: string, fixedE
       semMatch.push(colaborador);
       continue;
     }
+    if (employeeIdsUsados.has(employee.id)) {
+      colisoes.push(
+        `Colaborador "${colaborador.nome}"${colaborador.cpfDigits ? ` (CPF ${colaborador.cpfDigits})` : ""} do PDF casaria com "${employee.name}", mas esse colaborador já havia casado com outra pessoa deste mesmo PDF antes — nenhum dia importado para ele, pra não misturar os dois nos mesmos registros.`
+      );
+      continue;
+    }
+    employeeIdsUsados.add(employee.id);
     if (matchedBy === "cpf") casadosPorCpf++;
     else casadosPorNome++;
 
@@ -420,12 +461,21 @@ async function importFromTecnopontoPdf(buffer: Buffer, empresaId: string, fixedE
   // `fixedEmployeeId`, um PDF com muitos colaboradores sem match empurraria o aviso de escopo pra
   // bem depois da 5ª posição).
   errors.push(
-    `Resumo do PDF: ${parsed.colaboradores.length} colaborador(es) encontrado(s), ${casadosPorCpf} casado(s) por CPF, ${casadosPorNome} por nome, ${semMatch.length} sem correspondência.`
+    `Resumo do PDF: ${parsed.colaboradores.length} colaborador(es) encontrado(s), ${casadosPorCpf} casado(s) por CPF, ${casadosPorNome} por nome, ${semMatch.length} sem correspondência${colisoes.length > 0 ? `, ${colisoes.length} ignorado(s) por colidir com outro colaborador já casado neste mesmo PDF` : ""}.`
   );
   if (fixedEmployeeId && foraDoEscopo > 0) {
     errors.push(
       `O PDF contém ${foraDoEscopo} outro(s) colaborador(es); esta tela importa só os dias de ${fixedEmployee?.name ?? "um colaborador"}, os demais foram ignorados.`
     );
+  }
+  if (colisoes.length > 0) {
+    // Mesma lógica de ordem do comentário acima (resumo agregado sempre antes da lista
+    // linha-a-linha de quem não casou): uma colisão é um alerta de integridade de dados (dois
+    // colaboradores quase foram misturados num só), mais importante que a lista potencialmente
+    // longa de "sem correspondência" — não pode ficar escondida depois da 5ª posição que a tela
+    // efetivamente mostra.
+    errors.push(...colisoes.slice(0, 20));
+    if (colisoes.length > 20) errors.push(`... e mais ${colisoes.length - 20} colisão(ões) de colaborador ignorada(s).`);
   }
   if (semMatch.length > 0) {
     errors.push(
