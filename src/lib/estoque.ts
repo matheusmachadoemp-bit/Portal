@@ -98,7 +98,7 @@ export const RECEIVING_STATUS_TONE: Record<string, "default" | "success" | "warn
   APROVADO_RESSALVA: "warning",
   RECEBIDO_PARCIAL: "warning",
   RECUSADO: "danger",
-  AGUARDANDO_SOLUCAO: "info",
+  AGUARDANDO_SOLUCAO: "warning",
 };
 
 export const RECEIVING_DIVERGENCE_LABEL: Record<string, string> = {
