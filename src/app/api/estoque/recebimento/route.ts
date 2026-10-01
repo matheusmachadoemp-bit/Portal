@@ -44,13 +44,36 @@ export async function GET(req: Request) {
   const to = searchParams.get("to") ?? undefined;
   const { since, until } = resolveRecebimentoDashboardRange(key, from, to);
 
+  // `items` das duas listas abaixo (`pendentes`/`recebimentos`) usa `select` explícito, não
+  // `include`, de propósito: `PurchaseItem` tem `valorUnitario`/`valorTotal` (o que foi pago por
+  // aquele item) e um `include` solto devolveria essas 2 colunas pra qualquer usuário com
+  // `estoque:canView` — inclusive um COLABORADOR com o Perfil de Permissão padrão "Funcionário",
+  // já que esta rota (diferente de GET /api/estoque/compras) de propósito NÃO tem gate de cargo:
+  // "Recebimento de Mercadorias" é a tela de conferência/entrada de mercadoria aberta a qualquer
+  // colaborador operacional (ver RECEBIMENTO_MANAGE_ROLES em src/lib/estoque.ts e o comentário em
+  // GET /api/estoque/compras sobre por que aquela outra tela SIM é restrita a cargos de gestão).
+  // Nem `pendentes` (consumida por src/app/portal/estoque/recebimento/recebimento-client.tsx e,
+  // só para contar status, por src/app/portal/estoque/compras/compras-client.tsx) nem
+  // `recebimentos` usam `valorUnitario`/`valorTotal` do item hoje — confirmado lendo os dois
+  // clients antes desta mudança — então removê-los do `select` não quebra nenhum consumidor
+  // atual; o restante dos campos de `PurchaseItem` continua selecionado igual a antes (só o
+  // `include` virou `select` explícito para não herdar colunas novas por engano no futuro).
+  const purchaseItemSelect = {
+    id: true,
+    ingredientId: true,
+    quantidade: true,
+    unidade: true,
+    quantidadeRecebida: true,
+    ingredient: { select: { id: true, name: true, unidade: true } },
+  } as const;
+
   const [pendentes, recebimentos, dashboard] = await Promise.all([
     prisma.purchase.findMany({
       where: { empresaId: { in: empresaIds }, status: { in: ["PEDIDO_REALIZADO", "AGUARDANDO_ENTREGA", "EM_CONFERENCIA", "RECEBIDO_PARCIAL"] } },
       orderBy: { data: "desc" },
       include: {
         supplier: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
-        items: { include: { ingredient: { select: { id: true, name: true, unidade: true } } } },
+        items: { select: purchaseItemSelect },
         responsavelRecebimento: { select: { name: true } },
       },
     }),
@@ -62,7 +85,7 @@ export async function GET(req: Request) {
         purchase: {
           include: {
             supplier: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
-            items: { include: { ingredient: { select: { id: true, name: true, unidade: true } } } },
+            items: { select: purchaseItemSelect },
           },
         },
       },

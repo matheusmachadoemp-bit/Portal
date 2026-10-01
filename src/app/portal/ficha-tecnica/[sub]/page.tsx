@@ -15,10 +15,14 @@ const SUB_MAP = FICHA_TECNICA_SUB_MAP;
 
 // Checagem de cargo (MANAGER_ROLES) — ver comentário completo em
 // src/app/api/ficha-tecnica/produtos/route.ts (achado ALTO do Jonas, auditoria de 2026-10-01).
-// Aplicada só às abas de categoria de produto (qualquer `sub` de FICHA_TECNICA_SUB_MAP — ex.
-// "pizzas-salgadas", "combos") — NUNCA à aba "insumos", que é tratada à parte logo abaixo e fica
-// fora do escopo deste achado (expõe o mesmo tipo de dado de um jeito ainda mais direto, mas não
-// foi um dos 4 pontos reportados; ver observação no relatório final).
+// Aplicada a TODAS as abas desta página, incluindo "insumos" (tratada à parte logo abaixo, mas
+// sujeita ao mesmo gate antes de chegar lá). Até esta tarefa, "insumos" ficava DELIBERADAMENTE
+// fora deste bloqueio: o achado original só cobria as abas de categoria de produto, por escopo.
+// O Teulis, revisando aquele PR, confirmou que "insumos" expõe o mesmo custo/fornecedor de um
+// jeito ainda mais direto (coluna própria `precoAtual`/`fornecedorNome` em cada linha da tabela,
+// não um cálculo derivado) e recomendou fechar isso como tarefa separada — esta é essa tarefa.
+// O GET que alimenta o refresh client-side desta aba (`src/app/api/ficha-tecnica/insumos/route.ts`)
+// recebeu o mesmo gate, pelo mesmo motivo.
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
 export default async function FichaTecnicaSubPage({ params }: { params: Promise<{ sub: string }> }) {
@@ -28,7 +32,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   }
 
   const { sub } = await params;
-  if (sub !== "insumos" && !MANAGER_ROLES.includes(session.user.role)) {
+  if (!MANAGER_ROLES.includes(session.user.role)) {
     redirect("/portal/inicio");
   }
 
