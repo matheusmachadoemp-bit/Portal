@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, ChevronDown, ChevronRight, AlertCircle } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { format } from "date-fns";
@@ -506,6 +506,15 @@ export function UsuariosClient({
                         <option value="TOTAL">Total</option>
                       </select>
                     </div>
+                    {(m.key === "rh" || m.key === "financeiro") && form.role === "COLABORADOR" && (
+                      <p className="mt-1.5 flex items-start gap-1 text-[10px] text-nord-warning">
+                        <AlertCircle size={11} className="shrink-0 mt-[1px]" />
+                        <span>
+                          Também exige Nível de acesso Supervisor ou maior em parte das telas deste módulo — com
+                          Colaborador, este ajuste sozinho não libera o acesso.
+                        </span>
+                      </p>
+                    )}
                     {expanded && subs.length > 0 && (
                       <div className="mt-2 pl-4 space-y-1.5 border-l border-nord-border">
                         {subs.map((sub) => {
