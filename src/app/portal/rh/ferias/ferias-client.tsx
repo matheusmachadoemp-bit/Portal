@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { formatNumber } from "@/lib/calc";
 import {
   format,
@@ -85,6 +86,8 @@ export function FeriasClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     return fixedEmployeeId ? vacations.filter((v) => v.employeeId === fixedEmployeeId) : vacations;
@@ -129,11 +132,13 @@ export function FeriasClient({
   function openNew() {
     setEditing(null);
     setForm(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(v: VacationDTO) {
     setEditing(v);
+    setFormError(null);
     setForm({
       employeeId: v.employeeId,
       periodoAquisitivoInicio: format(new Date(v.periodoAquisitivoInicio), "yyyy-MM-dd"),
@@ -151,19 +156,14 @@ export function FeriasClient({
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
-      if (editing) {
-        await fetch(`/api/rh/vacations/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/rh/vacations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const result = editing
+        ? await apiRequest(`/api/rh/vacations/${editing.id}`, "PATCH", form)
+        : await apiRequest("/api/rh/vacations", "POST", form);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
       }
       setShowForm(false);
       await refresh();
@@ -174,7 +174,12 @@ export function FeriasClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/rh/vacations/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/rh/vacations/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -211,6 +216,7 @@ export function FeriasClient({
         </p>
       )}
 
+      <FormError message={rowError} />
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -307,6 +313,7 @@ export function FeriasClient({
       </Section>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar período de férias" : "Solicitar férias"}>
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           {!fixedEmployeeId && (
             <div className="col-span-2">

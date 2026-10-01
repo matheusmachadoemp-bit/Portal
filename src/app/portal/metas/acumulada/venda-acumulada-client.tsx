@@ -5,7 +5,8 @@ import Image from "next/image";
 import { Plus, Trash2, Trophy, Award } from "lucide-react";
 import { Section, ProgressBar, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { BONUS_TIERS, achievedTiers, nextTier, progressToNextTier, missingForNextTier } from "@/lib/venda-acumulada";
@@ -40,6 +41,8 @@ export function VendaAcumuladaClient({
   const [showForm, setShowForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
   const [form, setForm] = useState({
     employeeId: "",
     amount: "",
@@ -72,12 +75,13 @@ export function VendaAcumuladaClient({
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
-      await fetch("/api/venda-acumulada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      const result = await apiRequest("/api/venda-acumulada", "POST", form);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
+      }
       setShowForm(false);
       setForm({ employeeId: "", amount: "", date: format(new Date(), "yyyy-MM-dd"), note: "" });
       refresh();
@@ -88,7 +92,12 @@ export function VendaAcumuladaClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/venda-acumulada/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/venda-acumulada/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -116,7 +125,10 @@ export function VendaAcumuladaClient({
       {canCreate && (
         <div className="flex justify-end">
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setFormError(null);
+              setShowForm(true);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
             <Plus size={13} /> Lançar venda
@@ -198,6 +210,7 @@ export function VendaAcumuladaClient({
         </div>
       </Section>
 
+      <FormError message={rowError} />
       {entries.length > 0 && (
         <Section title="Lançamentos recentes">
           <div className="space-y-1.5">
@@ -218,6 +231,7 @@ export function VendaAcumuladaClient({
       )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Lançar venda" widthClass="max-w-sm">
+        <FormError message={formError} />
         <div className="space-y-3">
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Garçom</span>

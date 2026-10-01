@@ -6,8 +6,9 @@ import { ptBR } from "date-fns/locale";
 import { Plus, LayoutGrid, List as ListIcon, History } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal } from "@/components/ui/modal";
+import { Modal, FormError } from "@/components/ui/modal";
 import { MonthCalendar } from "@/components/ui/month-calendar";
+import { apiRequest } from "@/lib/api-client";
 import { formatNumber } from "@/lib/calc";
 import { describePreventivaOcorrenciaLabel } from "@/lib/manutencao";
 import { PreventivaFormModal } from "../preventiva-form-modal";
@@ -96,6 +97,7 @@ export function CalendarioClient({
   const [reagendarData, setReagendarData] = useState("");
   const [reagendarMotivo, setReagendarMotivo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -200,14 +202,15 @@ export function CalendarioClient({
   }
 
   async function updateStatus(id: string, status: string) {
-    setDetailOcorrencia(null);
     setSaving(true);
+    setActionError(null);
     try {
-      await fetch(`/api/manutencao/preventivas/ocorrencias/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
+      const result = await apiRequest(`/api/manutencao/preventivas/ocorrencias/${id}`, "PATCH", { status });
+      if (!result.ok) {
+        setActionError(result.error);
+        return;
+      }
+      setDetailOcorrencia(null);
       await refresh();
     } finally {
       setSaving(false);
@@ -222,12 +225,17 @@ export function CalendarioClient({
   async function confirmReagendar(id: string) {
     if (!reagendarData || !reagendarMotivo.trim()) return;
     setSaving(true);
+    setActionError(null);
     try {
-      await fetch(`/api/manutencao/preventivas/ocorrencias/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "REAGENDADA", novaData: reagendarData, motivoReagendamento: reagendarMotivo }),
+      const result = await apiRequest(`/api/manutencao/preventivas/ocorrencias/${id}`, "PATCH", {
+        status: "REAGENDADA",
+        novaData: reagendarData,
+        motivoReagendamento: reagendarMotivo,
       });
+      if (!result.ok) {
+        setActionError(result.error);
+        return;
+      }
       setReagendarFor(null);
       setReagendarData("");
       setReagendarMotivo("");
@@ -354,6 +362,7 @@ export function CalendarioClient({
           </div>
         }
       >
+        <FormError message={actionError} />
         {view === "lista" ? (
           <div className="space-y-5">
             {grouped.map(({ key, items }) => {
@@ -424,6 +433,7 @@ export function CalendarioClient({
       </Section>
 
       <Modal open={!!detailOcorrencia} onClose={() => setDetailOcorrencia(null)} title="Detalhes da manutenção">
+        <FormError message={actionError} />
         {detailOcorrencia && renderOcorrenciaRow(detailOcorrencia)}
       </Modal>
 
