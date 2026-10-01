@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, AlertTriangle, Tag, Settings2 } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, Tag, Settings2, Power, RotateCcw, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { formatCurrency, formatNumber } from "@/lib/calc";
+import { formatCurrency } from "@/lib/calc";
 
 type CategoryDTO = { id: string; name: string; color: string; icon: string };
 
@@ -29,6 +29,7 @@ type IngredientDTO = {
   categoryId: string | null;
   category: CategoryDTO | null;
   priceHistory: { id: string; price: number; createdAt: string }[];
+  active: boolean;
 };
 
 const emptyForm = {
@@ -67,9 +68,25 @@ export function InsumosClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [priceAlert, setPriceAlert] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Quando a exclusão é bloqueada por "insumo em uso" (erro 400 de
+  // `excluirIngredientSeNaoEmUso`), guarda o id pra oferecer um atalho de
+  // desativação direto no banner de erro, em vez de só apontar pra outra tela.
+  const [deleteBlockedId, setDeleteBlockedId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  // Insumos inativos ficam escondidos por padrão (mesmo padrão de Estoque >
+  // Produtos) — este toggle reexibe eles.
+  const [showInactive, setShowInactive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Ids com uma chamada PATCH (ativar/desativar) em andamento — desabilita o
+  // botão daquela linha pra evitar duplo clique.
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeactivating, setBulkDeactivating] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    sucesso: number;
+    falhas: { id: string; nome: string; motivo: string }[];
+  } | null>(null);
 
   async function refresh() {
     const res = await fetch("/api/ficha-tecnica/insumos");
@@ -151,20 +168,140 @@ export function InsumosClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    const res = await fetch(`/api/ficha-tecnica/insumos/${confirmDeleteId}`, { method: "DELETE" });
+    const id = confirmDeleteId;
+    const res = await fetch(`/api/ficha-tecnica/insumos/${id}`, { method: "DELETE" });
     setConfirmDeleteId(null);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setDeleteError(data.error ?? "Não foi possível excluir o insumo.");
+      // Erro 400 aqui é sempre "insumo em uso" — oferece o atalho de desativar.
+      setDeleteBlockedId(res.status === 400 ? id : null);
       return;
     }
     setDeleteError(null);
+    setDeleteBlockedId(null);
+    setSelected((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     refresh();
   }
 
+  /** Ativa/desativa um único insumo via `PATCH /api/ficha-tecnica/insumos/{id}` (campo `active`
+   *  já existia e já era aceito pela API — só faltava a tela chamar). Reaproveitada tanto pelo
+   *  botão de cada linha quanto pelo atalho "Desativar este insumo agora" do banner de exclusão
+   *  bloqueada. */
+  async function updateActive(id: string, active: boolean) {
+    setTogglingIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/ficha-tecnica/insumos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? `Não foi possível ${active ? "reativar" : "desativar"} o insumo.`);
+        setDeleteBlockedId(null);
+        return;
+      }
+      if (deleteBlockedId === id) {
+        setDeleteError(null);
+        setDeleteBlockedId(null);
+      }
+      setSelected((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      await refresh();
+    } finally {
+      setTogglingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
+
+  function toggleRow(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Alterna a seleção de um conjunto de ids de uma vez (checkbox "selecionar todos" de um grupo
+   *  de categoria ou de todos os insumos visíveis): se todos já estão selecionados, desmarca
+   *  todos; senão, marca todos. */
+  function toggleIds(ids: string[]) {
+    if (ids.length === 0) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.every((id) => next.has(id));
+      for (const id of ids) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }
+
+  /** Desativa todos os insumos selecionados — não existe rota de "desativar em lote", então faz
+   *  um PATCH individual por id (em paralelo) e agrega o resultado, igual ao padrão de resultado
+   *  por item já usado na exclusão em lote de Estoque > Produtos. */
+  async function doBulkDeactivate() {
+    if (selected.size === 0 || bulkDeactivating) return;
+    setBulkDeactivating(true);
+    const ids = Array.from(selected);
+    try {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const nome = ingredients.find((i) => i.id === id)?.name ?? id;
+          try {
+            const res = await fetch(`/api/ficha-tecnica/insumos/${id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ active: false }),
+            });
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              return { id, nome, ok: false as const, motivo: data.error ?? "Não foi possível desativar." };
+            }
+            return { id, nome, ok: true as const };
+          } catch {
+            return { id, nome, ok: false as const, motivo: "Falha de conexão." };
+          }
+        })
+      );
+      const falhas = results.filter((r): r is { id: string; nome: string; ok: false; motivo: string } => !r.ok);
+      setBulkResult({
+        sucesso: results.length - falhas.length,
+        falhas: falhas.map(({ id, nome, motivo }) => ({ id, nome, motivo })),
+      });
+      setSelected(new Set());
+      await refresh();
+    } finally {
+      setBulkDeactivating(false);
+    }
+  }
+
+  // Insumos inativos ficam de fora por padrão (ver `showInactive`) — tanto do agrupamento por
+  // categoria quanto das contagens dos filtros, pra lista e contadores baterem.
+  const scopedIngredients = useMemo(
+    () => (showInactive ? ingredients : ingredients.filter((i) => i.active)),
+    [ingredients, showInactive]
+  );
+  const inactiveCount = useMemo(() => ingredients.filter((i) => !i.active).length, [ingredients]);
+
   const groups = useMemo(() => {
     const byCategory = new Map<string, { category: CategoryDTO | null; items: IngredientDTO[] }>();
-    for (const i of ingredients) {
+    for (const i of scopedIngredients) {
       const key = i.category?.id ?? SEM_CATEGORIA;
       if (!byCategory.has(key)) byCategory.set(key, { category: i.category, items: [] });
       byCategory.get(key)!.items.push(i);
@@ -175,19 +312,30 @@ export function InsumosClient({
     const semCategoria = byCategory.get(SEM_CATEGORIA);
     if (semCategoria) ordered.push({ category: null, items: semCategoria.items });
     return ordered;
-  }, [ingredients, categories]);
+  }, [scopedIngredients, categories]);
 
   const visibleGroups = categoryFilter
     ? groups.filter((g) => (g.category?.id ?? SEM_CATEGORIA) === categoryFilter)
     : groups;
 
-  // Só mostra categorias que já têm algum insumo cadastrado — a Ficha
+  // Todos os ids atualmente visíveis (já considerando filtro de categoria e de inativos) — usado
+  // pelo checkbox "Selecionar todos os visíveis" da barra de seleção em massa.
+  const allVisibleIds = useMemo(() => visibleGroups.flatMap((g) => g.items.map((i) => i.id)), [visibleGroups]);
+
+  // Só mostra categorias que já têm algum insumo visível cadastrado — a Ficha
   // Técnica não usa todas as categorias globais do Estoque (ex.: "Insumos
   // Orientais", "Carnes"), então elas só poluiriam o filtro sem uso.
   const usedCategories = useMemo(
-    () => categories.filter((c) => ingredients.some((i) => i.categoryId === c.id)),
-    [categories, ingredients]
+    () => categories.filter((c) => scopedIngredients.some((i) => i.categoryId === c.id)),
+    [categories, scopedIngredients]
   );
+
+  // Nome da categoria filtrada no momento (só relevante quando `visibleGroups` fica vazio com a
+  // loja tendo insumo ativo em OUTRA categoria — ver estado vazio abaixo). `categoryFilter` só
+  // chega aqui como id de categoria ou `SEM_CATEGORIA`, nunca "" (filtro "Todas" nunca zera
+  // `visibleGroups` sozinho, já que nesse caso ele é igual a `groups`).
+  const filteredCategoryLabel =
+    categoryFilter === SEM_CATEGORIA ? "Sem categoria" : categories.find((c) => c.id === categoryFilter)?.name ?? null;
 
   return (
     <Section
@@ -219,7 +367,18 @@ export function InsumosClient({
       {deleteError && (
         <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
           <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
-          <p className="text-xs text-nord-danger">{deleteError}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-nord-danger">{deleteError}</p>
+            {deleteBlockedId && (
+              <button
+                onClick={() => updateActive(deleteBlockedId, false)}
+                disabled={togglingIds.has(deleteBlockedId)}
+                className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-nord-warning/15 text-nord-warning hover:bg-nord-warning/25 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <Power size={12} /> {togglingIds.has(deleteBlockedId) ? "Desativando..." : "Desativar este insumo agora"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -230,10 +389,10 @@ export function InsumosClient({
             categoryFilter === "" ? "bg-nord-blue border-nord-blue" : "border-nord-border hover:border-white/30"
           }`}
         >
-          Todas ({ingredients.length})
+          Todas ({scopedIngredients.length})
         </button>
         {usedCategories.map((c) => {
-          const count = ingredients.filter((i) => i.categoryId === c.id).length;
+          const count = scopedIngredients.filter((i) => i.categoryId === c.id).length;
           return (
             <button
               key={c.id}
@@ -247,16 +406,26 @@ export function InsumosClient({
             </button>
           );
         })}
-        {ingredients.some((i) => !i.categoryId) && (
+        {scopedIngredients.some((i) => !i.categoryId) && (
           <button
             onClick={() => setCategoryFilter(SEM_CATEGORIA)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border text-white ${
               categoryFilter === SEM_CATEGORIA ? "bg-nord-blue border-nord-blue" : "border-nord-border hover:border-white/30"
             }`}
           >
-            <Tag size={13} className="text-nord-blue-light" /> Sem categoria ({ingredients.filter((i) => !i.categoryId).length})
+            <Tag size={13} className="text-nord-blue-light" /> Sem categoria ({scopedIngredients.filter((i) => !i.categoryId).length})
           </button>
         )}
+        <button
+          onClick={() => setShowInactive((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
+            showInactive ? "bg-nord-blue border-nord-blue text-white" : "border-nord-border text-nord-gray hover:text-white hover:border-white/30"
+          }`}
+        >
+          {showInactive ? <Eye size={13} /> : <EyeOff size={13} />}
+          {showInactive ? "Ocultar inativos" : "Mostrar inativos"}
+          {inactiveCount > 0 ? ` (${inactiveCount})` : ""}
+        </button>
         <Link
           href="/portal/estoque/produtos?tab=categorias"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-dashed border-nord-border text-nord-gray hover:text-white hover:border-white/30 ml-auto"
@@ -265,11 +434,83 @@ export function InsumosClient({
         </Link>
       </div>
 
+      {canCreate && allVisibleIds.length > 0 && (
+        <div className="mb-4 flex items-center justify-between gap-2 flex-wrap px-3 py-2 rounded-lg bg-white/5">
+          <label className="flex items-center gap-2 text-xs text-nord-gray cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="accent-nord-blue"
+              checked={allVisibleIds.length > 0 && allVisibleIds.every((id) => selected.has(id))}
+              onChange={() => toggleIds(allVisibleIds)}
+            />
+            Selecionar todos os visíveis ({allVisibleIds.length})
+          </label>
+          {selected.size > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white font-medium">{selected.size} selecionado(s)</span>
+              <button onClick={() => setSelected(new Set())} className="text-xs text-nord-gray hover:text-white underline">
+                Limpar seleção
+              </button>
+              <button
+                onClick={doBulkDeactivate}
+                disabled={bulkDeactivating}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-warning/15 text-nord-warning hover:bg-nord-warning/25 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <Power size={13} /> {bulkDeactivating ? "Desativando..." : "Desativar selecionados"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {ingredients.length === 0 ? (
         <div className="nord-card p-8 text-center">
           <Tag size={28} className="text-nord-gray mx-auto mb-3" />
           <p className="text-white text-sm font-medium mb-1">Nenhum insumo cadastrado</p>
           <p className="text-xs text-nord-gray">Cadastre o primeiro insumo para começar a montar as fichas técnicas.</p>
+        </div>
+      ) : scopedIngredients.length === 0 ? (
+        <div className="nord-card p-8 text-center">
+          <EyeOff size={28} className="text-nord-gray mx-auto mb-3" />
+          <p className="text-white text-sm font-medium mb-1">Nenhum insumo ativo</p>
+          <p className="text-xs text-nord-gray mb-3">
+            Todos os {ingredients.length} insumo(s) cadastrados estão inativos no momento.
+          </p>
+          <button
+            onClick={() => setShowInactive(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-blue hover:bg-nord-blue-light text-white"
+          >
+            <Eye size={13} /> Mostrar inativos
+          </button>
+        </div>
+      ) : visibleGroups.length === 0 ? (
+        // Existe insumo ativo na loja, só não nesta categoria filtrada (ex.: desativou todos os
+        // insumos de "Carnes" em massa, mas ainda há insumos ativos em outras categorias) — sem
+        // este estado, a lista ficava em branco sem explicação nenhuma.
+        <div className="nord-card p-8 text-center">
+          <Tag size={28} className="text-nord-gray mx-auto mb-3" />
+          <p className="text-white text-sm font-medium mb-1">
+            Nenhum insumo ativo {filteredCategoryLabel ? `em "${filteredCategoryLabel}"` : "nesta categoria"}
+          </p>
+          <p className="text-xs text-nord-gray mb-3">
+            Os insumos dessa categoria foram desativados, mas continuam no histórico — eles só não aparecem na lista padrão.
+          </p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => setCategoryFilter("")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-blue hover:bg-nord-blue-light text-white"
+            >
+              Ver todos os insumos
+            </button>
+            {!showInactive && (
+              <button
+                onClick={() => setShowInactive(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-nord-border text-nord-gray hover:text-white hover:border-white/30"
+              >
+                <Eye size={13} /> Mostrar inativos
+              </button>
+            )}
+          </div>
         </div>
       ) : (
       <div className="space-y-6">
@@ -300,6 +541,16 @@ export function InsumosClient({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                    {canCreate && (
+                      <th className="py-2 pr-2 w-8">
+                        <input
+                          type="checkbox"
+                          checked={g.items.length > 0 && g.items.every((i) => selected.has(i.id))}
+                          onChange={() => toggleIds(g.items.map((i) => i.id))}
+                          className="accent-nord-blue"
+                        />
+                      </th>
+                    )}
                     <th className="py-2 pr-4">Insumo</th>
                     <th className="py-2 pr-4">Fornecedor</th>
                     <th className="py-2 pr-4">Preço atual</th>
@@ -311,18 +562,42 @@ export function InsumosClient({
                   {g.items.map((i) => {
                     return (
                       <tr key={i.id} className="border-b border-nord-border/50 hover:bg-white/5">
-                        <td className="py-2.5 pr-4 text-white">{i.name}</td>
+                        {canCreate && (
+                          <td className="py-2.5 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={selected.has(i.id)}
+                              onChange={() => toggleRow(i.id)}
+                              className="accent-nord-blue"
+                            />
+                          </td>
+                        )}
+                        <td className="py-2.5 pr-4 text-white">
+                          {i.name}
+                          {!i.active && <Badge tone="default"> Inativo</Badge>}
+                        </td>
                         <td className="py-2.5 pr-4 text-nord-gray">{i.fornecedorNome}</td>
                         <td className="py-2.5 pr-4 text-nord-gray">{formatCurrency(i.precoAtual)}</td>
                         <td className="py-2.5 pr-4 text-nord-gray">{i.unidade}</td>
                         <td className="py-2.5 pr-4">
                           <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
+                            <button
+                              onClick={() => updateActive(i.id, !i.active)}
+                              disabled={togglingIds.has(i.id)}
+                              title={i.active ? "Desativar insumo" : "Reativar insumo"}
+                              className={`disabled:opacity-60 disabled:cursor-not-allowed ${
+                                i.active ? "text-nord-gray hover:text-nord-warning" : "text-nord-gray hover:text-nord-success"
+                              }`}
+                            >
+                              {i.active ? <Power size={14} /> : <RotateCcw size={14} />}
+                            </button>
                             <button onClick={() => openEdit(i)} className="text-nord-gray hover:text-white">
                               <Pencil size={14} />
                             </button>
                             <button
                               onClick={() => {
                                 setDeleteError(null);
+                                setDeleteBlockedId(null);
                                 setConfirmDeleteId(i.id);
                               }}
                               className="text-nord-gray hover:text-nord-danger"
@@ -410,12 +685,43 @@ export function InsumosClient({
       <ConfirmDialog
         open={!!confirmDeleteId}
         title="Excluir insumo"
-        message="Tem certeza que deseja excluir este insumo? Essa ação não pode ser desfeita. Se ele estiver em uso em alguma ficha técnica, ou tiver histórico de compra, perda, transferência, contagem ou movimentação de estoque, a exclusão será bloqueada e você poderá desativá-lo em vez de excluir."
+        message="Tem certeza que deseja excluir este insumo? Essa ação não pode ser desfeita. Se ele estiver em uso em alguma ficha técnica, ou tiver histórico de compra, perda, transferência, contagem ou movimentação de estoque, a exclusão será bloqueada — nesse caso, use o botão de desativar (ícone de energia, ao lado do lápis) para remover o insumo da lista sem perder o histórico."
         onConfirm={doDelete}
         onCancel={() => setConfirmDeleteId(null)}
         confirmLabel="Excluir"
         danger
       />
+
+      <Modal open={!!bulkResult} onClose={() => setBulkResult(null)} title="Resultado da desativação em massa">
+        {bulkResult && (
+          <div className="space-y-3">
+            {bulkResult.sucesso > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-nord-success/10 border border-nord-success/30">
+                <CheckCircle2 size={14} className="text-nord-success mt-0.5 shrink-0" />
+                <p className="text-xs text-nord-success">{bulkResult.sucesso} insumo(s) desativado(s) com sucesso.</p>
+              </div>
+            )}
+            {bulkResult.falhas.length > 0 && (
+              <div className="p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+                  <p className="text-xs text-nord-danger">{bulkResult.falhas.length} insumo(s) não puderam ser desativados:</p>
+                </div>
+                <ul className="mt-2 ml-6 list-disc space-y-1 text-xs text-nord-gray">
+                  {bulkResult.falhas.map((f) => (
+                    <li key={f.id}>
+                      <span className="text-white">{f.nome}</span> — {f.motivo}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        <button onClick={() => setBulkResult(null)} className="btn-primary w-full mt-4 py-2.5">
+          Fechar
+        </button>
+      </Modal>
 
     </Section>
   );
