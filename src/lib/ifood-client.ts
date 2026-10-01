@@ -22,6 +22,8 @@
 // lógica de "sempre simular contra um arquivo real antes de publicar" que já
 // vale pra importação de arquivo (ver CLAUDE.md).
 
+import { spDateKey } from "@/lib/timezone";
+
 const IFOOD_API_BASE = "https://merchant-api.ifood.com.br";
 
 // [CONFIRMADO] POST /authentication/v1.0/oauth/token, grant_type
@@ -186,11 +188,29 @@ export async function fetchIfoodMerchants(accessToken: string): Promise<IfoodMer
  * Formato de data aceito pelos parâmetros beginSalesDate/endSalesDate — como
  * a própria documentação diz que "as vendas ficam disponíveis na API no
  * mesmo dia em que ocorrem", a granularidade é de dia (sem hora), então
- * usamos só a parte "YYYY-MM-DD" do ISO. A CONFIRMAR no primeiro teste real
- * se a API espera esse formato ou um timestamp completo.
+ * usamos só o dia-calendário "YYYY-MM-DD". A CONFIRMAR no primeiro teste
+ * real se a API espera esse formato ou um timestamp completo.
+ *
+ * Usa `spDateKey` (dia-calendário em Brasília) em vez de
+ * `date.toISOString().slice(0, 10)` puro (UTC). Investigado durante um
+ * débito técnico de fuso horário: os dois callers atuais de
+ * `fetchIfoodSales` (botão "Sincronizar agora" e o cron, ambos em
+ * `src/app/api/integracoes/ifood/sync/route.ts`) passam `range.start`/
+ * `range.end` de `defaultRange()` — "agora" (`new Date()`) e "agora menos 2
+ * dias", instantes genéricos, não fronteiras exatas de dia
+ * (`spStartOfDay`/`spEndOfDay`) — então não é literalmente a mesma mecânica
+ * do bug que fez a Saipos perder vendas reais (aquele cortava uma fronteira
+ * exata de dia). Mesmo assim, por `end` ser sempre "agora", qualquer
+ * instante entre 21h e 23h59 em Brasília (já virou o dia seguinte em UTC)
+ * faria o UTC puro mandar `beginSalesDate`/`endSalesDate` 1 dia adiantados —
+ * e esse intervalo cai dentro do horário de funcionamento da loja, quando o
+ * cron diário ou o clique manual plausivelmente rodam. Corrigido
+ * preventivamente enquanto a integração segue INATIVA (nenhuma loja
+ * sincronizando de verdade ainda) — sem efeito colateral conhecido, já que
+ * `spDateKey` só muda o dia-calendário calculado, não o formato da string.
  */
 function formatIfoodDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return spDateKey(date);
 }
 
 export type IfoodSaleRecord = {

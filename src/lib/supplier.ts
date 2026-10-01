@@ -11,8 +11,8 @@
  */
 export function parseDiasEntregaSemana(input: unknown): number[] {
   if (!Array.isArray(input)) return [];
-  const validos = input
-    .map((valor) => Number(valor))
-    .filter((valor) => Number.isInteger(valor) && valor >= 0 && valor <= 6);
+  const validos = input.filter(
+    (valor): valor is number => typeof valor === "number" && Number.isInteger(valor) && valor >= 0 && valor <= 6
+  );
   return [...new Set(validos)].sort((a, b) => a - b);
 }

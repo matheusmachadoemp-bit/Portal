@@ -5,6 +5,8 @@ import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, format } from 
 import { spDayStart, spDayEnd } from "@/lib/periods";
 import {
   spDateKey,
+  spHours,
+  spMinutes,
   computeOccurrenceStatus,
   dueEscalationLevels,
   CHECKLIST_TERMINAL_STATUSES,
@@ -302,10 +304,9 @@ export async function loadSerieDiaria7Dias(empresaId: string): Promise<{ data: s
 /** Quantos dias de antecedência/atraso já contam como "urgente" nas heurísticas abaixo (metas e aprovações pendentes). Ajustável sem migração. */
 const DIAS_LIMITE_URGENTE = 3;
 
-/** "HH:mm" em São Paulo a partir de um instante — mesmo offset fixo (UTC-3, sem horário de verão) de `spDateKey` em src/lib/checklist.ts. */
+/** "HH:mm" em São Paulo a partir de um instante — via `spHours`/`spMinutes` (src/lib/checklist.ts), mesmo offset fixo (UTC-3, sem horário de verão) de `spDateKey`/`@/lib/timezone`, nunca recalculado aqui. */
 function formatSpHm(date: Date): string {
-  const spTime = new Date(date.getTime() - 3 * 60 * 60 * 1000);
-  return spTime.toISOString().slice(11, 16);
+  return `${String(spHours(date)).padStart(2, "0")}:${String(spMinutes(date)).padStart(2, "0")}`;
 }
 
 /** Diferença em dias corridos (arredondada), positiva quando `ate` é depois de `de`. */

@@ -57,8 +57,12 @@ export async function PATCH(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
-  const weekday = Number(body?.weekday);
-  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+  const weekday: unknown = body?.weekday;
+  // Mesma classe de bug já corrigida em `parseDiasEntregaSemana` (src/lib/supplier.ts): `Number(valor)`
+  // rodando ANTES de checar o tipo original faz `Number(null)`, `Number("")`, `Number(false)` e
+  // `Number([3])` virarem 0/3 ("válidos") mesmo vindo de um tipo que não deveria contar como dia da
+  // semana — por isso o `typeof` abaixo roda primeiro, sem nenhuma coerção.
+  if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
     return NextResponse.json({ error: "Informe um dia da semana válido (0 a 6)." }, { status: 400 });
   }
   const ativo = body?.ativo === true;
