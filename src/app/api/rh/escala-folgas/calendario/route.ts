@@ -21,10 +21,21 @@ import { getCalendarioDias, resolveOwnSetor } from "@/lib/escala-folgas-server";
  * Líder (Role SUPERVISOR) só enxerga o próprio setor aqui — mesma restrição já aplicada em
  * `GET /api/rh/escala-folgas/entries` (item 16 do pedido original). `lojasFechadas` de cada dia
  * NUNCA é filtrado por setor (loja fechada é um fato da loja inteira, não de um setor).
+ *
+ * BUG-004 (achado da auditoria do Jonas): faltava a mesma checagem de cargo (MANAGER_ROLES) que
+ * toda rota irmã de RH já tem — sem ela, qualquer COLABORADOR com o Perfil de Permissão padrão
+ * "Funcionário" (rh:canView=true de fábrica) conseguia chamar este GET direto e ver o calendário
+ * de folgas/férias/afastamentos — inclusive `Absence.motivo` — de todos os colegas, de todos os
+ * setores.
  */
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     return NextResponse.json({ error: "Seu perfil de permissão não permite ver o RH." }, { status: 403 });
   }

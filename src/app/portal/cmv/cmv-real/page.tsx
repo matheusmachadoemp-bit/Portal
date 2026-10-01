@@ -7,9 +7,17 @@ import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
 
+// Checagem de cargo (MANAGER_ROLES) — ver comentário completo em src/app/portal/cmv/page.tsx
+// (achado do Jonas, auditoria de 2026-10-01): mesmo módulo "cmv", mesmo gate hoje, aplicada nas
+// 4 telas do módulo por consistência.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function CmvRealPage() {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "cmv", "canView"))) {
+    redirect("/portal/inicio");
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
     redirect("/portal/inicio");
   }
 

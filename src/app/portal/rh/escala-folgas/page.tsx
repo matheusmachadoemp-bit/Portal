@@ -18,9 +18,23 @@ import { EscalaFolgasClient } from "./escala-folgas-client";
  * desde a Fase 1 (PR #346, schema + regras de negócio, inclusive o cálculo de cobertura) — esta
  * fase só precisava do formulário na tela e das 3 flags de permissão abaixo pra liberá-lo.
  */
+// Mesma checagem de cargo (MANAGER_ROLES) já usada por todas as outras telas de RH desde o
+// BUG-004 (ex.: ../ferias/page.tsx, ../ocorrencias/page.tsx) e pelas rotas de API irmãs
+// (`/api/rh/escala-folgas/calendario` e `/api/rh/escala-folgas/entries`) — faltava só aqui.
+// Sem ela, qualquer COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView=true
+// de fábrica) conseguia ver a escala de folgas/férias/afastamentos de TODOS os colegas, de TODOS
+// os setores, inclusive o motivo do afastamento (`Absence.motivo`, texto livre que pode conter
+// atestado médico ou outro motivo pessoal) — achado CRÍTICO da auditoria do Jonas. Restrito a
+// Administrador/Gestor/Gerente/Supervisor por cargo, igual às outras telas; Supervisor continua
+// restrito só ao próprio setor por baixo dessa trava (ver `isSupervisor` abaixo, que não muda).
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function EscalaFolgasPage() {
   const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "rh", "canView"))) {
+  if (!session?.user || !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+  if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     redirect("/portal/inicio");
   }
 

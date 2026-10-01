@@ -34,10 +34,21 @@ const ENTRY_INCLUDE = {
  * Esta rota NÃO filtra ainda por `SchedulePeriod.status` (RASCUNHO x PUBLICADA) — a regra
  * "colaborador só vê mês já publicado" é implementada na fase que introduz o botão "Publicar
  * escala" (Fase 3), que é quando published/draft passa a ter efeito de verdade pela primeira vez.
+ *
+ * BUG-004 (achado da auditoria do Jonas): faltava a mesma checagem de cargo (MANAGER_ROLES) que
+ * toda rota irmã de RH já tem (ex.: `/api/rh/vacations`, `/api/rh/occurrences`) — sem ela,
+ * qualquer COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView=true de
+ * fábrica) conseguia chamar este GET/POST direto e ver/cadastrar folgas de todos os colegas, de
+ * todos os setores.
  */
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     return NextResponse.json({ error: "Seu perfil de permissão não permite ver o RH." }, { status: 403 });
   }
@@ -86,6 +97,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canCreate"))) {
     return NextResponse.json({ error: "Seu perfil de permissão não permite cadastrar folgas." }, { status: 403 });
   }

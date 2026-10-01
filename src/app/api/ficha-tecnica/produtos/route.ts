@@ -12,12 +12,33 @@ function isProductCodeConflict(e: unknown): boolean {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "code") ?? true);
 }
 
+// Checagem de cargo (MANAGER_ROLES) — sem ela, qualquer COLABORADOR com o Perfil de Permissão
+// padrão "Funcionário" (ficha-tecnica:canView=true de fábrica) conseguia ver o custo/fornecedor
+// de cada insumo via o `include` do Ingredient inteiro abaixo (achado ALTO do Jonas, auditoria de
+// 2026-10-01). Bloqueio da tela inteira (não só do campo de preço): o preço não é só um campo a
+// mais — ele alimenta "Custo"/"CMV %"/"Margem"/"Lucro", exibidos em TODO card de produto desta
+// tela (src/app/portal/ficha-tecnica/[sub]/produtos-client.tsx, calculados no client a partir de
+// `ingredient.precoAtual`), então ocultar só `precoAtual`/`fornecedor` da resposta quebraria
+// visualmente esses 4 campos em cada card (ficariam NaN) sem de fato esconder o custo, já que o
+// card principal da listagem é justamente isso. A composição de ingredientes do produto (o que
+// um colaborador operacional poderia querer ver sem preço) já só é visível pra quem tem
+// `canCreate` (botão "Editar", já escondido pra quem não tem) — colaborador comum não via isso
+// mesmo antes desta mudança. Essa rota só serve as abas de categoria de produto (nunca "Insumos",
+// que usa /api/ficha-tecnica/insumos — rota à parte, fora do escopo deste achado).
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "ficha-tecnica", "canView"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver a Ficha Técnica." },
+      { status: 403 }
+    );
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json(
+      { error: "Essa listagem é restrita a Administrador, Gestor, Gerente ou Supervisor." },
       { status: 403 }
     );
   }
