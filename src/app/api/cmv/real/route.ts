@@ -5,11 +5,19 @@ import { hasModulePermission } from "@/lib/authz";
 import { computeCmvReal } from "@/lib/cmv-server";
 import { resolveClosedPeriod, type ClosedPeriodMode } from "@/lib/closed-period-filter";
 
+// Checagem de cargo (MANAGER_ROLES) — ver comentário completo em src/app/portal/cmv/page.tsx
+// (achado do Jonas, auditoria de 2026-10-01). Essa rota é o filtro de período de CMV Real
+// (src/app/portal/cmv/cmv-real/cmv-real-client.tsx), então precisa do mesmo gate da página.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "cmv", "canView"))) {
     return NextResponse.json({ error: "Seu perfil de permissão não permite ver o CMV." }, { status: 403 });
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Esse relatório é restrito a Administrador, Gestor, Gerente ou Supervisor." }, { status: 403 });
   }
 
   const ctx = await getActiveEmpresaContext();
