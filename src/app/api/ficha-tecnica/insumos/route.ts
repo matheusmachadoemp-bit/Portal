@@ -5,12 +5,39 @@ import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpre
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
+// Checagem de cargo (MANAGER_ROLES) — mesmo motivo/gate de src/app/api/ficha-tecnica/produtos/route.ts
+// e de src/app/portal/ficha-tecnica/[sub]/page.tsx (a aba "insumos" dessa página, que consome este
+// GET para o refresh client-side depois de criar/editar/excluir/ativar um insumo, hoje já bloqueia
+// a página inteira para quem não é MANAGER_ROLES — essa checagem na rota é o mesmo gate replicado
+// para quem chamar a API direto, fora da tela). Sem ela, qualquer COLABORADOR com o Perfil de
+// Permissão padrão "Funcionário" (ficha-tecnica:canView=true de fábrica) conseguia ver
+// `precoAtual`/`fornecedorNome` de cada insumo — de um jeito até mais direto que a aba "Produtos"
+// (coluna própria na tabela, não um valor derivado de cálculo). Bloqueio da rota inteira, não um
+// `select` filtrando o campo: mesmo racional de produtos/route.ts (não há uso legítimo desta rota
+// que precise do restante dos dados sem o preço).
+//
+// Único outro consumidor confirmado deste GET é a aba "Produtos e insumos" de Estoque
+// (src/app/portal/estoque/produtos/produtos-client.tsx, função `refresh()`, chamada após
+// criar/editar/excluir e pelo botão "Atualizar" da Toolbar). Essa tela NÃO tem gate de cargo algum
+// hoje (só `estoque:canView`) e também exibe `precoAtual`/`fornecedorNome` sem nenhuma restrição —
+// é uma lacuna correlata a esta, fora do escopo desta tarefa (ver relatório), mas que passa a
+// sentir o efeito deste gate: um Colaborador comum que clicar em "Atualizar" nessa tela a partir de
+// agora recebe 403 nesta chamada (a lista inicial da tela, carregada direto via Prisma no
+// servidor, continua aparecendo — só o refresh client-side para de funcionar para esse perfil).
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "ficha-tecnica", "canView"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver a Ficha Técnica." },
+      { status: 403 }
+    );
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json(
+      { error: "Essa listagem é restrita a Administrador, Gestor, Gerente ou Supervisor." },
       { status: 403 }
     );
   }
