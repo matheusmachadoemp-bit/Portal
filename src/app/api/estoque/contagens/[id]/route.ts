@@ -124,9 +124,58 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR" && session.user.role !== "GERENTE") {
       return NextResponse.json({ error: "Apenas gerentes, gestores ou administradores podem aprovar o fechamento." }, { status: 403 });
     }
-    data.status = "APROVADA";
-    data.aprovadoPor = body.aprovadoPor || session.user.name;
-    data.aprovadoEm = new Date();
+    // Claim atômico da transição de status: a PRÓPRIA escrita do status para "APROVADA"
+    // é a operação que decide se outra requisição concorrente chegou primeiro — em vez de
+    // ler `existing.status` (buscado no início da função, fora de qualquer lock), decidir
+    // em memória e só escrever depois (dentro da transação abaixo ou no update genérico lá
+    // no fim da função). Esse "ler → decidir → escrever" em passos separados era a causa
+    // raiz de uma condição de corrida real encontrada pelo Teulis ao vivo: disparando 2-3
+    // chamadas PATCH verdadeiramente EM PARALELO (não uma depois da outra) contra a mesma
+    // contagem, todas liam o mesmo status antigo antes de qualquer uma commitar a mudança —
+    // nenhuma via a outra, todas passavam no guard antigo, todas criavam seu próprio lote
+    // de `StockMovement` na transação abaixo, e só no fim cada uma sobrescrevia o status
+    // (last write wins, sem erro). Resultado observado: 3 requisições simultâneas → 3 lotes
+    // de `StockMovement` duplicados (0 → 6 movimentos em vez de 2) e as 3 retornando 200.
+    //
+    // O `updateMany` abaixo, com a condição de status dentro do próprio `where`, é atômico
+    // no Postgres — a cláusula WHERE é avaliada e a escrita acontece numa única operação no
+    // banco, então duas chamadas concorrentes nunca conseguem as duas "ganhar" a corrida:
+    // só uma terá `count === 1` e segue para criar os movimentos; a(s) outra(s) encontra(m)
+    // a linha já com status "APROVADA" (não casa mais com o `status: { not: "APROVADA" }`),
+    // recebe(m) `count === 0` e retorna(m) 409 imediatamente, sem rodar nenhum efeito
+    // colateral no estoque.
+    //
+    // Importante: o claim bloqueia só quando o status JÁ é "APROVADA" (ou seja, essa
+    // chamada é um reenvio/corrida da MESMA aprovação que já rodou ou está rodando). Ele
+    // propositalmente NÃO bloqueia partindo de "REABERTA" — reabrir e aprovar de novo é um
+    // ciclo de uso legítimo e esperado (corrigir um item e fechar de novo), não um reenvio
+    // acidental; bloquear nesse caso deixaria uma contagem reaberta sem como ser fechada de
+    // novo. A mensagem "Esta contagem já foi aprovada" cobre o mesmo cenário do DELETE
+    // desta rota logo abaixo (que bloqueia APROVADA e REABERTA — lá faz sentido bloquear os
+    // dois porque excluir uma contagem que já mexeu no estoque nunca é permitido, mesmo
+    // reaberta; aqui o objetivo é só impedir reprocessar a MESMA aprovação duas vezes, seja
+    // em paralelo ou em sequência).
+    //
+    // Nota sobre o ciclo reabrir→editar→aprovar: hoje a aprovação pós-reabertura
+    // recria `StockMovement` de TODOS os itens com `quantidadeContada` preenchido (não só
+    // os editados depois da reabertura) — decisão deliberada, não um descuido: tratamos
+    // cada aprovação como um snapshot completo e auditável do estado contado da loja
+    // naquele momento (reforça a mesma garantia usada no primeiro fechamento), em vez de
+    // tentar calcular um "diff" de quais itens mudaram desde a última aprovação (exigiria
+    // guardar um carimbo por item da última aprovação e abriria espaço para itens ficarem
+    // sem movimento registrado por engano). O preço é um histórico mais "gordo" quando só
+    // 1-2 itens são corrigidos numa reabertura — aceitável, já que `StockMovement` é só
+    // histórico informativo (não é a fonte de verdade do estoque) e o valor final do
+    // estoque permanece correto de qualquer forma.
+    const aprovadoPor = body.aprovadoPor || session.user.name;
+    const aprovadoEm = new Date();
+    const claimed = await prisma.stockCount.updateMany({
+      where: { id, status: { not: "APROVADA" } },
+      data: { status: "APROVADA", aprovadoPor, aprovadoEm },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json({ error: "Esta contagem já foi aprovada." }, { status: 409 });
+    }
 
     const fresh = await prisma.stockCountItem.findMany({ where: { countId: id }, include: { ingredient: true } });
     const approvedItems = fresh.filter((i) => i.quantidadeContada !== null && i.quantidadeContada !== undefined);
@@ -148,7 +197,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const ingredientIds = approvedItems.map((i) => i.ingredientId);
       const quantidades = approvedItems.map((i) => i.quantidadeContada!);
       const itemIds = approvedItems.map((i) => i.id);
-      const autorizadoPor = data.aprovadoPor as string;
 
       await prisma.$transaction([
         prisma.stockMovement.createMany({
@@ -160,7 +208,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             estoqueApos: i.quantidadeContada!,
             motivo: `Contagem ${existing.type === "MENSAL" ? "mensal" : "semanal"} aprovada`,
             origin: "CONTAGEM",
-            autorizadoPor,
+            autorizadoPor: aprovadoPor,
             createdById: session.user.id,
           })),
         }),

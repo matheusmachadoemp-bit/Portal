@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Modal } from "@/components/ui/modal";
+import { Modal, FormError } from "@/components/ui/modal";
 import { Plus, Trash2, GripVertical, ChevronDown, ChevronRight } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
+import { apiRequest } from "@/lib/api-client";
 import { COURSE_CATEGORY_OPTIONS, COURSE_STATUS_OPTIONS, MODULE_TYPE_OPTIONS, QUESTION_TYPE_OPTIONS } from "@/lib/university";
 import type { CourseDTO } from "./university-types";
 
@@ -122,6 +123,7 @@ export function CourseBuilderModal({
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function updateModule(idx: number, patch: Partial<ModuleForm>) {
     setModules((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
@@ -229,6 +231,7 @@ export function CourseBuilderModal({
   async function submit() {
     if (saving) return;
     setSaving(true);
+    setSubmitError(null);
     try {
       const modulesPayload = modules
         .filter((m) => m.title.trim())
@@ -278,25 +281,24 @@ export function CourseBuilderModal({
 
       let courseId = course?.id;
       if (course) {
-        await fetch(`/api/university/courses/${course.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...infoPayload, modules: modulesPayload }),
-        });
+        const result = await apiRequest(`/api/university/courses/${course.id}`, "PATCH", { ...infoPayload, modules: modulesPayload });
+        if (!result.ok) {
+          setSubmitError(result.error);
+          return;
+        }
       } else {
-        const res = await fetch("/api/university/courses", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(infoPayload),
-        });
-        const data = await res.json();
-        courseId = data.course?.id;
+        const createResult = await apiRequest<{ course?: { id: string } }>("/api/university/courses", "POST", infoPayload);
+        if (!createResult.ok) {
+          setSubmitError(createResult.error);
+          return;
+        }
+        courseId = createResult.data.course?.id;
         if (courseId) {
-          await fetch(`/api/university/courses/${courseId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ modules: modulesPayload }),
-          });
+          const modulesResult = await apiRequest(`/api/university/courses/${courseId}`, "PATCH", { modules: modulesPayload });
+          if (!modulesResult.ok) {
+            setSubmitError(modulesResult.error);
+            return;
+          }
         }
       }
       onSaved();
@@ -609,13 +611,16 @@ export function CourseBuilderModal({
         </div>
       )}
 
-      <button
-        onClick={submit}
-        disabled={!name.trim() || saving}
-        className="w-full mt-5 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
-      >
-        {saving ? "Salvando..." : "Salvar curso"}
-      </button>
+      <div className="mt-5">
+        <FormError message={submitError} />
+        <button
+          onClick={submit}
+          disabled={!name.trim() || saving}
+          className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+        >
+          {saving ? "Salvando..." : "Salvar curso"}
+        </button>
+      </div>
 
     </Modal>
   );

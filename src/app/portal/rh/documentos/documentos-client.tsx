@@ -6,7 +6,8 @@ import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { formatNumber } from "@/lib/calc";
 import { documentStatus, documentosAlerts } from "@/lib/rh-helpers";
 import { format } from "date-fns";
@@ -78,7 +79,9 @@ export function DocumentosClient({
   const [form, setForm] = useState(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     return fixedEmployeeId ? documents.filter((d) => d.employeeId === fixedEmployeeId) : documents;
@@ -102,25 +105,27 @@ export function DocumentosClient({
   function openNew() {
     setForm(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
     setFile(null);
+    setFormError(null);
     setShowForm(true);
   }
 
   async function submit() {
     if (uploading || !file) return;
     setUploading(true);
+    setFormError(null);
     try {
       const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
 
-      await fetch("/api/rh/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          nome: form.nome || file.name,
-          fileUrl: blob.url,
-          mimeType: file.type,
-        }),
+      const result = await apiRequest("/api/rh/documents", "POST", {
+        ...form,
+        nome: form.nome || file.name,
+        fileUrl: blob.url,
+        mimeType: file.type,
       });
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
+      }
       setShowForm(false);
       refresh();
     } finally {
@@ -130,7 +135,12 @@ export function DocumentosClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/rh/documents/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/rh/documents/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -179,6 +189,7 @@ export function DocumentosClient({
         </Section>
       )}
 
+      <FormError message={rowError} />
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -235,6 +246,7 @@ export function DocumentosClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Novo documento">
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           {!fixedEmployeeId && (
             <div className="col-span-2">

@@ -6,6 +6,7 @@ import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { ConfirmDialog } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { LIBRARY_CATEGORY_OPTIONS } from "@/lib/university";
 
 type LibraryItem = {
@@ -28,6 +29,7 @@ export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] })
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadCategory, setUploadCategory] = useState(LIBRARY_CATEGORY_OPTIONS[0]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -60,17 +62,17 @@ export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] })
     try {
       for (const file of Array.from(fileList)) {
         const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
-        await fetch("/api/university/library", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: file.name,
-            category: uploadCategory,
-            fileUrl: blob.url,
-            mimeType: file.type,
-            sizeBytes: file.size,
-          }),
+        const result = await apiRequest("/api/university/library", "POST", {
+          name: file.name,
+          category: uploadCategory,
+          fileUrl: blob.url,
+          mimeType: file.type,
+          sizeBytes: file.size,
         });
+        if (!result.ok) {
+          setUploadError(result.error);
+          return;
+        }
       }
       refresh();
     } catch (err) {
@@ -83,7 +85,13 @@ export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] })
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/university/library/${confirmDeleteId}`, { method: "DELETE" });
+    setDeleteError(null);
+    const result = await apiRequest(`/api/university/library/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setDeleteError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -118,6 +126,7 @@ export function LibraryClient({ initialItems }: { initialItems: LibraryItem[] })
       </div>
 
       {uploadError && <p className="text-xs text-nord-danger">{uploadError}</p>}
+      {deleteError && <p className="text-xs text-nord-danger">{deleteError}</p>}
 
       <div className="flex gap-1.5 flex-wrap">
         <button

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { TaskModal } from "../task-modal";
+import { apiRequest } from "@/lib/api-client";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/marketing";
 import type { TaskDTO, TeamMember } from "../marketing-types";
 import { startOfWeek, addDays, format, isToday, isTomorrow, isSameDay, parseISO } from "date-fns";
@@ -51,6 +52,7 @@ export function DashboardClient({
   const [panelFilter, setPanelFilter] = useState<"TODAS" | "FEITAS" | "A_PRODUZIR" | "EM_ANALISE">("TODAS");
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskDTO | null>(null);
+  const [markDoneError, setMarkDoneError] = useState<string | null>(null);
   const doneCount = allTasks.filter((t) => DONE_STATUSES.includes(t.status)).length;
   const producingCount = allTasks.filter((t) => PRODUCING_STATUSES.includes(t.status)).length;
   const analysisCount = allTasks.filter((t) => t.status === "EM_ANALISE").length;
@@ -87,11 +89,12 @@ export function DashboardClient({
   const tomorrowTasks = panelTasks.filter((t) => t.date && isTomorrow(parseISO(t.date)));
 
   async function markDone(task: TaskDTO) {
-    await fetch(`/api/marketing/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "PUBLICADO" }),
-    });
+    setMarkDoneError(null);
+    const result = await apiRequest(`/api/marketing/tasks/${task.id}`, "PATCH", { status: "PUBLICADO" });
+    if (!result.ok) {
+      setMarkDoneError(result.error);
+      return;
+    }
     router.refresh();
   }
 
@@ -199,6 +202,7 @@ export function DashboardClient({
               </button>
             )}
           </div>
+          {markDoneError && <p className="text-xs text-nord-danger mb-2">{markDoneError}</p>}
           <div className="flex gap-1.5 mb-3 flex-wrap">
             {[
               { key: "TODAS", label: "Todas" },

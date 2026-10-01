@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
+import { FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
+import { apiRequest } from "@/lib/api-client";
 import { PERMISSION_ACTIONS, type PermissionAction } from "@/lib/permissions";
 
 type ModulePermissionDTO = {
@@ -38,6 +40,7 @@ export function PermissoesClient({
   const [activeId, setActiveId] = useState(initialProfiles[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const active = profiles.find((p) => p.id === activeId);
 
@@ -48,6 +51,7 @@ export function PermissoesClient({
 
   function updateCell(moduleKey: string, action: PermissionAction, value: boolean) {
     setSaved(false);
+    setSaveError(null);
     setProfiles((prev) =>
       prev.map((p) => {
         if (p.id !== activeId) return p;
@@ -62,6 +66,7 @@ export function PermissoesClient({
 
   function toggleColumn(action: PermissionAction, value: boolean) {
     setSaved(false);
+    setSaveError(null);
     setProfiles((prev) =>
       prev.map((p) => {
         if (p.id !== activeId) return p;
@@ -77,6 +82,7 @@ export function PermissoesClient({
 
   function toggleRow(moduleKey: string, value: boolean) {
     setSaved(false);
+    setSaveError(null);
     setProfiles((prev) =>
       prev.map((p) => {
         if (p.id !== activeId) return p;
@@ -93,6 +99,7 @@ export function PermissoesClient({
 
   function selectAllProfile(value: boolean) {
     setSaved(false);
+    setSaveError(null);
     setProfiles((prev) =>
       prev.map((p) =>
         p.id === activeId
@@ -105,12 +112,13 @@ export function PermissoesClient({
   async function save() {
     if (!active) return;
     setSaving(true);
-    await fetch(`/api/permissoes/${active.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modulePermissions: matrix }),
-    });
+    setSaveError(null);
+    const result = await apiRequest(`/api/permissoes/${active.id}`, "PATCH", { modulePermissions: matrix });
     setSaving(false);
+    if (!result.ok) {
+      setSaveError(result.error);
+      return;
+    }
     setSaved(true);
   }
 
@@ -156,6 +164,7 @@ export function PermissoesClient({
           </div>
         }
       >
+        <FormError message={saveError} />
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>

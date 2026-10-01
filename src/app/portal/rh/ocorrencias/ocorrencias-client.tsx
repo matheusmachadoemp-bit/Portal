@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { RhTabs } from "../rh-tabs";
@@ -105,6 +106,8 @@ export function OcorrenciasClient({
   const [detail, setDetail] = useState<OccurrenceDTO | null>(null);
   const [historico, setHistorico] = useState<OccurrenceDTO[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   // Só usado pra decidir o que a TABELA mostra (lista de "atividade recente", que já tem `take` —
   // isso é esperado, nunca foi o problema).
@@ -153,11 +156,13 @@ export function OcorrenciasClient({
   function openNew() {
     setEditing(null);
     setForm(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(o: OccurrenceDTO) {
     setEditing(o);
+    setFormError(null);
     setForm({
       employeeId: o.employeeId,
       date: format(new Date(o.date), "yyyy-MM-dd"),
@@ -178,19 +183,14 @@ export function OcorrenciasClient({
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
-      if (editing) {
-        await fetch(`/api/rh/occurrences/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/rh/occurrences", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const result = editing
+        ? await apiRequest(`/api/rh/occurrences/${editing.id}`, "PATCH", form)
+        : await apiRequest("/api/rh/occurrences", "POST", form);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
       }
       setShowForm(false);
       await refresh();
@@ -201,7 +201,12 @@ export function OcorrenciasClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/rh/occurrences/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/rh/occurrences/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -269,6 +274,7 @@ export function OcorrenciasClient({
         </div>
       )}
 
+      <FormError message={rowError} />
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -317,6 +323,7 @@ export function OcorrenciasClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar ocorrência" : "Nova ocorrência"}>
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           {!fixedEmployeeId && (
             <div className="col-span-2">

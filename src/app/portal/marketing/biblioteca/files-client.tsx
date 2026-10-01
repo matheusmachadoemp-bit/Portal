@@ -6,6 +6,7 @@ import { Upload, Search, Trash2, File as FileIcon } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { ConfirmDialog } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { FILE_CATEGORY_OPTIONS } from "@/lib/marketing";
 
 type FileDTO = {
@@ -41,6 +42,7 @@ export function FilesClient({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadCategory, setUploadCategory] = useState(FILE_CATEGORY_OPTIONS[0]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -73,18 +75,18 @@ export function FilesClient({
     try {
       for (const file of Array.from(fileList)) {
         const blob = await upload(sanitizeFileName(file.name), file, { access: "public", handleUploadUrl: "/api/upload" });
-        await fetch("/api/marketing/files", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: file.name,
-            space,
-            category: uploadCategory,
-            fileUrl: blob.url,
-            mimeType: file.type,
-            sizeBytes: file.size,
-          }),
+        const result = await apiRequest("/api/marketing/files", "POST", {
+          name: file.name,
+          space,
+          category: uploadCategory,
+          fileUrl: blob.url,
+          mimeType: file.type,
+          sizeBytes: file.size,
         });
+        if (!result.ok) {
+          setUploadError(result.error);
+          return;
+        }
       }
       refresh();
     } catch (err) {
@@ -97,7 +99,13 @@ export function FilesClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/marketing/files/${confirmDeleteId}`, { method: "DELETE" });
+    setDeleteError(null);
+    const result = await apiRequest(`/api/marketing/files/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setDeleteError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -134,6 +142,7 @@ export function FilesClient({
       </div>
 
       {uploadError && <p className="text-xs text-nord-danger">{uploadError}</p>}
+      {deleteError && <p className="text-xs text-nord-danger">{deleteError}</p>}
 
       <div className="flex gap-1.5 flex-wrap">
         <button
