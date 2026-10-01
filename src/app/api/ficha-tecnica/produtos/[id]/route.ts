@@ -5,14 +5,11 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 
 /** `Product.code` é `@unique` no schema inteiro (não por loja) — ver comentário em `PATCH`. */
 function isProductCodeConflict(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    e.code === "P2002" &&
-    ((e.meta?.target as string[] | undefined)?.includes("code") ?? true)
-  );
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "code") ?? true);
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
