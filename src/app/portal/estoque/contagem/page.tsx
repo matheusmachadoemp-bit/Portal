@@ -44,7 +44,7 @@ export default async function ContagemEstoquePage() {
       where: { empresaId: { in: empresaIds }, status: "ATIVO" },
       orderBy: { name: "asc" },
     }),
-    prisma.stockSector.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.stockSector.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { order: "asc" } }),
     // Usuários (`User`, não `Employee`) selecionáveis como responsável pelo lembrete de
     // notificação — a agenda notifica por sessão de login (push via `PushSubscription`, ligada
     // a `User`), diferente do responsável "de chão de fábrica" da contagem em si, que é um nome

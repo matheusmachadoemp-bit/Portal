@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 
 export async function GET() {
   const session = await auth();
@@ -13,7 +14,11 @@ export async function GET() {
     );
   }
 
+  const ctx = await getActiveEmpresaContext();
+  if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
+
   const categories = await prisma.stockCategory.findMany({
+    where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: { order: "asc" },
     include: { _count: { select: { ingredients: true } } },
   });
@@ -30,6 +35,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // Categoria é um cadastro por loja desde a migration 20261001120000_estoque_setores_categorias_por_loja
+  // — criar uma exige uma loja única ativa (não o modo "Grupo Nord" consolidado), mesmo padrão de
+  // POST /api/estoque/setores e POST /api/estoque/contagens.
+  const empresa = await requireActiveSingleEmpresa();
+  if (!empresa) {
+    return NextResponse.json({ error: "Selecione uma loja específica para criar uma categoria." }, { status: 400 });
+  }
+
   const body = await req.json();
   if (!body.name) return NextResponse.json({ error: "Informe o nome da categoria." }, { status: 400 });
 
@@ -40,10 +53,14 @@ export async function POST(req: Request) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 
-  const maxOrder = await prisma.stockCategory.aggregate({ _max: { order: true } });
+  const maxOrder = await prisma.stockCategory.aggregate({
+    where: { empresaId: empresa.id },
+    _max: { order: true },
+  });
 
   const category = await prisma.stockCategory.create({
     data: {
+      empresaId: empresa.id,
       key: `${key}-${Date.now().toString(36)}`,
       name: body.name,
       color: body.color || "#2952E3",

@@ -46,7 +46,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
           fornecedorPrincipal: { select: { id: true, nomeFantasia: true, razaoSocial: true } },
         },
       }),
-      prisma.stockCategory.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+      prisma.stockCategory.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { order: "asc" } }),
       prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
     ]);
     const serialized = ingredients.map((i) => ({

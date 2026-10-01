@@ -25,7 +25,7 @@ export default async function PerdasPage() {
       include: { ingredient: { select: { id: true, name: true, unidade: true } }, createdBy: { select: { name: true } } },
     }),
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { name: "asc" } }),
-    prisma.stockSector.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.stockSector.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { order: "asc" } }),
   ]);
 
   return (

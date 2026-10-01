@@ -32,13 +32,17 @@ export default async function ProdutosPage() {
   const canDeleteFichaTecnica = await hasModulePermission(session.user.id, "ficha-tecnica", "canDelete");
   const canDeleteProduto = ctx?.mode === "single" && canDeleteFichaTecnica;
 
-  // Categorias de estoque: StockCategory não tem empresaId (é um cadastro global, compartilhado
-  // por todas as lojas) e as rotas /api/estoque/categorias não exigem loja específica ativa
-  // para criar/editar — diferente de Produtos, aqui não faz sentido travar por
-  // "ctx?.mode === 'single'": travaria uma ação que a API aceitaria normalmente em modo Grupo
-  // Nord. Só a permissão de verdade importa. Confirmado nas rotas: POST checa canCreate, PATCH
-  // (edição de campos e ativar/desativar) checa canEdit.
-  const canCreateCategoria = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  // Categorias e Setores de estoque são cadastros POR LOJA desde a migration
+  // 20261001120000_estoque_setores_categorias_por_loja (antes eram globais, compartilhados por
+  // todas as lojas — corrigido depois de uma auditoria do Teulis mostrar que um usuário com
+  // permissão de Estoque em QUALQUER loja podia renomear/excluir uma categoria/setor usado por
+  // TODAS as outras lojas ao mesmo tempo). Criar uma categoria/setor agora exige loja única ativa
+  // (POST /api/estoque/categorias e /api/estoque/setores recusam em modo Grupo Nord, mesmo padrão
+  // de canCreateProduto acima) — por isso o "ctx?.mode === 'single'" entrou aqui também. Editar/
+  // ativar-desativar continua liberado em modo Grupo Nord (a API confere o acesso à loja
+  // específica de cada registro via assertEmpresaAccess, mesmo padrão de editar uma StockCount).
+  const canManageEstoque = await hasModulePermission(session.user.id, "estoque", "canCreate");
+  const canCreateCategoria = ctx?.mode === "single" && canManageEstoque;
   const canEditCategoria = await hasModulePermission(session.user.id, "estoque", "canEdit");
   // Setores (StockSector): exclusão de verdade (não soft-delete), protegida por um verbo à parte
   // (canDelete), diferente de criar/editar/ativar-desativar (canCreate/canEdit acima) — ver
@@ -56,6 +60,7 @@ export default async function ProdutosPage() {
     // quanto os dropdowns de categoria da aba "Produtos" (filtro e formulário) — o client
     // deriva a lista simples (id/nome/cor) a partir desta mesma lista, sem duplicar a query.
     prisma.stockCategory.findMany({
+      where: { empresaId: { in: empresaIds } },
       orderBy: { order: "asc" },
       include: { _count: { select: { ingredients: true } } },
     }),
@@ -63,7 +68,7 @@ export default async function ProdutosPage() {
     // padrão da query de `categories` acima, que também traz todas independente de `active`) —
     // os dropdowns operacionais (filtro/formulário de Produtos, "Setor responsável" de
     // Categorias) filtram só os ativos dentro do próprio client (`ProdutosClient`).
-    prisma.stockSector.findMany({ orderBy: { order: "asc" } }),
+    prisma.stockSector.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { order: "asc" } }),
     prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
   ]);
 
