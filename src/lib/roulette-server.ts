@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 
 type TxClient = Prisma.TransactionClient;
 /** Cliente Prisma "normal" ou o `tx` de uma transação em andamento — mesmo padrão de
@@ -224,35 +225,12 @@ export function gerarCodigoCandidato(): string {
 
 const GIRO_RATE_LIMIT_DIAS_PADRAO = 30; // mesmo default do schema (CustomerSurveyConfig.giroRoletaIntervaloDias).
 
-/**
- * Descobre se um P2002 se refere a uma constraint cujo nome contém `needle` (ex.: "telefone",
- * "responseId") — ou `undefined` se não for possível determinar.
- *
- * Achado ao vivo nesta tarefa: nesta versão do Prisma (7.10) com driver adapter
- * (`@prisma/adapter-pg`, ver src/lib/prisma.ts), `PrismaClientKnownRequestError.meta.target`
- * (o formato "clássico", usado pelos helpers irmãos `isNumeroConflict`/`isFixaNotaGeralConflict`
- * em outras rotas deste módulo) vem **`undefined`** — o detalhe do conflito aparece só em
- * `meta.driverAdapterError.cause.constraint.index` (o nome do índice Postgres, ex.
- * `"RouletteSpin_responseId_key"`) e, como reforço, em `cause.originalMessage` (a mensagem crua
- * do Postgres, que também cita o nome da constraint). Os helpers irmãos não quebraram com essa
- * mudança só por sorte: os dois têm fallback `?? true` (tratam qualquer P2002 como sendo aquela
- * constraint específica quando não conseguem confirmar), o que é seguro PRA ELES porque cada
- * `create` que eles protegem só tem UMA constraint única possível. Aqui, checar os dois formatos
- * (`target` E `driverAdapterError`) deixa a função funcionando nos dois shapes possíveis, em vez
- * de depender de qual delas o ambiente de fato usa.
- */
-function p2002ConstraintIncludes(e: unknown, needle: string): boolean | undefined {
-  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") return undefined;
-  const meta = e.meta as
-    | { target?: string[]; driverAdapterError?: { cause?: { constraint?: { index?: string }; originalMessage?: string } } }
-    | undefined;
-  if (meta?.target) return meta.target.some((t) => t.includes(needle));
-  const index = meta?.driverAdapterError?.cause?.constraint?.index;
-  if (index) return index.includes(needle);
-  const message = meta?.driverAdapterError?.cause?.originalMessage;
-  if (message) return message.includes(needle);
-  return undefined;
-}
+// `p2002ConstraintIncludes` (descobre se um P2002 se refere a uma constraint cujo nome contém
+// `needle`, cobrindo tanto o formato clássico de `meta.target` quanto o formato
+// `meta.driverAdapterError` desta versão do Prisma com driver adapter — achado originalmente
+// aqui) foi extraída para `src/lib/prisma-errors.ts`, compartilhada com outros pontos do app que
+// também precisam distinguir qual constraint única foi violada num P2002 (ver comentário lá para
+// o achado completo).
 
 /** `RouletteEligibility` só tem a constraint composta `[empresaId, telefone]` — qualquer P2002
  *  nesta chamada específica (`tx.rouletteEligibility.create`, o único INSERT deste model em todo

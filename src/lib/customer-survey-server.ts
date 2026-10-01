@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { createNotifications } from "@/lib/notifications";
+import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 import type { CustomerSurveyQuestion } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -98,16 +99,13 @@ function findActiveFixedNotaGeralQuestion() {
 
 /** `CustomerSurveyQuestion` não tem nenhuma outra constraint única além do índice parcial de
  *  `fixaNotaGeral` (ver comentário no schema) — então um P2002 nesta chamada específica de
- *  `create` só pode ser essa. Ainda assim inspeciona `target` (cobrindo tanto nome de coluna
- *  quanto nome do índice, dependendo de como o Postgres/Prisma relatam essa violação — não
- *  testado nos dois formatos, então checa substring nos dois casos) antes de cair no fallback
- *  `true`, mesmo padrão de `isNumeroConflict` em `mesas/route.ts`. */
+ *  `create` só pode ser essa. Usa o helper compartilhado `p2002ConstraintIncludes`
+ *  (src/lib/prisma-errors.ts), que cobre tanto o formato clássico (`meta.target`) quanto o
+ *  formato usado nesta versão do Prisma com driver adapter (`meta.driverAdapterError` — ver
+ *  comentário lá) antes de cair no fallback `true`, mesmo padrão de `isNumeroConflict` em
+ *  `mesas/route.ts`. */
 function isFixaNotaGeralConflict(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    e.code === "P2002" &&
-    ((e.meta?.target as string[] | undefined)?.some((t) => t.includes("fixaNotaGeral")) ?? true)
-  );
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "fixaNotaGeral") ?? true);
 }
 
 /**
