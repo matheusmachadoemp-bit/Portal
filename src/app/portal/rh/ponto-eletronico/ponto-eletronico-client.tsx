@@ -30,6 +30,8 @@ type TimeEntryDTO = TimeEntryLike & {
   employeeId: string;
   saidaAlmoco: string | null;
   retornoAlmoco: string | null;
+  /** Nota visível sobre o dia (preenchida pela importação do PDF Tecnoponto — ver ponto-pdf-import.ts; `null` em registros manuais/de planilha). Ainda sem coluna própria nesta tabela — fica disponível no DTO pra quando alguém for exibi-la. */
+  observacao: string | null;
   employee: { name: string; setor: string };
 };
 
@@ -278,20 +280,32 @@ export function PontoEletronicoClient({
       <div className="flex items-center justify-between flex-wrap gap-2">
         {!fixedEmployeeId ? <RhTabs /> : <div />}
         {canCreate && (
-          <div className="flex items-center gap-2">
-            <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx" className="hidden" id="ponto-upload" onChange={handleFileChange} />
-            <label
-              htmlFor="ponto-upload"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white cursor-pointer"
-            >
-              <Upload size={13} /> {uploading ? "Enviando..." : "Enviar Arquivo"}
-            </label>
-            <button
-              onClick={openNew}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
-            >
-              <Plus size={13} /> Novo registro
-            </button>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.txt,.xlsx,.pdf"
+                className="hidden"
+                id="ponto-upload"
+                onChange={handleFileChange}
+              />
+              <label
+                htmlFor="ponto-upload"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white cursor-pointer"
+              >
+                <Upload size={13} /> {uploading ? "Enviando..." : "Enviar Arquivo"}
+              </label>
+              <button
+                onClick={openNew}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+              >
+                <Plus size={13} /> Novo registro
+              </button>
+            </div>
+            <p className="text-[11px] text-nord-gray">
+              Aceita planilha (.csv, .txt, .xlsx) ou o PDF &quot;Relatório Espelho Ponto&quot; exportado do Tecnoponto.
+            </p>
           </div>
         )}
       </div>
