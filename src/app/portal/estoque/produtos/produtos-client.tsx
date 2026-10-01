@@ -8,6 +8,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { CategoriasClient, type StockCategoryDTO } from "./categorias-client";
+import { SetoresClient, type StockSectorDTO } from "./setores-client";
 
 type Ingredient = {
   id: string;
@@ -81,12 +82,13 @@ const emptyForm = {
 export function ProdutosClient({
   initialIngredients,
   initialCategories,
+  initialSectors,
   suppliers,
-  setores,
   canCreate,
   canDelete,
   canCreateCategoria,
   canEditCategoria,
+  canDeleteSetor,
 }: {
   initialIngredients: Ingredient[];
   /** Lista completa de categorias de estoque (ativas e inativas, com contagem de produtos).
@@ -95,22 +97,25 @@ export function ProdutosClient({
    *  editar ou ativar/desativar uma categoria reflita nos dois lugares sem precisar de F5.
    *  Mesmo padrão de src/app/portal/financeiro/caixa-da-empresa/ (CaixaClient + accounts). */
   initialCategories: StockCategoryDTO[];
+  /** Lista completa de setores (`StockSector`, ativos e inativos). Mesmo padrão de
+   *  `initialCategories` acima: o estado fica aqui, nível comum entre os dropdowns de setor desta
+   *  aba (filtro e formulário de produto), o repasse pra `CategoriasClient` ("Setor responsável")
+   *  e o grid de gerenciamento da aba "Setores" — só os ativos entram nos dropdowns. */
+  initialSectors: StockSectorDTO[];
   suppliers: { id: string; name: string }[];
-  /** Setores ativos (`StockSector`, ver schema.prisma) — usados no filtro "Setor" da listagem,
-   *  no formulário de produto e repassados pra `CategoriasClient` (campo "Setor responsável"). */
-  setores: string[];
   canCreate: boolean;
   canDelete: boolean;
   canCreateCategoria: boolean;
   canEditCategoria: boolean;
+  canDeleteSetor: boolean;
 }) {
   // Estoque > Produtos e Estoque > Categorias foram unificadas nesta única tela (subcategoria
   // "Produtos" absorveu "Categorias" — a URL /portal/estoque/categorias não existe mais). O
   // link "Gerenciar categorias" de dentro da Ficha Técnica aponta pra cá com
   // "?tab=categorias" pra já abrir na aba certa.
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"produtos" | "categorias">(
-    searchParams.get("tab") === "categorias" ? "categorias" : "produtos"
+  const [activeTab, setActiveTab] = useState<"produtos" | "categorias" | "setores">(
+    searchParams.get("tab") === "categorias" ? "categorias" : searchParams.get("tab") === "setores" ? "setores" : "produtos"
   );
 
   const [categories, setCategories] = useState(initialCategories);
@@ -121,6 +126,13 @@ export function ProdutosClient({
     () => categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
     [categories]
   );
+
+  const [sectors, setSectors] = useState(initialSectors);
+  // Nomes dos setores ATIVOS, em ordem — usado nos dropdowns de setor desta aba (filtro e
+  // formulário de produto) e repassado pra `CategoriasClient` ("Setor responsável"). Derivado do
+  // mesmo estado que alimenta o grid de gerenciamento da aba "Setores": criar, renomear,
+  // ativar/desativar ou excluir um setor ali reflete aqui na hora, sem precisar de F5.
+  const setores = useMemo(() => sectors.filter((s) => s.active).map((s) => s.name), [sectors]);
 
   const [ingredients, setIngredients] = useState(initialIngredients);
   const [search, setSearch] = useState("");
@@ -334,6 +346,14 @@ export function ProdutosClient({
           }`}
         >
           Categorias
+        </button>
+        <button
+          onClick={() => setActiveTab("setores")}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+            activeTab === "setores" ? "border-nord-blue text-white" : "border-transparent text-nord-gray hover:text-white"
+          }`}
+        >
+          Setores
         </button>
       </div>
 
@@ -692,6 +712,16 @@ export function ProdutosClient({
           setores={setores}
           canCreate={canCreateCategoria}
           canEdit={canEditCategoria}
+        />
+      </div>
+
+      <div className={activeTab === "setores" ? "" : "hidden"}>
+        <SetoresClient
+          sectors={sectors}
+          onSectorsChange={setSectors}
+          canCreate={canCreateCategoria}
+          canEdit={canEditCategoria}
+          canDelete={canDeleteSetor}
         />
       </div>
     </div>

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
-import { Modal } from "@/components/ui/modal";
+import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "@/lib/estoque";
+import { AgendaLembretesModal } from "../contagem/agenda-lembretes-modal";
 
 type CountRow = {
   id: string;
@@ -44,12 +46,27 @@ export function ContagemSemanalClient({
   initialCounts,
   employees,
   setores,
+  users,
   canCreate,
+  canEdit,
+  canDelete,
+  canCreateAgenda,
+  canManageAgenda,
 }: {
   initialCounts: CountRow[];
   employees: EmployeeOption[];
   setores: string[];
+  /** Usuários (`User`, não `Employee`) selecionáveis como responsável pelo lembrete de
+   *  notificação — ver `AgendaLembretesModal`/`StockCountSchedule.responsavelId`. */
+  users: { id: string; name: string }[];
   canCreate: boolean;
+  /** Edita setor/responsável de uma contagem já criada (PATCH /api/estoque/contagens/[id]). */
+  canEdit: boolean;
+  /** Exclui uma contagem em rascunho/andamento/concluída (DELETE /api/estoque/contagens/[id] —
+   *  a própria API bloqueia contagens aprovadas/reabertas; a UI nem mostra o botão nesse caso). */
+  canDelete: boolean;
+  canCreateAgenda: boolean;
+  canManageAgenda: boolean;
 }) {
   const [counts, setCounts] = useState(initialCounts);
   const [showNew, setShowNew] = useState(false);
@@ -61,6 +78,14 @@ export function ContagemSemanalClient({
   const [items, setItems] = useState<CountItem[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [summary, setSummary] = useState<{ esperado: number; contado: number } | null>(null);
+
+  const [editing, setEditing] = useState<CountRow | null>(null);
+  const [editSetor, setEditSetor] = useState("");
+  const [editResponsavel, setEditResponsavel] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function refreshList() {
     const res = await fetch("/api/estoque/contagens?type=SEMANAL");
@@ -96,6 +121,48 @@ export function ContagemSemanalClient({
       return;
     }
     setShowNew(false);
+    await refreshList();
+  }
+
+  function openEdit(c: CountRow) {
+    setEditing(c);
+    setEditSetor(c.setor ?? "");
+    setEditResponsavel(c.responsavel ?? "");
+    setEditError(null);
+  }
+
+  async function salvarEdicao() {
+    if (!editing || editSubmitting) return;
+    setEditSubmitting(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/estoque/contagens/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setor: editSetor, responsavel: editResponsavel }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setEditError(data.error ?? "Não foi possível salvar as alterações.");
+        return;
+      }
+      setEditing(null);
+      await refreshList();
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
+  async function doDelete() {
+    if (!confirmDeleteId) return;
+    const res = await fetch(`/api/estoque/contagens/${confirmDeleteId}`, { method: "DELETE" });
+    setConfirmDeleteId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error ?? "Não foi possível excluir a contagem.");
+      return;
+    }
+    setDeleteError(null);
     await refreshList();
   }
 
@@ -150,8 +217,26 @@ export function ContagemSemanalClient({
     <div className="space-y-6">
       <Section
         title="Contagens semanais"
-        action={<Toolbar onRefresh={refreshList} onAdd={canCreate ? () => { setError(null); setShowNew(true); } : undefined} addLabel="Iniciar contagem" />}
+        action={
+          <div className="flex items-center gap-2 flex-wrap">
+            <AgendaLembretesModal
+              type="SEMANAL"
+              typeLabel="Semanal"
+              setores={setores}
+              users={users}
+              canCreate={canCreateAgenda}
+              canManage={canManageAgenda}
+            />
+            <Toolbar onRefresh={refreshList} onAdd={canCreate ? () => { setError(null); setShowNew(true); } : undefined} addLabel="Iniciar contagem" />
+          </div>
+        }
       >
+        {deleteError && (
+          <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
+            <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+            <p className="text-xs text-nord-danger">{deleteError}</p>
+          </div>
+        )}
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>
@@ -183,6 +268,19 @@ export function ContagemSemanalClient({
                     <button onClick={() => abrirContagem(c)} className="text-xs text-nord-blue-light hover:underline">
                       Abrir
                     </button>
+                    {canEdit && (
+                      <button onClick={() => openEdit(c)} className="text-xs text-nord-blue-light hover:underline ml-3">
+                        Editar
+                      </button>
+                    )}
+                    {canDelete && c.status !== "APROVADA" && c.status !== "REABERTA" && (
+                      <button
+                        onClick={() => { setDeleteError(null); setConfirmDeleteId(c.id); }}
+                        className="text-xs text-nord-danger hover:underline ml-3"
+                      >
+                        Excluir
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -311,6 +409,45 @@ export function ContagemSemanalClient({
           </div>
         )}
       </Modal>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Editar contagem" widthClass="max-w-sm">
+        {editing && (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Setor</span>
+              <select className="input" value={editSetor} onChange={(e) => setEditSetor(e.target.value)}>
+                <option value="">Sem setor</option>
+                {setores.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Responsável</span>
+              <select className="input" value={editResponsavel} onChange={(e) => setEditResponsavel(e.target.value)}>
+                <option value="">Selecione...</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.name}>{emp.name}</option>
+                ))}
+              </select>
+            </label>
+            {editError && <p className="text-xs text-nord-danger">{editError}</p>}
+            <button onClick={salvarEdicao} disabled={editSubmitting} className="btn-primary w-full py-2.5">
+              {editSubmitting ? "Salvando..." : "Salvar"}
+            </button>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Excluir contagem"
+        message="Tem certeza que deseja excluir esta contagem semanal? Essa ação não pode ser desfeita."
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+        confirmLabel="Excluir"
+        danger
+      />
     </div>
   );
 }

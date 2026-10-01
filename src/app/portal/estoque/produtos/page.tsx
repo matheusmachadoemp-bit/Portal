@@ -9,8 +9,8 @@ import { redirect } from "next/navigation";
 // Estoque > Produtos e Estoque > Categorias foram unificadas nesta única
 // subcategoria ("Produtos" absorveu "Categorias" — ver DESIGN_SYSTEM.md e o
 // precedente em src/app/portal/financeiro/caixa-da-empresa/). A tela mostra
-// duas abas internas (Produtos / Categorias); a URL /portal/estoque/categorias
-// deixou de existir.
+// três abas internas (Produtos / Categorias / Setores); a URL
+// /portal/estoque/categorias deixou de existir.
 export default async function ProdutosPage() {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
@@ -40,8 +40,12 @@ export default async function ProdutosPage() {
   // (edição de campos e ativar/desativar) checa canEdit.
   const canCreateCategoria = await hasModulePermission(session.user.id, "estoque", "canCreate");
   const canEditCategoria = await hasModulePermission(session.user.id, "estoque", "canEdit");
+  // Setores (StockSector): exclusão de verdade (não soft-delete), protegida por um verbo à parte
+  // (canDelete), diferente de criar/editar/ativar-desativar (canCreate/canEdit acima) — ver
+  // DELETE /api/estoque/setores/[id].
+  const canDeleteSetor = await hasModulePermission(session.user.id, "estoque", "canDelete");
 
-  const [ingredients, categories, suppliers, setores] = await Promise.all([
+  const [ingredients, categories, sectors, suppliers] = await Promise.all([
     prisma.ingredient.findMany({
       where: { empresaId: { in: empresaIds } },
       orderBy: { name: "asc" },
@@ -55,8 +59,12 @@ export default async function ProdutosPage() {
       orderBy: { order: "asc" },
       include: { _count: { select: { ingredients: true } } },
     }),
+    // Ativos E inativos: a aba "Setores" precisa gerenciar/reativar um setor desativado (mesmo
+    // padrão da query de `categories` acima, que também traz todas independente de `active`) —
+    // os dropdowns operacionais (filtro/formulário de Produtos, "Setor responsável" de
+    // Categorias) filtram só os ativos dentro do próprio client (`ProdutosClient`).
+    prisma.stockSector.findMany({ orderBy: { order: "asc" } }),
     prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
-    prisma.stockSector.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
   ]);
 
   const serializedIngredients = ingredients.map((i) => ({
@@ -99,18 +107,26 @@ export default async function ProdutosPage() {
     produtos: c._count.ingredients,
   }));
 
+  const serializedSectors = sectors.map((s) => ({
+    id: s.id,
+    name: s.name,
+    order: s.order,
+    active: s.active,
+  }));
+
   return (
     <PageContainer title="Estoque" subtitle="Produtos">
       <div className="space-y-6">
         <ProdutosClient
           initialIngredients={serializedIngredients}
           initialCategories={serializedCategories}
+          initialSectors={serializedSectors}
           suppliers={suppliers.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
-          setores={setores.map((s) => s.name)}
           canCreate={canCreateProduto}
           canDelete={canDeleteProduto}
           canCreateCategoria={canCreateCategoria}
           canEditCategoria={canEditCategoria}
+          canDeleteSetor={canDeleteSetor}
         />
       </div>
     </PageContainer>
