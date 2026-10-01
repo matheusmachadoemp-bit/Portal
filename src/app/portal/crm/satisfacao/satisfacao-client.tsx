@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
+import { FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { formatNumber, formatPercent } from "@/lib/calc";
 
 type Distribuicao = { promotores: number; neutros: number; detratores: number };
@@ -42,13 +44,15 @@ export function SatisfacaoClient({
 }) {
   const router = useRouter();
   const [insatisfeitos, setInsatisfeitos] = useState(initialInsatisfeitos);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   async function atualizarStatus(id: string, status: string) {
-    await fetch(`/api/crm/nps/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
+    setStatusError(null);
+    const result = await apiRequest(`/api/crm/nps/${id}`, "PATCH", { status });
+    if (!result.ok) {
+      setStatusError(result.error);
+      return;
+    }
     setInsatisfeitos((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
     router.refresh();
   }
@@ -110,6 +114,7 @@ export function SatisfacaoClient({
       </div>
 
       <Section title={`Clientes insatisfeitos (${insatisfeitos.length})`}>
+        <FormError message={statusError} />
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>

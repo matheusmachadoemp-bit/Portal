@@ -6,7 +6,8 @@ import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { RhTabs } from "../rh-tabs";
@@ -93,6 +94,8 @@ export function UniformesClient({
   const [termoFilePreviewUrl, setTermoFilePreviewUrl] = useState<string | null>(null);
   const [existingTermo, setExistingTermo] = useState<ExistingTermo | null>(null);
   const [removeTermo, setRemoveTermo] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     return deliveries
@@ -136,11 +139,13 @@ export function UniformesClient({
     setEditing(null);
     setForm(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
     resetTermoState();
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(d: UniformDeliveryDTO) {
     setEditing(d);
+    setFormError(null);
     setForm({
       employeeId: d.employeeId,
       item: d.item,
@@ -158,6 +163,7 @@ export function UniformesClient({
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
       let termoPayload: Record<string, string | null> = {};
       if (termoFile) {
@@ -181,18 +187,12 @@ export function UniformesClient({
 
       const payload = { ...form, ...termoPayload };
 
-      if (editing) {
-        await fetch(`/api/rh/uniforms/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetch("/api/rh/uniforms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      const result = editing
+        ? await apiRequest(`/api/rh/uniforms/${editing.id}`, "PATCH", payload)
+        : await apiRequest("/api/rh/uniforms", "POST", payload);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
       }
       setShowForm(false);
       await refresh();
@@ -203,7 +203,12 @@ export function UniformesClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/rh/uniforms/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/rh/uniforms/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -249,6 +254,7 @@ export function UniformesClient({
         ))}
       </select>
 
+      <FormError message={rowError} />
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -317,6 +323,7 @@ export function UniformesClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar entrega" : "Registrar entrega"}>
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           {!fixedEmployeeId && (
             <div className="col-span-2">

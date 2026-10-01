@@ -4,7 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Download } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { RhTabs } from "../rh-tabs";
@@ -98,6 +99,8 @@ export function FinanceiroClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [filterEmployeeId, setFilterEmployeeId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   // Só usado pra decidir o que a TABELA mostra (lista de "atividade recente", que já tem `take` —
   // isso é esperado, nunca foi o problema). `entries` já vem do servidor filtrado por `targetId`
@@ -144,11 +147,13 @@ export function FinanceiroClient({
   function openNew() {
     setEditing(null);
     setForm(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(e: FinanceEntryDTO) {
     setEditing(e);
+    setFormError(null);
     setForm({
       employeeId: e.employeeId,
       date: format(new Date(e.date), "yyyy-MM-dd"),
@@ -163,19 +168,14 @@ export function FinanceiroClient({
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
-      if (editing) {
-        await fetch(`/api/rh/finance/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/rh/finance", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const result = editing
+        ? await apiRequest(`/api/rh/finance/${editing.id}`, "PATCH", form)
+        : await apiRequest("/api/rh/finance", "POST", form);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
       }
       setShowForm(false);
       await refresh();
@@ -186,7 +186,12 @@ export function FinanceiroClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/rh/finance/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/rh/finance/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -292,6 +297,7 @@ export function FinanceiroClient({
         </ResponsiveContainer>
       </Section>
 
+      <FormError message={rowError} />
       <div className="nord-card overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -343,6 +349,7 @@ export function FinanceiroClient({
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar lançamento" : "Novo lançamento"}>
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           {!fixedEmployeeId && (
             <div className="col-span-2">
