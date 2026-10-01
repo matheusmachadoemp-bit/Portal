@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { computeENPS } from "@/lib/satisfaction";
+import { resolveRollingPeriod } from "@/lib/periods";
 import { PesquisaSatisfacaoClient } from "./pesquisa-satisfacao-client";
 
 const CAN_CREATE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE"];
@@ -27,9 +28,20 @@ export default async function PesquisaSatisfacaoPage() {
   }
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
+  // Carga inicial já filtrada pelo período default do filtro de página ("mes-atual"), pra bater
+  // com o que o cliente mostra assim que abre a tela — mesmo padrão de
+  // src/app/portal/estoque/compras/page.tsx. Ver GET /api/rh/pesquisa-satisfacao para o racional
+  // completo de o que o período filtra (janela da pesquisa cruzando o período vs. respostas
+  // enviadas dentro do período, pro eNPS).
+  const periodo = resolveRollingPeriod("mes-atual");
+
   const [surveys, empresas, notasEnps] = await Promise.all([
     prisma.satisfactionSurvey.findMany({
-      where: { publico: { some: { empresaId: { in: empresaIds } } } },
+      where: {
+        publico: { some: { empresaId: { in: empresaIds } } },
+        startDate: { lte: periodo.to },
+        endDate: { gte: periodo.from },
+      },
       include: {
         publico: { include: { empresa: { select: { id: true, name: true } } } },
         perguntas: { select: { id: true } },
@@ -42,7 +54,7 @@ export default async function PesquisaSatisfacaoPage() {
       where: {
         question: { tipo: "ENPS" },
         valorNumero: { not: null },
-        response: { empresaId: { in: empresaIds } },
+        response: { empresaId: { in: empresaIds }, submittedAt: { gte: periodo.from, lte: periodo.to } },
       },
       select: { valorNumero: true },
     }),
@@ -63,7 +75,7 @@ export default async function PesquisaSatisfacaoPage() {
         initialSurveys={serialized}
         empresas={empresas}
         canCreate={CAN_CREATE_ROLES.includes(session?.user?.role ?? "")}
-        enpsGeral={notasEnps.length > 0 ? enpsGeral.enps : null}
+        initialEnpsGeral={notasEnps.length > 0 ? enpsGeral.enps : null}
       />
     </PageContainer>
   );
