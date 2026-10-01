@@ -6,7 +6,9 @@ import { Search, Pencil, Copy, Ban, Trash2, BarChart3, Send, CheckCheck } from "
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { ConfirmDialog, Modal } from "@/components/ui/modal";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { SATISFACTION_STATUS_LABEL, SATISFACTION_STATUS_TONE } from "@/lib/satisfaction";
+import { type RollingPeriodKey } from "@/lib/periods";
 
 type Invitation = { id: string; token: string; respondido: boolean; employee: { id: string; name: string; setor: string } };
 
@@ -29,18 +31,27 @@ export function PesquisaSatisfacaoClient({
   initialSurveys,
   empresas,
   canCreate,
-  enpsGeral,
+  initialEnpsGeral,
 }: {
   initialSurveys: Survey[];
   empresas: { id: string; name: string }[];
   canCreate: boolean;
-  enpsGeral: number | null;
+  initialEnpsGeral: number | null;
 }) {
   const router = useRouter();
   const [surveys, setSurveys] = useState(initialSurveys);
+  const [enpsGeral, setEnpsGeral] = useState(initialEnpsGeral);
   const [search, setSearch] = useState("");
   const [filterEmpresa, setFilterEmpresa] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  // Filtro de período (padrão do portal — ver CLAUDE.md): "mes-atual" bate com o período que a
+  // carga inicial do servidor já usa (page.tsx), pra não mostrar um período diferente do que o
+  // filtro exibe como selecionado.
+  const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [loadingPeriodo, setLoadingPeriodo] = useState(false);
+  const [periodoError, setPeriodoError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
   const [sendingSurvey, setSendingSurvey] = useState<Survey | null>(null);
@@ -64,10 +75,51 @@ export function PesquisaSatisfacaoClient({
     return { ativas, total, lojasAlcancadas };
   }, [surveys]);
 
-  async function refresh() {
-    const res = await fetch("/api/satisfaction/surveys");
+  /**
+   * Busca as pesquisas (e o eNPS geral) já filtradas por período no servidor (GET
+   * /api/rh/pesquisa-satisfacao?key=...&from=...&to=...) — mesmo padrão de
+   * src/app/portal/estoque/compras/compras-client.tsx. Diferente de GET
+   * /api/satisfaction/surveys (que lista tudo sem filtro, usado só por outras telas do módulo),
+   * esta rota é a "companion" desta tela: por isso `refresh()` reaplica o período já selecionado em
+   * vez de voltar a mostrar todas as pesquisas sem filtro depois de qualquer ação (duplicar,
+   * encerrar, excluir).
+   */
+  async function fetchSurveys(key: RollingPeriodKey, from?: string, to?: string) {
+    const params = new URLSearchParams({ key });
+    if (key === "personalizado" && from && to) {
+      params.set("from", from);
+      params.set("to", to);
+    }
+    const res = await fetch(`/api/rh/pesquisa-satisfacao?${params.toString()}`);
+    if (!res.ok) throw new Error();
     const data = await res.json();
     setSurveys(data.surveys);
+    setEnpsGeral(data.enpsGeral);
+  }
+
+  async function refresh() {
+    try {
+      await fetchSurveys(periodo, customFrom, customTo);
+    } catch {
+      setPeriodoError("Não foi possível atualizar os dados.");
+    }
+  }
+
+  async function applyPeriodo(key: RollingPeriodKey, from?: string, to?: string) {
+    setPeriodo(key);
+    if (key === "personalizado" && from && to) {
+      setCustomFrom(from);
+      setCustomTo(to);
+    }
+    setLoadingPeriodo(true);
+    setPeriodoError(null);
+    try {
+      await fetchSurveys(key, from, to);
+    } catch {
+      setPeriodoError("Não foi possível carregar os dados desse período.");
+    } finally {
+      setLoadingPeriodo(false);
+    }
   }
 
   async function duplicate(s: Survey) {
@@ -203,6 +255,11 @@ export function PesquisaSatisfacaoClient({
             </button>
           )}
         </div>
+      </div>
+
+      <div>
+        <PeriodFilterBar periodo={periodo} onApply={applyPeriodo} loading={loadingPeriodo} />
+        {periodoError && <p className="text-xs text-nord-danger mt-2">{periodoError}</p>}
       </div>
 
       <SortableStatCards
