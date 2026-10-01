@@ -161,6 +161,7 @@ export async function POST(req: Request) {
       horasTrabalhadas,
       atrasoMinutos: Number(body.atrasoMinutos) || 0,
       falta: !!body.falta,
+      observacao: body.observacao || null,
     },
     update: {
       entrada: body.entrada || null,
@@ -170,6 +171,10 @@ export async function POST(req: Request) {
       horasTrabalhadas,
       atrasoMinutos: Number(body.atrasoMinutos) || 0,
       falta: !!body.falta,
+      // `undefined` (não `|| null`) quando o form não manda o campo — um lançamento manual feito
+      // por cima de um registro importado do PDF (ver ponto-pdf-import.ts) não apaga a observação
+      // da importação só porque o formulário de edição ainda não tem esse campo.
+      observacao: body.observacao !== undefined ? body.observacao || null : undefined,
     },
   });
 

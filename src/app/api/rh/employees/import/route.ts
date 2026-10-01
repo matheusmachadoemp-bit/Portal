@@ -83,9 +83,19 @@ function rowsFromCsvText(text: string): string[][] {
     .map((line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, "")));
 }
 
+// Mesma checagem de cargo (MANAGER_ROLES) já usada pela rota irmã `POST /api/rh/employees` —
+// faltava aqui (achado da auditoria do Jonas). Hoje não é explorável com os perfis padrão (só
+// cargo gerencial tem canCreate em "rh" de fábrica), mas fica como lacuna pronta pra um perfil de
+// permissão customizado futuro que dê canCreate em RH pra um Colaborador comum — nesse caso ele
+// poderia importar/alterar colaboradores de toda a loja em massa sem essa trava.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   // A planilha cria colaboradores novos e atualiza os já existentes (match por CPF/nome) na
   // mesma chamada — trata como canCreate por ser fundamentalmente uma importação em massa,
   // mesmo padrão usado em financeiro/conciliacao/import.
