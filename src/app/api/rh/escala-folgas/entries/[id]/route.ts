@@ -20,9 +20,18 @@ async function assertSetorAccessIfLider(userId: string, role: string, setor: str
   return !!ownSetor && ownSetor === setor;
 }
 
+// BUG-004 (achado da auditoria do Jonas): faltava a mesma checagem de cargo (MANAGER_ROLES) que
+// toda rota irmã de RH já tem (ex.: `/api/rh/vacations/[id]`) — sem ela, qualquer COLABORADOR com
+// o Perfil de Permissão padrão "Funcionário" (rh:canView=true de fábrica) conseguia editar/
+// excluir folga de qualquer colega, de qualquer setor.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.dayOffEntry.findUnique({ where: { id }, include: { employee: true } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
@@ -110,6 +119,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.dayOffEntry.findUnique({ where: { id }, include: { employee: true } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
