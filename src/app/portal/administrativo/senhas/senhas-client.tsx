@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Plus, Pencil, Trash2, Eye, EyeOff, Copy, Check } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { apiRequest } from "@/lib/api-client";
 import { format } from "date-fns";
 
 type VaultEntryDTO = {
@@ -34,7 +35,9 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
   const [editing, setEditing] = useState<VaultEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showFormPassword, setShowFormPassword] = useState(false);
@@ -48,6 +51,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
   function openNew() {
     setEditing(null);
     setForm(emptyForm);
+    setFormError(null);
     setShowFormPassword(false);
     setShowForm(true);
   }
@@ -63,6 +67,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
       responsavel: e.responsavel ?? "",
       observacao: e.observacao ?? "",
     });
+    setFormError(null);
     setShowFormPassword(false);
     setShowForm(true);
   }
@@ -70,19 +75,14 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
   async function submit() {
     if (submitting) return;
     setSubmitting(true);
+    setFormError(null);
     try {
-      if (editing) {
-        await fetch(`/api/admin/vault/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-      } else {
-        await fetch("/api/admin/vault", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const result = editing
+        ? await apiRequest(`/api/admin/vault/${editing.id}`, "PATCH", form)
+        : await apiRequest("/api/admin/vault", "POST", form);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
       }
       setShowForm(false);
       refresh();
@@ -93,7 +93,12 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
 
   async function doDelete() {
     if (!confirmDeleteId) return;
-    await fetch(`/api/admin/vault/${confirmDeleteId}`, { method: "DELETE" });
+    const result = await apiRequest(`/api/admin/vault/${confirmDeleteId}`, "DELETE");
+    if (!result.ok) {
+      setRowError(result.error);
+      setConfirmDeleteId(null);
+      return;
+    }
     setConfirmDeleteId(null);
     refresh();
   }
@@ -107,14 +112,24 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
       });
       return;
     }
+    setRowError(null);
     const res = await fetch(`/api/admin/vault/${id}?action=VIEW`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setRowError(data?.error ?? "Não foi possível revelar a senha.");
+      return;
+    }
     setRevealed((r) => ({ ...r, [id]: data.password }));
   }
 
   async function copyPassword(id: string) {
+    setRowError(null);
     const res = await fetch(`/api/admin/vault/${id}?action=COPY`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setRowError(data?.error ?? "Não foi possível copiar a senha.");
+      return;
+    }
     await navigator.clipboard.writeText(data.password);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
@@ -132,6 +147,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
         </button>
       }
     >
+      <FormError message={rowError} />
       <div className="overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
           <thead>
@@ -198,6 +214,7 @@ export function SenhasClient({ initialEntries }: { initialEntries: VaultEntryDTO
       </div>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar senha" : "Nova senha"}>
+        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Nome do sistema">
             <input value={form.systemName} onChange={(e) => setForm({ ...form, systemName: e.target.value })} className="input" />
