@@ -10,6 +10,7 @@ import {
   travarProbabilidadeRoleta,
   ProbabilidadeInvalidaError,
 } from "@/lib/roulette-server";
+import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 /**
  * Catálogo de prêmios da Roleta (`RoulettePrize`) da loja ativa — mesmo formato de catálogo
@@ -94,6 +95,10 @@ export async function POST(req: Request) {
   const probabilidadePercent = Number(body.probabilidadePercent);
   if (!Number.isFinite(probabilidadePercent)) {
     return NextResponse.json({ error: "Informe a probabilidade (%) do prêmio." }, { status: 400 });
+  }
+
+  if (body.imagemUrl && !isValidBlobUrl(body.imagemUrl)) {
+    return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
   const ativo = body.ativo !== false;
