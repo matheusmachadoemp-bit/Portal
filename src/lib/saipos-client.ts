@@ -1,3 +1,5 @@
+import { SP_OFFSET_HOURS } from "@/lib/timezone";
+
 const SAIPOS_DATA_API_BASE = "https://data.saipos.io/v1";
 const MAX_RANGE_DAYS = 15;
 const PAGE_LIMIT = 1000;
@@ -96,7 +98,8 @@ export async function fetchSaiposSales(
   return { ok: true, sales: allSales };
 }
 
-const BRASILIA_OFFSET_MS = 3 * 60 * 60 * 1000;
+/** Mesma constante de origem de `@/lib/timezone` (`SP_OFFSET_HOURS`) — valor idêntico ao usado por `spDateKey`, só em ms em vez de horas, e sob um nome local mais claro pra quem lê esta integração. */
+const BRASILIA_OFFSET_MS = SP_OFFSET_HOURS * 60 * 60 * 1000;
 
 /**
  * A Saipos espera as datas no horário local da loja (Brasília, UTC-3, sem

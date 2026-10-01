@@ -1,12 +1,8 @@
 import type { SatisfactionQuestionType, SatisfactionSurveyStatus, SatisfactionTheme } from "@prisma/client";
+import { spDateKey } from "@/lib/timezone";
 
-/** Brasil não observa horário de verão desde 2019 — America/Sao_Paulo é sempre UTC-3. */
-const SP_OFFSET_HOURS = 3;
-
-export function spDateKey(date: Date = new Date()): string {
-  const spTime = new Date(date.getTime() - SP_OFFSET_HOURS * 60 * 60 * 1000);
-  return spTime.toISOString().slice(0, 10);
-}
+/** `spDateKey` morou aqui (duplicada palavra por palavra de `checklist.ts`) até virar `@/lib/timezone` — reexportada abaixo. */
+export { spDateKey };
 
 export const SATISFACTION_STATUS_LABEL: Record<SatisfactionSurveyStatus, string> = {
   RASCUNHO: "Rascunho",
