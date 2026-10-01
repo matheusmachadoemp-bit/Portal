@@ -15,9 +15,24 @@ import { redirect } from "next/navigation";
 const DIAS_SERIE = 14;
 const DIVERGENCIA_ALERTA_PP = 3;
 
+// Checagem de cargo (MANAGER_ROLES) — mesmo padrão já usado no Financeiro
+// (src/app/portal/financeiro/dashboard/page.tsx) e no RH: sem ela, qualquer COLABORADOR com o
+// Perfil de Permissão padrão "Funcionário" (cmv:canView=true de fábrica) conseguia ver o
+// percentual de CMV (margem) por produto/categoria (achado MÉDIO do Jonas, auditoria de
+// 2026-10-01). Aplicada nas 4 telas do módulo "CMV" (esta + cmv-teorico, cmv-real,
+// comparativo — mesmo módulo, mesmo gate de hoje, mesma lacuna): as outras 3 não foram citadas
+// no achado original do Jonas, mas checam exatamente o mesmo `hasModulePermission(..., "cmv",
+// "canView")` sem trava de cargo, e cmv-real/comparativo expõem valor em R$ (não só percentual)
+// de estoque/compras/perdas — bloquear só esta tela deixaria essas 3 alcançáveis direto pelo
+// sidebar, sem corrigir o problema de verdade.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function CmvPage() {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "cmv", "canView"))) {
+    redirect("/portal/inicio");
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
     redirect("/portal/inicio");
   }
 

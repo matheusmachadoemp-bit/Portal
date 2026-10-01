@@ -4,12 +4,20 @@ import { ComprasClient } from "./compras-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 import { redirect } from "next/navigation";
 import { resolveRollingPeriod } from "@/lib/periods";
 
+// Checagem de cargo (RECEBIMENTO_MANAGE_ROLES) — ver comentário completo em
+// src/app/api/estoque/compras/route.ts (achado ALTO do Jonas, auditoria de 2026-10-01): a carga
+// inicial desta página já traz preço de cada item direto do servidor, então precisa do mesmo
+// gate da rota GET.
 export default async function ComprasPage() {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "estoque", "canView"))) {
+    redirect("/portal/inicio");
+  }
+  if (!RECEBIMENTO_MANAGE_ROLES.includes(session.user.role)) {
     redirect("/portal/inicio");
   }
 

@@ -35,12 +35,33 @@ import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
  * já usado em src/app/api/satisfacao-cliente/avaliacoes/route.ts), não um teto
  * ainda maior.
  */
+// Checagem de cargo (RECEBIMENTO_MANAGE_ROLES, o mesmo já usado no POST abaixo) — sem ela,
+// qualquer COLABORADOR com o Perfil de Permissão padrão "Funcionário" (estoque:canView=true de
+// fábrica) conseguia ver o valor pago em cada item de cada pedido de compra (achado ALTO do
+// Jonas, auditoria de 2026-10-01). Bloqueio da tela inteira (não só do campo de preço): o preço
+// está presente em TODA linha da listagem ("Valor total", coluna sempre visível, não um detalhe
+// opcional) e no card "Valor total" do topo, então ocultar só `valorUnitario` quebraria a tabela
+// visualmente. Quem só precisa conferir/dar entrada numa mercadoria (uso operacional legítimo) já
+// tem uma tela própria pra isso — Estoque > Recebimento de Mercadorias
+// (src/app/portal/estoque/recebimento/page.tsx, mesmo card "Aguardando entrega" que existe aqui),
+// que continua liberada pra qualquer COLABORADOR com estoque:canView e cuja UI não exibe preço
+// por item hoje (só o agregado "Valor em divergências" do dashboard gerencial). Atenção: a rota
+// GET /api/estoque/recebimento por trás dessa tela NÃO filtra `valorUnitario`/`valorTotal` do
+// JSON (só o `select` do insumo embutido exclui `precoAtual` — os campos de preço do próprio
+// PurchaseItem passam direto) — ela não é uma das 4 telas deste achado e não foi alterada aqui,
+// mas é uma lacuna correlata que vale auditar à parte (reportada no relatório desta tarefa).
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "estoque", "canView"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver o Estoque." },
+      { status: 403 }
+    );
+  }
+  if (!RECEBIMENTO_MANAGE_ROLES.includes(session.user.role)) {
+    return NextResponse.json(
+      { error: "Compras é restrito a Administrador, Gestor, Gerente ou Supervisor. Para conferir mercadoria recebida, use Estoque > Recebimento de Mercadorias." },
       { status: 403 }
     );
   }

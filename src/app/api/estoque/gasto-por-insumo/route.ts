@@ -5,6 +5,11 @@ import { hasModulePermission } from "@/lib/authz";
 import { computeGastoPorInsumoRows } from "@/lib/recebimento-server";
 import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
+// Checagem de cargo (MANAGER_ROLES) — mesmo padrão do Financeiro (ver page.tsx desta mesma tela
+// para o comentário completo). Essa rota é a que a tela usa tanto na carga inicial quanto no
+// filtro de período, então precisa do mesmo gate.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 // Relatório "Gasto por Insumo": quanto foi recebido/pago de cada insumo no período, a partir dos
 // recebimentos já confirmados (ver comentário completo em computeGastoPorInsumoRows,
 // src/lib/recebimento-server.ts, para as regras de negócio: só compras RECEBIDO/RECEBIDO_PARCIAL,
@@ -16,6 +21,12 @@ export async function GET(req: Request) {
   if (!(await hasModulePermission(session.user.id, "estoque", "canView"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite ver o Estoque." },
+      { status: 403 }
+    );
+  }
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json(
+      { error: "Esse relatório é restrito a Administrador, Gestor, Gerente ou Supervisor." },
       { status: 403 }
     );
   }

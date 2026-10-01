@@ -13,6 +13,14 @@ import { hasModulePermission } from "@/lib/authz";
 
 const SUB_MAP = FICHA_TECNICA_SUB_MAP;
 
+// Checagem de cargo (MANAGER_ROLES) — ver comentário completo em
+// src/app/api/ficha-tecnica/produtos/route.ts (achado ALTO do Jonas, auditoria de 2026-10-01).
+// Aplicada só às abas de categoria de produto (qualquer `sub` de FICHA_TECNICA_SUB_MAP — ex.
+// "pizzas-salgadas", "combos") — NUNCA à aba "insumos", que é tratada à parte logo abaixo e fica
+// fora do escopo deste achado (expõe o mesmo tipo de dado de um jeito ainda mais direto, mas não
+// foi um dos 4 pontos reportados; ver observação no relatório final).
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export default async function FichaTecnicaSubPage({ params }: { params: Promise<{ sub: string }> }) {
   const session = await auth();
   if (!session?.user || !(await hasModulePermission(session.user.id, "ficha-tecnica", "canView"))) {
@@ -20,6 +28,10 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   }
 
   const { sub } = await params;
+  if (sub !== "insumos" && !MANAGER_ROLES.includes(session.user.role)) {
+    redirect("/portal/inicio");
+  }
+
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canManageFichaTecnica = await hasModulePermission(session.user.id, "ficha-tecnica", "canCreate");
