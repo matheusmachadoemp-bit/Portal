@@ -21,7 +21,13 @@ export async function computeHrInsights(empresaIds: string[]): Promise<HrInsight
 
   const [employees, occurrencesThisMonth, occurrencesPrevMonth, financeThisMonth, vacations, documents] =
     await Promise.all([
-      prisma.employee.findMany({ where: { empresaId: { in: empresaIds } } }),
+      // `include: { user: ... }` aqui é usado só pelo insight #8 (treinamento em atraso) abaixo,
+      // pra ter o id do `User` vinculado (se existir) e buscar o treinamento real na Universidade
+      // em vez do campo morto `Employee.lastTrainingDate`.
+      prisma.employee.findMany({
+        where: { empresaId: { in: empresaIds } },
+        include: { user: { select: { id: true } } },
+      }),
       prisma.occurrence.findMany({
         where: { date: { gte: monthStart }, employee: { empresaId: { in: empresaIds } } },
         include: { employee: { select: { id: true, name: true, setor: true } } },
@@ -163,14 +169,61 @@ export async function computeHrInsights(empresaIds: string[]): Promise<HrInsight
   }
 
   // 8. Treinamento atrasado
-  const semTreinamento = employees.filter((e) => {
-    if (e.status !== "ATIVO") return false;
-    if (!e.lastTrainingDate) return true;
-    return differenceInMonths(now, e.lastTrainingDate) >= 6;
+  //
+  // Antes lia `Employee.lastTrainingDate`, um campo de texto/data livre preenchido manualmente na
+  // ficha do colaborador — na prática, NUNCA preenchido por ninguém (não existe nenhuma tela no
+  // Portal que grave esse campo), então todo colaborador ativo caía sempre no ramo "nunca
+  // treinou" aqui, mesmo quem de fato treinou bastante na Universidade Grupo Nord. Trocado para
+  // ler o dado real via o vínculo 1:1 já existente `User.employeeId` -> `TrainingEnrollment`
+  // (curso concluído) e `TrainingCertificate` (certificado de módulo emitido), usando a data mais
+  // recente entre os dois como "último treinamento" da pessoa.
+  //
+  // Colaborador SEM `Employee.user` (sem login no Portal) não tem como ter dado de treinamento da
+  // Universidade — como a tela de Colaboradores do RH não distingue hoje entre "não tem login" e
+  // "tem login, mas nunca treinou", decidimos aqui, dentro deste insight, EXCLUIR quem não tem
+  // login do cálculo (nem conta como "treinado" nem como "atrasado"), em vez de forçar um falso
+  // positivo de "nunca treinou" só por falta de login. Quem tem login mas nenhum
+  // `TrainingEnrollment` concluído/`TrainingCertificate` continua contando como "atenção" (mesmo
+  // comportamento de antes para quem de fato nunca treinou).
+  type EmployeeComLogin = (typeof employees)[number] & { user: { id: string } };
+  const ativos = employees.filter((e) => e.status === "ATIVO");
+  const ativosComLogin = ativos.filter((e): e is EmployeeComLogin => e.user !== null);
+  const userIdsComLogin = ativosComLogin.map((e) => e.user.id);
+
+  const [enrollmentMaxByUser, certificateMaxByUser] = userIdsComLogin.length
+    ? await Promise.all([
+        prisma.trainingEnrollment.groupBy({
+          by: ["userId"],
+          where: { userId: { in: userIdsComLogin }, status: "CONCLUIDO" },
+          _max: { completedAt: true },
+        }),
+        prisma.trainingCertificate.groupBy({
+          by: ["userId"],
+          where: { userId: { in: userIdsComLogin } },
+          _max: { issuedAt: true },
+        }),
+      ])
+    : [[], []];
+
+  const ultimoTreinamentoPorUserId = new Map<string, Date>();
+  for (const row of enrollmentMaxByUser) {
+    if (row._max.completedAt) ultimoTreinamentoPorUserId.set(row.userId, row._max.completedAt);
+  }
+  for (const row of certificateMaxByUser) {
+    if (!row._max.issuedAt) continue;
+    const atual = ultimoTreinamentoPorUserId.get(row.userId);
+    if (!atual || row._max.issuedAt > atual) ultimoTreinamentoPorUserId.set(row.userId, row._max.issuedAt);
+  }
+
+  const semTreinamento = ativosComLogin.filter((e) => {
+    const ultimo = ultimoTreinamentoPorUserId.get(e.user.id);
+    if (!ultimo) return true;
+    return differenceInMonths(now, ultimo) >= 6;
   });
   if (semTreinamento.length > 0) {
     const destaque = semTreinamento[0];
-    const meses = destaque.lastTrainingDate ? differenceInMonths(now, destaque.lastTrainingDate) : null;
+    const ultimoDestaque = ultimoTreinamentoPorUserId.get(destaque.user.id);
+    const meses = ultimoDestaque ? differenceInMonths(now, ultimoDestaque) : null;
     insights.push({
       title: "Treinamento em atraso",
       detail: meses
