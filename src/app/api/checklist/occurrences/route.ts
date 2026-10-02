@@ -43,11 +43,11 @@ export async function GET(req: Request) {
   });
   await refreshOccurrenceStatuses(existing.map((o) => o.id));
   // O escalonamento (processChecklistEscalations) NÃO roda mais aqui: o
-  // workflow .github/workflows/checklist-escalations.yml já cobre isso a
-  // cada 5 minutos independente de alguém estar com a tela aberta/trocando
-  // a data, então repetir a varredura completa a cada carregamento só
-  // custava tempo à toa (achado #208). Mesmo ajuste já feito antes na
-  // página (server component), ver comentário em
+  // Vercel Cron nativo (GET /api/checklist/escalations/run, ver vercel.json)
+  // já cobre isso a cada 5 minutos independente de alguém estar com a tela
+  // aberta/trocando a data, então repetir a varredura completa a cada
+  // carregamento só custava tempo à toa (achado #208). Mesmo ajuste já
+  // feito antes na página (server component), ver comentário em
   // src/app/portal/tarefas/checklist/page.tsx.
   //
   // Atenção, processChecklistEscalations não é só notificação/escalonamento

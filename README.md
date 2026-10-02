@@ -15,7 +15,7 @@ usuário e menu lateral reorganizável por arrastar e soltar.
 
 ## Configuração local
 
-1. Configure `DATABASE_URL`, `AUTH_SECRET`, `VAULT_SECRET` e `CRON_SECRET` (autentica os crons de sincronização Saipos e Meta Ads) em `.env` (veja `.env` como referência).
+1. Configure `DATABASE_URL`, `AUTH_SECRET`, `VAULT_SECRET` e `CRON_SECRET` (autentica todos os crons agendados do projeto — sincronização Saipos/Meta Ads, avisos de checklist/estoque/fechamento do dia/manutenção, keep-alive do banco etc., ver lista completa em `vercel.json`) em `.env` (veja `.env` como referência).
 2. Instale as dependências: `npm install`
 3. Aplique as migrações: `npx prisma migrate deploy` (ou `npx prisma migrate dev` em desenvolvimento)
 4. Popule o banco com dados iniciais: `npm run db:seed`

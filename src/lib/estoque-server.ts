@@ -6,10 +6,10 @@ const COUNT_TYPE_LABEL: Record<string, string> = { SEMANAL: "semanal", MENSAL: "
 
 /**
  * Janela de tolerância (minutos) depois do horário configurado em que um lembrete ainda é
- * considerado "no horário" — cobre o cron (GitHub Actions, ver
- * .github/workflows/estoque-contagem-lembretes.yml) rodando com algum atraso/drift sem deixar o
- * aviso sair horas depois do horário pedido. `ultimoLembreteData` (ver abaixo) garante que nunca
- * duplica mesmo rodando várias vezes dentro da janela.
+ * considerado "no horário" — cobre o cron (Vercel Cron nativo, a cada 15 min, ver
+ * GET /api/estoque/contagens/lembretes/run e vercel.json) rodando com algum atraso/drift sem
+ * deixar o aviso sair horas depois do horário pedido. `ultimoLembreteData` (ver abaixo) garante
+ * que nunca duplica mesmo rodando várias vezes dentro da janela.
  */
 const REMINDER_WINDOW_MINUTES = 30;
 
