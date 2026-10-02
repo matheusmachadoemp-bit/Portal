@@ -36,6 +36,8 @@ type EmployeeDTO = {
   lastEvaluationNote: string | null;
   lastTrainingDate: string | null;
   lastTrainingName: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
   empresa: { name: string };
 };
 
@@ -72,6 +74,8 @@ const emptyForm = {
   lastEvaluationNote: "",
   lastTrainingDate: "",
   lastTrainingName: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
 };
 
 function Avatar({ name, photoUrl, size = 32 }: { name: string; photoUrl: string | null; size?: number }) {
@@ -273,6 +277,8 @@ export function ColaboradoresClient({
       lastEvaluationNote: e.lastEvaluationNote ?? "",
       lastTrainingDate: e.lastTrainingDate ? format(new Date(e.lastTrainingDate), "yyyy-MM-dd") : "",
       lastTrainingName: e.lastTrainingName ?? "",
+      emergencyContactName: e.emergencyContactName ?? "",
+      emergencyContactPhone: e.emergencyContactPhone ?? "",
     });
     setShowForm(true);
   }
@@ -739,6 +745,23 @@ export function ColaboradoresClient({
             </Field>
             <Field label="Último treinamento (nome)">
               <input value={form.lastTrainingName} onChange={(e) => setForm({ ...form, lastTrainingName: e.target.value })} className="input" />
+            </Field>
+            <Field label="Contato de emergência (nome)">
+              <input
+                required
+                value={form.emergencyContactName}
+                onChange={(e) => setForm({ ...form, emergencyContactName: e.target.value })}
+                className="input"
+                placeholder="Nome de um familiar/pessoa próxima"
+              />
+            </Field>
+            <Field label="Contato de emergência (telefone)">
+              <input
+                required
+                value={form.emergencyContactPhone}
+                onChange={(e) => setForm({ ...form, emergencyContactPhone: e.target.value })}
+                className="input"
+              />
             </Field>
           </div>
           <button

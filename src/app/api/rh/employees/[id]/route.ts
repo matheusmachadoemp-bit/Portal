@@ -32,6 +32,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
+  // Contato de emergência é obrigatório (mesma regra do POST — ver racional lá), mas só checamos
+  // quando o campo foi de fato enviado no corpo (`!== undefined`): este PATCH também é chamado com
+  // um corpo parcial contendo só `{ photoUrl }` pela troca rápida de foto (handlePhotoChange em
+  // colaboradores-client.tsx / employee-profile-client.tsx), que não deve ser bloqueada por esta
+  // validação. O formulário de edição completo sempre manda os dois campos (ficaram `required` no
+  // HTML), então na prática só dispara se o campo for enviado vazio.
+  if (body.emergencyContactName !== undefined && (!body.emergencyContactName || !String(body.emergencyContactName).trim())) {
+    return NextResponse.json({ error: "Nome do contato de emergência é obrigatório." }, { status: 400 });
+  }
+  if (body.emergencyContactPhone !== undefined && (!body.emergencyContactPhone || !String(body.emergencyContactPhone).trim())) {
+    return NextResponse.json({ error: "Telefone do contato de emergência é obrigatório." }, { status: 400 });
+  }
+
   // Mesmo catálogo de RH (EmployeeCargo/EmployeeSetor) da criação (ver @/lib/rh-server) — só
   // resolve/cadastra quando o campo foi de fato enviado no PATCH (`undefined` continua
   // significando "não mexe neste campo", mesmo critério já usado pelos demais campos desta
@@ -76,6 +89,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       lastTrainingDate:
         body.lastTrainingDate !== undefined ? (body.lastTrainingDate ? new Date(body.lastTrainingDate) : null) : undefined,
       lastTrainingName: body.lastTrainingName ?? undefined,
+      emergencyContactName: body.emergencyContactName ?? undefined,
+      emergencyContactPhone: body.emergencyContactPhone ?? undefined,
     },
   });
 
