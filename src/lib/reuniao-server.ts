@@ -178,6 +178,32 @@ export type ReuniaoMeetingKeyDTO = "GERENTE" | "SALAO" | "COZINHA" | "DELIVERY" 
 export type ReuniaoCustomIndicatorDTO = {
   id: string;
   nome: string;
+  /**
+   * O `periodo` ("YYYY-MM") MAIS ANTIGO que tem um `ReuniaoCustomIndicatorValue`
+   * de verdade salvo para este indicador — `null` quando o indicador nunca
+   * recebeu nenhum valor em período nenhum (ex.: acabou de ser criado).
+   *
+   * NÃO usar `ReuniaoCustomIndicator.createdAt` pra essa finalidade — tentativa
+   * anterior (ver histórico desta mesma tarefa) usava `createdAt`, mas os 4
+   * indicadores fixos migrados de campos antigos (Faturamento Total/CMV/
+   * Turnover/Checklist Operacional do Gerente, NPS/Faturamento/Ticket Médio do
+   * Salão, etc. — ver `20260914140000_gerente_fechamento_do_mes` e
+   * `20260914160000_salao_cozinha_delivery_fechamento_do_mes`) têm `createdAt`
+   * = data em que a migration rodou (bem recente), MESMO tendo meses de
+   * `ReuniaoCustomIndicatorValue` reais copiados pra trás nessa mesma
+   * migration ("preservando histórico") — usar `createdAt` apagava com `null`
+   * o histórico real desses indicadores de uso diário, um bug pior que o
+   * original. `primeiroPeriodoComValor` reflete o dado de verdade (quando
+   * existe o PRIMEIRO valor salvo), não quando a linha do indicador foi
+   * criada.
+   *
+   * Usado para diferenciar "o indicador ainda não existia (nenhum valor
+   * salvo ainda) neste período" de "existe mas sem valor salvo NESTE período
+   * específico, com valor salvo em outros" (cai no `valorPadrao`, mesmo
+   * comportamento de sempre) — ver `historicoFor` em
+   * `buildCustomIndicatorPdfEntries` (fechamento-do-mes.tsx).
+   */
+  primeiroPeriodoComValor: string | null;
   icon: string;
   unidade: "PERCENT" | "CURRENCY" | "NUMBER";
   valorPadrao: number;
@@ -243,16 +269,34 @@ export async function loadReuniaoCustomIndicators(
   });
   if (indicators.length === 0) return [];
 
-  const values = await prisma.reuniaoCustomIndicatorValue.findMany({
-    where: { indicatorId: { in: indicators.map((i) => i.id) }, periodo },
-  });
+  const indicatorIds = indicators.map((i) => i.id);
+  const [values, earliestByIndicator] = await Promise.all([
+    prisma.reuniaoCustomIndicatorValue.findMany({
+      where: { indicatorId: { in: indicatorIds }, periodo },
+    }),
+    // Período mais antigo com um valor de verdade salvo, por indicador — busca
+    // em TODOS os períodos (sem filtrar por `periodo`, diferente da query
+    // acima), pra servir de "desde quando este indicador tem dado real" (ver
+    // comentário de `primeiroPeriodoComValor` no tipo `ReuniaoCustomIndicatorDTO`
+    // acima, sobre por que isso não pode vir de `createdAt`). Comparação
+    // lexicográfica de strings "YYYY-MM" (MIN de texto no Postgres) é
+    // cronológica porque todo `periodo` tem exatamente o mesmo formato de 7
+    // caracteres.
+    prisma.reuniaoCustomIndicatorValue.groupBy({
+      by: ["indicatorId"],
+      where: { indicatorId: { in: indicatorIds } },
+      _min: { periodo: true },
+    }),
+  ]);
   const valueByIndicator = new Map(values.map((v) => [v.indicatorId, v]));
+  const earliestPeriodoMap = new Map(earliestByIndicator.map((e) => [e.indicatorId, e._min.periodo ?? null]));
 
   return indicators.map((ind) => {
     const v = valueByIndicator.get(ind.id);
     return {
       id: ind.id,
       nome: ind.nome,
+      primeiroPeriodoComValor: earliestPeriodoMap.get(ind.id) ?? null,
       icon: ind.icon,
       unidade: ind.unidade,
       valorPadrao: ind.valorPadrao,
