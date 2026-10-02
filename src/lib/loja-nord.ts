@@ -78,16 +78,10 @@ export const LOJA_NORD_REDEMPTION_STATUS_TONE: Record<string, BadgeTone> = {
   CANCELADO: "default",
 };
 
-/** Regras de pontuação padrão sugeridas na tela de configuração (ponto de partida, editável pelo admin). */
-export const LOJA_NORD_DEFAULT_RULES = [
-  { activityType: "TAREFA_SIMPLES", label: "Tarefa simples concluída", pontos: 10 },
-  { activityType: "TAREFA_PRIORITARIA", label: "Tarefa prioritária concluída", pontos: 30 },
-  { activityType: "CHECKLIST_NO_HORARIO", label: "Checklist concluído no horário", pontos: 20 },
-  { activityType: "CHECKLIST_ATRASADO", label: "Checklist atrasado", pontos: 5 },
-  { activityType: "CURSO_CONCLUIDO", label: "Curso concluído", pontos: 100 },
-  { activityType: "AVALIACAO_APROVADA", label: "Avaliação aprovada", pontos: 50 },
-  { activityType: "SEQUENCIA_SEMANAL", label: "Sequência semanal sem atraso", pontos: 100 },
-] as const;
+// `LOJA_NORD_DEFAULT_RULES` (regras padrão sugeridas) existiu aqui como constante estática até a
+// Fase 1 da tela "Regras de pontuação" — removida porque virou dado de verdade no banco
+// (`LojaNordPointRule`, populado em prisma/seed.ts com os mesmos 7 valores + 5 novos). Editável
+// via `/api/loja-nord/regras` (Administrador), não mais hardcoded aqui.
 
 export function estoqueBadge(estoque: number | null, estoqueMinimo: number | null): { label: string; tone: BadgeTone } {
   if (estoque === null) return { label: "Disponível", tone: "success" };

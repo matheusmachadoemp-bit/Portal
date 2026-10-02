@@ -122,6 +122,12 @@ className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
   (positivo) ou `bg-nord-danger/15 text-nord-danger` (negativo), com
   ícone `TrendingUp`/`TrendingDown` 12px + texto "vs. período anterior".
 - `hint` opcional substitui o delta quando não há variação a mostrar.
+- `action` opcional: elemento pequeno e clicável (ex.: botão de ícone)
+  renderizado ao lado do valor — usado para ações rápidas por card, como
+  revelar/ocultar um dado sensível (ex.: botão de olho no card "Salário
+  Fixo" da ficha do colaborador). Evite combinar com `href` no mesmo card
+  sem necessidade (o clique na `action` já tem `stopPropagation` para não
+  disparar a navegação do card-link, mas o ideal é usar um ou outro).
 
 ```tsx
 <StatCard label="Faturamento do mês" value="R$ 42.000" icon="DollarSign"
