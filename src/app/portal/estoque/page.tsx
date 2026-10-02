@@ -205,10 +205,14 @@ export default async function EstoquePage() {
   if (produtosSemFicha.length) alertas.push({ label: `${produtosSemFicha.length} item(ns) do cardápio sem ficha técnica`, tone: "danger" });
   if (valorPerdas > 0) alertas.push({ label: `Desperdício de ${valorPerdas.toFixed(2).replace(".", ",")} registrado no período`, tone: "warning" });
   // Só dispara com pelo menos 1 contagem física já aprovada (ver
-  // `temContagemAprovada` acima) — sem isso, `estoqueAtual` nunca foi
-  // reconciliado com uma contagem real, então não há "estoque físico"
-  // confiável pra comparar com o sistema.
-  if (temContagemAprovada && Math.abs(diferencaPP) > 3) {
+  // `temContagemAprovada` acima) e com movimentação de estoque no período
+  // (`semMovimentacaoCmv`, mesmo flag usado pelo card "Diferença Real x
+  // Teórico" acima) — sem contagem, não há "estoque físico" confiável pra
+  // comparar; sem movimentação, `cmvRealPercent` cai artificialmente pra 0%
+  // e `diferencaPP` fica bem negativo, o que antes disparava "Crítico" aqui
+  // ao mesmo tempo que o card ao lado mostrava "Sem dados" (achado do
+  // Teulis, revisão da Ficha Técnica/CMV).
+  if (!semMovimentacaoCmv && temContagemAprovada && Math.abs(diferencaPP) > 3) {
     alertas.push({ label: `Diferença entre estoque físico e sistema acima de 3 p.p.`, tone: "danger" });
   }
 
