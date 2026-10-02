@@ -214,6 +214,18 @@ mas é um lembrete pra qualquer agente rodando revisão em paralelo: prefira
 nomear arquivos de teste temporários com algo único (ex.: o nome da própria
 tarefa/worktree) em vez de nomes genéricos como `cookies-admin.txt`.
 
+Mesma classe de problema, achada de outro jeito: numa revisão do Teulis, o
+`next dev` que o Mylon tinha subido pra testar a própria tarefa (já
+reportada como concluída) ainda estava rodando no mesmo worktree quando o
+Teulis foi montar o ambiente dele ali — o Next.js só permite um `next dev`
+por diretório, então a tentativa do Teulis colidiu, e escrever o `.env`
+dele por cima quase sobrescreveu a configuração do processo do Mylon ainda
+vivo (o Teulis reparou pelo log antes de isso causar dano, derrubou o
+processo órfão do Mylon e seguiu com o próprio). Todo agente (Caio, Mylon,
+Otavio, Nina, Teulis) deve derrubar o próprio `next dev`/servidor de teste
+antes de reportar a tarefa como concluída — nunca deixar um processo de
+teste vivo no worktree depois do relatório final.
+
 ## Isolar cada tarefa em uma branch/worktree própria
 
 Depois de um episódio em que Caio e Mylon, rodando ao mesmo tempo, editaram
