@@ -5,11 +5,16 @@ import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 
-// Vercel mata a função em 10s por padrão — um arquivo com centenas/milhares
-// de linhas processadas uma a uma facilmente estoura isso. Com as operações
-// em lote abaixo não deveria mais precisar de tanto tempo, mas isso dá
-// margem de segurança.
-export const maxDuration = 60;
+// No plano Vercel Pro o teto real é de pelo menos 800s, sem precisar habilitar
+// nada em beta (bem acima do teto efetivo de 60s do plano Hobby anterior, que
+// foi o motivo do valor original aqui). Subimos pra 300s — não o teto inteiro,
+// só margem real: o arquivo não tem limite de linhas no código, apenas o teto
+// de 4.5MB de corpo de requisição que a própria Vercel impõe (igual em
+// qualquer plano); e a atualização de clientes já cadastrados ainda faz 1 ida
+// ao banco por lote de 15 (ver processInChunks), então reimportar uma base
+// grande (milhares de linhas, maioria já existente) pode somar bastante tempo
+// nesses lotes sequenciais mesmo com o upsert em lote na criação.
+export const maxDuration = 300;
 
 // Colunas aceitas na planilha de importação de clientes (CRM > Clientes).
 // Cobre tanto uma planilha "uma linha por pedido" (número do pedido, o que
