@@ -17,7 +17,7 @@ import {
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, resolveComparePeriodos, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
+import { nextPeriodo, periodoLabel, periodoShortLabel, resolveComparePeriodos, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
 
 type ProdutoMeta = { produto: string; quantidade: number | null; meta: number; premiacao: number };
 
@@ -149,7 +149,7 @@ export function SalaoClient({
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
 
   const fdm = useFechamentoDoMes("/api/reuniao/salao", selectedPeriodo, initialCustomIndicators);
-  const mp = useMetasProximoMes("/api/reuniao/salao", canCreate);
+  const mp = useMetasProximoMes("/api/reuniao/salao", canCreate, nextPeriodo(selectedPeriodo));
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -195,7 +195,7 @@ export function SalaoClient({
     // Busca as metas do próximo mês na hora de exportar (não reaproveita o estado `mp.metas`
     // já carregado na tela) pra garantir que o PDF sai com o que está salvo agora — mesmo
     // padrão da Reunião Gerente (ver fetchMetasProximoMesForPdf).
-    const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/salao");
+    const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/salao", nextPeriodo(selectedPeriodo));
 
     // Busca os indicadores customizados ("Fechamento do mês") de cada período comparado,
     // fresquinhos do servidor (mesmo motivo de fetchMetasProximoMesForPdf acima) — a rota

@@ -5,13 +5,15 @@ import { Pencil, Plus, Trash2, Trophy } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
-import { periodoLabel, proximoMesPeriodo } from "@/lib/reuniao";
+import { periodoLabel } from "@/lib/reuniao";
 import { indicatorAccentColor } from "@/components/reuniao/fechamento-do-mes";
 
 /**
  * Card "Metas de [próximo mês]" (logo abaixo de "Observações da reunião") —
- * cadastro livre de metas para o mês seguinte a hoje (`proximoMesPeriodo()`,
- * nunca digitado): cada uma com métrica, valor-alvo e o prêmio (valor +
+ * cadastro livre de metas para o mês seguinte ao período que o usuário está
+ * vendo na tela (`periodo`, calculado pela própria tela como
+ * `nextPeriodo(selectedPeriodo)` — não mais fixo em "o mês seguinte a
+ * hoje"): cada uma com métrica, valor-alvo e o prêmio (valor +
  * destinatário, "Equipe" por padrão) ao bater. Mecanismo único (model
  * `MetaProximoMes`) compartilhado pelas 5 reuniões (ver GET/POST/PATCH/DELETE
  * /api/reuniao/{sub}/metas-proximo-mes(/[id]) — contrato idêntico nas 5, só o
@@ -54,33 +56,45 @@ function buildMetaForm(m?: MetaProximoMes | null) {
  * salvo agora, inclusive em modo Grupo Nord (a API já devolve lista vazia e
  * o PDF mostra "nenhuma meta cadastrada" em vez de pular a página). Em caso
  * de erro de rede, cai num fallback vazio em vez de travar a exportação.
+ * `periodo` é o mês-alvo (ex.: `nextPeriodo(selectedPeriodo)`, calculado pela
+ * tela a partir do período selecionado no momento do clique em Exportar) —
+ * garante que o PDF reflita o período que o usuário estava olhando, não "o
+ * mês seguinte a hoje".
  */
-export async function fetchMetasProximoMesForPdf(apiBase: string): Promise<{ periodoLabel: string; metas: MetaProximoMes[] }> {
+export async function fetchMetasProximoMesForPdf(apiBase: string, periodo: string): Promise<{ periodoLabel: string; metas: MetaProximoMes[] }> {
   try {
-    const res = await fetch(`${apiBase}/metas-proximo-mes`);
-    if (!res.ok) return { periodoLabel: periodoLabel(proximoMesPeriodo()), metas: [] };
+    const res = await fetch(`${apiBase}/metas-proximo-mes?periodo=${periodo}`);
+    if (!res.ok) return { periodoLabel: periodoLabel(periodo), metas: [] };
     const data = await res.json().catch(() => null);
-    return { periodoLabel: data?.periodoLabel ?? periodoLabel(proximoMesPeriodo()), metas: data?.metas ?? [] };
+    return { periodoLabel: data?.periodoLabel ?? periodoLabel(periodo), metas: data?.metas ?? [] };
   } catch {
-    return { periodoLabel: periodoLabel(proximoMesPeriodo()), metas: [] };
+    return { periodoLabel: periodoLabel(periodo), metas: [] };
   }
 }
 
 /**
  * Estado + chamadas de API do card "Metas de [próximo mês]" de uma reunião.
  * `apiBase` é a rota da própria reunião (ex.: "/api/reuniao/cozinha") — as
- * metas usam sempre `${apiBase}/metas-proximo-mes` (listar/criar) e
- * `${apiBase}/metas-proximo-mes/{id}` (editar/excluir). `canLoad` é o mesmo
+ * metas usam sempre `${apiBase}/metas-proximo-mes?periodo=...` (listar/criar)
+ * e `${apiBase}/metas-proximo-mes/{id}` (editar/excluir, sem precisar mandar
+ * `periodo` — operam numa meta já existente, identificada pelo próprio ID,
+ * e editar/excluir não muda o período da meta). `canLoad` é o mesmo
  * `canCreate` (isSingle) do resto da tela — em modo Grupo Nord o card nem
- * aparece, então nem faz sentido buscar.
+ * aparece, então nem faz sentido buscar. `periodo` é o mês-alvo das metas
+ * (normalmente `nextPeriodo(selectedPeriodo)`, calculado pela tela a partir
+ * do período que o usuário está vendo agora — nunca mais fixo em "o mês
+ * seguinte a hoje").
  *
- * Diferente de `useFechamentoDoMes`, as metas do próximo mês não dependem do
- * período selecionado na tela (sempre o mês seguinte a hoje, calculado uma
- * única vez) — por isso a busca inicial acontece uma vez só ao montar, sem
- * o mecanismo de "resposta fora de ordem" que a lista de indicadores precisa
- * (aquele existe por causa da troca de período, que não existe aqui).
+ * Igual a `useFechamentoDoMes`, as metas do próximo mês dependem do período
+ * selecionado na tela — trocar de período reexecuta o efeito de busca
+ * abaixo, que usa a flag `cancelled` por execução pra descartar resposta
+ * fora de ordem (troca rápida de período não deixa uma busca antiga
+ * sobrescrever o resultado da busca mais recente, porque cada execução do
+ * efeito tem sua própria flag, fechada por `cancelled = true` na limpeza
+ * quando `periodo`/`canLoad`/`apiBase` mudam de novo ou o componente
+ * desmonta).
  */
-export function useMetasProximoMes(apiBase: string, canLoad: boolean) {
+export function useMetasProximoMes(apiBase: string, canLoad: boolean, periodo: string) {
   const [metas, setMetas] = useState<MetaProximoMes[]>([]);
   // Só começa "carregando" quando o card vai mesmo aparecer (canLoad) — evita precisar
   // setState síncrono dentro do efeito abaixo só pra desligar o loading no modo Grupo Nord.
@@ -102,18 +116,17 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean) {
   useEffect(() => {
     if (!canLoad) return;
     let cancelled = false;
-    fetch(`${apiBase}/metas-proximo-mes`)
+    fetch(`${apiBase}/metas-proximo-mes?periodo=${periodo}`)
       .then((res) => res.json())
       .then((data) => !cancelled && setMetas(data.metas ?? []))
       .finally(() => !cancelled && setMetasLoading(false));
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `apiBase` é fixo por tela (nunca muda em runtime); incluir causaria só ruído no lint.
-  }, [canLoad]);
+  }, [apiBase, canLoad, periodo]);
 
   async function refreshMetas() {
-    const res = await fetch(`${apiBase}/metas-proximo-mes`);
+    const res = await fetch(`${apiBase}/metas-proximo-mes?periodo=${periodo}`);
     const data = await res.json();
     setMetas(data.metas ?? []);
   }
@@ -134,7 +147,7 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean) {
       const res = await fetch(`${apiBase}/metas-proximo-mes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newForm),
+        body: JSON.stringify({ ...newForm, periodo }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -200,6 +213,7 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean) {
   return {
     metas,
     metasLoading,
+    periodo,
     newOpen,
     setNewOpen,
     newForm,
@@ -235,7 +249,7 @@ export type MetasProximoMesState = ReturnType<typeof useMetasProximoMes>;
  * cada meta.
  */
 export function MetasProximoMesSection({ mp, canDelete }: { mp: MetasProximoMesState; canDelete: boolean }) {
-  const mesLabel = periodoLabel(proximoMesPeriodo());
+  const mesLabel = periodoLabel(mp.periodo);
 
   return (
     <>

@@ -15,7 +15,7 @@ import {
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
+import { nextPeriodo, periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
 import type { GerenteCustomIndicatorDTO } from "@/lib/reuniao-server";
 
 type Meeting = {
@@ -223,7 +223,7 @@ export function GerenteClient({
   const [savingEditIndicator, setSavingEditIndicator] = useState(false);
   const [editIndicatorError, setEditIndicatorError] = useState<string | null>(null);
 
-  const mp = useMetasProximoMes("/api/reuniao/gerente", canCreate);
+  const mp = useMetasProximoMes("/api/reuniao/gerente", canCreate, nextPeriodo(selectedPeriodo));
 
   const mounted = useRef(false);
   useEffect(() => {
@@ -276,7 +276,7 @@ export function GerenteClient({
     // já carregado na tela) pra garantir que o PDF sai com o que está salvo agora — inclusive
     // em modo Grupo Nord, onde a API já devolve lista vazia e o PDF mostra a mensagem de
     // "nenhuma meta cadastrada" em vez de pular a página.
-    const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/gerente");
+    const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/gerente", nextPeriodo(selectedPeriodo));
 
     // Busca os indicadores customizados ("Fechamento do mês") de cada período comparado,
     // fresquinhos do servidor (mesmo motivo de fetchMetasProximoMesForPdf acima) — a rota
