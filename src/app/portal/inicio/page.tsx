@@ -290,6 +290,20 @@ async function getData(
     total: idx === monthlyRanges.length - 1 ? fatMes : totalByMonthKey.get(format(start, "yyyy-MM")) ?? 0,
   }));
 
+  // "Existência de dados" (ver aviso de % da meta abaixo, em InicioClassico):
+  // só considera que há progresso real pra comparar quando existe pelo menos
+  // 1 SalesEntry lançado no mês corrente — sem isso, `fatMes` é 0 só porque
+  // nada foi lançado ainda, não porque o mês esteja "indo mal".
+  const temLancamentosMes = thisMonth.length > 0;
+
+  // Ritmo esperado do mês (dias já decorridos / total de dias do mês, em %)
+  // — mesma convenção de "progresso real vs. progresso esperado pro ponto
+  // do mês" já usada por `goalPace` (src/lib/inicio.ts) pro módulo de Metas,
+  // reaproveitada aqui pro aviso "% da meta" da Tela de Início clássica.
+  const diasNoMes = monthEnd.getDate();
+  const diaAtualDoMes = now.getDate();
+  const percentualEsperadoMes = Math.min(100, (diaAtualDoMes / diasNoMes) * 100);
+
   return {
     fatMes,
     fatMesAnterior,
@@ -308,6 +322,8 @@ async function getData(
     channelData,
     monthlyEvolution,
     pedidosGrowth: growth(pedidosMes, pedidosMesAnterior),
+    temLancamentosMes,
+    percentualEsperadoMes,
   };
 }
 
@@ -411,7 +427,12 @@ async function InicioClassico({ userId }: { userId: string | null }) {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const d = await getData(empresaIds, perms);
   const percentualMeta = pct(d.fatMes, d.metaMensal);
-  const abaixoDaMeta = percentualMeta < 70;
+  // Aviso "X% da meta" só dispara quando já existe algum lançamento de
+  // vendas no mês (sem isso, 0% não significa "indo mal", só "ainda não
+  // lançou nada") E o progresso real está abaixo do progresso ESPERADO pro
+  // dia corrente do mês (não contra 100%, que é sempre enganoso logo no
+  // começo do mês — ver `percentualEsperadoMes` em `getData`, acima).
+  const abaixoDaMeta = d.temLancamentosMes && percentualMeta < d.percentualEsperadoMes;
   const subtitle =
     ctx?.mode === "single" ? `Visão geral da ${ctx.empresa.name}` : "Visão geral consolidada — Grupo Nord";
 

@@ -32,7 +32,7 @@ export function DashboardClient({
   colaboradoresTreinados,
   cursosConcluidos,
   cursosPendentes,
-  horasRealizadas,
+  minutosRealizados,
   mediaConclusao,
   mediaAvaliacoes,
   certificadosEmitidos,
@@ -50,9 +50,14 @@ export function DashboardClient({
   colaboradoresTreinados: number;
   cursosConcluidos: number;
   cursosPendentes: number;
-  horasRealizadas: number;
+  /** Já em minutos (não em horas) — ver `formatMinutes` abaixo; evita arredondar pra hora cheia
+   * antes de reconverter, que zerava qualquer total abaixo de 30min. */
+  minutosRealizados: number;
   mediaConclusao: number;
-  mediaAvaliacoes: number;
+  /** `null` = nenhuma `TrainingAttempt` no escopo ainda (quiz é opcional por módulo) — distinto
+   * de "a média das avaliações registradas é 0%". Ver item 2 da investigação Base única de
+   * pessoas. */
+  mediaAvaliacoes: number | null;
   certificadosEmitidos: number;
   topCourses: { name: string; matriculas: number }[];
   byCategory: { name: string; value: number }[];
@@ -84,9 +89,15 @@ export function DashboardClient({
         storageKey="universidade-dashboard-treinamento-kpi-order"
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
         cards={[
-          { key: "horas-treinamento", label: "Horas de treinamento", value: formatMinutes(horasRealizadas * 60), icon: "Timer" },
+          { key: "horas-treinamento", label: "Horas de treinamento", value: formatMinutes(minutosRealizados), icon: "Timer" },
           { key: "media-conclusao", label: "Média de conclusão", value: `${mediaConclusao}%`, icon: "TrendingUp" },
-          { key: "media-avaliacoes", label: "Média das avaliações", value: `${mediaAvaliacoes}%`, icon: "ClipboardCheck" },
+          {
+            key: "media-avaliacoes",
+            label: "Média das avaliações",
+            value: mediaAvaliacoes === null ? "—" : `${mediaAvaliacoes}%`,
+            hint: mediaAvaliacoes === null ? "Sem avaliações registradas" : undefined,
+            icon: "ClipboardCheck",
+          },
           { key: "certificados-emitidos", label: "Certificados emitidos", value: String(certificadosEmitidos), icon: "Award", color: "#a855f7" },
         ]}
       />

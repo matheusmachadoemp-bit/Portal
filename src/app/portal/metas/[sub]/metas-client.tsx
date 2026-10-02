@@ -98,7 +98,7 @@ function kpisOf(list: GoalDTO[]) {
   const atrasadas = list.filter((g) => g.status === "NAO_ATINGIDA").length;
   const mediaConclusao = total
     ? list.reduce((s, g) => s + Math.max(0, Math.min(goalPercent(g), 100)), 0) / total
-    : 0;
+    : null;
   return { total, concluidas, emAndamento, atrasadas, mediaConclusao };
 }
 
@@ -383,7 +383,7 @@ export function MetasClient({
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <input type="month" value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} className="input w-auto" />
+          <input type="month" aria-label="Filtrar por mês" value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} className="input w-auto" />
           {mesFiltro && (
             <button onClick={() => setMesFiltro("")} className="text-xs text-nord-blue-light hover:underline">
               Ver todos os meses
@@ -463,10 +463,10 @@ export function MetasClient({
           {
             key: "media-conclusao",
             label: "Média de conclusão",
-            value: `${curr.mediaConclusao.toFixed(1)}%`,
+            value: curr.mediaConclusao != null ? `${curr.mediaConclusao.toFixed(1)}%` : "—",
             icon: "TrendingUp",
             color: "#f59e0b",
-            delta: growth(curr.mediaConclusao, prev.mediaConclusao),
+            delta: curr.mediaConclusao != null && prev.mediaConclusao != null ? growth(curr.mediaConclusao, prev.mediaConclusao) : null,
           },
         ]}
       />

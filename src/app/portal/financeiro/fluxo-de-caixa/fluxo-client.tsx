@@ -5,6 +5,7 @@ import { Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
+import { ChartEmptyState, isChartDataEmpty } from "@/components/ui/chart-empty-state";
 import { formatCurrency } from "@/lib/calc";
 import { format, startOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -141,25 +142,29 @@ export function FluxoCaixaClient({
       />
 
       <Section title={`Fluxo de caixa (${granularidade})`}>
-        <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={chartData} margin={{ top: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-            <XAxis dataKey="date" stroke="#9a9aa2" fontSize={11} />
-            <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
-            <Tooltip
-              contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
-              formatter={(v) => formatCurrency(Number(v))}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]}>
-              <LabelList dataKey="entradas" content={makeColumnValueLabel(formatCurrency)} />
-            </Bar>
-            <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]}>
-              <LabelList dataKey="saidas" content={makeColumnValueLabel(formatCurrency)} />
-            </Bar>
-            <Line type="monotone" dataKey="saldo" name="Saldo acumulado" stroke="#2952E3" strokeWidth={2} dot={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
+        {isChartDataEmpty(chartData, ["entradas", "saidas", "saldo"]) ? (
+          <ChartEmptyState height={300} />
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={chartData} margin={{ top: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
+              <XAxis dataKey="date" stroke="#9a9aa2" fontSize={11} />
+              <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
+              <Tooltip
+                contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
+                formatter={(v) => formatCurrency(Number(v))}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="entradas" content={makeColumnValueLabel(formatCurrency)} />
+              </Bar>
+              <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="saidas" content={makeColumnValueLabel(formatCurrency)} />
+              </Bar>
+              <Line type="monotone" dataKey="saldo" name="Saldo acumulado" stroke="#2952E3" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
       </Section>
     </div>
   );

@@ -6,6 +6,8 @@ import { PageContainer } from "@/components/page-container";
 import { Badge, ProgressBar, Section } from "@/components/ui/stat-card";
 import { levelForXp, nextLevelForXp } from "@/lib/university";
 import { canManageUsers } from "@/lib/permissions";
+import { activeUserInEmpresasWhere, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { courseEmpresaWhere } from "@/lib/university-server";
 import { Award } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -25,23 +27,37 @@ export default async function ColaboradoresPage() {
   }
 
   const isAdmin = canManageUsers(session.user.role);
+  const ctx = await getActiveEmpresaContext();
+  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  // Mesmo guard de `/portal/universidade` (dashboard): sem contexto de loja resolvido, não cai no
+  // fallback de `activeUserInEmpresasWhere` que deixaria ADMINISTRADOR/GESTOR passar mesmo com
+  // lista de lojas vazia.
+  const hasEmpresaContext = empresaIds.length > 0;
 
   const [users, certificates] = await Promise.all([
-    prisma.user.findMany({
-      where: isAdmin ? { active: true } : { id: session.user.id },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        role: true,
-        avatarUrl: true,
-        trainingEnrollments: { select: { status: true } },
-        trainingCertificates: { select: { id: true } },
-        trainingXpEvents: { select: { amount: true } },
-      },
-    }),
+    // Admin via a rede inteira sem filtro de loja até esta correção — mesmo padrão já usado pelo
+    // dashboard (`/portal/universidade`) e por RH/Checklist pra listas de usuário por loja.
+    isAdmin && !hasEmpresaContext
+      ? Promise.resolve([])
+      : prisma.user.findMany({
+          where: isAdmin ? activeUserInEmpresasWhere(empresaIds) : { id: session.user.id },
+          orderBy: { name: "asc" },
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            avatarUrl: true,
+            // Totais do PRÓPRIO colaborador (concluídos/pendentes/certificados/XP no card dele),
+            // propositalmente não escopados por `courseEmpresaWhere` — é o histórico de
+            // treinamento da pessoa, não uma agregação de rede que possa "vazar" dado de outra
+            // loja; o que este item escopa é só QUAIS colaboradores aparecem na lista.
+            trainingEnrollments: { select: { status: true } },
+            trainingCertificates: { select: { id: true } },
+            trainingXpEvents: { select: { amount: true } },
+          },
+        }),
     prisma.trainingCertificate.findMany({
-      where: isAdmin ? {} : { userId: session.user.id },
+      where: isAdmin ? { course: courseEmpresaWhere(empresaIds) } : { userId: session.user.id },
       orderBy: { issuedAt: "desc" },
       include: {
         user: { select: { name: true } },

@@ -149,8 +149,17 @@ export async function requireActiveSingleEmpresa(): Promise<Empresa | null> {
  * `empresaIds`. Mesmo critério já usado por `getStoreActiveUsers`
  * (src/lib/manutencao-server.ts), mas generalizado pra aceitar uma lista (a maioria das telas usa
  * `empresaIdsForContext(ctx)`, que pode ter mais de um id no modo Grupo Nord).
+ *
+ * Exportada (além de usada internamente por `getSelectableTeamMembers` abaixo) para o dashboard
+ * da Universidade (`/portal/universidade`, `/portal/universidade/colaboradores`) escopar por loja
+ * ativa suas contagens/listagens que são de `User` (login no Portal) — nunca de `Employee` (ficha
+ * de RH, que já tem `empresaId` direto). Quando `empresaIds` vier vazio (sem contexto de loja
+ * ativo resolvido), chame só depois de confirmar isso num guard próprio: sozinho, este `where`
+ * ainda deixaria ADMINISTRADOR/GESTOR passar (eles contam pra qualquer lista de lojas, inclusive
+ * vazia) — foi por isso que `getSelectableTeamMembers` abaixo retorna `[]` cedo nesse caso, em vez
+ * de confiar só neste filtro.
  */
-function activeUserInEmpresasWhere(empresaIds: string[]): Prisma.UserWhereInput {
+export function activeUserInEmpresasWhere(empresaIds: string[]): Prisma.UserWhereInput {
   return {
     active: true,
     OR: [{ role: { in: ["ADMINISTRADOR", "GESTOR"] } }, { empresaAccess: { some: { empresaId: { in: empresaIds } } } }],

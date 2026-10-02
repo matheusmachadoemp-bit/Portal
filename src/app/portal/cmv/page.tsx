@@ -53,7 +53,7 @@ export default async function CmvPage() {
   });
   const snapshotDates = [periodStart, now, ...dayBoundaries.flatMap((d) => [d.day, d.end])];
 
-  const [products, ingredients, snapshots, movements, salesEntries, quantidadeVendida] = await Promise.all([
+  const [products, ingredients, snapshots, movements, salesEntries, quantidadeVendida, contagensAprovadas] = await Promise.all([
     prisma.product.findMany({
       where: { empresaId: { in: empresaIds } },
       include: { ingredients: { include: { ingredient: true } } },
@@ -74,6 +74,13 @@ export default async function CmvPage() {
     }),
     prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: periodStart } } }),
     quantidadeVendidaPorProdutoNoPeriodo(empresaIds, periodStart, now),
+    // Pelo menos 1 contagem física já aprovada alguma vez — ver mesmo
+    // racional em src/app/portal/estoque/page.tsx: sem nenhuma contagem
+    // aprovada, `ingredient.estoqueAtual` nunca foi reconciliado com a
+    // realidade, então "CMV Real" (que depende dele) não tem base física
+    // confiável pra ser comparado com o "CMV Teórico" — a divergência entre
+    // os dois não deveria disparar como alerta nesse caso.
+    prisma.stockCount.count({ where: { empresaId: { in: empresaIds }, status: "APROVADA" } }),
   ]);
 
   const estoqueEm = (at: Date) => valorEstoqueDeSnapshot(ingredients, snapshots.get(at.getTime())!);
@@ -107,7 +114,14 @@ export default async function CmvPage() {
 
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaValor = cmvRealValorPeriodo - cmvTeoricoValorPeriodo;
-  const divergenciaAlta = !semMovimentacaoEstoque && Math.abs(diferencaPP) > DIVERGENCIA_ALERTA_PP;
+  const temContagemAprovada = contagensAprovadas > 0;
+  // "Diferença" só é confiável quando há movimentação de estoque no período
+  // (senão o CMV Real nem tem como ser calculado, achado de produção
+  // 02/10/2026) E quando já existe ao menos 1 contagem física aprovada
+  // (senão `estoqueAtual` nunca foi reconciliado com a realidade, achado de
+  // produção 02/10/2026 — ver mesmo racional em estoque/page.tsx).
+  const diferencaDisponivel = !semMovimentacaoEstoque && temContagemAprovada;
+  const divergenciaAlta = diferencaDisponivel && Math.abs(diferencaPP) > DIVERGENCIA_ALERTA_PP;
 
   const dailySeries = dayBoundaries.map(({ day, end }) => {
     const faturamentoDia = faturamentoNoPeriodo(day, end);
@@ -157,14 +171,29 @@ export default async function CmvPage() {
               color: semMovimentacaoEstoque ? undefined : "#eab308",
             },
             { key: "cmv-real-valor", label: "CMV Real (R$, 30d)", value: formatCurrency(cmvRealValorPeriodo), icon: "DollarSign" },
-            {
-              key: "diferenca",
-              label: "Diferença",
-              value: semMovimentacaoEstoque ? "Sem dados" : `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
-              icon: semMovimentacaoEstoque ? "Percent" : divergenciaAlta ? "TriangleAlert" : "CheckCircle2",
-              color: semMovimentacaoEstoque ? undefined : divergenciaAlta ? "#ef4444" : "#22c55e",
-              hint: semMovimentacaoEstoque ? "Sem movimentação de estoque nos últimos 30 dias" : formatCurrency(diferencaValor),
-            },
+            diferencaDisponivel
+              ? {
+                  key: "diferenca",
+                  label: "Diferença",
+                  value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
+                  icon: divergenciaAlta ? "TriangleAlert" : "CheckCircle2",
+                  color: divergenciaAlta ? "#ef4444" : "#22c55e",
+                  hint: formatCurrency(diferencaValor),
+                }
+              : {
+                  // Sem movimentação de estoque no período OU sem nenhuma
+                  // contagem física aprovada ainda — o "CMV Real" não tem
+                  // base confiável pra comparar com o teórico nesses casos,
+                  // mostra "sem dados" em vez de um p.p. que pareceria preciso.
+                  key: "diferenca",
+                  label: "Diferença",
+                  value: "Sem dados",
+                  icon: "HelpCircle",
+                  color: "#64748b",
+                  hint: semMovimentacaoEstoque
+                    ? "Sem movimentação de estoque nos últimos 30 dias"
+                    : "Faça uma contagem de estoque para comparar",
+                },
           ]}
         />
 

@@ -5,7 +5,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { DashboardClient } from "./dashboard/dashboard-client";
 import { canManageUsers } from "@/lib/permissions";
-import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
+import { activeUserInEmpresasWhere, empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { courseEmpresaWhere, courseStatusWhere } from "@/lib/university-server";
 import { startOfMonth, endOfMonth, subMonths, subDays, format } from "date-fns";
 
@@ -20,6 +20,11 @@ export default async function UniversidadePage() {
   const isAdmin = canManageUsers(session.user.role);
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
+  // Sem contexto de loja resolvido (ex.: usuário sem nenhum acesso), nenhuma das métricas abaixo
+  // que são escopadas por USUÁRIO (em vez de por CURSO) deve recair no fallback de
+  // `activeUserInEmpresasWhere` que deixaria ADMINISTRADOR/GESTOR passar mesmo com lista vazia —
+  // mesmo guard que `getSelectableTeamMembers` (src/lib/empresa.ts) já aplica.
+  const hasEmpresaContext = empresaIds.length > 0;
 
   const now = new Date();
 
@@ -46,26 +51,53 @@ export default async function UniversidadePage() {
     pendingAssessments,
     monthlyCounts,
   ] = await Promise.all([
-    prisma.user.count({ where: { active: true } }),
+    // Escopado por USUÁRIO (não por curso): "colaboradores cadastrados" é contagem de `User`
+    // (login no Portal), então usa o mesmo filtro de "tem acesso a pelo menos uma destas lojas"
+    // já usado por RH/Checklist pra listas de usuário por loja (`activeUserInEmpresasWhere`),
+    // não `courseEmpresaWhere` (esse é só pra filtrar `TrainingCourse`). Até a correção deste
+    // item (#investigação base única de pessoas), contava a rede inteira sem filtro nenhum.
+    hasEmpresaContext ? prisma.user.count({ where: activeUserInEmpresasWhere(empresaIds) }) : Promise.resolve(0),
     // `enrollments.findMany` (sem where nenhum) trazia TODA matrícula de todo funcionário pra
     // somar/contar em JS — cresce pra sempre a cada matrícula nova. Trocado por count/aggregate/
     // groupBy calculados no banco (ver #296): cada consulta abaixo já chega pronta.
-    prisma.trainingEnrollment.count({ where: { status: "CONCLUIDO" } }),
-    prisma.trainingEnrollment.count({ where: { status: { in: ["NAO_INICIADO", "EM_ANDAMENTO"] } } }),
-    prisma.trainingEnrollment.aggregate({ _avg: { progressPercent: true } }),
+    //
+    // Escopado por CURSO (`courseEmpresaWhere`) a partir deste item: cursos sem `empresaId` são
+    // compartilhados entre lojas, cursos com `empresaId` só entram se a loja estiver no contexto
+    // ativo — mesmo critério que `topCourses`/`byCategory` abaixo já aplicavam, agora estendido a
+    // toda contagem/agregação de `TrainingEnrollment`/`TrainingCertificate`/`TrainingAttempt`/
+    // `TrainingLessonProgress` deste dashboard (antes contavam a rede inteira sem filtro).
+    prisma.trainingEnrollment.count({ where: { status: "CONCLUIDO", course: courseEmpresaWhere(empresaIds) } }),
+    prisma.trainingEnrollment.count({
+      where: { status: { in: ["NAO_INICIADO", "EM_ANDAMENTO"] }, course: courseEmpresaWhere(empresaIds) },
+    }),
+    prisma.trainingEnrollment.aggregate({
+      _avg: { progressPercent: true },
+      where: { course: courseEmpresaWhere(empresaIds) },
+    }),
     // Um `groupBy` só substitui tanto "quantos colaboradores distintos já concluíram algo"
     // (trainedUserIds, = número de grupos) quanto "quem concluiu mais cursos" (mostCoursesUser, =
     // primeiro grupo, já vem ordenado por contagem decrescente) — sem trazer uma linha por
     // matrícula, só uma linha por colaborador com pelo menos 1 conclusão.
     prisma.trainingEnrollment.groupBy({
       by: ["userId"],
-      where: { status: "CONCLUIDO" },
+      where: { status: "CONCLUIDO", course: courseEmpresaWhere(empresaIds) },
       _count: { userId: true },
       orderBy: { _count: { userId: "desc" } },
     }),
-    prisma.trainingCertificate.count(),
-    prisma.trainingLessonProgress.aggregate({ _sum: { watchedSeconds: true } }),
-    prisma.trainingAttempt.aggregate({ _avg: { score: true } }),
+    prisma.trainingCertificate.count({ where: { course: courseEmpresaWhere(empresaIds) } }),
+    prisma.trainingLessonProgress.aggregate({
+      _sum: { watchedSeconds: true },
+      where: { moduleEnrollment: { enrollment: { course: courseEmpresaWhere(empresaIds) } } },
+    }),
+    // `_count: true` aqui (além de `_avg`) é o que permite o item 2 distinguir "nenhuma
+    // TrainingAttempt no escopo" (quiz é opcional por módulo — pode não existir nenhuma tentativa
+    // ainda) de "média real é 0%" — antes os dois casos chegavam como "0%" pro usuário, sem
+    // diferença nenhuma na tela.
+    prisma.trainingAttempt.aggregate({
+      _avg: { score: true },
+      _count: true,
+      where: { moduleEnrollment: { enrollment: { course: courseEmpresaWhere(empresaIds) } } },
+    }),
     // Filtrado por loja (`courseEmpresaWhere`, desde a #315) E status (`courseStatusWhere`, desde
     // a #317 — achado do Teulis na revisão da #315): sem o segundo, os gráficos "Cursos mais
     // concluídos"/"por categoria" abaixo agregavam nome+categoria+matrículas de cursos em
@@ -79,23 +111,40 @@ export default async function UniversidadePage() {
       where: {
         status: { not: "CONCLUIDO" },
         createdAt: { lte: subDays(now, OVERDUE_DAYS) },
-        course: { mandatory: true },
+        course: { ...courseEmpresaWhere(empresaIds), mandatory: true },
       },
       select: { id: true },
     }),
-    prisma.trainingXpEvent.findMany({
-      where: { createdAt: { gte: startOfMonth(now) } },
-      include: { user: { select: { name: true } } },
+    // `TrainingXpEvent` não tem vínculo com curso nenhum (só `userId`) — escopado por USUÁRIO
+    // (mesmo motivo/filtro da contagem de `users` acima), não por `courseEmpresaWhere`.
+    hasEmpresaContext
+      ? prisma.trainingXpEvent.findMany({
+          where: { createdAt: { gte: startOfMonth(now) }, user: activeUserInEmpresasWhere(empresaIds) },
+          include: { user: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+    prisma.trainingAttempt.count({
+      where: { passed: false, moduleEnrollment: { enrollment: { course: courseEmpresaWhere(empresaIds) } } },
     }),
-    prisma.trainingAttempt.count({ where: { passed: false } }),
     Promise.all(
-      monthRanges.map((r) => prisma.trainingEnrollment.count({ where: { completedAt: { gte: r.from, lte: r.to } } }))
+      monthRanges.map((r) =>
+        prisma.trainingEnrollment.count({
+          where: { completedAt: { gte: r.from, lte: r.to }, course: courseEmpresaWhere(empresaIds) },
+        })
+      )
     ),
   ]);
 
-  const horasRealizadas = Math.round((horasSoma._sum.watchedSeconds ?? 0) / 3600);
+  // Horas de treinamento: antes arredondava segundos -> HORA cheia (`/3600`) e só depois
+  // reconvertia pra minuto (`* 60`) na tela — qualquer total abaixo de 30min acumulado virava
+  // "0min" na exibição, mesmo com progresso real registrado. Agora arredonda direto pra minuto.
+  const minutosRealizados = Math.round((horasSoma._sum.watchedSeconds ?? 0) / 60);
   const mediaConclusao = Math.round(progressoMedio._avg.progressPercent ?? 0);
-  const mediaAvaliacoes = Math.round(mediaScore._avg.score ?? 0);
+  // `mediaScore._count` (não `._count.score`: é `_count: true`, não `_count: { score: true }`) é
+  // o total de `TrainingAttempt` no escopo — 0 significa "nenhuma avaliação registrada ainda"
+  // (quiz é opcional por módulo), bem diferente de "a média das avaliações registradas é 0%".
+  // `null` sinaliza o primeiro caso pro `DashboardClient` (ver item 2).
+  const mediaAvaliacoes = mediaScore._count > 0 ? Math.round(mediaScore._avg.score ?? 0) : null;
 
   const topCourses = [...courses]
     .sort((a, b) => b._count.enrollments - a._count.enrollments)
@@ -132,7 +181,7 @@ export default async function UniversidadePage() {
         colaboradoresTreinados={concluidosPorUsuario.length}
         cursosConcluidos={concluidos}
         cursosPendentes={pendentes}
-        horasRealizadas={horasRealizadas}
+        minutosRealizados={minutosRealizados}
         mediaConclusao={mediaConclusao}
         mediaAvaliacoes={mediaAvaliacoes}
         certificadosEmitidos={certificates}
