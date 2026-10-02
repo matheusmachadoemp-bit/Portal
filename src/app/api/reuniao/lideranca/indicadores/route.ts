@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { createReuniaoCustomIndicator, parseSecondaryIndicatorFields, REUNIAO_INDICATOR_UNIDADES } from "@/lib/reuniao-server";
+import {
+  createReuniaoCustomIndicator,
+  parseSecondaryIndicatorFields,
+  parseTertiaryIndicatorFields,
+  validateTertiaryRequiresSecondary,
+  REUNIAO_INDICATOR_UNIDADES,
+} from "@/lib/reuniao-server";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -34,6 +40,20 @@ export async function POST(req: Request) {
   if (secondary.touched && !secondary.ok) {
     return NextResponse.json({ error: secondary.error }, { status: 400 });
   }
+  // Terceiro valor — só pode existir junto do segundo (ver comentário de
+  // nomeTerciario em schema.prisma); na criação, "efetivo tem segundo" é
+  // direto o que este mesmo body está pedindo (não há nada prévio pra
+  // herdar).
+  const tertiary = parseTertiaryIndicatorFields(body);
+  if (tertiary.touched && !tertiary.ok) {
+    return NextResponse.json({ error: tertiary.error }, { status: 400 });
+  }
+  const efetivoTemSecundario = secondary.touched && secondary.ok && secondary.unidadeSecundaria !== null;
+  const efetivoTemTerciario = tertiary.touched && tertiary.ok && tertiary.unidadeTerciaria !== null;
+  const tertiaryError = validateTertiaryRequiresSecondary(efetivoTemSecundario, efetivoTemTerciario);
+  if (tertiaryError) {
+    return NextResponse.json({ error: tertiaryError }, { status: 400 });
+  }
 
   const indicator = await createReuniaoCustomIndicator({
     empresaId: empresa.id,
@@ -44,6 +64,8 @@ export async function POST(req: Request) {
     valorPadrao,
     nomeSecundario: secondary.touched && secondary.ok ? secondary.nomeSecundario : null,
     unidadeSecundaria: secondary.touched && secondary.ok ? secondary.unidadeSecundaria : null,
+    nomeTerciario: tertiary.touched && tertiary.ok ? tertiary.nomeTerciario : null,
+    unidadeTerciaria: tertiary.touched && tertiary.ok ? tertiary.unidadeTerciaria : null,
     createdById: session.user.id,
   });
 
