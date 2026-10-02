@@ -25,6 +25,15 @@ import { OcorrenciasClient } from "./ocorrencias-client";
  * Ocorrências (categoria pra editar, responsável pra transformar) — mesmo padrão já usado em
  * Manutenção/Tarefas/Checklist (busca direta no page.tsx pra popular um `<select>`, sem rota
  * própria pra isso).
+ *
+ * `teamMembersByEmpresa` (pro bloco "Status do dia", seletor de Responsável/Substituto de cada
+ * card de cargo) é a MESMA busca, mas uma vez por loja do contexto em vez de uma vez só com todas
+ * as `empresaIds` juntas: em modo Grupo Nord, um card de cargo pertence a uma loja específica
+ * (`cargo.empresa.id`), e `getSelectableTeamMembers(empresaIds)` combinado devolveria também
+ * usuários que só têm acesso a OUTRA loja do grupo — a API já rejeitaria essa escolha
+ * (`findUsersWithoutEmpresaAccess` em `PATCH .../cargos/[cargoId]`), mas a lista nem deveria
+ * oferecer essa opção pra começo (mesmo racional do achado #177: seletor de Responsável sem
+ * filtro de loja).
  */
 export default async function OcorrenciasPage() {
   const session = await auth();
@@ -36,14 +45,16 @@ export default async function OcorrenciasPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canEdit = await hasModulePermission(session.user.id, "fechamento-dia", "canEdit");
 
-  const [categorias, teamMembers] = await Promise.all([
+  const [categorias, teamMembers, teamMembersPerEmpresa] = await Promise.all([
     prisma.fechamentoCategoria.findMany({
       where: { empresaId: { in: empresaIds }, ativa: true },
       select: { id: true, nome: true, icon: true, empresaId: true },
       orderBy: [{ empresaId: "asc" }, { ordem: "asc" }],
     }),
     getSelectableTeamMembers(empresaIds),
+    Promise.all(empresaIds.map((id) => getSelectableTeamMembers([id]))),
   ]);
+  const teamMembersByEmpresa = Object.fromEntries(empresaIds.map((id, idx) => [id, teamMembersPerEmpresa[idx]]));
 
   // Mesma projeção "campos de vitrine apenas" de Tarefas/Chamados (tarefas-client.tsx,
   // chamados/page.tsx): em modo "single", `ctx.empresa` é o registro completo da loja
@@ -56,7 +67,7 @@ export default async function OcorrenciasPage() {
       <div className="space-y-8">
         <div className="space-y-3">
           <h2 className="text-base font-semibold text-white">Status do dia</h2>
-          <StatusDoDiaClient />
+          <StatusDoDiaClient teamMembersByEmpresa={teamMembersByEmpresa} canEdit={canEdit} />
         </div>
         <div className="space-y-3">
           <h2 className="text-base font-semibold text-white">Ocorrências</h2>
