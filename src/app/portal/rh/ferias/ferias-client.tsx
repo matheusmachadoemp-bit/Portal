@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronRight } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
@@ -14,11 +14,19 @@ import {
   eachDayOfInterval,
   getDay,
   addMonths,
-  subMonths,
   isWithinInterval,
   isSameMonth,
 } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { RhTabs } from "../rh-tabs";
+
+/** Quantos meses (a partir do mês atual) o calendário mostra de cada vez antes de precisar
+ * clicar em "Mostrar mais meses" — ver 3 ao mesmo tempo é o que cabe confortavelmente numa
+ * tela comum sem rolar; meses extras ficam disponíveis rolando a fileira horizontalmente,
+ * igual as colunas do kanban de Marketing. */
+const INITIAL_MONTHS = 6;
+const MONTHS_STEP = 3;
+const WEEKDAY_LABELS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 type VacationDTO = {
   id: string;
@@ -84,7 +92,7 @@ export function FeriasClient({
   const [editing, setEditing] = useState<VacationDTO | null>(null);
   const [form, setForm] = useState(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [monthsToShow, setMonthsToShow] = useState(INITIAL_MONTHS);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
@@ -106,14 +114,6 @@ export function FeriasClient({
     return { periodos, diasDisponiveis, diasTirados, vencidas };
   }, [visible]);
 
-  const calendarDays = useMemo(() => {
-    const start = startOfMonth(calendarMonth);
-    const end = endOfMonth(calendarMonth);
-    const days = eachDayOfInterval({ start, end });
-    const leadingBlanks = getDay(start);
-    return { days, leadingBlanks };
-  }, [calendarMonth]);
-
   function vacationsOnDay(day: Date) {
     return visible.filter((v) => {
       if (!v.dataInicio || !v.dataFim) return false;
@@ -121,6 +121,33 @@ export function FeriasClient({
       return isWithinInterval(day, { start: new Date(v.dataInicio), end: new Date(v.dataFim) });
     });
   }
+
+  // Um cartão por mês, começando no mês atual — em vez do antigo "um mês só com setas",
+  // a fileira inteira fica montada e rola na horizontal (igual as colunas do kanban de
+  // Marketing), então os meses anteriores nunca saem da tela de vez, só ficam fora da
+  // área visível até o usuário rolar de volta pra eles.
+  const months = useMemo(() => {
+    const base = startOfMonth(new Date());
+    return Array.from({ length: monthsToShow }, (_, i) => addMonths(base, i));
+  }, [monthsToShow]);
+
+  const monthCards = useMemo(() => {
+    return months.map((month) => {
+      const start = startOfMonth(month);
+      const end = endOfMonth(month);
+      const days = eachDayOfInterval({ start, end });
+      const leadingBlanks = getDay(start);
+      const employeesInMonth = new Set<string>();
+      visible.forEach((v) => {
+        if (!v.dataInicio || !v.dataFim) return;
+        if (v.status !== "APROVADA" && v.status !== "EM_ANDAMENTO") return;
+        const vStart = new Date(v.dataInicio);
+        const vEnd = new Date(v.dataFim);
+        if (vStart <= end && vEnd >= start) employeesInMonth.add(v.employeeId);
+      });
+      return { month, days, leadingBlanks, employeeCount: employeesInMonth.size };
+    });
+  }, [months, visible]);
 
   async function refresh() {
     const url = fixedEmployeeId ? `/api/rh/vacations?employeeId=${fixedEmployeeId}` : "/api/rh/vacations";
@@ -271,41 +298,60 @@ export function FeriasClient({
       <Section
         title="Calendário"
         action={
-          <div className="flex items-center gap-2">
-            <button onClick={() => setCalendarMonth((m) => subMonths(m, 1))} className="text-nord-gray hover:text-white">
-              <ChevronLeft size={16} />
-            </button>
-            <span className="text-xs text-white w-24 text-center">{format(calendarMonth, "MMMM yyyy")}</span>
-            <button onClick={() => setCalendarMonth((m) => addMonths(m, 1))} className="text-nord-gray hover:text-white">
-              <ChevronRight size={16} />
-            </button>
-          </div>
+          <button
+            onClick={() => setMonthsToShow((n) => n + MONTHS_STEP)}
+            className="flex items-center gap-1 text-xs text-nord-gray hover:text-white"
+          >
+            Mostrar mais meses <ChevronRight size={14} />
+          </button>
         }
       >
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-nord-gray mb-2">
-          {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
-            <span key={i}>{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: calendarDays.leadingBlanks }).map((_, i) => (
-            <div key={`blank-${i}`} />
-          ))}
-          {calendarDays.days.map((day) => {
-            const dayVacations = vacationsOnDay(day);
+        <div className="flex gap-3 overflow-x-auto nord-scrollbar pb-2 snap-x snap-mandatory">
+          {monthCards.map(({ month, days, leadingBlanks, employeeCount }) => {
+            const isCurrentMonth = isSameMonth(month, new Date());
             return (
               <div
-                key={day.toISOString()}
-                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs ${
-                  dayVacations.length > 0
-                    ? "bg-nord-blue/20 text-nord-blue-light font-medium"
-                    : isSameMonth(day, calendarMonth)
-                      ? "text-nord-gray"
-                      : "text-nord-gray/30"
+                key={month.toISOString()}
+                className={`w-72 sm:w-80 shrink-0 snap-start rounded-xl border p-3 ${
+                  isCurrentMonth ? "border-nord-blue bg-nord-blue/5" : "border-nord-border bg-nord-panel/40"
                 }`}
-                title={dayVacations.map((v) => v.employee.name).join(", ")}
               >
-                {format(day, "d")}
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="text-sm font-medium text-white capitalize truncate">
+                    {format(month, "MMMM yyyy", { locale: ptBR })}
+                  </span>
+                  {employeeCount > 0 && (
+                    <span className="shrink-0 text-[11px] font-medium text-nord-blue-light bg-nord-blue/15 rounded-full px-2 py-0.5">
+                      {employeeCount} {employeeCount === 1 ? "colaborador" : "colaboradores"}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-nord-gray mb-2">
+                  {WEEKDAY_LABELS.map((d, i) => (
+                    <span key={i}>{d}</span>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({ length: leadingBlanks }).map((_, i) => (
+                    <div key={`blank-${i}`} />
+                  ))}
+                  {days.map((day) => {
+                    const dayVacations = vacationsOnDay(day);
+                    const onVacation = dayVacations.length > 0;
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        className={`aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 text-xs ${
+                          onVacation ? "bg-nord-blue/20 text-nord-blue-light font-medium" : "text-nord-gray"
+                        }`}
+                        title={dayVacations.map((v) => v.employee.name).join(", ")}
+                      >
+                        <span>{format(day, "d")}</span>
+                        {onVacation && <span className="w-1 h-1 rounded-full bg-nord-blue-light" />}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}

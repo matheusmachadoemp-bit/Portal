@@ -298,14 +298,24 @@ export function ContagemSemanalClient({
 
       <Modal open={showNew} onClose={() => setShowNew(false)} title="Iniciar contagem semanal" widthClass="max-w-sm">
         <div className="space-y-3">
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Setor</span>
-            <select className="input" value={setor} onChange={(e) => setSetor(e.target.value)}>
-              {setores.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </label>
+          {setores.length === 0 ? (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
+              <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+              <p className="text-xs text-nord-danger">
+                Nenhum setor cadastrado para esta loja ainda. Cadastre em Estoque &gt; Produtos, aba &quot;Setores&quot;,
+                antes de iniciar a contagem.
+              </p>
+            </div>
+          ) : (
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Setor</span>
+              <select className="input" value={setor} onChange={(e) => setSetor(e.target.value)}>
+                {setores.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Responsável</span>
             <select className="input" value={responsavel} onChange={(e) => setResponsavel(e.target.value)}>
@@ -316,7 +326,7 @@ export function ContagemSemanalClient({
             </select>
           </label>
           {error && <p className="text-xs text-nord-danger">{error}</p>}
-          <button onClick={iniciarContagem} className="btn-primary w-full py-2.5">
+          <button onClick={iniciarContagem} disabled={setores.length === 0} className="btn-primary w-full py-2.5">
             Iniciar
           </button>
         </div>
