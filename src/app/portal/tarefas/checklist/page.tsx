@@ -64,9 +64,10 @@ export default async function ChecklistPage() {
   // desta página seria buscar e recalcular à toa todo o histórico de
   // checklists já fechados desta loja.
   // O escalonamento/notificação de atraso (processChecklistEscalations) NÃO
-  // roda mais aqui: o workflow .github/workflows/checklist-escalations.yml já
-  // cobre isso a cada 15 minutos independente de alguém abrir esta tela, então
-  // repetir a varredura completa em todo carregamento só custava tempo à toa.
+  // roda mais aqui: o Vercel Cron nativo (GET /api/checklist/escalations/run,
+  // ver vercel.json) já cobre isso a cada 5 minutos independente de alguém
+  // abrir esta tela, então repetir a varredura completa em todo carregamento
+  // só custava tempo à toa.
   const existing = await prisma.checklistOccurrence.findMany({
     where: { empresaId: { in: empresaIds }, status: { notIn: CHECKLIST_TERMINAL_STATUSES } },
     select: { id: true },
