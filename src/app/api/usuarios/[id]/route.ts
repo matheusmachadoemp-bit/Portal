@@ -115,26 +115,41 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   // Fecha a brecha "criar como Administrador/Gestor (sem ficha, permitido) e depois promover
   // por aqui pra um papel operacional sem nunca vincular uma ficha de RH" — mesma exigência da
-  // criação (POST /api/usuarios), mas só entra em ação quando ESTE PATCH está, ele mesmo,
-  // mudando o role PARA um papel operacional. Compara contra o role ATUAL do usuário (não contra
-  // "body.role só está presente") de propósito: o formulário de Usuários sempre reenvia o role
-  // atual mesmo quando o admin não troca nada, então bloquear só por "body.role !== undefined"
-  // pegaria também edições comuns (ex.: só telefone) de usuário operacional antigo que já existia
-  // sem ficha — isso sim seria forçar retroativo, o que o Matheus pediu pra NÃO fazer. O
-  // employeeId "resultante" considera tanto um `body.employeeId` enviado neste mesmo PATCH quanto
-  // o que o usuário já tinha, se este PATCH não tocar nesse campo.
-  if (body.role !== undefined && OPERATIONAL_ROLES.includes(body.role)) {
+  // criação (POST /api/usuarios). Dispara quando ESTE PATCH está, ele mesmo, mudando algo que
+  // pode levar o usuário pro estado inválido "role operacional sem ficha": (a) o role está
+  // mudando PARA um papel operacional, ou (b) o employeeId está mudando de VALOR neste PATCH
+  // (pra outra ficha ou pra nulo) enquanto o role FINAL (o que veio no body, ou o que o usuário
+  // já tinha) é operacional. O caso (b) é o que fecha a brecha #458/#455: antes, um PATCH só com
+  // `employeeId: null` (sem tocar `role`) passava direto porque a checagem só olhava pra troca
+  // de role, deixando um usuário operacional sem ficha vinculada.
+  //
+  // De propósito NÃO dispara só porque o role final é operacional sem nenhum dos dois campos
+  // (role/employeeId) estar de fato MUDANDO DE VALOR neste PATCH — isso pegaria também edições
+  // comuns (ex.: só telefone) de usuário operacional antigo que já existia sem ficha, forçando
+  // um ajuste retroativo que o Matheus pediu pra NÃO fazer. Tanto o role quanto o employeeId são
+  // comparados contra o valor ATUAL do usuário (não contra "o campo só está presente no body")
+  // pelo mesmo motivo: a tela de Usuários (`usuarios-client.tsx`) sempre reenvia o `form` inteiro
+  // — role e employeeId incluídos — mesmo quando o admin só mudou outro campo (ex.: telefone), e
+  // usar "a chave veio no body" em vez de "o valor mudou" faria esse reenvio de rotina disparar a
+  // validação sempre que o usuário editado já for operacional, travando até edições sem relação
+  // nenhuma com role/ficha (achado do Teulis na revisão desta mesma tarefa). `employeeId` (a
+  // variável já normalizada acima, não `body.employeeId`) trata string vazia como `null`, então
+  // reenviar `""` quando já era `null` conta como "não mudou", igual a reenviar o mesmo role.
+  if (body.role !== undefined || body.employeeId !== undefined) {
     const currentUser = await prisma.user.findUnique({ where: { id }, select: { role: true, employeeId: true } });
     if (!currentUser) {
       return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
     }
-    if (currentUser.role !== body.role) {
+    const finalRole = body.role !== undefined ? body.role : currentUser.role;
+    const roleActuallyChanging = body.role !== undefined && body.role !== currentUser.role;
+    const employeeIdActuallyChanging = employeeId !== undefined && employeeId !== currentUser.employeeId;
+    if (OPERATIONAL_ROLES.includes(finalRole) && (roleActuallyChanging || employeeIdActuallyChanging)) {
       const resultingEmployeeId = employeeId !== undefined ? employeeId : currentUser.employeeId;
       if (!resultingEmployeeId) {
         return NextResponse.json(
           {
             error:
-              "Para o nível de acesso Gerente, Supervisor ou Colaborador, este usuário precisa de uma ficha de funcionário (RH) vinculada. Selecione a ficha de RH antes de salvar essa troca de nível de acesso.",
+              "Para o nível de acesso Gerente, Supervisor ou Colaborador, este usuário precisa de uma ficha de funcionário (RH) vinculada. Selecione uma ficha de RH antes de salvar.",
           },
           { status: 400 }
         );
