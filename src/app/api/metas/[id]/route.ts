@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { computeGoalStatus, GERENCIA_RESPONSAVEL, weeksInGoalPeriod, type GoalDirectionKey } from "@/lib/goals";
-import { computeValorRealizado } from "@/lib/goals-server";
+import { computeValorRealizado, resolveResponsavelEmployeeId } from "@/lib/goals-server";
 import { hasModulePermission } from "@/lib/authz";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -78,12 +78,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const category = body.category ?? existing.category;
   const responsavel = category === "GERENCIA" ? GERENCIA_RESPONSAVEL : (body.responsavel ?? undefined);
 
+  // Só re-resolve o vínculo real (achado #454) quando responsável e/ou categoria de fato mudam
+  // nesta edição (mesmo espírito de só recalcular `valorRealizado` quando a unidade muda, acima)
+  // — uma edição que não toca em nenhum dos dois não arrisca desfazer um vínculo já certo (da
+  // criação ou de um backfill anterior) só por uma ambiguidade nova surgida depois (ex.: um
+  // `Employee` homônimo cadastrado mais tarde). `undefined` aqui faz o Prisma manter o valor já
+  // salvo, igual ao padrão já usado pros outros campos desta rota.
+  const responsavelEmployeeId =
+    body.responsavel !== undefined || body.category !== undefined
+      ? await resolveResponsavelEmployeeId(existing.empresaId, category, responsavel ?? existing.responsavel)
+      : undefined;
+
   const goal = await prisma.goal.update({
     where: { id },
     data: {
       name: body.name ?? undefined,
       category: body.category ?? undefined,
       responsavel,
+      responsavelEmployeeId,
       description: body.description ?? undefined,
       indicador: body.indicador ?? undefined,
       valorMeta,

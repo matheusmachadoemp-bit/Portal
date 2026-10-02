@@ -1396,7 +1396,15 @@ async function main() {
           empresaId: nordPizza.id,
           name: "Reduzir tempo de atendimento no salão",
           category: "SALAO",
-          responsavel: "Supervisor Salão",
+          // "Mariana Alves" (não um papel/cargo genérico): é o nome da própria `Employee`
+          // "Chef de Salão" da Nord Pizza, criada mais abaixo (`employeeChefSalao`) e vinculada
+          // ao login de teste `chef-salao@nordpizza.com` — usar o nome real aqui (em vez de um
+          // texto descritivo como "Supervisor Salão", que não bate com nenhum `Employee`
+          // cadastrado) é o que permite tanto o cruzamento por texto de `loadRotinaMetas` quanto
+          // o backfill de `responsavelEmployeeId` (migration
+          // 20261002212102_goal_responsavel_employee_backfill) encontrarem esta meta na "Minha
+          // rotina" de quem de fato ocupa o cargo.
+          responsavel: "Mariana Alves",
           indicador: "Minutos por mesa",
           valorMeta: 25,
           valorRealizado: 29,
@@ -1421,7 +1429,10 @@ async function main() {
           empresaId: nordPizza.id,
           name: "Reduzir CMV médio",
           category: "COZINHA",
-          responsavel: "Chef de Cozinha",
+          // "Rafael Torres" (não um papel/cargo genérico): mesmo raciocínio do comentário em
+          // "Reduzir tempo de atendimento no salão" acima, só que para a `Employee` "Chef de
+          // Cozinha" da Nord Pizza (`employeeChefCozinha`, vinculada a `chef-cozinha@nordpizza.com`).
+          responsavel: "Rafael Torres",
           indicador: "CMV %",
           valorMeta: 30,
           valorRealizado: 32,

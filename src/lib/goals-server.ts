@@ -47,6 +47,42 @@ export async function recomputeGoalRealizado(goalId: string) {
 }
 
 /**
+ * Resolve `Goal.responsavelEmployeeId` a partir do texto já digitado em `responsavel` — mesmo
+ * espírito do backfill de dado que preencheu esse campo pras metas já existentes (migration
+ * 20261002212102_goal_responsavel_employee_backfill), aplicado agora na criação/edição, pra meta
+ * nova (ou reatribuída) não ficar presa só no cruzamento por texto de `loadRotinaMetas`
+ * (src/lib/inicio.ts) esperando um backfill futuro que não vai rodar de novo.
+ *
+ * Critério conservador — "sem vínculo" (`null`, cai pro cruzamento por texto que já existe hoje)
+ * é sempre preferível a vincular errado:
+ *   - Nunca resolve para categoria GERENCIA: responsável de meta de Gerência é sempre um PAPEL
+ *     fixo ("Gerente", ver `GERENCIA_RESPONSAVEL` acima), nunca uma pessoa específica.
+ *   - Só casa `Employee` ATIVO da MESMA loja (`empresaId`) — nunca entre lojas diferentes, mesmo
+ *     que o nome coincida. Diferente do backfill (que também casa `Employee` não-ativo, pra não
+ *     perder o vínculo de meta ANTIGA com alguém já desligado): aqui o texto está sendo
+ *     digitado/confirmado AGORA, então o candidato certo é sempre alguém atualmente ativo.
+ *   - Comparação por igualdade de texto, sem diferenciar maiúsculas/minúsculas nem espaços nas
+ *     pontas — mesma tolerância do backfill e de `loadRotinaMetas`.
+ *   - Só preenche quando existe EXATAMENTE 1 `Employee` ativo daquela loja com esse nome —
+ *     nome ambíguo fica sem vínculo (`null`) em vez de arriscar escolher a pessoa errada.
+ */
+export async function resolveResponsavelEmployeeId(
+  empresaId: string,
+  category: string,
+  responsavel: string | null | undefined
+): Promise<string | null> {
+  if (category === "GERENCIA") return null;
+  const nome = (responsavel ?? "").trim();
+  if (!nome) return null;
+
+  const candidatos = await prisma.employee.findMany({
+    where: { empresaId, status: "ATIVO", name: { equals: nome, mode: "insensitive" } },
+    select: { id: true },
+  });
+  return candidatos.length === 1 ? candidatos[0].id : null;
+}
+
+/**
  * Roda diariamente (ver vercel.json): toda meta cujo período já terminou e
  * ainda não teve alerta disparado é reavaliada — se ficou "NAO_ATINGIDA",
  * gerentes e administradores da loja são notificados. `alertaEnviado`
