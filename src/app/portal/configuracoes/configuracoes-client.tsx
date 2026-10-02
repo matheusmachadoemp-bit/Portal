@@ -4,6 +4,53 @@ import { useActionState, useState } from "react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { changePasswordAction } from "@/app/actions/account";
 import { format } from "date-fns";
+import { GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
+
+type ChecklistNotifTemplate = {
+  id: string;
+  name: string;
+  empresaNome: string;
+  setor: string;
+  categoria: string | null;
+  turno: string | null;
+  cobrancaAtiva: boolean;
+  avisoAntesMinutos: number;
+  avisoAtrasoResponsavelMinutos: number;
+  alertaCriticoMinutos: number;
+  naoRealizadoMinutos: number;
+};
+
+type ChecklistNotifRow = {
+  id: string;
+  name: string;
+  empresaNome: string;
+  setor: string;
+  turno: string | null;
+  cobrancaAtiva: boolean;
+  avisoAntesMinutos: string;
+  avisoAtrasoResponsavelMinutos: string;
+  alertaCriticoMinutos: string;
+  naoRealizadoMinutos: string;
+  saving: boolean;
+  message: string | null;
+};
+
+function toChecklistNotifRow(t: ChecklistNotifTemplate): ChecklistNotifRow {
+  return {
+    id: t.id,
+    name: t.name,
+    empresaNome: t.empresaNome,
+    setor: t.setor,
+    turno: t.turno,
+    cobrancaAtiva: t.cobrancaAtiva,
+    avisoAntesMinutos: String(t.avisoAntesMinutos),
+    avisoAtrasoResponsavelMinutos: String(t.avisoAtrasoResponsavelMinutos),
+    alertaCriticoMinutos: String(t.alertaCriticoMinutos),
+    naoRealizadoMinutos: String(t.naoRealizadoMinutos),
+    saving: false,
+    message: null,
+  };
+}
 
 const INTEGRATIONS = [
   { name: "iFood", webhook: "/api/webhooks/ifood", status: "Aguardando configuração" },
@@ -23,6 +70,9 @@ export function ConfiguracoesClient({
   metasCmv,
   activeEmpresaId,
   canEditMetaCmv,
+  checklistTemplates,
+  showChecklistEmpresaColumn,
+  canEditChecklistNotificacoes,
   saipos,
   metaAds,
 }: {
@@ -36,6 +86,9 @@ export function ConfiguracoesClient({
   metasCmv: { id: string; name: string; metaCmvPercent: number }[];
   activeEmpresaId: string | null;
   canEditMetaCmv: boolean;
+  checklistTemplates: ChecklistNotifTemplate[];
+  showChecklistEmpresaColumn: boolean;
+  canEditChecklistNotificacoes: boolean;
   saipos: { lojaId: string | null; syncEnabled: boolean; hasToken: boolean; lastSyncAt: string | null } | null;
   metaAds: {
     adAccountId: string | null;
@@ -81,6 +134,59 @@ export function ConfiguracoesClient({
     } else {
       setMetaCmvMessage(data.error ?? "Não foi possível salvar a meta de CMV.");
     }
+  }
+
+  const [checklistRows, setChecklistRows] = useState<ChecklistNotifRow[]>(() => checklistTemplates.map(toChecklistNotifRow));
+
+  // `message: null` vem ANTES de `...patch` (não depois) de propósito: o objetivo é limpar a
+  // mensagem antiga sempre que algum campo muda (ex.: usuário editando um input depois de ver um
+  // erro) — mas `saveChecklistNotif` reaproveita esta mesma função pra MOSTRAR um erro de
+  // validação (`updateChecklistRow(id, { message: "..." })`), e com `message: null` depois do
+  // spread, esse valor explícito era sobrescrito no mesmo golpe e a mensagem nunca aparecia.
+  function updateChecklistRow(id: string, patch: Partial<ChecklistNotifRow>) {
+    setChecklistRows((rows) => rows.map((r) => (r.id === id ? { ...r, message: null, ...patch } : r)));
+  }
+
+  async function saveChecklistNotif(id: string) {
+    const row = checklistRows.find((r) => r.id === id);
+    if (!row) return;
+
+    const avisoAntes = Number(row.avisoAntesMinutos);
+    const avisoAtraso = Number(row.avisoAtrasoResponsavelMinutos);
+    const alertaCritico = Number(row.alertaCriticoMinutos);
+    const naoRealizado = Number(row.naoRealizadoMinutos);
+    const valores = [avisoAntes, avisoAtraso, alertaCritico, naoRealizado];
+    if (!valores.every((n) => Number.isInteger(n) && n >= 0)) {
+      updateChecklistRow(id, { message: "Informe minutos válidos (números inteiros, 0 ou mais)." });
+      return;
+    }
+    if (avisoAtraso > alertaCritico || alertaCritico > naoRealizado) {
+      updateChecklistRow(id, {
+        message: "Os prazos precisam seguir esta ordem: cobrança do responsável ≤ alerta crítico ≤ não realizado.",
+      });
+      return;
+    }
+
+    setChecklistRows((rows) => rows.map((r) => (r.id === id ? { ...r, saving: true, message: null } : r)));
+    const res = await fetch(`/api/configuracoes/checklist-notificacoes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cobrancaAtiva: row.cobrancaAtiva,
+        avisoAntesMinutos: avisoAntes,
+        avisoAtrasoResponsavelMinutos: avisoAtraso,
+        alertaCriticoMinutos: alertaCritico,
+        naoRealizadoMinutos: naoRealizado,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setChecklistRows((rows) =>
+      rows.map((r) =>
+        r.id === id
+          ? { ...r, saving: false, message: res.ok ? "Salvo com sucesso." : data.error ?? "Não foi possível salvar." }
+          : r
+      )
+    );
   }
 
   const [saiposToken, setSaiposToken] = useState("");
@@ -366,6 +472,133 @@ export function ConfiguracoesClient({
             Usada como referência de comparação em CMV → Comparativo Real x Teórico, CMV Real, CMV Teórico e na
             Visão Geral do Estoque.
           </p>
+        </Section>
+      )}
+
+      {isAdmin && (
+        <Section title="Notificações de checklist">
+          <p className="text-xs text-nord-gray mb-4">
+            Controla, por checklist, quando avisar sobre atraso e cobrar os responsáveis. O aviso de
+            conclusão (no prazo ou com atraso) já é automático e não depende de nenhuma configuração
+            aqui. A verificação de atraso roda em segundo plano a cada poucos minutos — o horário de
+            chegada do aviso pode variar alguns minutos em relação ao limiar configurado abaixo, e se
+            mais de um limiar vencer de uma vez (ex.: o checklist ficou muito tempo sem verificação),
+            cada destinatário recebe só um aviso, o mais severo entre os vencidos — nunca uma rajada.
+          </p>
+          <div className="overflow-x-auto nord-scrollbar">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-nord-gray border-b border-nord-border">
+                  <th className="py-2 pr-4">Checklist</th>
+                  {showChecklistEmpresaColumn && <th className="py-2 pr-4">Loja</th>}
+                  <th className="py-2 pr-4">Setor / turno</th>
+                  <th className="py-2 pr-4" title="Liga/desliga a cobrança automática deste checklist">
+                    Cobrança
+                  </th>
+                  <th className="py-2 pr-4">Avisar antes do prazo (min)</th>
+                  <th className="py-2 pr-4">Cobrar responsável após (min)</th>
+                  <th className="py-2 pr-4">Alerta crítico após (min)</th>
+                  <th className="py-2 pr-4">Não realizado após (min)</th>
+                  <th className="py-2 pr-4" />
+                </tr>
+              </thead>
+              <tbody>
+                {checklistRows.map((row) => (
+                  <tr key={row.id} className="border-b border-nord-border/50 align-top">
+                    <td className="py-2.5 pr-4 text-white">{row.name}</td>
+                    {showChecklistEmpresaColumn && <td className="py-2.5 pr-4 text-nord-gray">{row.empresaNome}</td>}
+                    <td className="py-2.5 pr-4 text-nord-gray whitespace-nowrap">
+                      {GOAL_CATEGORY_LABEL[row.setor as GoalCategoryKey] ?? row.setor}
+                      {row.turno ? ` · ${row.turno}` : ""}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        type="checkbox"
+                        checked={row.cobrancaAtiva}
+                        disabled={!canEditChecklistNotificacoes}
+                        onChange={(e) => updateChecklistRow(row.id, { cobrancaAtiva: e.target.checked })}
+                        title="Cobrança automática ativa"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={row.avisoAntesMinutos}
+                        disabled={!canEditChecklistNotificacoes}
+                        onChange={(e) => updateChecklistRow(row.id, { avisoAntesMinutos: e.target.value })}
+                        className="input input-sm w-20"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={row.avisoAtrasoResponsavelMinutos}
+                        disabled={!canEditChecklistNotificacoes}
+                        onChange={(e) => updateChecklistRow(row.id, { avisoAtrasoResponsavelMinutos: e.target.value })}
+                        className="input input-sm w-20"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={row.alertaCriticoMinutos}
+                        disabled={!canEditChecklistNotificacoes}
+                        onChange={(e) => updateChecklistRow(row.id, { alertaCriticoMinutos: e.target.value })}
+                        className="input input-sm w-20"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={row.naoRealizadoMinutos}
+                        disabled={!canEditChecklistNotificacoes}
+                        onChange={(e) => updateChecklistRow(row.id, { naoRealizadoMinutos: e.target.value })}
+                        className="input input-sm w-20"
+                      />
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      {canEditChecklistNotificacoes && (
+                        <button
+                          onClick={() => saveChecklistNotif(row.id)}
+                          disabled={row.saving}
+                          className="bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-xs font-medium rounded-lg py-1.5 px-3 whitespace-nowrap"
+                        >
+                          {row.saving ? "Salvando..." : "Salvar"}
+                        </button>
+                      )}
+                      {row.message && (
+                        <p
+                          className={`text-[11px] mt-1 ${row.message.includes("sucesso") ? "text-nord-success" : "text-nord-danger"}`}
+                        >
+                          {row.message}
+                        </p>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {checklistRows.length === 0 && (
+                  <tr>
+                    <td colSpan={showChecklistEmpresaColumn ? 9 : 8} className="py-4 text-center text-nord-gray">
+                      Nenhum checklist cadastrado ainda.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {!canEditChecklistNotificacoes && checklistRows.length > 0 && (
+            <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2 mt-4">
+              Seu perfil de permissão não permite editar estas configurações — somente visualização.
+            </p>
+          )}
         </Section>
       )}
 

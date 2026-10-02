@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { ChecklistEscalationType } from "@prisma/client";
+import { Prisma, type ChecklistEscalationType } from "@prisma/client";
 import {
   CHECKLIST_ESCALATION_PRIORITY,
   computeOccurrenceStatus,
@@ -246,12 +246,84 @@ export async function notifyChecklistCompletion(occurrenceId: string) {
 }
 
 /**
- * Processa cobrança automática das ocorrências informadas: para cada nível
- * de escalonamento já vencido (calculado a partir dos horários e das
- * configurações do template), notifica os destinatários certos — uma única
- * vez por ocorrência+nível+destinatário, graças à chave única de
- * `ChecklistEscalationLog`. Ao atingir o nível NAO_REALIZADO, também marca a
- * ocorrência como não realizada.
+ * Destinatários de um nível de escalonamento específico — AVISO_ANTES/NO_LIMITE só avisam o
+ * responsável (ainda não é "problema dos gestores"); ATRASO_RESPONSAVEL/ALERTA_CRITICO avisam
+ * responsável + gestores da loja; NAO_REALIZADO avisa só os gestores (a ocorrência já está
+ * encerrada nesse ponto). Extraída da função principal porque agora é usada pra decidir, por
+ * destinatário, QUAIS níveis vencidos se aplicam a ele antes de escolher qual deles efetivamente
+ * notificar (ver `processChecklistEscalations`).
+ */
+function recipientsForLevel(
+  tipo: ChecklistEscalationType,
+  responsavelId: string | null,
+  managerIds: Set<string>
+): string[] {
+  if (tipo === "AVISO_ANTES" || tipo === "NO_LIMITE") {
+    return responsavelId ? [responsavelId] : [];
+  }
+  if (tipo === "ATRASO_RESPONSAVEL" || tipo === "ALERTA_CRITICO") {
+    return [...new Set([...(responsavelId ? [responsavelId] : []), ...managerIds])];
+  }
+  return [...managerIds];
+}
+
+/**
+ * Processa cobrança automática das ocorrências informadas: para cada nível de escalonamento já
+ * vencido (calculado a partir dos horários e das configurações do template), notifica os
+ * destinatários certos — uma única vez por ocorrência+nível+destinatário, graças à chave única de
+ * `ChecklistEscalationLog`. Ao atingir o nível NAO_REALIZADO, também marca a ocorrência como não
+ * realizada.
+ *
+ * Duas garantias importantes, as duas corrigindo problemas reais encontrados ao vivo (sessão de
+ * investigação do pedido "Configurações > Notificações de checklist" — relato do Matheus: "chega
+ * muita notificação... tipo 'não foi feito há 336 minutos'"):
+ *
+ * 1. Rajada de níveis quando o cron atrasa (causa raiz B): este motor depende de um disparo
+ *    externo rodando a cada poucos minutos (ver .github/workflows/checklist-escalations.yml),
+ *    mas esse disparo pode ficar horas sem rodar de verdade na prática (limitação do agendador do
+ *    GitHub Actions pra schedules muito frequentes — confirmado ao vivo consultando o histórico
+ *    real de execuções via API do GitHub: mediana de ~4h entre execuções, não os 5 min
+ *    configurados; corrigir isso é uma decisão de infra fora do código, acompanhada separadamente
+ *    com o Matheus). Quando isso acontece, uma ocorrência atrasada pode ter VÁRIOS níveis vencidos
+ *    de uma vez (ex.: ATRASO_RESPONSAVEL + ALERTA_CRITICO + NAO_REALIZADO todos vencidos juntos) —
+ *    antes, cada nível gerava sua própria notificação, e um responsável/gestor recebia uma rajada
+ *    de vários avisos de uma vez, todos carimbados com o mesmo atraso acumulado. Agora: por
+ *    DESTINATÁRIO, só o nível mais severo entre os vencidos-e-ainda-não-notificados gera
+ *    notificação de verdade; os níveis mais brandos vencidos na mesma rodada ainda ganham um
+ *    registro de controle (pra nunca serem "recuperados" e notificados tardiamente numa rodada
+ *    futura, o que pareceria um aviso andando pra trás no tempo), só não disparam notificação
+ *    própria.
+ *
+ * 2. Corrida entre execuções concorrentes (causa raiz C, com uma volta extra achada na revisão
+ *    do Teulis): como existe mais de um gatilho pro mesmo endpoint (GitHub Actions + cron diário
+ *    do Vercel, ver vercel.json, mais qualquer disparo manual), duas execuções podem processar a
+ *    MESMA ocorrência ao mesmo tempo. Primeira versão: a função antiga criava a Notification e SÓ
+ *    DEPOIS tentava gravar o `ChecklistEscalationLog` — as duas checagens de "já notifiquei?"
+ *    aconteciam antes de qualquer uma escrever, então as duas podiam achar que não e as duas
+ *    mandarem a notificação (duplicada), com só uma conseguindo gravar o log (a outra quebrava com
+ *    erro P2002 não tratado). Corrigido invertendo a ordem (gravar o log primeiro, só notificar se
+ *    a gravação coube a esta execução) — mas essa correção ainda reivindicava o nível MAIS SEVERO
+ *    primeiro e só gravava os níveis "absorvidos" (ponto 1 acima) DEPOIS de chamar
+ *    `createNotification` (que inclui envio de push, rede, pode demorar). Isso deixava uma janela
+ *    real: uma execução concorrente lendo `existingLogs` nesse meio-tempo via o nível mais severo
+ *    já reivindicado mas os absorvidos ainda "livres" — concluía (do SEU snapshot, correto mas
+ *    incompleto) que um nível mais brando era "o mais severo pendente" PRA ELA, reivindicava esse
+ *    nível separadamente (sem colidir com nenhuma chave única, já que é um `tipo` diferente) e
+ *    mandava uma SEGUNDA notificação pro mesmo destinatário na mesma rodada. Reproduzido ao vivo
+ *    pelo Teulis (4 de 8 rodadas concorrentes duplicando pelo menos um destinatário).
+ *
+ *    Correção final: reivindica TODOS os níveis pendentes de um destinatário (o mais severo + os
+ *    absorvidos) numa ÚNICA chamada `createMany` SEM `skipDuplicates` — um INSERT multi-linha é um
+ *    único statement no Postgres, então se qualquer uma das linhas colidir com a chave única
+ *    (outra execução concorrente já reivindicou QUALQUER um desses níveis pra este destinatário
+ *    nesta janela), o statement inteiro falha e NENHUMA linha é gravada (nunca reivindica só uma
+ *    parte). Então: ou este destinatário reivindica tudo de uma vez e manda uma única notificação
+ *    (a do nível mais severo), ou não reivindica nada e não notifica nesta rodada (a execução
+ *    concorrente que venceu já cobre esse destinatário). Mesmo padrão de detecção de P2002 já
+ *    usado em src/lib/prisma-errors.ts e src/lib/roulette-server.ts. Isso nunca impede
+ *    escalonamento de verdade em RODADAS SEPARADAS no tempo (ex.: ATRASO_RESPONSAVEL de manhã,
+ *    ALERTA_CRITICO à tarde se ainda não resolvido) — só fecha a janela DENTRO da mesma avaliação
+ *    concorrente.
  */
 export async function processChecklistEscalations(occurrenceIds: string[]) {
   if (occurrenceIds.length === 0) return { notified: 0 };
@@ -290,55 +362,95 @@ export async function processChecklistEscalations(occurrenceIds: string[]) {
     const minutesLate = (now.getTime() - o.dueAt.getTime()) / 60000;
     const managerIds = new Set((managersByEmpresa.get(o.empresaId) ?? []).map((m) => m.id));
 
+    // `levels` já vem em ordem crescente de severidade (ver dueEscalationLevels em
+    // src/lib/checklist.ts) — agrupar por destinatário preserva essa ordem, então o último item
+    // de cada lista é sempre o nível mais severo que venceu para aquele destinatário nesta rodada.
+    const levelsByRecipient = new Map<string, ChecklistEscalationType[]>();
     for (const tipo of levels) {
-      let recipientIds: string[];
-      if (tipo === "AVISO_ANTES" || tipo === "NO_LIMITE") {
-        recipientIds = o.responsavelId ? [o.responsavelId] : [];
-      } else if (tipo === "ATRASO_RESPONSAVEL" || tipo === "ALERTA_CRITICO") {
-        recipientIds = [...(o.responsavelId ? [o.responsavelId] : []), ...managerIds];
-      } else {
-        recipientIds = [...managerIds];
+      for (const destinatarioId of recipientsForLevel(tipo, o.responsavelId, managerIds)) {
+        const arr = levelsByRecipient.get(destinatarioId) ?? [];
+        arr.push(tipo);
+        levelsByRecipient.set(destinatarioId, arr);
       }
-      recipientIds = [...new Set(recipientIds)];
-      if (recipientIds.length === 0) continue;
-
-      const existing = await prisma.checklistEscalationLog.findMany({
-        where: { occurrenceId: o.id, tipo, destinatarioId: { in: recipientIds } },
-        select: { destinatarioId: true },
-      });
-      const already = new Set(existing.map((e) => e.destinatarioId));
-      const pending = recipientIds.filter((id) => !already.has(id));
-      if (pending.length === 0) continue;
-
-      const { title, body } = escalationMessage(tipo, {
-        name: o.template.name,
-        empresaName: o.empresa.name,
-        setor: o.template.setor,
-        minutesLate,
-        responsavelName: o.responsavel?.name ?? null,
-      });
-      const priority = CHECKLIST_ESCALATION_PRIORITY[tipo];
-
-      // Um destinatário nunca depende do outro (cada um recebe sua própria
-      // notificação/log) — dá pra disparar em paralelo em vez de um de cada vez.
-      await Promise.all(
-        pending.map(async (destinatarioId) => {
-          const notification = await createNotification({
-            userId: destinatarioId,
-            type: `CHECKLIST_${tipo}`,
-            title,
-            body,
-            priority,
-            checklistOccurrenceId: o.id,
-            url: `/portal/tarefas/checklist/executar/${o.id}`,
-          });
-          await prisma.checklistEscalationLog.create({
-            data: { occurrenceId: o.id, tipo, destinatarioId, notificationId: notification.id },
-          });
-        })
-      );
-      notified += pending.length;
     }
+    const candidateIds = [...levelsByRecipient.keys()];
+    if (candidateIds.length === 0) continue;
+
+    // Todos os logs já existentes pra esta ocorrência, pros destinatários candidatos desta
+    // rodada — uma única busca, reaproveitada por destinatário/nível abaixo.
+    const existingLogs = await prisma.checklistEscalationLog.findMany({
+      where: { occurrenceId: o.id, destinatarioId: { in: candidateIds } },
+      select: { tipo: true, destinatarioId: true },
+    });
+    const already = new Set(existingLogs.map((l) => `${l.tipo}:${l.destinatarioId}`));
+
+    // Cada destinatário é independente dos demais — dá pra processar em paralelo.
+    const sent = await Promise.all(
+      candidateIds.map(async (destinatarioId) => {
+        const pendingLevels = (levelsByRecipient.get(destinatarioId) ?? []).filter(
+          (tipo) => !already.has(`${tipo}:${destinatarioId}`)
+        );
+        if (pendingLevels.length === 0) return 0;
+
+        const mostSevere = pendingLevels[pendingLevels.length - 1];
+
+        // Reivindica TODOS os níveis pendentes (o mais severo + os "absorvidos") numa ÚNICA
+        // operação, nunca um de cada vez. Achado real do Teulis na revisão: a versão anterior
+        // reivindicava só o nível mais severo primeiro (o "cadeado") e só gravava os absorvidos
+        // DEPOIS de chamar `createNotification` (que inclui envio de push, rede, pode demorar) —
+        // isso deixava uma janela real em que uma execução concorrente, lendo `existingLogs`
+        // nesse meio-tempo, via o nível mais severo já reivindicado mas os absorvidos ainda
+        // "livres", e concluía (corretamente, a partir do SEU snapshot incompleto) que um nível
+        // mais brando era "o mais severo pendente" pra ela — reivindicava esse nível
+        // separadamente (sem colidir com nenhuma chave única, já que é um `tipo` diferente) e
+        // mandava uma SEGUNDA notificação pro mesmo destinatário na mesma rodada, às vezes com o
+        // nível mais brando chegando depois do mais severo. Reproduzido ao vivo pelo Teulis (4 de
+        // 8 rodadas concorrentes duplicando pelo menos um destinatário).
+        //
+        // A correção: um único `createMany` SEM `skipDuplicates` é atômico no Postgres (um INSERT
+        // multi-linha é um único statement — se qualquer linha colidir com a chave única, o
+        // statement inteiro falha e NENHUMA linha é gravada, nunca reivindica só uma parte).
+        // Então, ou este destinatário reivindica TODOS os níveis pendentes desta rodada de uma vez
+        // (e aí sim manda uma única notificação, pro mais severo), ou — se QUALQUER um deles já
+        // tiver sido reivindicado por uma execução concorrente nesse meio-tempo — não reivindica
+        // nenhum e não manda notificação nenhuma nesta rodada (a execução concorrente que venceu
+        // cobre o destinatário sozinha). Isso nunca impede escalonamento de verdade em RODADAS
+        // SEPARADAS no tempo (ex.: ATRASO_RESPONSAVEL de manhã, ALERTA_CRITICO à tarde se ainda não
+        // resolvido) — só fecha a janela DENTRO da mesma avaliação concorrente.
+        try {
+          await prisma.checklistEscalationLog.createMany({
+            data: pendingLevels.map((tipo) => ({ occurrenceId: o.id, tipo, destinatarioId })),
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return 0;
+          throw err;
+        }
+
+        const { title, body } = escalationMessage(mostSevere, {
+          name: o.template.name,
+          empresaName: o.empresa.name,
+          setor: o.template.setor,
+          minutesLate,
+          responsavelName: o.responsavel?.name ?? null,
+        });
+        const notification = await createNotification({
+          userId: destinatarioId,
+          type: `CHECKLIST_${mostSevere}`,
+          title,
+          body,
+          priority: CHECKLIST_ESCALATION_PRIORITY[mostSevere],
+          checklistOccurrenceId: o.id,
+          url: `/portal/tarefas/checklist/executar/${o.id}`,
+        });
+        await prisma.checklistEscalationLog.update({
+          where: { occurrenceId_tipo_destinatarioId: { occurrenceId: o.id, tipo: mostSevere, destinatarioId } },
+          data: { notificationId: notification.id },
+        });
+
+        return 1;
+      })
+    );
+    notified += sent.reduce<number>((sum, n) => sum + n, 0);
 
     if (levels.includes("NAO_REALIZADO") && o.status !== "NAO_REALIZADO") {
       await prisma.checklistOccurrence.update({ where: { id: o.id }, data: { status: "NAO_REALIZADO" } });
