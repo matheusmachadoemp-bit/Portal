@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
+import { spStartOfDay } from "@/lib/timezone";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -85,21 +86,21 @@ export async function POST(req: Request) {
       name: body.name,
       cargo: cargoResolvido.nome,
       setor: setorResolvido.nome,
-      admissionDate: new Date(body.admissionDate),
-      terminationDate: body.terminationDate ? new Date(body.terminationDate) : null,
+      admissionDate: spStartOfDay(body.admissionDate),
+      terminationDate: body.terminationDate ? spStartOfDay(body.terminationDate) : null,
       status: body.status || "ATIVO",
       phone: body.phone || null,
       email: body.email || null,
       cpf: body.cpf || null,
       pixKey: body.pixKey || null,
-      birthDate: body.birthDate ? new Date(body.birthDate) : null,
+      birthDate: body.birthDate ? spStartOfDay(body.birthDate) : null,
       escala: body.escala || null,
       gestorResponsavel: body.gestorResponsavel || null,
       supervisorResponsavel: body.supervisorResponsavel || null,
       salarioFixo: body.salarioFixo ? Number(body.salarioFixo) : null,
-      lastEvaluationDate: body.lastEvaluationDate ? new Date(body.lastEvaluationDate) : null,
+      lastEvaluationDate: body.lastEvaluationDate ? spStartOfDay(body.lastEvaluationDate) : null,
       lastEvaluationNote: body.lastEvaluationNote || null,
-      lastTrainingDate: body.lastTrainingDate ? new Date(body.lastTrainingDate) : null,
+      lastTrainingDate: body.lastTrainingDate ? spStartOfDay(body.lastTrainingDate) : null,
       lastTrainingName: body.lastTrainingName || null,
       emergencyContactName: body.emergencyContactName,
       emergencyContactPhone: body.emergencyContactPhone,
