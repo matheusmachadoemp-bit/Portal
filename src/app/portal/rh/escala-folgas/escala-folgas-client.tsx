@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, DoorClosed, Pencil, Plus, Trash2 } from "luc
 import { Section, ColorBadge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { MonthCalendar } from "@/components/ui/month-calendar";
+import { ColorPicker, COLOR_CHOICES } from "@/components/ui/icon-picker";
 
 /**
  * Mesmo formato devolvido por `GET /api/rh/escala-folgas/calendario` (ver `getCalendarioDias` e os
@@ -53,6 +54,10 @@ type EmployeeOptionDTO = { id: string; name: string; setor: string; cargo: strin
  * desacoplados de propósito).
  */
 type CoverageResult = { quantidadeMinima: number; escalados: number; deficit: number; insuficiente: boolean };
+
+/** Valor sentinela da opção "+ Cadastrar novo tipo..." no fim do `<select>` de "Tipo de folga" —
+ *  nunca colide com um id real de `DayOffType` (que são sempre `cuid()`). */
+const NEW_DAY_OFF_TYPE_OPTION = "__new__";
 
 const WEEKDAY_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const WEEKDAY_PLURAL = [
@@ -220,6 +225,7 @@ export function EscalaFolgasClient({
   canCreate,
   canEdit,
   canDelete,
+  canManageDayOffTypes,
   employees,
 }: {
   /** Líder — a API já restringe o resultado ao próprio setor dele, então o filtro fica fixo. */
@@ -236,6 +242,12 @@ export function EscalaFolgasClient({
    *  (Tráfego Pago/Ideias/Parcerias/Tarefas). */
   canEdit: boolean;
   canDelete: boolean;
+  /** Cadastrar um TIPO de folga (catálogo global, sem loja) não tem a ambiguidade de "em qual loja
+   *  gravar" que criar uma folga em si tem — por isso é só a permissão crua `rh:canCreate`, sem
+   *  combinar com o modo de visualização como `canCreate` acima faz. Controla só a visibilidade da
+   *  opção "+ Cadastrar novo tipo..." no `<select>` de "Tipo de folga", tanto ao criar quanto ao
+   *  editar uma folga. */
+  canManageDayOffTypes: boolean;
   /** Colaboradores ATIVOS pro select de "Colaborador" do formulário — vazio quando `canCreate` é
    *  falso (o servidor só busca quando o formulário pode de fato ser usado). */
   employees: EmployeeOptionDTO[];
@@ -262,6 +274,19 @@ export function EscalaFolgasClient({
   const [entryForm, setEntryForm] = useState({ employeeId: "", dayOffTypeId: "", observacao: "" });
   const [entrySubmitting, setEntrySubmitting] = useState(false);
   const [entryFormError, setEntryFormError] = useState<string | null>(null);
+
+  // Mini-formulário inline "+ Cadastrar novo tipo..." (último item do select de "Tipo de folga") —
+  // só aparece pra quem tem `canCreate` (mesma permissão `rh:canCreate` exigida pelo
+  // `POST /api/rh/escala-folgas/day-off-types`; ver comentário no próprio `<select>` mais abaixo
+  // sobre por que usar esse prop em vez de buscar a permissão de novo). `entryForm.dayOffTypeId` só
+  // é alterado de verdade quando o cadastro é concluído com sucesso — enquanto este mini-formulário
+  // está aberto, o valor antigo (se havia algum) fica só "escondido" por baixo (ver `value` do
+  // `<select>`), e volta a aparecer selecionado se o usuário cancelar em vez de cadastrar.
+  const [showNewTypeForm, setShowNewTypeForm] = useState(false);
+  const [newTypeForm, setNewTypeForm] = useState({ nome: "", cor: COLOR_CHOICES[0] });
+  const [newTypeSubmitting, setNewTypeSubmitting] = useState(false);
+  const [newTypeError, setNewTypeError] = useState<string | null>(null);
+
   // Não-nulo = a API avisou que a cobertura mínima do setor ficaria insuficiente e ainda não
   // gravou nada (`{ saved: false, coverage }`) — mostra o `ConfirmDialog` de aviso com os números;
   // confirmando, reenvia a mesma requisição com `confirmarApesarDoAviso: true`.
@@ -314,7 +339,17 @@ export function EscalaFolgasClient({
     setPendingCoverage(null);
     setDeletingEntry(null);
     setDeleteError(null);
+    resetNewTypeForm();
     setSelectedDate(dateKey);
+  }
+
+  /** Fecha e limpa o mini-formulário "+ Cadastrar novo tipo..." — chamado sempre que o formulário de
+   *  folga (criar ou editar) é aberto, fechado, ou reaberto, pra nunca vazar nome/cor digitados (ou
+   *  um erro de uma tentativa anterior) de uma folga pra outra. */
+  function resetNewTypeForm() {
+    setShowNewTypeForm(false);
+    setNewTypeForm({ nome: "", cor: COLOR_CHOICES[0] });
+    setNewTypeError(null);
   }
 
   const loadCalendario = useCallback(async (): Promise<{ dias: CalendarioDiaDTO[]; error: string | null }> => {
@@ -394,6 +429,7 @@ export function EscalaFolgasClient({
     setEntryForm({ employeeId: "", dayOffTypeId: "", observacao: "" });
     setEntryFormError(null);
     setPendingCoverage(null);
+    resetNewTypeForm();
     setDayModalView("form");
   }
 
@@ -402,6 +438,7 @@ export function EscalaFolgasClient({
     setEntryForm({ employeeId: p.employeeId, dayOffTypeId: p.dayOffType.id, observacao: p.observacao ?? "" });
     setEntryFormError(null);
     setPendingCoverage(null);
+    resetNewTypeForm();
     setDayModalView("form");
   }
 
@@ -410,6 +447,7 @@ export function EscalaFolgasClient({
     setEditingEntry(null);
     setEntryFormError(null);
     setPendingCoverage(null);
+    resetNewTypeForm();
   }
 
   /**
@@ -480,6 +518,46 @@ export function EscalaFolgasClient({
       setEntryFormError("Falha de conexão ao salvar. Verifique sua internet e tente novamente.");
     } finally {
       setEntrySubmitting(false);
+    }
+  }
+
+  /**
+   * Cadastra o tipo de folga digitado no mini-formulário "+ Cadastrar novo tipo..." via
+   * `POST /api/rh/escala-folgas/day-off-types` (sempre cria com `kind: "FOLGA"`, nunca
+   * FERIAS/AFASTAMENTO — ver comentário na própria rota). Dá certo: entra na lista local
+   * (`dayOffTypes`) sem recarregar a página e já fica selecionado no formulário de folga, pra quem
+   * estava tentando adicionar uma folga poder seguir direto pra "Salvar" com o tipo novo já
+   * escolhido. Erro 409 (nome duplicado) ou 403 (sem permissão) aparecem com a mensagem que a
+   * própria API devolve, igual ao padrão de erro já usado no resto deste formulário.
+   */
+  async function submitNewType() {
+    if (newTypeSubmitting) return;
+    const nome = newTypeForm.nome.trim();
+    if (!nome) {
+      setNewTypeError("Informe o nome do novo tipo de folga.");
+      return;
+    }
+    setNewTypeSubmitting(true);
+    setNewTypeError(null);
+    try {
+      const res = await fetch("/api/rh/escala-folgas/day-off-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome, cor: newTypeForm.cor }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNewTypeError(data?.error ?? "Não foi possível cadastrar o tipo de folga.");
+        return;
+      }
+      const created: DayOffTypeCatalogItem = { ...data.dayOffType, ativo: true };
+      setDayOffTypes((prev) => [...(prev ?? []), created]);
+      setEntryForm((prev) => ({ ...prev, dayOffTypeId: created.id }));
+      resetNewTypeForm();
+    } catch {
+      setNewTypeError("Falha de conexão ao cadastrar. Verifique sua internet e tente novamente.");
+    } finally {
+      setNewTypeSubmitting(false);
     }
   }
 
@@ -814,8 +892,17 @@ export function EscalaFolgasClient({
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Tipo de folga</span>
               <select
-                value={entryForm.dayOffTypeId}
-                onChange={(e) => setEntryForm({ ...entryForm, dayOffTypeId: e.target.value })}
+                value={showNewTypeForm ? NEW_DAY_OFF_TYPE_OPTION : entryForm.dayOffTypeId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === NEW_DAY_OFF_TYPE_OPTION) {
+                    setNewTypeError(null);
+                    setShowNewTypeForm(true);
+                    return;
+                  }
+                  setShowNewTypeForm(false);
+                  setEntryForm({ ...entryForm, dayOffTypeId: value });
+                }}
                 className="input"
               >
                 <option value="">Selecione...</option>
@@ -825,8 +912,64 @@ export function EscalaFolgasClient({
                     {!t.ativo ? " (inativo)" : ""}
                   </option>
                 ))}
+                {/* `canManageDayOffTypes` é a permissão crua `rh:canCreate`, sem combinar com o
+                    modo de visualização (diferente de `canCreate`, que também exige loja única por
+                    causa do `POST /api/rh/escala-folgas/entries`). Cadastrar um TIPO de folga é um
+                    catálogo global, sem loja (ver `day-off-types/route.ts`) — por isso a opção
+                    aparece tanto ao criar quanto ao editar uma folga, mesmo no modo Grupo Nord
+                    consolidado, desde que a pessoa tenha a permissão. */}
+                {canManageDayOffTypes && (
+                  <>
+                    <option disabled>──────────</option>
+                    <option value={NEW_DAY_OFF_TYPE_OPTION}>+ Cadastrar novo tipo...</option>
+                  </>
+                )}
               </select>
             </label>
+
+            {showNewTypeForm && (
+              <div className="rounded-lg border border-nord-border bg-nord-panel/60 p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-white font-medium">Novo tipo de folga</p>
+                  <ColorBadge color={newTypeForm.cor}>{newTypeForm.nome.trim() || "Pré-visualização"}</ColorBadge>
+                </div>
+                <FormError message={newTypeError} />
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Nome</span>
+                  <input
+                    value={newTypeForm.nome}
+                    onChange={(e) => setNewTypeForm({ ...newTypeForm, nome: e.target.value })}
+                    className="input"
+                    placeholder="Ex.: Day off aniversário"
+                    autoFocus
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Cor</span>
+                  <ColorPicker value={newTypeForm.cor} onChange={(cor) => setNewTypeForm({ ...newTypeForm, cor })} />
+                </label>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewTypeForm(false);
+                      setNewTypeError(null);
+                    }}
+                    className="btn-outline text-xs px-3 py-1.5 flex-1"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitNewType}
+                    disabled={newTypeSubmitting}
+                    className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg px-3 py-1.5"
+                  >
+                    {newTypeSubmitting ? "Cadastrando..." : "Cadastrar tipo"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Observação (opcional)</span>
@@ -844,7 +987,8 @@ export function EscalaFolgasClient({
               <button
                 type="button"
                 onClick={() => submitEntry(false)}
-                disabled={entrySubmitting}
+                disabled={entrySubmitting || showNewTypeForm}
+                title={showNewTypeForm ? "Cadastre ou cancele o novo tipo de folga antes de salvar" : undefined}
                 className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg py-2.5"
               >
                 {entrySubmitting ? "Salvando..." : "Salvar"}
