@@ -82,18 +82,21 @@ function buildForm(m?: Meeting | null) {
 // que ignora esses campos quando o indicador não é composto).
 type CustomForm = Record<string, { valor: string; valorReferencia: string; valorSecundario: string; valorTerciario: string }>;
 
+/** Converte um indicador (como vem da API) para a forma de texto usada no formulário —
+ * usado tanto por `buildCustomForm` (carga inicial/troca de período) quanto por `refresh`
+ * (que precisa comparar o valor "conhecido do servidor" antigo com o novo, campo a campo,
+ * pra decidir se preserva um rascunho digitado — ver comentário em `refresh` abaixo). */
+function indicatorFormEntry(ind: GerenteCustomIndicatorDTO) {
+  return {
+    valor: ind.valor != null ? String(ind.valor) : "",
+    valorReferencia: String(ind.valorReferencia),
+    valorSecundario: ind.valorSecundario != null ? String(ind.valorSecundario) : "",
+    valorTerciario: ind.valorTerciario != null ? String(ind.valorTerciario) : "",
+  };
+}
+
 function buildCustomForm(indicators: GerenteCustomIndicatorDTO[]): CustomForm {
-  return Object.fromEntries(
-    indicators.map((ind) => [
-      ind.id,
-      {
-        valor: ind.valor != null ? String(ind.valor) : "",
-        valorReferencia: String(ind.valorReferencia),
-        valorSecundario: ind.valorSecundario != null ? String(ind.valorSecundario) : "",
-        valorTerciario: ind.valorTerciario != null ? String(ind.valorTerciario) : "",
-      },
-    ])
-  );
+  return Object.fromEntries(indicators.map((ind) => [ind.id, indicatorFormEntry(ind)]));
 }
 
 const UNIDADE_LABEL: Record<GerenteCustomIndicatorDTO["unidade"], string> = {
@@ -370,8 +373,41 @@ export function GerenteClient({
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
-    setCustomIndicators(data.customIndicators ?? []);
-    setCustomForm(buildCustomForm(data.customIndicators ?? []));
+    const nextIndicators: GerenteCustomIndicatorDTO[] = data.customIndicators ?? [];
+    // Criar/editar/excluir UM indicador no modal "Fechamento do mês" chama este refresh pra
+    // recarregar a lista inteira do servidor — sem cuidado, isso sobrescreve `customForm` por
+    // completo e apaga o valor que o usuário tiver digitado em QUALQUER OUTRO indicador e
+    // ainda não salvo (o servidor devolve o valor antigo, porque esse rascunho nunca foi
+    // enviado por um POST). Mesma lógica/`draftTouched` do `sync()` compartilhado em
+    // src/components/reuniao/fechamento-do-mes.tsx (usado pelas outras 4 reuniões): compara,
+    // campo a campo, o rascunho atual com o último valor "conhecido do servidor" (o
+    // `customIndicators` de antes desta chamada, capturado por closure) — só assume o valor
+    // novo quando o campo não foi tocado localmente. `valor` nunca tem input no formulário
+    // (ver comentário de `buildCustomForm`/`CustomForm` acima), então sempre acompanha o
+    // servidor sem necessidade de comparação.
+    setCustomForm((prevForm) => {
+      const next: CustomForm = {};
+      for (const ind of nextIndicators) {
+        const prevInd = customIndicators.find((p) => p.id === ind.id);
+        const prevEntry = prevForm[ind.id];
+        const freshEntry = indicatorFormEntry(ind);
+        if (!prevInd || !prevEntry) {
+          next[ind.id] = freshEntry;
+          continue;
+        }
+        const lastKnown = indicatorFormEntry(prevInd);
+        next[ind.id] = {
+          valor: freshEntry.valor,
+          valorReferencia: prevEntry.valorReferencia !== lastKnown.valorReferencia ? prevEntry.valorReferencia : freshEntry.valorReferencia,
+          valorSecundario:
+            prevEntry.valorSecundario !== lastKnown.valorSecundario ? prevEntry.valorSecundario : freshEntry.valorSecundario,
+          valorTerciario:
+            prevEntry.valorTerciario !== lastKnown.valorTerciario ? prevEntry.valorTerciario : freshEntry.valorTerciario,
+        };
+      }
+      return next;
+    });
+    setCustomIndicators(nextIndicators);
   }
 
   async function submit() {
