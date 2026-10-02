@@ -6,6 +6,7 @@ import { computeCurrentAquisitivePeriod } from "@/lib/rh-helpers";
 import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
 import { hasModulePermission } from "@/lib/authz";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
+import { spStartOfDay } from "@/lib/timezone";
 
 // Colunas aceitas na planilha de importação de colaboradores (RH > Colaboradores).
 // "Férias a vencer" não é lida como valor — o período aquisitivo vigente é sempre
@@ -45,18 +46,39 @@ function normalizeHeader(h: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
+// Ancora em meia-noite de São Paulo (spStartOfDay), não em meia-noite UTC (Date.UTC direto) —
+// mesma causa raiz e mesmo remédio já aplicados em POST/PATCH de ../route.ts e ../[id]/route.ts e,
+// antes disso, na importação irmã de ponto (task #318 em
+// src/app/api/rh/time-entries/import/route.ts): `new Date(Date.UTC(y, m-1, d))` fica 3h ANTES da
+// meia-noite de SP do mesmo dia, o que faz o navegador (rodando em America/Sao_Paulo) exibir o dia
+// anterior ao formatar com hora local (`format(new Date(valor), ...)` do date-fns).
+//
+// `spStartOfDay` remonta a string e reparsa via `new Date("YYYY-MM-DDT00:00:00-03:00")` — diferente
+// de `Date.UTC(ano, mes, dia)` com números (que sempre normaliza, nunca dá Date inválido),
+// mês/dia fora do intervalo sintático (ex. mês "13", dia "32"/"00" vindo de um erro de digitação
+// plausível na planilha, como "31/13/2026") faz essa string virar `Invalid Date` — e um `Invalid
+// Date` é truthy em JS, então os branches abaixo precisam checar `Number.isNaN(...getTime())`
+// explicitamente e devolver `null` nesse caso (achado do Teulis: sem essa checagem, a linha ruim
+// passava pelo guard `if (!admissionDate)`, chegava inválida no Prisma e estourava um erro não
+// tratado que derrubava a rota inteira no meio do loop, em vez de só reportar a linha em
+// `errors[]` como qualquer outra data inválida).
+function validOrNull(d: Date): Date | null {
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function parseDateFlexible(raw: string | number): Date | null {
+  const pad = (n: number) => String(n).padStart(2, "0");
   if (typeof raw === "number") {
     const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
-    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+    return spStartOfDay(`${parsed.y}-${pad(parsed.m)}-${pad(parsed.d)}`);
   }
   const s = String(raw).trim();
   if (!s) return null;
   const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-  if (br) return new Date(Date.UTC(Number(br[3]), Number(br[2]) - 1, Number(br[1])));
+  if (br) return validOrNull(spStartOfDay(`${br[3]}-${pad(Number(br[2]))}-${pad(Number(br[1]))}`));
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-  if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+  if (iso) return validOrNull(spStartOfDay(`${iso[1]}-${pad(Number(iso[2]))}-${pad(Number(iso[3]))}`));
   return null;
 }
 
