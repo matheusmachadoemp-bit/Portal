@@ -5,6 +5,14 @@ import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { syncEmpresaMetaAdsInsights } from "@/lib/meta-ads-sync";
 import { hasModulePermission } from "@/lib/authz";
 
+// Mantido em 60s mesmo no plano Pro (teto real ali é bem maior, ~800s) —
+// cada chamada já é limitada a no máximo 31 dias de dados da Graph API
+// (MAX_CUSTOM_RANGE_DAYS abaixo; o cron usa janela fixa de 30 dias) e o
+// upsert dos insights é 1 única query em lote (UNNEST), não 1 por linha —
+// ver upsertMetaAdsInsightRows em meta-ads-sync.ts. A única lentidão real
+// já registrada aqui (resync de período já existente) foi corrigida
+// trocando pra esse upsert em lote, não aumentando timeout — sem evidência
+// de que 60s já tenha sido insuficiente, não há motivo pra subir o valor.
 export const maxDuration = 60;
 
 const DEFAULT_SYNC_WINDOW_DAYS = 30;
