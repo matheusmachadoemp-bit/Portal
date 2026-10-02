@@ -5,6 +5,11 @@ import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
 import { hasModulePermission, resolveDefaultPermissionProfileId } from "@/lib/authz";
 
+// Espelha `OPERATIONAL_ROLES` de `src/app/api/usuarios/route.ts` (POST) — qualquer mudança lá
+// precisa ser replicada aqui. Usado só pelo guard de troca de Nível de acesso perto do bloco de
+// `employeeId` abaixo.
+const OPERATIONAL_ROLES = ["GERENTE", "SUPERVISOR", "COLABORADOR"];
+
 async function ensureAdmin() {
   const session = await auth();
   if (!session?.user) return null;
@@ -105,6 +110,35 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       employeeId = employee.id;
     } else {
       employeeId = null;
+    }
+  }
+
+  // Fecha a brecha "criar como Administrador/Gestor (sem ficha, permitido) e depois promover
+  // por aqui pra um papel operacional sem nunca vincular uma ficha de RH" — mesma exigência da
+  // criação (POST /api/usuarios), mas só entra em ação quando ESTE PATCH está, ele mesmo,
+  // mudando o role PARA um papel operacional. Compara contra o role ATUAL do usuário (não contra
+  // "body.role só está presente") de propósito: o formulário de Usuários sempre reenvia o role
+  // atual mesmo quando o admin não troca nada, então bloquear só por "body.role !== undefined"
+  // pegaria também edições comuns (ex.: só telefone) de usuário operacional antigo que já existia
+  // sem ficha — isso sim seria forçar retroativo, o que o Matheus pediu pra NÃO fazer. O
+  // employeeId "resultante" considera tanto um `body.employeeId` enviado neste mesmo PATCH quanto
+  // o que o usuário já tinha, se este PATCH não tocar nesse campo.
+  if (body.role !== undefined && OPERATIONAL_ROLES.includes(body.role)) {
+    const currentUser = await prisma.user.findUnique({ where: { id }, select: { role: true, employeeId: true } });
+    if (!currentUser) {
+      return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
+    }
+    if (currentUser.role !== body.role) {
+      const resultingEmployeeId = employeeId !== undefined ? employeeId : currentUser.employeeId;
+      if (!resultingEmployeeId) {
+        return NextResponse.json(
+          {
+            error:
+              "Para o nível de acesso Gerente, Supervisor ou Colaborador, este usuário precisa de uma ficha de funcionário (RH) vinculada. Selecione a ficha de RH antes de salvar essa troca de nível de acesso.",
+          },
+          { status: 400 }
+        );
+      }
     }
   }
 

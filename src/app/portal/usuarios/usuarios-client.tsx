@@ -33,6 +33,11 @@ type EmployeeOption = {
 };
 
 const ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR", "COLABORADOR"];
+// Papéis OPERACIONAIS — espelha `OPERATIONAL_ROLES` de `src/app/api/usuarios/route.ts` (qualquer
+// mudança lá precisa ser replicada aqui). Só na CRIAÇÃO (nunca ao editar, ver `submit()`): exige
+// vínculo com ficha de RH (`employeeId`) desde o nascimento do usuário, pra RH/Universidade/
+// Checklist nunca contarem a mesma pessoa como gente diferente por falta desse vínculo.
+const OPERATIONAL_ROLES = ["GERENTE", "SUPERVISOR", "COLABORADOR"];
 const ROLE_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
   ADMINISTRADOR: "danger",
   GESTOR: "info",
@@ -121,6 +126,10 @@ export function UsuariosClient({
   // Nord — ver GET /api/rh/employees). Só mostra o nome da loja em cada opção quando há mais de
   // uma entre as fichas carregadas, pra não poluir a lista no caso comum (loja única).
   const showEmpresaHint = new Set(employees.map((emp) => emp.empresa.name)).size > 1;
+  // Só na criação: ficha de RH obrigatória para papel operacional — ver OPERATIONAL_ROLES e a
+  // checagem equivalente em `submit()`. Usado só pra indicação visual (label/borda/texto de
+  // ajuda) — a validação de verdade (que bloqueia o envio) é a de `submit()`.
+  const employeeRequired = !editing && OPERATIONAL_ROLES.includes(form.role);
 
   function setPermission(key: string, level: string) {
     setPermissions((p) => ({ ...p, [key]: level }));
@@ -193,6 +202,14 @@ export function UsuariosClient({
     }
     if (!form.email.trim()) {
       setFormError("Informe o e-mail do usuário.");
+      return;
+    }
+    // Só na criação (nunca ao editar — ver comentário de OPERATIONAL_ROLES acima e o motivo em
+    // src/app/api/usuarios/[id]/route.ts): papel operacional sem ficha de RH vinculada não entra.
+    if (!editing && OPERATIONAL_ROLES.includes(form.role) && !form.employeeId) {
+      setFormError(
+        "Para o nível de acesso Gerente, Supervisor ou Colaborador, selecione a ficha de funcionário (RH) deste usuário."
+      );
       return;
     }
     setSubmitting(true);
@@ -376,11 +393,12 @@ export function UsuariosClient({
               ))}
             </select>
           </Field>
-          <Field label="Ficha de funcionário (RH)">
+          <Field label={employeeRequired ? "Ficha de funcionário (RH) *" : "Ficha de funcionário (RH)"}>
             <select
               value={form.employeeId}
               onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-              className="input"
+              required={employeeRequired}
+              className={`input ${employeeRequired && !form.employeeId ? "border-nord-danger/70" : ""}`}
             >
               <option value="">Nenhuma</option>
               {form.employeeId && !employees.some((emp) => emp.id === form.employeeId) && (
@@ -402,11 +420,20 @@ export function UsuariosClient({
             </select>
             {employeesError ? (
               <p className="text-[11px] text-nord-warning mt-1">{employeesError}</p>
+            ) : employeeRequired ? (
+              <p className="text-[11px] text-nord-warning mt-1">
+                Obrigatório para o nível de acesso Gerente, Supervisor ou Colaborador — é o que permite computar
+                pontuação, conquistas e os dados de RH/Universidade/Checklist deste colaborador como uma pessoa
+                só, além de ser necessário pra preencher o Fechamento do Dia (Gerente, Chef de Salão ou Chef de
+                Cozinha). A lista mostra as fichas da loja ativa no seletor do topo (ou de todas, no modo Grupo
+                Nord).
+              </p>
             ) : (
               <p className="text-[11px] text-nord-gray mt-1">
-                Necessário só para quem vai preencher o Fechamento do Dia (Gerente, Chef de Salão ou Chef de
-                Cozinha). Deixe em &quot;Nenhuma&quot; se este usuário não precisa preencher esse formulário. A
-                lista mostra as fichas da loja ativa no seletor do topo (ou de todas, no modo Grupo Nord).
+                Opcional para Administrador/Gestor. Necessário também pra quem vai preencher o Fechamento do Dia
+                (Gerente, Chef de Salão ou Chef de Cozinha). Deixe em &quot;Nenhuma&quot; se este usuário não tem
+                ficha de RH. A lista mostra as fichas da loja ativa no seletor do topo (ou de todas, no modo
+                Grupo Nord).
               </p>
             )}
           </Field>
