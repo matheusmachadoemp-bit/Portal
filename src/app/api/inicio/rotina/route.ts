@@ -38,13 +38,12 @@ export async function GET(req: Request) {
 
   const userId = session.user.id;
   const nomeUsuario = session.user.name ?? "";
-  const emailUsuario = session.user.email ?? "";
 
   const [tarefas, checklist, metas, pesquisas] = await Promise.all([
     loadRotinaTarefas(empresaId, userId, empresa.name, nomeUsuario),
     loadRotinaChecklist(empresaId, userId, empresa.name, nomeUsuario),
-    loadRotinaMetas(empresaId, empresa.name, nomeUsuario),
-    loadRotinaPesquisas(empresaId, emailUsuario, empresa.name, nomeUsuario),
+    loadRotinaMetas(empresaId, userId, empresa.name, nomeUsuario),
+    loadRotinaPesquisas(empresaId, userId, empresa.name, nomeUsuario),
   ]);
 
   const itens = sortRotinaItems([...tarefas, ...checklist, ...metas, ...pesquisas]);

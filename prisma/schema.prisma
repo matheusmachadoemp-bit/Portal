@@ -1329,15 +1329,28 @@ enum GoalDirection {
 }
 
 model Goal {
-  id             String        @id @default(cuid())
-  empresaId      String
-  empresa        Empresa       @relation(fields: [empresaId], references: [id])
-  name           String
-  category       GoalCategory
-  responsavel    String
-  description    String?
-  indicador      String?
-  valorMeta      Float         @default(0)
+  id                    String        @id @default(cuid())
+  empresaId             String
+  empresa               Empresa       @relation(fields: [empresaId], references: [id])
+  name                  String
+  category              GoalCategory
+  responsavel           String
+  /// Vínculo real (opcional) com a ficha de RH da pessoa responsável pela meta — adicionado
+  /// porque `responsavel` (texto livre acima, digitado na criação) é frágil para cruzamento
+  /// automático (nome digitado errado, acentuação diferente, homônimos, mudança de nome etc. —
+  /// ver `loadRotinaMetas` em src/lib/inicio.ts, que hoje cruza por igualdade de texto). Nulável
+  /// (nem toda meta tem um responsável individual identificável — categoria GERENCIA, por
+  /// exemplo, usa sempre o texto fixo "Gerente"/`GERENCIA_RESPONSAVEL` em src/lib/goals.ts,
+  /// nunca uma pessoa específica — e metas antigas só recebem este vínculo via backfill quando
+  /// o texto já digitado casa, sem ambiguidade, com exatamente um `Employee` da mesma loja).
+  /// `responsavel` (texto) continua sendo a fonte de exibição/relatório mesmo quando este
+  /// vínculo existe — nenhum dos dois é removido; `loadRotinaMetas` prefere este vínculo quando
+  /// presente e só cai para o cruzamento por texto quando ele estiver vazio.
+  responsavelEmployeeId String?
+  responsavelEmployee   Employee?     @relation(fields: [responsavelEmployeeId], references: [id])
+  description           String?
+  indicador             String?
+  valorMeta             Float         @default(0)
   /// Cache calculado: soma (metas cumulativas) ou média (metas em "%" —
   /// ver `isAverageGoalUnit` em src/lib/goals.ts) de `GoalWeeklyUpdate.valor`
   /// desta meta (ver `computeValorRealizado`/`recomputeGoalRealizado` em
@@ -1347,21 +1360,21 @@ model Goal {
   /// (painel "Progresso das metas" da Início, "Minha rotina de hoje", o job
   /// de alerta de meta não atingida) e não precisam saber nada sobre
   /// lançamentos semanais para continuar funcionando sem alteração.
-  valorRealizado Float         @default(0)
-  unidade        String        @default("R$")
+  valorRealizado        Float         @default(0)
+  unidade               String        @default("R$")
   /// Ver enum `GoalDirection` acima.
-  direcao        GoalDirection @default(MAXIMIZAR)
-  startDate      DateTime
-  endDate        DateTime
-  bonificacao    String?
-  status         GoalStatus    @default(NAO_INICIADA)
-  observacoes    String?
-  planoDeAcao    String?
-  createdById    String
-  createdBy      User          @relation(fields: [createdById], references: [id])
-  alertaEnviado  Boolean       @default(false)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  direcao               GoalDirection @default(MAXIMIZAR)
+  startDate             DateTime
+  endDate               DateTime
+  bonificacao           String?
+  status                GoalStatus    @default(NAO_INICIADA)
+  observacoes           String?
+  planoDeAcao           String?
+  createdById           String
+  createdBy             User          @relation(fields: [createdById], references: [id])
+  alertaEnviado         Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   attachments   GoalAttachment[]
   notifications Notification[]
@@ -1736,6 +1749,10 @@ model Employee {
   dayOffEntries           DayOffEntry[]
   scheduleChangeLogs      ScheduleChangeLog[]
   garcomIndicacoes        CustomerSurveyResponse[] @relation("CustomerSurveyGarcomIndicado")
+  /// Ponta inversa de `Goal.responsavelEmployeeId` — metas cujo responsável é esta ficha de RH
+  /// (vínculo real, preenchido na criação da meta ou por backfill; ver comentário completo no
+  /// campo em `Goal`).
+  metasResponsavel        Goal[]
 
   @@index([empresaId])
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { computeGoalStatus, GERENCIA_RESPONSAVEL, GOAL_CATEGORY_ROUTE, type GoalDirectionKey } from "@/lib/goals";
+import { resolveResponsavelEmployeeId } from "@/lib/goals-server";
 import { formatNumber } from "@/lib/calc";
 import { hasModulePermission } from "@/lib/authz";
 import { getStoreManagers } from "@/lib/manutencao-server";
@@ -82,6 +83,10 @@ export async function POST(req: Request) {
   // aqui no servidor, não só escondendo o campo na tela, para que um POST
   // direto na API (sem passar pelo formulário) também respeite a regra.
   const responsavel = category === "GERENCIA" ? GERENCIA_RESPONSAVEL : body.responsavel;
+  // Vínculo real com a ficha de RH (achado #454), resolvido automaticamente a partir do texto
+  // acima sempre que possível — ver `resolveResponsavelEmployeeId` (src/lib/goals-server.ts) para
+  // o critério (conservador) de quando isso casa com exatamente 1 `Employee` ativo da loja.
+  const responsavelEmployeeId = await resolveResponsavelEmployeeId(empresa.id, category, responsavel);
 
   // `valorRealizado` nunca é aceito na criação: toda meta nova começa
   // zerada e só sobe através dos lançamentos semanais (ver
@@ -93,6 +98,7 @@ export async function POST(req: Request) {
       name: body.name,
       category,
       responsavel,
+      responsavelEmployeeId,
       description: body.description || null,
       indicador: body.indicador || null,
       valorMeta,
