@@ -7,7 +7,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
-import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE } from "@/lib/estoque";
+import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, ingredientCostPerUnit } from "@/lib/estoque";
 import { AgendaLembretesModal } from "../contagem/agenda-lembretes-modal";
 
 type CountRow = {
@@ -200,8 +200,8 @@ export function ContagemSemanalClient({
 
   async function finalizar() {
     if (!active) return;
-    const esperado = items.reduce((s, i) => s + i.estoqueEsperado * (i.ingredient.precoAtual / (i.ingredient.quantidadeEmbalagem || 1)), 0);
-    const contado = items.reduce((s, i) => s + (i.quantidadeContada ?? i.estoqueEsperado) * (i.ingredient.precoAtual / (i.ingredient.quantidadeEmbalagem || 1)), 0);
+    const esperado = items.reduce((s, i) => s + i.estoqueEsperado * ingredientCostPerUnit(i.ingredient), 0);
+    const contado = items.reduce((s, i) => s + (i.quantidadeContada ?? i.estoqueEsperado) * ingredientCostPerUnit(i.ingredient), 0);
     await fetch(`/api/estoque/contagens/${active.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

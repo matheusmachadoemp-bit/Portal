@@ -24,7 +24,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existing = await prisma.transfer.findUnique({
     where: { id },
-    include: { items: { include: { ingredient: true } }, origemEmpresa: true, destinoEmpresa: true },
+    // `ingredient.category` só é usado abaixo pra achar a categoria equivalente na loja de
+    // destino (por `key`, igual nos dois lados) quando o insumo precisa ser criado lá — ver
+    // comentário em "Insumos novos" mais abaixo.
+    include: { items: { include: { ingredient: { include: { category: true } } } }, origemEmpresa: true, destinoEmpresa: true },
   });
   if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
 
@@ -196,10 +199,52 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // mesmo insumo de destino (mesmo nome normalizado), pra o segundo crédito somar em cima
       // do primeiro em vez de um sobrescrever o outro.
       const estoqueCorrente = new Map<string, number>();
-      // Insumos novos que serão criados na loja de destino nesta chamada, por nome normalizado
-      // — pra não criar duplicado se dois itens da mesma transferência caírem no mesmo insumo
-      // novo (ex.: mesmo insumo de origem informado duas vezes por engano).
-      const novosPorNome = new Map<string, { id: string; name: string; unidade: string }>();
+      // Categoria equivalente na loja de destino pra cada `StockCategory.key` presente nos
+      // insumos de origem desta transferência — `key` é único só por `(empresaId, key)`, mas
+      // convencionalmente a mesma categoria (ex. "pescados") existe com a mesma key em cada loja
+      // (ver seed). 1 query só, fora do loop abaixo.
+      const categoryKeysOrigem = [...new Set(recebidasComQuantidade.map((q) => itemById.get(q.itemId)!.ingredient.category?.key).filter((k): k is string => !!k))];
+      const destinoCategoriaIdPorKey = categoryKeysOrigem.length
+        ? new Map(
+            (
+              await prisma.stockCategory.findMany({
+                where: { empresaId: existing.destinoEmpresaId, key: { in: categoryKeysOrigem } },
+                select: { id: true, key: true },
+              })
+            ).map((c) => [c.key, c.id])
+          )
+        : new Map<string, string>();
+      // Insumos novos que serão criados na loja de destino nesta chamada, por nome normalizado —
+      // pra não criar duplicado se dois itens da mesma transferência caírem no mesmo insumo novo
+      // (ex.: mesmo insumo de origem informado duas vezes por engano). Carrega os campos
+      // descritivos/de custo do insumo de ORIGEM (preço, categoria, embalagem, fornecedor em
+      // texto livre etc.) — achado de produção (02/10/2026): sem isso, um insumo criado
+      // automaticamente aqui nascia com `precoAtual` 0 e sem categoria/fornecedor (`categoryId`/
+      // `fornecedorPrincipalId` null), entrando silenciosamente no CMV como "custo zero" e nas
+      // listagens como "sem categoria"/"sem fornecedor" até alguém completar o cadastro na mão.
+      // `fornecedorPrincipalId` (relação com `Supplier`, que é 100% por loja, sem `key`
+      // compartilhada como `StockCategory`) propositalmente NÃO é copiado — não tem como saber
+      // se existe um fornecedor equivalente cadastrado na loja de destino; só o texto livre
+      // `fornecedor` (sem FK) é copiado, como referência.
+      const novosPorNome = new Map<
+        string,
+        {
+          id: string;
+          name: string;
+          unidade: string;
+          precoAtual: number;
+          quantidadeEmbalagem: number;
+          percentualPerda: number;
+          fornecedor: string | null;
+          unidadeCompra: string | null;
+          fatorConversao: number;
+          pesoEmbalagem: number | null;
+          rendimentoAproveitavel: number | null;
+          perecivel: boolean;
+          setor: string | null;
+          categoryId: string | null;
+        }
+      >();
       const movimentosEntrada: {
         ingredientId: string;
         empresaId: string;
@@ -230,7 +275,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             estoqueBase = estoqueCorrente.get(ingredientId) ?? 0;
           } else {
             ingredientId = randomUUID();
-            novosPorNome.set(nomeNormalizado, { id: ingredientId, name: item.ingredient.name, unidade: item.unidade });
+            novosPorNome.set(nomeNormalizado, {
+              id: ingredientId,
+              name: item.ingredient.name,
+              unidade: item.unidade,
+              precoAtual: item.ingredient.precoAtual,
+              quantidadeEmbalagem: item.ingredient.quantidadeEmbalagem,
+              percentualPerda: item.ingredient.percentualPerda,
+              fornecedor: item.ingredient.fornecedor,
+              unidadeCompra: item.ingredient.unidadeCompra,
+              fatorConversao: item.ingredient.fatorConversao,
+              pesoEmbalagem: item.ingredient.pesoEmbalagem,
+              rendimentoAproveitavel: item.ingredient.rendimentoAproveitavel,
+              perecivel: item.ingredient.perecivel,
+              setor: item.ingredient.setor,
+              categoryId: item.ingredient.category ? destinoCategoriaIdPorKey.get(item.ingredient.category.key) ?? null : null,
+            });
             estoqueBase = 0;
           }
         }
@@ -264,6 +324,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               name: n.name,
               unidade: n.unidade,
               estoqueAtual: estoqueCorrente.get(n.id) ?? 0,
+              precoAtual: n.precoAtual,
+              quantidadeEmbalagem: n.quantidadeEmbalagem,
+              percentualPerda: n.percentualPerda,
+              fornecedor: n.fornecedor,
+              unidadeCompra: n.unidadeCompra,
+              fatorConversao: n.fatorConversao,
+              pesoEmbalagem: n.pesoEmbalagem,
+              rendimentoAproveitavel: n.rendimentoAproveitavel,
+              perecivel: n.perecivel,
+              setor: n.setor,
+              categoryId: n.categoryId,
             })),
           })
         );

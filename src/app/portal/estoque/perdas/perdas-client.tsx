@@ -10,7 +10,7 @@ import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { makeBarValueLabel } from "@/components/ui/bar-value-label";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
-import { LOSS_REASONS, LOSS_REASON_LABEL } from "@/lib/estoque";
+import { LOSS_REASONS, LOSS_REASON_LABEL, ingredientCostPerUnit } from "@/lib/estoque";
 import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
 type Loss = {
@@ -137,9 +137,7 @@ export function PerdasClient({
 
   const selectedIngredient = ingredients.find((i) => i.id === form.ingredientId);
   const valorEstimadoPreview =
-    selectedIngredient && form.quantidade
-      ? (selectedIngredient.precoAtual / (selectedIngredient.quantidadeEmbalagem || 1)) * Number(form.quantidade)
-      : 0;
+    selectedIngredient && form.quantidade ? ingredientCostPerUnit(selectedIngredient) * Number(form.quantidade) : 0;
 
   return (
     <div className="space-y-6">

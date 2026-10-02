@@ -14,6 +14,7 @@ import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 import {
   cmvPercent,
+  ingredientCostPerUnit,
   lucroIfoodEstimado,
   margemContribuicao,
   precoIfoodSugerido,
@@ -190,7 +191,12 @@ export function ProdutosClient({
     return lines.reduce((acc, line) => {
       const ing = ingredientOptions.find((o) => o.id === line.ingredientId);
       if (!ing) return acc;
-      const costPerUnit = ing.quantidadeEmbalagem ? ing.precoAtual / ing.quantidadeEmbalagem : 0;
+      // Mesma fórmula do servidor (productTotalCost/ingredientCostPerUnit em @/lib/ficha —
+      // precoAtual já é o preço de 1 `unidade`, não da embalagem inteira, ver comentário na
+      // definição em @/lib/estoque) — duplicada aqui só pro preview instantâneo ao editar, sem
+      // round-trip ao servidor. Divergia do cálculo salvo até a correção do achado de produção
+      // de 02/10/2026 (Combo Salmão 20 peças com custo deflacionado).
+      const costPerUnit = ingredientCostPerUnit(ing);
       const perda = 1 + (Number(line.percentualPerda) || 0) / 100;
       return acc + costPerUnit * (Number(line.quantidadeUsada) || 0) * perda;
     }, 0);

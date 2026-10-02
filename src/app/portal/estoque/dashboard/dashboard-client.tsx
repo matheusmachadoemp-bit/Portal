@@ -33,6 +33,7 @@ export function EstoqueDashboardClient({
   periodDays,
   cmvRealPercent,
   cmvTeoricoPercent,
+  semMovimentacaoCmv,
   metaCmvPercent,
   diferencaPP,
   diferencaFinanceira,
@@ -59,6 +60,9 @@ export function EstoqueDashboardClient({
   periodDays: number;
   cmvRealPercent: number;
   cmvTeoricoPercent: number;
+  /** Nenhuma movimentação de estoque no período — "Sem dados" em vez de "0%" (achado de produção,
+   * 02/10/2026; ver computeCmvReal em @/lib/cmv-server). */
+  semMovimentacaoCmv: boolean;
   metaCmvPercent: number;
   diferencaPP: number;
   diferencaFinanceira: number;
@@ -79,10 +83,16 @@ export function EstoqueDashboardClient({
         storageKey="estoque-dashboard-cmv-kpi-order"
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
         cards={[
-          { key: "cmv-real-periodo", label: "CMV Real do período", value: formatPercent(cmvRealPercent), icon: "Warehouse", color: dentroDaMeta ? "#22c55e" : "#ef4444" },
+          {
+            key: "cmv-real-periodo",
+            label: "CMV Real do período",
+            value: semMovimentacaoCmv ? "Sem dados" : formatPercent(cmvRealPercent),
+            icon: "Warehouse",
+            color: semMovimentacaoCmv ? undefined : dentroDaMeta ? "#22c55e" : "#ef4444",
+          },
           { key: "meta-cmv", label: "Meta de CMV", value: formatPercent(metaCmvPercent), icon: "Target" },
           { key: "cmv-teorico", label: "CMV Teórico", value: formatPercent(cmvTeoricoPercent), icon: "Calculator", color: "#2952E3" },
-          temContagemAprovada
+          !semMovimentacaoCmv && temContagemAprovada
             ? {
                 key: "diferenca-real-teorico",
                 label: "Diferença Real x Teórico",
@@ -92,16 +102,19 @@ export function EstoqueDashboardClient({
                 hint: formatCurrency(diferencaFinanceira),
               }
             : {
-                // Sem nenhuma contagem física aprovada ainda, não há base
-                // confiável pra comparar o estoque físico com o sistema —
-                // mostra "sem dados" em vez de um p.p. que pareceria preciso
-                // (e nunca com a cor/ícone de "Crítico").
+                // Sem movimentação de estoque no período OU sem nenhuma
+                // contagem física aprovada ainda — não há base confiável pra
+                // comparar o estoque físico com o sistema — mostra "sem
+                // dados" em vez de um p.p. que pareceria preciso (e nunca com
+                // a cor/ícone de "Crítico").
                 key: "diferenca-real-teorico",
                 label: "Diferença Real x Teórico",
                 value: "Sem dados",
                 icon: "HelpCircle",
                 color: "#64748b",
-                hint: "Faça uma contagem de estoque para comparar",
+                hint: semMovimentacaoCmv
+                  ? "Sem movimentação de estoque no período"
+                  : "Faça uma contagem de estoque para comparar",
               },
         ]}
       />
