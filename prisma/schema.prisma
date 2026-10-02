@@ -3381,6 +3381,31 @@ model ReuniaoCustomIndicator {
   nomeSecundario    String?
   /// Unidade do segundo valor — ver `nomeSecundario` acima.
   unidadeSecundaria ReuniaoIndicatorUnit?
+  /// Nome do terceiro valor (opcional) de um indicador "composto" — ex.: além do
+  /// percentual (nome/unidade) e da quantidade (nomeSecundario/unidadeSecundaria),
+  /// um terceiro número no mesmo período (ex.: "Pedidos por canal" com
+  /// nome="Site", nomeSecundario="99Food", nomeTerciario="iFood", os 3 do
+  /// mesmo jeito — NUMBER). Mesma regra do segundo valor: null (o padrão) =
+  /// sem terceiro valor; sempre preenchido junto com `unidadeTerciaria` (os
+  /// dois null juntos, ou os dois preenchidos juntos — nunca um só), checado
+  /// na camada de aplicação (`parseTertiaryIndicatorFields` em
+  /// reuniao-server.ts, usada por createReuniaoCustomIndicator e pelas 10
+  /// rotas de criar/editar indicador), sem CHECK constraint no banco — mesmo
+  /// padrão de `nomeSecundario` acima.
+  ///
+  /// DEPENDENTE do segundo valor: um indicador só pode ter um terceiro valor
+  /// se também tiver um segundo (`unidadeSecundaria` não-null) — não dá pra
+  /// "pular" de 1 pra 3 valores sem passar pelos 2. Checado em
+  /// `validateTertiaryRequiresSecondary` (reuniao-server.ts), chamada pelas
+  /// mesmas 10 rotas acima depois de resolver os dois pares. Decisão de UX:
+  /// evita o caso estranho de um indicador com "valor principal" + "3º valor"
+  /// mas sem "2º valor" — tanto no card (que lista os valores em ordem) quanto
+  /// no formulário (o 3º campo apareceria "sozinho", sem o 2º ao lado); na
+  /// tela, o checkbox/campos do 3º valor só ficam disponíveis quando o
+  /// checkbox do 2º valor já está marcado.
+  nomeTerciario     String?
+  /// Unidade do terceiro valor — ver `nomeTerciario` acima.
+  unidadeTerciaria  ReuniaoIndicatorUnit?
   order             Int                   @default(0)
   createdById       String
   createdBy         User                  @relation(fields: [createdById], references: [id])
@@ -3413,6 +3438,16 @@ model ReuniaoCustomIndicatorValue {
   /// evita linha "órfã" com um valorSecundario que não corresponde a nenhum
   /// nomeSecundario/unidadeSecundaria do indicador.
   valorSecundario Float?
+  /// Terceiro valor (opcional) de um indicador composto — só significa algo
+  /// quando o indicador (`ReuniaoCustomIndicator.unidadeTerciaria`) tem um
+  /// terceiro valor configurado; mesma regra de `valorSecundario` acima
+  /// (inclusive opcional por período, fica null até alguém salvar um valor
+  /// de verdade). Para um indicador sem terceiro valor configurado,
+  /// `upsertReuniaoCustomIndicatorValues` nunca grava nada aqui (mesmo que o
+  /// payload mande um valor por engano) — evita linha "órfã" com um
+  /// valorTerciario que não corresponde a nenhum nomeTerciario/
+  /// unidadeTerciaria do indicador.
+  valorTerciario Float?
 
   @@unique([indicatorId, periodo])
 }
