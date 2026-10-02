@@ -7,6 +7,7 @@ import type { ProductCategory } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 import { readWorkbookRows } from "@/lib/xlsx-import";
+import { spStartOfDay } from "@/lib/timezone";
 
 const INSERT_CHUNK_SIZE = 1000;
 
@@ -18,14 +19,35 @@ function normalizeText(value?: string | null): string {
     .trim();
 }
 
+// `periodFrom`/`periodTo` são comparados em outros módulos (ex. `loadGarcomRanking` em
+// @/lib/garcons.ts, usado por `vendas/garcons`) contra o período selecionado no dashboard, que é
+// sempre ancorado em meia-noite de São Paulo (`resolveRollingPeriod`/`spStartOfDay`, ver
+// @/lib/periods.ts). Por isso ancora em meia-noite de SÃO PAULO aqui também, não em meia-noite UTC
+// (Date.UTC direto) — mesma causa raiz e mesmo remédio já aplicados na importação de colaboradores/
+// ponto do RH (ver rh/employees/import/route.ts e rh/time-entries/import/route.ts): `new
+// Date(Date.UTC(y, m-1, d))` fica 3h ANTES da meia-noite de SP do mesmo dia, o que faz o período
+// importado ficar fora do `gte`/`lte` calculado por `resolveRollingPeriod` na última(s) hora(s) do
+// dia final do período.
+//
+// `validOrNull` existe porque `spStartOfDay` remonta a string e reparsa via `new
+// Date("YYYY-MM-DDT00:00:00-03:00")` — diferente de `Date.UTC` com números (que sempre normaliza,
+// nunca dá Date inválido), mês/dia fora do intervalo sintático (ex. mês "13") faz essa string virar
+// `Invalid Date` — e um `Invalid Date` é truthy em JS, então sem essa checagem explícita uma data
+// malformada passaria pelo `if (!periodFrom)` abaixo, chegaria inválida no Prisma e estouraria um
+// erro não tratado (achado do Teulis na correção original do RH, ver rh/employees/import/route.ts).
+function validOrNull(d: Date): Date | null {
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function parseBrDate(raw: string): Date | null {
+  const pad = (n: number) => String(n).padStart(2, "0");
   const s = raw.trim();
   const br = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
-  if (br) return new Date(Date.UTC(Number(br[1]), Number(br[2]) - 1, Number(br[3])));
+  if (br) return validOrNull(spStartOfDay(`${br[1]}-${pad(Number(br[2]))}-${pad(Number(br[3]))}`));
   const br2 = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
   if (br2) {
     const year = br2[3].length === 2 ? Number(`20${br2[3]}`) : Number(br2[3]);
-    return new Date(Date.UTC(year, Number(br2[2]) - 1, Number(br2[1])));
+    return validOrNull(spStartOfDay(`${year}-${pad(Number(br2[2]))}-${pad(Number(br2[1]))}`));
   }
   return null;
 }

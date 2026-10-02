@@ -7,6 +7,7 @@ import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
+import { spStartOfDay } from "@/lib/timezone";
 
 const SALE_INSERT_CHUNK_SIZE = 1000;
 
@@ -102,6 +103,16 @@ function mapPagamento(raw: string): PaymentMethod {
   return "OUTRO";
 }
 
+// Fica ancorada em meia-noite UTC DE PROPÓSITO (não em meia-noite de São Paulo) — `SalesEntry.date`
+// (alimentado por esta função, via `parseOrderDate`, e pelo formato "resumo diário" mais abaixo) é
+// gravado com essa mesma convenção em TODO outro ponto que escreve nesta tabela: lançamento manual
+// (`src/app/api/vendas/route.ts` POST e `[id]/route.ts` PATCH, `new Date(body.date)` — uma string
+// "YYYY-MM-DD" pura também vira meia-noite UTC) e a sincronização automática da Saipos
+// (`src/lib/saipos-sync.ts`, função `startOfDayUtc`). Ancorar só a importação de arquivo em SP
+// deixaria esta rota desalinhada de todas as outras — reimportar um dia já lançado manualmente (ou
+// já sincronizado da Saipos) não encontraria o `SalesEntry` existente pelo `findFirst({ date: day
+// })` abaixo e criaria um registro duplicado (faturamento contado em dobro no dia). Ver
+// `parseOrderDateTime` abaixo para o campo que REALMENTE precisa do fuso de SP (`Sale.dateTime`).
 function parseDateFlexible(raw: string | number): Date | null {
   if (typeof raw === "number") {
     const parsed = parseExcelDateCode(raw);
@@ -119,7 +130,11 @@ function parseDateFlexible(raw: string | number): Date | null {
   return null;
 }
 
-/** Extrai só a data (dia/mês/ano) de "Data da venda", ignorando a hora — usada para agrupar por dia. */
+/**
+ * Extrai só a data (dia/mês/ano) de "Data da venda", ignorando a hora — usada para agrupar por dia
+ * (`SalesEntry`, via `dayOf`). Ancorada em meia-noite UTC de propósito — ver comentário de
+ * `parseDateFlexible` acima, mesma convenção.
+ */
 function parseOrderDate(raw: string | number): Date | null {
   if (typeof raw === "number") return parseDateFlexible(raw);
   const s = String(raw).trim();
@@ -131,20 +146,51 @@ function parseOrderDate(raw: string | number): Date | null {
   return parseDateFlexible(raw);
 }
 
-/** Extrai data e hora completas de "Data da venda" (dd/mm/aaaa HH:MM) — usada no registro de cada venda. */
+// `validOrNull` existe porque `spStartOfDay` remonta a string e reparsa via `new
+// Date("YYYY-MM-DDT00:00:00-03:00")` — diferente de `Date.UTC` com números (que sempre normaliza,
+// nunca dá Date inválido), mês/dia/hora fora do intervalo sintático (ex. mês "13") faz essa string
+// virar `Invalid Date` — e um `Invalid Date` é truthy em JS, então sem essa checagem explícita uma
+// data malformada passaria pelo `?? date` do chamador como se fosse válida, chegaria inválida no
+// Prisma e estouraria um erro não tratado (achado do Teulis na correção original do RH, ver
+// rh/employees/import/route.ts).
+function validOrNull(d: Date): Date | null {
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Extrai data e hora completas de "Data da venda" (dd/mm/aaaa HH:MM) — usada no registro de cada
+ * venda (`Sale.dateTime`). Ancorada em meia-noite/hora de SÃO PAULO, não em UTC direto — diferente
+ * de `parseDateFlexible`/`parseOrderDate` acima (que alimentam `SalesEntry.date`, propositalmente
+ * ainda em UTC — ver comentário lá). `Sale.dateTime` é lido em outros módulos sempre assumindo o
+ * fuso de SP (`computeFaturamentoSummary`/`buildHalfHourBuckets` em @/lib/faturamento-analytics.ts,
+ * via `spStartOfDay`/`spEndOfDay`/`spHours`/`spMinutes`; mesma causa raiz do bug de "Ontem" já
+ * corrigido em `resolvePeriod`/`resolveRollingPeriod`, ver @/lib/periods.ts) — uma venda importada
+ * com `dateTime` ancorado em UTC (3h antes da meia-noite de SP) ficava fora do período certo nesses
+ * módulos, contada no dia ANTERIOR ao que o arquivo da Saipos realmente informa.
+ */
 function parseOrderDateTime(raw: string | number): Date | null {
+  const pad = (n: number) => String(n).padStart(2, "0");
   if (typeof raw === "number") {
     const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
-    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H ?? 0, parsed.M ?? 0, parsed.S ?? 0));
+    const dateKey = `${parsed.y}-${pad(parsed.m)}-${pad(parsed.d)}`;
+    const time = `${pad(parsed.H ?? 0)}:${pad(parsed.M ?? 0)}:${pad(parsed.S ?? 0)}`;
+    return validOrNull(new Date(`${dateKey}T${time}-03:00`));
   }
   const s = String(raw).trim();
   const br = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(s);
   if (br) {
     const year = br[3].length === 2 ? Number(`20${br[3]}`) : Number(br[3]);
-    return new Date(Date.UTC(year, Number(br[2]) - 1, Number(br[1]), Number(br[4]), Number(br[5]), Number(br[6] ?? 0)));
+    const dateKey = `${year}-${pad(Number(br[2]))}-${pad(Number(br[1]))}`;
+    const time = `${pad(Number(br[4]))}:${pad(Number(br[5]))}:${pad(Number(br[6] ?? 0))}`;
+    return validOrNull(new Date(`${dateKey}T${time}-03:00`));
   }
-  return parseOrderDate(raw);
+  // Sem horário reconhecido na célula (ex. só a data, sem hora) — cai pra meia-noite de SÃO PAULO do
+  // mesmo dia (nunca a meia-noite UTC de `parseOrderDate`, que fica 3h antes), pra `Sale.dateTime`
+  // ficar sempre ancorado em SP, mesmo nesse caso de borda.
+  const dayOnly = parseOrderDate(raw);
+  if (!dayOnly) return null;
+  return validOrNull(spStartOfDay(dayOnly.toISOString().slice(0, 10)));
 }
 
 function parseNumber(raw: string | number): number {
@@ -297,8 +343,17 @@ export async function POST(req: Request) {
         errors.push(`Linha ${i + 1}: data inválida ("${rawDate}").`);
         continue;
       }
-      if (!minDate || date < minDate) minDate = date;
-      if (!maxDate || date > maxDate) maxDate = date;
+      // minDate/maxDate delimitam só o intervalo de `Sale.dateTime` apagado antes de reinserir
+      // (substituir uma reimportação do mesmo período, ver `rangeStart`/`rangeEnd` abaixo) — nunca
+      // gravados no banco. Por isso usam a versão ancorada em SÃO PAULO do mesmo dia de `date` (via
+      // `spStartOfDay`, reaproveitando o Y-M-D já validado por `parseOrderDate`), não `date` em si
+      // (que fica em UTC de propósito — ver comentário de `parseDateFlexible`): `Sale.dateTime`
+      // (`parseOrderDateTime` abaixo) agora é ancorado em SP, então o intervalo de exclusão precisa
+      // acompanhar esse fuso, senão vendas do fim da noite (horário de SP) do último dia do período
+      // ficam depois do `rangeEnd` e não são substituídas na reimportação (duplicando a venda).
+      const spDay = spStartOfDay(date.toISOString().slice(0, 10));
+      if (!minDate || spDay < minDate) minDate = spDay;
+      if (!maxDate || spDay > maxDate) maxDate = spDay;
 
       const cancelado = columnMap.cancelado !== undefined && normalizeText(String(row[columnMap.cancelado])) === "s";
       if (cancelado) {

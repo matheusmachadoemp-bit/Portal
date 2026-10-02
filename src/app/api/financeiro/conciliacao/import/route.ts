@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
+import { spStartOfDay } from "@/lib/timezone";
 import { Extractor, Reader, type NormalizedTransaction } from "ofx-data-extractor";
 
 const HEADER_ALIASES: Record<string, string> = {
@@ -27,20 +28,39 @@ function normalizeHeader(h: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
+// A tela de conciliação (conciliacao-client.tsx) formata esta data com `format(new Date(t.date),
+// "dd/MM/yyyy")` do date-fns, que lê o instante no fuso LOCAL DO NAVEGADOR — America/Sao_Paulo pra
+// quem usa o Portal no Brasil. Por isso ancora em meia-noite de SÃO PAULO, não em meia-noite UTC
+// (Date.UTC direto) — mesma causa raiz e mesmo remédio já aplicados na importação de colaboradores/
+// ponto do RH (ver rh/employees/import/route.ts e rh/time-entries/import/route.ts): `new
+// Date(Date.UTC(y, m-1, d))` fica 3h ANTES da meia-noite de SP do mesmo dia, o que faz o navegador
+// exibir o dia anterior ao formatar com hora local.
+//
+// `validOrNull` existe porque `spStartOfDay` remonta a string e reparsa via `new
+// Date("YYYY-MM-DDT00:00:00-03:00")` — diferente de `Date.UTC` com números (que sempre normaliza,
+// nunca dá Date inválido), mês/dia fora do intervalo sintático (ex. mês "13") faz essa string virar
+// `Invalid Date` — e um `Invalid Date` é truthy em JS, então sem essa checagem explícita uma data
+// malformada passaria pelo `if (!date)` abaixo, chegaria inválida no Prisma e estouraria um erro não
+// tratado (achado do Teulis na correção original do RH, ver rh/employees/import/route.ts).
+function validOrNull(d: Date): Date | null {
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function parseDateFlexible(raw: string | number): Date | null {
+  const pad = (n: number) => String(n).padStart(2, "0");
   if (typeof raw === "number") {
     const parsed = parseExcelDateCode(raw);
     if (!parsed) return null;
-    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+    return validOrNull(spStartOfDay(`${parsed.y}-${pad(parsed.m)}-${pad(parsed.d)}`));
   }
   const s = String(raw).trim();
   const br = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
   if (br) {
     const year = br[3].length === 2 ? Number(`20${br[3]}`) : Number(br[3]);
-    return new Date(Date.UTC(year, Number(br[2]) - 1, Number(br[1])));
+    return validOrNull(spStartOfDay(`${year}-${pad(Number(br[2]))}-${pad(Number(br[1]))}`));
   }
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-  if (iso) return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+  if (iso) return validOrNull(spStartOfDay(`${iso[1]}-${pad(Number(iso[2]))}-${pad(Number(iso[3]))}`));
   return null;
 }
 
