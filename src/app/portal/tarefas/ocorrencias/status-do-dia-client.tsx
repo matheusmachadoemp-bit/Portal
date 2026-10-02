@@ -16,6 +16,8 @@ import { FECHAMENTO_STATUS_LABEL, FECHAMENTO_STATUS_TONE, type FechamentoStatusV
 // autorização é tomada aqui.
 // ---------------------------------------------------------------------------
 
+type TeamMemberOption = { id: string; name: string };
+
 type CargoInfo = {
   id: string;
   key: string;
@@ -23,8 +25,8 @@ type CargoInfo = {
   icon: string;
   ordem: number;
   empresa: { id: string; name: string };
-  responsavel: { id: string; name: string } | null;
-  substituto: { id: string; name: string } | null;
+  responsavel: TeamMemberOption | null;
+  substituto: TeamMemberOption | null;
   horarioLiberacao: string;
   horarioLimite: string;
 };
@@ -71,7 +73,98 @@ function CardSkeleton() {
   );
 }
 
-function CargoCard({ item }: { item: CargoStatus }) {
+/**
+ * Responsável/substituto editáveis direto no card, só para quem tem `canEdit` do módulo
+ * "fechamento-dia" (mesmo gate que `PATCH /api/fechamento-dia/cargos/[cargoId]` já exige — ver
+ * comentário daquela rota; não reimplementamos nenhuma regra nova aqui, só escondemos o controle
+ * de quem a API recusaria de qualquer forma). Cada `<select>` salva no `onChange`, sem botão
+ * "Salvar" separado — já que o resumo do card é só um texto curto, um dropdown que já aplica a
+ * escolha mantém a mesma pegada "uma olhada e já sei o status" do resto do card.
+ */
+function ResponsavelSubstitutoFields({
+  cargo,
+  teamMembers,
+  onUpdated,
+}: {
+  cargo: CargoInfo;
+  teamMembers: TeamMemberOption[];
+  onUpdated: (cargo: CargoInfo) => void;
+}) {
+  const [savingField, setSavingField] = useState<"responsavelId" | "substitutoId" | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  async function salvar(field: "responsavelId" | "substitutoId", value: string) {
+    setSavingField(field);
+    setLocalError(null);
+    try {
+      const res = await fetch(`/api/fechamento-dia/cargos/${cargo.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value || null }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLocalError(body.error || "Não foi possível salvar. Tente novamente.");
+        return;
+      }
+      onUpdated(body.cargo);
+    } catch {
+      setLocalError("Não foi possível salvar. Tente novamente.");
+    } finally {
+      setSavingField(null);
+    }
+  }
+
+  const disabled = savingField !== null;
+
+  return (
+    <div className="space-y-1">
+      <label className="flex items-center gap-1.5">
+        <span className="shrink-0 text-nord-gray">Responsável:</span>
+        <select
+          className="input-sm flex-1 min-w-0"
+          value={cargo.responsavel?.id ?? ""}
+          disabled={disabled}
+          onChange={(e) => salvar("responsavelId", e.target.value)}
+        >
+          <option value="">não definido</option>
+          {teamMembers.map((u) => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
+        {savingField === "responsavelId" && <RefreshCw size={11} className="shrink-0 animate-spin text-nord-gray" />}
+      </label>
+      <label className="flex items-center gap-1.5">
+        <span className="shrink-0 text-nord-gray">Substituto:</span>
+        <select
+          className="input-sm flex-1 min-w-0"
+          value={cargo.substituto?.id ?? ""}
+          disabled={disabled}
+          onChange={(e) => salvar("substitutoId", e.target.value)}
+        >
+          <option value="">não definido</option>
+          {teamMembers.map((u) => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
+        {savingField === "substitutoId" && <RefreshCw size={11} className="shrink-0 animate-spin text-nord-gray" />}
+      </label>
+      {localError && <p className="text-nord-danger">{localError}</p>}
+    </div>
+  );
+}
+
+function CargoCard({
+  item,
+  teamMembers,
+  canEdit,
+  onCargoUpdated,
+}: {
+  item: CargoStatus;
+  teamMembers: TeamMemberOption[];
+  canEdit: boolean;
+  onCargoUpdated: (cargo: CargoInfo) => void;
+}) {
   const { cargo, submissao, podeExecutar } = item;
   const enviadoComAtraso =
     submissao?.status === "ENVIADO" && submissao.enviadoEm
@@ -98,7 +191,11 @@ function CargoCard({ item }: { item: CargoStatus }) {
       </div>
 
       <div className="text-xs text-nord-gray space-y-1">
-        <p className="truncate">Responsável: {cargo.responsavel?.name ?? "não definido"}</p>
+        {canEdit ? (
+          <ResponsavelSubstitutoFields cargo={cargo} teamMembers={teamMembers} onUpdated={onCargoUpdated} />
+        ) : (
+          <p className="truncate">Responsável: {cargo.responsavel?.name ?? "não definido"}</p>
+        )}
         {submissao?.status === "ENVIADO" && submissao.enviadoEm && (
           <p className="flex items-center gap-1">
             <Clock size={12} className="shrink-0" />
@@ -136,8 +233,19 @@ function CargoCard({ item }: { item: CargoStatus }) {
  * Renderizado no topo de `./page.tsx` (subcategoria Ocorrências, dentro de Tarefas), acima da
  * lista/gestão de ocorrências — antes vivia em uma tela própria ("Fechamento do Dia" /
  * `/portal/fechamento-dia`), unificada aqui a pedido do usuário.
+ *
+ * `teamMembersByEmpresa`/`canEdit` vêm do `page.tsx` (busca/permissão resolvidas no servidor —
+ * ver comentário ali) só pra alimentar o seletor de Responsável/Substituto de cada card; esta
+ * tela continua buscando o status do dia em si (`GET /api/fechamento-dia/status`) por conta
+ * própria, como sempre fez.
  */
-export function StatusDoDiaClient() {
+export function StatusDoDiaClient({
+  teamMembersByEmpresa,
+  canEdit,
+}: {
+  teamMembersByEmpresa: Record<string, TeamMemberOption[]>;
+  canEdit: boolean;
+}) {
   const [data, setData] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +272,17 @@ export function StatusDoDiaClient() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- busca o status do dia ao montar a tela
     load();
   }, [load]);
+
+  // Chamado pelo `ResponsavelSubstitutoFields` depois de um PATCH com sucesso — troca só o `cargo`
+  // daquele card pelo objeto atualizado que a própria rota devolve, sem refazer a busca inteira
+  // (evita piscar os outros cards/skeleton de novo por uma mudança de um campo só).
+  const updateCargo = useCallback((updated: CargoInfo) => {
+    setData((prev) =>
+      prev
+        ? { ...prev, cargos: prev.cargos.map((item) => (item.cargo.id === updated.id ? { ...item, cargo: updated } : item)) }
+        : prev
+    );
+  }, []);
 
   const cargos = data?.cargos ?? [];
   const enviados = cargos.filter((c) => c.submissao?.status === "ENVIADO").length;
@@ -250,7 +369,13 @@ export function StatusDoDiaClient() {
                 .slice()
                 .sort((a, b) => a.cargo.ordem - b.cargo.ordem)
                 .map((item) => (
-                  <CargoCard key={item.cargo.id} item={item} />
+                  <CargoCard
+                    key={item.cargo.id}
+                    item={item}
+                    teamMembers={teamMembersByEmpresa[item.cargo.empresa.id] ?? []}
+                    canEdit={canEdit}
+                    onCargoUpdated={updateCargo}
+                  />
                 ))}
             </div>
           </div>
