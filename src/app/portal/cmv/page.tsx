@@ -52,7 +52,7 @@ export default async function CmvPage() {
   });
   const snapshotDates = [periodStart, now, ...dayBoundaries.flatMap((d) => [d.day, d.end])];
 
-  const [products, ingredients, snapshots, movements, salesEntries] = await Promise.all([
+  const [products, ingredients, snapshots, movements, salesEntries, contagensAprovadas] = await Promise.all([
     prisma.product.findMany({
       where: { empresaId: { in: empresaIds } },
       include: { ingredients: { include: { ingredient: true } } },
@@ -72,6 +72,13 @@ export default async function CmvPage() {
       select: { ingredientId: true, type: true, quantidade: true, estoqueApos: true, createdAt: true },
     }),
     prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: periodStart } } }),
+    // Pelo menos 1 contagem física já aprovada alguma vez — ver mesmo
+    // racional em src/app/portal/estoque/page.tsx: sem nenhuma contagem
+    // aprovada, `ingredient.estoqueAtual` nunca foi reconciliado com a
+    // realidade, então "CMV Real" (que depende dele) não tem base física
+    // confiável pra ser comparado com o "CMV Teórico" — a divergência entre
+    // os dois não deveria disparar como alerta nesse caso.
+    prisma.stockCount.count({ where: { empresaId: { in: empresaIds }, status: "APROVADA" } }),
   ]);
 
   const estoqueEm = (at: Date) => valorEstoqueDeSnapshot(ingredients, snapshots.get(at.getTime())!);
@@ -94,7 +101,8 @@ export default async function CmvPage() {
 
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaValor = cmvRealValorPeriodo - cmvTeoricoValorPeriodo;
-  const divergenciaAlta = Math.abs(diferencaPP) > DIVERGENCIA_ALERTA_PP;
+  const temContagemAprovada = contagensAprovadas > 0;
+  const divergenciaAlta = temContagemAprovada && Math.abs(diferencaPP) > DIVERGENCIA_ALERTA_PP;
 
   const dailySeries = dayBoundaries.map(({ day, end }) => {
     const faturamentoDia = faturamentoNoPeriodo(day, end);
@@ -138,14 +146,26 @@ export default async function CmvPage() {
             { key: "cmv-teorico", label: "CMV Teórico (%)", value: formatPercent(cmvTeoricoPercent), icon: "ClipboardList", color: "#2952E3" },
             { key: "cmv-real", label: "CMV Real (%)", value: formatPercent(cmvRealPercent), icon: "Warehouse", color: "#eab308" },
             { key: "cmv-real-valor", label: "CMV Real (R$, 30d)", value: formatCurrency(cmvRealValorPeriodo), icon: "DollarSign" },
-            {
-              key: "diferenca",
-              label: "Diferença",
-              value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
-              icon: divergenciaAlta ? "TriangleAlert" : "CheckCircle2",
-              color: divergenciaAlta ? "#ef4444" : "#22c55e",
-              hint: formatCurrency(diferencaValor),
-            },
+            temContagemAprovada
+              ? {
+                  key: "diferenca",
+                  label: "Diferença",
+                  value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
+                  icon: divergenciaAlta ? "TriangleAlert" : "CheckCircle2",
+                  color: divergenciaAlta ? "#ef4444" : "#22c55e",
+                  hint: formatCurrency(diferencaValor),
+                }
+              : {
+                  // Sem nenhuma contagem física aprovada ainda, o "CMV Real"
+                  // não tem base confiável pra comparar com o teórico — mostra
+                  // "sem dados" em vez de um p.p. que pareceria preciso.
+                  key: "diferenca",
+                  label: "Diferença",
+                  value: "Sem dados",
+                  icon: "HelpCircle",
+                  color: "#64748b",
+                  hint: "Faça uma contagem de estoque para comparar",
+                },
           ]}
         />
 
