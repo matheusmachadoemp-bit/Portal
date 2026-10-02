@@ -3,7 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { findReuniaoCustomIndicatorForMeeting, parseSecondaryIndicatorFields, REUNIAO_INDICATOR_UNIDADES } from "@/lib/reuniao-server";
+import {
+  findReuniaoCustomIndicatorForMeeting,
+  parseSecondaryIndicatorFields,
+  parseTertiaryIndicatorFields,
+  validateTertiaryRequiresSecondary,
+  REUNIAO_INDICATOR_UNIDADES,
+} from "@/lib/reuniao-server";
 
 /**
  * Edita nome/unidade/ícone/valor padrão de um indicador já criado — só
@@ -43,6 +49,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     valorPadrao?: number;
     nomeSecundario?: string | null;
     unidadeSecundaria?: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null;
+    nomeTerciario?: string | null;
+    unidadeTerciaria?: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null;
   } = {};
 
   if (body.nome !== undefined) {
@@ -72,9 +80,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (secondary.touched && !secondary.ok) {
     return NextResponse.json({ error: secondary.error }, { status: 400 });
   }
+
+  // Terceiro valor — mesma regra do segundo (só mexe quando o body toca em
+  // nomeTerciario/unidadeTerciaria; não tocar mantém o que já está salvo),
+  // mas só pode existir junto do segundo (ver comentário de nomeTerciario em
+  // schema.prisma). "Efetivo" considera tanto o que este body está mudando
+  // agora quanto o que o indicador já tinha, pra campos não tocados —
+  // inclusive o caso de desmarcar o 2º valor sem tocar no 3º (que o
+  // indicador já tinha): o 3º precisa ser removido junto, não pode "sobrar"
+  // sem o 2º.
+  const tertiary = parseTertiaryIndicatorFields(body);
+  if (tertiary.touched && !tertiary.ok) {
+    return NextResponse.json({ error: tertiary.error }, { status: 400 });
+  }
+  const efetivoTemSecundario = secondary.touched && secondary.ok ? secondary.unidadeSecundaria !== null : !!indicator.unidadeSecundaria;
+  const efetivoTemTerciario = tertiary.touched && tertiary.ok ? tertiary.unidadeTerciaria !== null : !!indicator.unidadeTerciaria;
+  const tertiaryError = validateTertiaryRequiresSecondary(efetivoTemSecundario, efetivoTemTerciario);
+  if (tertiaryError) {
+    return NextResponse.json({ error: tertiaryError }, { status: 400 });
+  }
+
   if (secondary.touched && secondary.ok) {
     data.nomeSecundario = secondary.nomeSecundario;
     data.unidadeSecundaria = secondary.unidadeSecundaria;
+  }
+  if (tertiary.touched && tertiary.ok) {
+    data.nomeTerciario = tertiary.nomeTerciario;
+    data.unidadeTerciaria = tertiary.unidadeTerciaria;
   }
 
   const updated =

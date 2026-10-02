@@ -100,10 +100,31 @@ type IndicatorFormState = {
   hasSecondary: boolean;
   nomeSecundario: string;
   unidadeSecundaria: FechamentoIndicator["unidade"];
+  /** Marca se este indicador tem um terceiro valor por período (ex.: "Pedidos por
+   * canal" = Site + 99Food + iFood). Só faz sentido quando `hasSecondary` também
+   * está marcado (ver comentário de `nomeTerciario` em schema.prisma) — a tela só
+   * mostra/habilita este checkbox quando o do 2º valor já está marcado, e desmarcar
+   * o do 2º também desmarca este (ver os `onChange` do checkbox "tem um segundo
+   * valor" abaixo). Quando `false`, `nomeTerciario`/`unidadeTerciaria` abaixo são
+   * ignorados na hora de montar o payload — ver `buildTertiaryPayload` abaixo. */
+  hasTertiary: boolean;
+  nomeTerciario: string;
+  unidadeTerciaria: FechamentoIndicator["unidade"];
 };
 
 function emptyIndicatorForm(): IndicatorFormState {
-  return { nome: "", unidade: "PERCENT", icon: "Target", valorPadrao: "", hasSecondary: false, nomeSecundario: "", unidadeSecundaria: "PERCENT" };
+  return {
+    nome: "",
+    unidade: "PERCENT",
+    icon: "Target",
+    valorPadrao: "",
+    hasSecondary: false,
+    nomeSecundario: "",
+    unidadeSecundaria: "PERCENT",
+    hasTertiary: false,
+    nomeTerciario: "",
+    unidadeTerciaria: "PERCENT",
+  };
 }
 
 /** Monta os campos `nomeSecundario`/`unidadeSecundaria` do body de criar/editar a
@@ -118,6 +139,19 @@ function buildSecondaryPayload(form: IndicatorFormState) {
   };
 }
 
+/** Mesma ideia de `buildSecondaryPayload`, agora pro terceiro valor — ver
+ * `parseTertiaryIndicatorFields` em src/lib/reuniao-server.ts. `hasTertiary` só
+ * fica `true` quando `hasSecondary` também está (garantido pelos `onChange` dos
+ * checkboxes, não checado de novo aqui), então "" nos 2 quando `hasTertiary` é
+ * `false` já cobre tanto "nunca teve 3º valor" quanto "tinha e foi removido
+ * (junto do 2º, ou isoladamente)". */
+function buildTertiaryPayload(form: IndicatorFormState) {
+  return {
+    nomeTerciario: form.hasTertiary ? form.nomeTerciario : "",
+    unidadeTerciaria: form.hasTertiary ? form.unidadeTerciaria : "",
+  };
+}
+
 function buildCustomForm(indicators: FechamentoIndicator[]): Record<string, string> {
   return Object.fromEntries(indicators.map((ind) => [ind.id, String(ind.valorReferencia)]));
 }
@@ -127,6 +161,13 @@ function buildCustomForm(indicators: FechamentoIndicator[]): Record<string, stri
  * com string vazia, sem nenhum campo extra aparecendo no formulário. */
 function buildCustomFormSecundario(indicators: FechamentoIndicator[]): Record<string, string> {
   return Object.fromEntries(indicators.map((ind) => [ind.id, ind.valorSecundario != null ? String(ind.valorSecundario) : ""]));
+}
+
+/** Rascunho do 3º valor ("Valor" do `nomeTerciario`) por indicador — mesma ideia de
+ * `buildCustomFormSecundario`, só indicadores com `unidadeTerciaria` configurada de
+ * fato usam isso. */
+function buildCustomFormTerciario(indicators: FechamentoIndicator[]): Record<string, string> {
+  return Object.fromEntries(indicators.map((ind) => [ind.id, ind.valorTerciario != null ? String(ind.valorTerciario) : ""]));
 }
 
 /**
@@ -188,6 +229,9 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
   // `buildCustomFormSecundario`) — mesma ideia de `customForm`, mas separado porque nem
   // todo indicador tem um 2º valor pra editar.
   const [customFormSecundario, setCustomFormSecundario] = useState(buildCustomFormSecundario(initialCustomIndicators));
+  // Rascunho do 3º valor — mesma ideia de `customFormSecundario`, só indicadores com
+  // `unidadeTerciaria` configurada de fato usam isso.
+  const [customFormTerciario, setCustomFormTerciario] = useState(buildCustomFormTerciario(initialCustomIndicators));
   // Incrementado a cada `beginFetch()` — "geração" da busca mais recente.
   // Ver o comentário de `useFechamentoDoMes` acima sobre resposta fora de
   // ordem.
@@ -256,6 +300,20 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       }
       return next;
     });
+    // Mesma lógica de novo, agora pro rascunho do 3º valor — só existe pra indicadores
+    // com unidadeTerciaria configurada.
+    setCustomFormTerciario((prevForm) => {
+      const next: Record<string, string> = {};
+      for (const ind of indicators) {
+        if (!ind.unidadeTerciaria) continue;
+        const prevInd = customIndicators.find((p) => p.id === ind.id);
+        const prevValue = prevInd?.valorTerciario != null ? String(prevInd.valorTerciario) : "";
+        const prevDraft = prevForm[ind.id];
+        const draftTouched = prevInd !== undefined && prevDraft !== undefined && prevDraft !== prevValue;
+        next[ind.id] = draftTouched ? prevDraft : ind.valorTerciario != null ? String(ind.valorTerciario) : "";
+      }
+      return next;
+    });
     setCustomIndicators(indicators);
   }
 
@@ -291,17 +349,25 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
     setCustomFormSecundario((prev) => ({ ...prev, [id]: value }));
   }
 
+  function updateValorTerciario(id: string, value: string) {
+    setCustomFormTerciario((prev) => ({ ...prev, [id]: value }));
+  }
+
   /** Monta o array `customIndicators` esperado pelo POST da reunião (mesmo
    * formato `{id, valorReferencia}` já usado hoje pela Reunião Gerente) — inclui
-   * `valorSecundario` só para indicadores "compostos" (unidadeSecundaria
-   * configurada); o backend também ignora esse campo pra indicador simples, mas
-   * evitar mandar à toa deixa o payload mais claro. */
+   * `valorSecundario`/`valorTerciario` só para indicadores "compostos"
+   * (unidadeSecundaria/unidadeTerciaria configurada); o backend também ignora
+   * esses campos pra indicador simples, mas evitar mandar à toa deixa o payload
+   * mais claro. */
   function buildIndicatorsPayload() {
     return customIndicators.map((ind) => ({
       id: ind.id,
       valorReferencia: customForm[ind.id] ?? String(ind.valorReferencia),
       ...(ind.unidadeSecundaria
         ? { valorSecundario: customFormSecundario[ind.id] ?? String(ind.valorSecundario ?? "") }
+        : {}),
+      ...(ind.unidadeTerciaria
+        ? { valorTerciario: customFormTerciario[ind.id] ?? String(ind.valorTerciario ?? "") }
         : {}),
     }));
   }
@@ -317,6 +383,10 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       setNewError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
       return;
     }
+    if (newForm.hasTertiary && !newForm.nomeTerciario.trim()) {
+      setNewError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
+      return;
+    }
     setCreating(true);
     try {
       const res = await fetch(`${apiBase}/indicadores`, {
@@ -328,6 +398,7 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
           icon: newForm.icon,
           valorPadrao: newForm.valorPadrao,
           ...buildSecondaryPayload(newForm),
+          ...buildTertiaryPayload(newForm),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -338,9 +409,9 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       // A rota devolve o registro "cru" (sem valor/valorReferencia, que vivem
       // à parte em ReuniaoCustomIndicatorValue) — um indicador recém-criado
       // ainda não tem valor salvo em nenhum período, então cai no valorPadrao
-      // (mesma regra de loadReuniaoCustomIndicators). Idem para valorSecundario:
-      // sem período salvo ainda, começa null mesmo que o indicador já nasça
-      // composto.
+      // (mesma regra de loadReuniaoCustomIndicators). Idem para valorSecundario/
+      // valorTerciario: sem período salvo ainda, começam null mesmo que o
+      // indicador já nasça composto.
       const created: FechamentoIndicator = {
         id: data.indicator.id,
         nome: data.indicator.nome,
@@ -352,10 +423,14 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
         nomeSecundario: data.indicator.nomeSecundario ?? null,
         unidadeSecundaria: data.indicator.unidadeSecundaria ?? null,
         valorSecundario: null,
+        nomeTerciario: data.indicator.nomeTerciario ?? null,
+        unidadeTerciaria: data.indicator.unidadeTerciaria ?? null,
+        valorTerciario: null,
       };
       setCustomIndicators((prev) => [...prev, created]);
       setCustomForm((prev) => ({ ...prev, [created.id]: String(created.valorReferencia) }));
       setCustomFormSecundario((prev) => ({ ...prev, [created.id]: "" }));
+      setCustomFormTerciario((prev) => ({ ...prev, [created.id]: "" }));
       setNewOpen(false);
       setNewForm(emptyIndicatorForm());
     } finally {
@@ -373,6 +448,9 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       hasSecondary: !!ind.unidadeSecundaria,
       nomeSecundario: ind.nomeSecundario ?? "",
       unidadeSecundaria: ind.unidadeSecundaria ?? "PERCENT",
+      hasTertiary: !!ind.unidadeTerciaria,
+      nomeTerciario: ind.nomeTerciario ?? "",
+      unidadeTerciaria: ind.unidadeTerciaria ?? "PERCENT",
     });
     setEditError(null);
   }
@@ -388,6 +466,10 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       setEditError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
       return;
     }
+    if (editForm.hasTertiary && !editForm.nomeTerciario.trim()) {
+      setEditError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
+      return;
+    }
     setSavingEdit(true);
     try {
       const res = await fetch(`${apiBase}/indicadores/${editTarget.id}`, {
@@ -399,6 +481,7 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
           icon: editForm.icon,
           valorPadrao: editForm.valorPadrao,
           ...buildSecondaryPayload(editForm),
+          ...buildTertiaryPayload(editForm),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -434,6 +517,11 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
         delete next[deletedId];
         return next;
       });
+      setCustomFormTerciario((prev) => {
+        const next = { ...prev };
+        delete next[deletedId];
+        return next;
+      });
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
@@ -444,10 +532,12 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
     customIndicators,
     customForm,
     customFormSecundario,
+    customFormTerciario,
     beginFetch,
     sync,
     updateValorReferencia,
     updateValorSecundario,
+    updateValorTerciario,
     buildIndicatorsPayload,
     newOpen,
     setNewOpen,
@@ -518,6 +608,16 @@ export function FechamentoDoMesSection({
                       </span>
                     </p>
                   )}
+                  {/* Terceiro valor — mesma ideia do segundo, só aparece quando o indicador
+                      tem unidadeTerciaria configurada (que só existe junto da secundária). */}
+                  {ind.unidadeTerciaria && (
+                    <p className="text-xs text-nord-gray truncate">
+                      {ind.nomeTerciario}:{" "}
+                      <span className="text-white font-medium">
+                        {formatIndicatorValue(ind.unidadeTerciaria, ind.valorTerciario ?? 0)}
+                      </span>
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -570,7 +670,15 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
                     </button>
                   </div>
                 </div>
-                <div className={ind.unidadeSecundaria ? "grid grid-cols-2 gap-3" : ""}>
+                {/* Grid de 1 (indicador simples), 2 (composto com 2º valor) ou 3 colunas
+                    (composto com 2º E 3º valor) — o 3º valor só existe junto do 2º (ver
+                    comentário de nomeTerciario em schema.prisma), então nunca pula de 1
+                    pra 3 colunas direto. */}
+                <div
+                  className={
+                    ind.unidadeTerciaria ? "grid grid-cols-3 gap-3" : ind.unidadeSecundaria ? "grid grid-cols-2 gap-3" : ""
+                  }
+                >
                   <label className="block">
                     <span className="block text-xs text-nord-gray mb-1">Valor {unidadeSuffix(ind.unidade)}</span>
                     <input
@@ -593,6 +701,22 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
                         step="0.1"
                         value={fdm.customFormSecundario[ind.id] ?? String(ind.valorSecundario ?? "")}
                         onChange={(e) => fdm.updateValorSecundario(ind.id, e.target.value)}
+                        className="input"
+                      />
+                    </label>
+                  )}
+                  {/* Terceiro valor — mesma ideia do segundo, só aparece quando o indicador
+                      tem unidadeTerciaria configurada. */}
+                  {ind.unidadeTerciaria && (
+                    <label className="block">
+                      <span className="block text-xs text-nord-gray mb-1">
+                        {ind.nomeTerciario} {unidadeSuffix(ind.unidadeTerciaria)}
+                      </span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={fdm.customFormTerciario[ind.id] ?? String(ind.valorTerciario ?? "")}
+                        onChange={(e) => fdm.updateValorTerciario(ind.id, e.target.value)}
                         className="input"
                       />
                     </label>
@@ -660,7 +784,12 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
             <input
               type="checkbox"
               checked={fdm.newForm.hasSecondary}
-              onChange={(e) => fdm.setNewForm({ ...fdm.newForm, hasSecondary: e.target.checked })}
+              onChange={(e) => {
+                const hasSecondary = e.target.checked;
+                // Desmarcar o 2º valor também desmarca o 3º (nunca pode existir um sem o
+                // outro — ver comentário de nomeTerciario em schema.prisma).
+                fdm.setNewForm({ ...fdm.newForm, hasSecondary, hasTertiary: hasSecondary ? fdm.newForm.hasTertiary : false });
+              }}
             />
             Este indicador tem um segundo valor
           </label>
@@ -683,6 +812,47 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
                 <select
                   value={fdm.newForm.unidadeSecundaria}
                   onChange={(e) => fdm.setNewForm({ ...fdm.newForm, unidadeSecundaria: e.target.value as FechamentoIndicator["unidade"] })}
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {/* 3º valor — só disponível quando o 2º já está marcado (ver comentário de
+              nomeTerciario em schema.prisma); ex.: "Pedidos por canal" com Site (campos
+              principais), 99Food (2º valor) e iFood (3º valor), os 3 do mesmo jeito. */}
+          {fdm.newForm.hasSecondary && (
+            <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={fdm.newForm.hasTertiary}
+                onChange={(e) => fdm.setNewForm({ ...fdm.newForm, hasTertiary: e.target.checked })}
+              />
+              Este indicador também tem um terceiro valor
+            </label>
+          )}
+          {fdm.newForm.hasSecondary && fdm.newForm.hasTertiary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do terceiro valor</span>
+                <input
+                  type="text"
+                  value={fdm.newForm.nomeTerciario}
+                  onChange={(e) => fdm.setNewForm({ ...fdm.newForm, nomeTerciario: e.target.value })}
+                  placeholder="Ex.: iFood"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do terceiro valor</span>
+                <select
+                  value={fdm.newForm.unidadeTerciaria}
+                  onChange={(e) => fdm.setNewForm({ ...fdm.newForm, unidadeTerciaria: e.target.value as FechamentoIndicator["unidade"] })}
                   className="input"
                 >
                   {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
@@ -751,13 +921,19 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
             <input
               type="checkbox"
               checked={fdm.editForm.hasSecondary}
-              onChange={(e) => fdm.setEditForm({ ...fdm.editForm, hasSecondary: e.target.checked })}
+              onChange={(e) => {
+                const hasSecondary = e.target.checked;
+                // Desmarcar o 2º valor também desmarca o 3º (nunca pode existir um sem o
+                // outro — ver comentário de nomeTerciario em schema.prisma).
+                fdm.setEditForm({ ...fdm.editForm, hasSecondary, hasTertiary: hasSecondary ? fdm.editForm.hasTertiary : false });
+              }}
             />
             Este indicador tem um segundo valor
           </label>
           {/* Desmarcar remove o 2º valor deste indicador (volta a ser simples) — o histórico
               de valores já salvos em meses anteriores permanece no banco, só deixa de
-              aparecer/ser editável enquanto a opção estiver desmarcada. */}
+              aparecer/ser editável enquanto a opção estiver desmarcada. Remove também o 3º
+              valor, se houver (não pode existir um sem o outro). */}
           {fdm.editForm.hasSecondary && (
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
@@ -775,6 +951,46 @@ export function FechamentoDoMesEditor({ fdm }: { fdm: FechamentoDoMesState }) {
                 <select
                   value={fdm.editForm.unidadeSecundaria}
                   onChange={(e) => fdm.setEditForm({ ...fdm.editForm, unidadeSecundaria: e.target.value as FechamentoIndicator["unidade"] })}
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {/* 3º valor — só disponível quando o 2º já está marcado (ver comentário de
+              nomeTerciario em schema.prisma). */}
+          {fdm.editForm.hasSecondary && (
+            <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={fdm.editForm.hasTertiary}
+                onChange={(e) => fdm.setEditForm({ ...fdm.editForm, hasTertiary: e.target.checked })}
+              />
+              Este indicador também tem um terceiro valor
+            </label>
+          )}
+          {fdm.editForm.hasSecondary && fdm.editForm.hasTertiary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do terceiro valor</span>
+                <input
+                  type="text"
+                  value={fdm.editForm.nomeTerciario}
+                  onChange={(e) => fdm.setEditForm({ ...fdm.editForm, nomeTerciario: e.target.value })}
+                  placeholder="Ex.: iFood"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do terceiro valor</span>
+                <select
+                  value={fdm.editForm.unidadeTerciaria}
+                  onChange={(e) => fdm.setEditForm({ ...fdm.editForm, unidadeTerciaria: e.target.value as FechamentoIndicator["unidade"] })}
                   className="input"
                 >
                   {Object.entries(UNIDADE_LABEL).map(([value, label]) => (

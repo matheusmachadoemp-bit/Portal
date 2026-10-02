@@ -70,11 +70,13 @@ function buildForm(m?: Meeting | null) {
 // tela é sempre `valorReferencia`, usado no card "Fechamento do mês" (dentro e fora do modal).
 // Mantido aqui só porque divide a mesma estrutura de estado que `valorReferencia`; sem input
 // escrevendo nele, fica congelado no valor carregado da API (comportamento aceito pelo usuário).
-// `valorSecundario`: 2º valor de um indicador "composto" (ex.: Cancelamentos = % + quantidade)
-// — só tem input de verdade quando o indicador tem `unidadeSecundaria` configurada; para os
-// demais fica sempre "" e nunca é enviado de fato (ver upsertReuniaoCustomIndicatorValues em
-// src/lib/reuniao-server.ts, que ignora esse campo quando o indicador não é composto).
-type CustomForm = Record<string, { valor: string; valorReferencia: string; valorSecundario: string }>;
+// `valorSecundario`/`valorTerciario`: 2º/3º valor de um indicador "composto" (ex.:
+// Cancelamentos = % + quantidade) — só têm input de verdade quando o indicador tem
+// `unidadeSecundaria`/`unidadeTerciaria` configurada (o 3º só existe junto do 2º — ver
+// comentário de `nomeTerciario` em schema.prisma); para os demais ficam sempre "" e nunca
+// são enviados de fato (ver upsertReuniaoCustomIndicatorValues em src/lib/reuniao-server.ts,
+// que ignora esses campos quando o indicador não é composto).
+type CustomForm = Record<string, { valor: string; valorReferencia: string; valorSecundario: string; valorTerciario: string }>;
 
 function buildCustomForm(indicators: GerenteCustomIndicatorDTO[]): CustomForm {
   return Object.fromEntries(
@@ -84,6 +86,7 @@ function buildCustomForm(indicators: GerenteCustomIndicatorDTO[]): CustomForm {
         valor: ind.valor != null ? String(ind.valor) : "",
         valorReferencia: String(ind.valorReferencia),
         valorSecundario: ind.valorSecundario != null ? String(ind.valorSecundario) : "",
+        valorTerciario: ind.valorTerciario != null ? String(ind.valorTerciario) : "",
       },
     ])
   );
@@ -110,7 +113,11 @@ function unidadeSuffix(unidade: GerenteCustomIndicatorDTO["unidade"]) {
 /** Estado do formulário de criar/editar indicador — `hasSecondary` marca se este
  * indicador tem um 2º valor por período (ex.: Cancelamentos = % + quantidade);
  * `nomeSecundario`/`unidadeSecundaria` só importam quando `hasSecondary` está
- * marcado (ver `buildSecondaryPayload` abaixo). */
+ * marcado (ver `buildSecondaryPayload` abaixo). `hasTertiary`/`nomeTerciario`/
+ * `unidadeTerciaria`: mesma ideia pro 3º valor, mas só faz sentido quando
+ * `hasSecondary` também está marcado (ver comentário de `nomeTerciario` em
+ * schema.prisma) — a tela só mostra/habilita o checkbox do 3º valor quando o do
+ * 2º já está marcado, e desmarcar o do 2º também desmarca o do 3º. */
 type IndicatorFormState = {
   nome: string;
   unidade: GerenteCustomIndicatorDTO["unidade"];
@@ -119,10 +126,24 @@ type IndicatorFormState = {
   hasSecondary: boolean;
   nomeSecundario: string;
   unidadeSecundaria: GerenteCustomIndicatorDTO["unidade"];
+  hasTertiary: boolean;
+  nomeTerciario: string;
+  unidadeTerciaria: GerenteCustomIndicatorDTO["unidade"];
 };
 
 function emptyIndicatorForm(): IndicatorFormState {
-  return { nome: "", unidade: "PERCENT", icon: "Target", valorPadrao: "", hasSecondary: false, nomeSecundario: "", unidadeSecundaria: "PERCENT" };
+  return {
+    nome: "",
+    unidade: "PERCENT",
+    icon: "Target",
+    valorPadrao: "",
+    hasSecondary: false,
+    nomeSecundario: "",
+    unidadeSecundaria: "PERCENT",
+    hasTertiary: false,
+    nomeTerciario: "",
+    unidadeTerciaria: "PERCENT",
+  };
 }
 
 /** Monta os campos `nomeSecundario`/`unidadeSecundaria` do body de criar/editar a
@@ -133,6 +154,15 @@ function buildSecondaryPayload(form: IndicatorFormState) {
   return {
     nomeSecundario: form.hasSecondary ? form.nomeSecundario : "",
     unidadeSecundaria: form.hasSecondary ? form.unidadeSecundaria : "",
+  };
+}
+
+/** Mesma ideia de `buildSecondaryPayload`, agora pro 3º valor — ver
+ * `parseTertiaryIndicatorFields` em src/lib/reuniao-server.ts. */
+function buildTertiaryPayload(form: IndicatorFormState) {
+  return {
+    nomeTerciario: form.hasTertiary ? form.nomeTerciario : "",
+    unidadeTerciaria: form.hasTertiary ? form.unidadeTerciaria : "",
   };
 }
 
@@ -219,11 +249,12 @@ export function GerenteClient({
   const checklistValor = form.checklistOperacionalPercent ? Number(form.checklistOperacionalPercent) : null;
 
   function customIndicatorState(ind: GerenteCustomIndicatorDTO) {
-    const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao), valorSecundario: "" };
+    const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao), valorSecundario: "", valorTerciario: "" };
     const valor = entry.valor !== "" ? Number(entry.valor) : null;
     const valorReferencia = Number(entry.valorReferencia) || 0;
     const valorSecundario = entry.valorSecundario !== "" ? Number(entry.valorSecundario) : null;
-    return { entry, valor, valorReferencia, valorSecundario };
+    const valorTerciario = entry.valorTerciario !== "" ? Number(entry.valorTerciario) : null;
+    return { entry, valor, valorReferencia, valorSecundario, valorTerciario };
   }
 
   function updateCustomForm(id: string, patch: Partial<CustomForm[string]>) {
@@ -355,6 +386,10 @@ export function GerenteClient({
       setNewIndicatorError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
       return;
     }
+    if (newIndicatorForm.hasTertiary && !newIndicatorForm.nomeTerciario.trim()) {
+      setNewIndicatorError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
+      return;
+    }
     setCreatingIndicator(true);
     try {
       const res = await fetch("/api/reuniao/gerente/indicadores", {
@@ -366,6 +401,7 @@ export function GerenteClient({
           icon: newIndicatorForm.icon,
           valorPadrao: newIndicatorForm.valorPadrao,
           ...buildSecondaryPayload(newIndicatorForm),
+          ...buildTertiaryPayload(newIndicatorForm),
         }),
       });
       if (!res.ok) {
@@ -391,6 +427,9 @@ export function GerenteClient({
       hasSecondary: !!ind.unidadeSecundaria,
       nomeSecundario: ind.nomeSecundario ?? "",
       unidadeSecundaria: ind.unidadeSecundaria ?? "PERCENT",
+      hasTertiary: !!ind.unidadeTerciaria,
+      nomeTerciario: ind.nomeTerciario ?? "",
+      unidadeTerciaria: ind.unidadeTerciaria ?? "PERCENT",
     });
     setEditIndicatorError(null);
   }
@@ -406,6 +445,10 @@ export function GerenteClient({
       setEditIndicatorError("Informe o nome do segundo valor (ou desmarque a opção de segundo valor).");
       return;
     }
+    if (editIndicatorForm.hasTertiary && !editIndicatorForm.nomeTerciario.trim()) {
+      setEditIndicatorError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
+      return;
+    }
     setSavingEditIndicator(true);
     try {
       const res = await fetch(`/api/reuniao/gerente/indicadores/${editIndicatorTarget.id}`, {
@@ -417,6 +460,7 @@ export function GerenteClient({
           icon: editIndicatorForm.icon,
           valorPadrao: editIndicatorForm.valorPadrao,
           ...buildSecondaryPayload(editIndicatorForm),
+          ...buildTertiaryPayload(editIndicatorForm),
         }),
       });
       if (!res.ok) {
@@ -547,7 +591,7 @@ export function GerenteClient({
           {customIndicators.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {customIndicators.map((ind, index) => {
-                const { valorReferencia, valorSecundario } = customIndicatorState(ind);
+                const { valorReferencia, valorSecundario, valorTerciario } = customIndicatorState(ind);
                 const color = indicatorAccentColor(index);
                 return (
                   <div
@@ -572,6 +616,16 @@ export function GerenteClient({
                           {ind.nomeSecundario}:{" "}
                           <span className="text-white font-medium">
                             {formatCustomValue(ind.unidadeSecundaria, valorSecundario ?? 0)}
+                          </span>
+                        </p>
+                      )}
+                      {/* Terceiro valor — mesma ideia do segundo, só aparece quando o indicador
+                          tem unidadeTerciaria configurada (que só existe junto da secundária). */}
+                      {ind.unidadeTerciaria && (
+                        <p className="text-xs text-nord-gray truncate">
+                          {ind.nomeTerciario}:{" "}
+                          <span className="text-white font-medium">
+                            {formatCustomValue(ind.unidadeTerciaria, valorTerciario ?? 0)}
                           </span>
                         </p>
                       )}
@@ -606,7 +660,8 @@ export function GerenteClient({
               {customIndicators.length > 0 ? (
                 <div className="space-y-3">
                   {customIndicators.map((ind, index) => {
-                    const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao), valorSecundario: "" };
+                    const entry =
+                      customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao), valorSecundario: "", valorTerciario: "" };
                     const color = indicatorAccentColor(index);
                     return (
                       <div key={ind.id} className="rounded-lg border border-nord-border/60 p-3">
@@ -635,7 +690,15 @@ export function GerenteClient({
                             </button>
                           </div>
                         </div>
-                        <div className={ind.unidadeSecundaria ? "grid grid-cols-2 gap-3" : ""}>
+                        {/* Grid de 1 (indicador simples), 2 (composto com 2º valor) ou 3 colunas
+                            (composto com 2º E 3º valor) — o 3º valor só existe junto do 2º (ver
+                            comentário de nomeTerciario em schema.prisma), então nunca pula de 1
+                            pra 3 colunas direto. */}
+                        <div
+                          className={
+                            ind.unidadeTerciaria ? "grid grid-cols-3 gap-3" : ind.unidadeSecundaria ? "grid grid-cols-2 gap-3" : ""
+                          }
+                        >
                           <label className="block">
                             <span className="block text-xs text-nord-gray mb-1">Valor {unidadeSuffix(ind.unidade)}</span>
                             <input
@@ -658,6 +721,22 @@ export function GerenteClient({
                                 step="0.1"
                                 value={entry.valorSecundario}
                                 onChange={(e) => updateCustomForm(ind.id, { valorSecundario: e.target.value })}
+                                className="input"
+                              />
+                            </label>
+                          )}
+                          {/* Terceiro valor — mesma ideia do segundo, só aparece quando o indicador
+                              tem unidadeTerciaria configurada. */}
+                          {ind.unidadeTerciaria && (
+                            <label className="block">
+                              <span className="block text-xs text-nord-gray mb-1">
+                                {ind.nomeTerciario} {unidadeSuffix(ind.unidadeTerciaria)}
+                              </span>
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={entry.valorTerciario}
+                                onChange={(e) => updateCustomForm(ind.id, { valorTerciario: e.target.value })}
                                 className="input"
                               />
                             </label>
@@ -768,7 +847,12 @@ export function GerenteClient({
             <input
               type="checkbox"
               checked={newIndicatorForm.hasSecondary}
-              onChange={(e) => setNewIndicatorForm({ ...newIndicatorForm, hasSecondary: e.target.checked })}
+              onChange={(e) => {
+                const hasSecondary = e.target.checked;
+                // Desmarcar o 2º valor também desmarca o 3º (nunca pode existir um sem o
+                // outro — ver comentário de nomeTerciario em schema.prisma).
+                setNewIndicatorForm({ ...newIndicatorForm, hasSecondary, hasTertiary: hasSecondary ? newIndicatorForm.hasTertiary : false });
+              }}
             />
             Este indicador tem um segundo valor
           </label>
@@ -792,6 +876,49 @@ export function GerenteClient({
                   value={newIndicatorForm.unidadeSecundaria}
                   onChange={(e) =>
                     setNewIndicatorForm({ ...newIndicatorForm, unidadeSecundaria: e.target.value as GerenteCustomIndicatorDTO["unidade"] })
+                  }
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {/* 3º valor — só disponível quando o 2º já está marcado (ver comentário de
+              nomeTerciario em schema.prisma); ex.: "Pedidos por canal" com Site (campos
+              principais), 99Food (2º valor) e iFood (3º valor), os 3 do mesmo jeito. */}
+          {newIndicatorForm.hasSecondary && (
+            <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={newIndicatorForm.hasTertiary}
+                onChange={(e) => setNewIndicatorForm({ ...newIndicatorForm, hasTertiary: e.target.checked })}
+              />
+              Este indicador também tem um terceiro valor
+            </label>
+          )}
+          {newIndicatorForm.hasSecondary && newIndicatorForm.hasTertiary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do terceiro valor</span>
+                <input
+                  type="text"
+                  value={newIndicatorForm.nomeTerciario}
+                  onChange={(e) => setNewIndicatorForm({ ...newIndicatorForm, nomeTerciario: e.target.value })}
+                  placeholder="Ex.: iFood"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do terceiro valor</span>
+                <select
+                  value={newIndicatorForm.unidadeTerciaria}
+                  onChange={(e) =>
+                    setNewIndicatorForm({ ...newIndicatorForm, unidadeTerciaria: e.target.value as GerenteCustomIndicatorDTO["unidade"] })
                   }
                   className="input"
                 >
@@ -861,13 +988,19 @@ export function GerenteClient({
             <input
               type="checkbox"
               checked={editIndicatorForm.hasSecondary}
-              onChange={(e) => setEditIndicatorForm({ ...editIndicatorForm, hasSecondary: e.target.checked })}
+              onChange={(e) => {
+                const hasSecondary = e.target.checked;
+                // Desmarcar o 2º valor também desmarca o 3º (nunca pode existir um sem o
+                // outro — ver comentário de nomeTerciario em schema.prisma).
+                setEditIndicatorForm({ ...editIndicatorForm, hasSecondary, hasTertiary: hasSecondary ? editIndicatorForm.hasTertiary : false });
+              }}
             />
             Este indicador tem um segundo valor
           </label>
           {/* Desmarcar remove o 2º valor deste indicador (volta a ser simples) — o histórico
               de valores já salvos em meses anteriores permanece no banco, só deixa de
-              aparecer/ser editável enquanto a opção estiver desmarcada. */}
+              aparecer/ser editável enquanto a opção estiver desmarcada. Remove também o 3º
+              valor, se houver (não pode existir um sem o outro). */}
           {editIndicatorForm.hasSecondary && (
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
@@ -886,6 +1019,48 @@ export function GerenteClient({
                   value={editIndicatorForm.unidadeSecundaria}
                   onChange={(e) =>
                     setEditIndicatorForm({ ...editIndicatorForm, unidadeSecundaria: e.target.value as GerenteCustomIndicatorDTO["unidade"] })
+                  }
+                  className="input"
+                >
+                  {Object.entries(UNIDADE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {/* 3º valor — só disponível quando o 2º já está marcado (ver comentário de
+              nomeTerciario em schema.prisma). */}
+          {editIndicatorForm.hasSecondary && (
+            <label className="flex items-center gap-2 text-sm text-white cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={editIndicatorForm.hasTertiary}
+                onChange={(e) => setEditIndicatorForm({ ...editIndicatorForm, hasTertiary: e.target.checked })}
+              />
+              Este indicador também tem um terceiro valor
+            </label>
+          )}
+          {editIndicatorForm.hasSecondary && editIndicatorForm.hasTertiary && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nome do terceiro valor</span>
+                <input
+                  type="text"
+                  value={editIndicatorForm.nomeTerciario}
+                  onChange={(e) => setEditIndicatorForm({ ...editIndicatorForm, nomeTerciario: e.target.value })}
+                  placeholder="Ex.: iFood"
+                  className="input"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Unidade do terceiro valor</span>
+                <select
+                  value={editIndicatorForm.unidadeTerciaria}
+                  onChange={(e) =>
+                    setEditIndicatorForm({ ...editIndicatorForm, unidadeTerciaria: e.target.value as GerenteCustomIndicatorDTO["unidade"] })
                   }
                   className="input"
                 >

@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { pct, safeDiv } from "@/lib/calc";
 import { resolveCrmPeriod, type CrmPeriodKey } from "@/lib/crm";
@@ -498,26 +499,49 @@ export async function loadRotinaChecklist(
  * abaixo do ritmo esperado, perto do prazo (até `DIAS_LIMITE_URGENTE` dias)
  * ou já vencidas sem terem sido atingidas.
  *
- * `Goal.responsavel` é campo de texto livre — não existe relação com
- * `User`/`Employee` no schema hoje —, então o cruzamento é por igualdade de
- * nome (sem diferenciar maiúsculas/minúsculas) com `session.user.name`; não
- * bate se o nome digitado na meta divergir do nome de cadastro do usuário
- * (apelido, sobrenome a menos, etc.).
+ * Achado #454: cruzamento PREFERE o vínculo real `Goal.responsavelEmployeeId`
+ * (ver comentário do campo em schema.prisma) quando a própria meta já tem
+ * esse vínculo preenchido (seja por ter nascido vinculada, seja pelo
+ * backfill — migration 20261002212102_goal_responsavel_employee_backfill):
+ * nesse caso só bate pra quem tem o MESMO `employeeId` (resolvido a partir
+ * de `User.employeeId`, mesmo padrão de `podeExecutarFechamentoCargo` em
+ * src/lib/fechamento-server.ts) — nunca mais por texto pra essa meta
+ * específica, nem para um homônimo cujo nome também bateria com
+ * `Goal.responsavel`. Só cai para o cruzamento por igualdade de nome em
+ * texto com `nomeUsuario` (sem diferenciar maiúsculas/minúsculas — o
+ * comportamento de antes desta tarefa, ainda sujeito à mesma fragilidade de
+ * sempre: nome digitado errado, acentuação diferente, homônimo, mudança de
+ * nome etc.) quando a meta AINDA NÃO tem `responsavelEmployeeId`
+ * preenchido. Usuário sem `employeeId` (ex.: administrador sem ficha de RH)
+ * nunca bate pela primeira via — só pelo texto, exatamente como antes.
  */
 export async function loadRotinaMetas(
   empresaId: string,
+  userId: string,
   nomeLoja: string,
   nomeUsuario: string,
   now: Date = new Date()
 ): Promise<RotinaItem[]> {
-  if (!nomeUsuario.trim()) return [];
+  const usuario = await prisma.user.findUnique({ where: { id: userId }, select: { employeeId: true } });
+  const employeeId = usuario?.employeeId ?? null;
+  const nome = nomeUsuario.trim();
+  if (!employeeId && !nome) return [];
+
+  // Por que um `OR` com 2 condições em vez de só preferir uma via e cair pra outra em JS: as duas
+  // precisam avaliar NO MESMO `findMany`, porque "preferir" aqui é por META (cada linha decide,
+  // pelo próprio `responsavelEmployeeId`, qual critério vale pra ELA), não por usuário — ver
+  // comentário acima. `responsavelEmployeeId: null` na 2ª condição é o que garante que uma meta
+  // JÁ vinculada nunca volta a casar por texto (nem pra um homônimo do responsável real).
+  const condicoes: Prisma.GoalWhereInput[] = [];
+  if (employeeId) condicoes.push({ responsavelEmployeeId: employeeId });
+  if (nome) condicoes.push({ responsavelEmployeeId: null, responsavel: { equals: nome, mode: "insensitive" } });
 
   const goals = await prisma.goal.findMany({
     where: {
       empresaId,
-      responsavel: { equals: nomeUsuario, mode: "insensitive" },
       startDate: { lte: now },
       endDate: { gte: subDays(now, DIAS_LIMITE_URGENTE) },
+      OR: condicoes,
     },
   });
 
@@ -553,24 +577,31 @@ export async function loadRotinaMetas(
  * Convites de pesquisa de satisfação ainda não respondidos pelo usuário.
  * Convites são por `Employee`, não por `User` — o colaborador responde por
  * link com token, sem precisar logar (ver
- * src/app/api/satisfaction/responder/[token]/route.ts) — e não existe
- * relação direta `User`<->`Employee` no schema. O cruzamento aqui é por
- * e-mail (`Employee.email` = `session.user.email`, sem diferenciar
- * maiúsculas/minúsculas); usuários sem um cadastro de colaborador com o
- * mesmo e-mail (ex.: administradores sem ficha de RH) nunca verão pesquisas
- * aqui.
+ * src/app/api/satisfaction/responder/[token]/route.ts). O cruzamento usa o
+ * vínculo real `User.employeeId` (achado #453: antes cruzava por e-mail,
+ * campo de texto — mesmo padrão de resolução de
+ * `podeExecutarFechamentoCargo`, em src/lib/fechamento-server.ts) em vez de
+ * depender de `Employee.email` bater com `session.user.email` por
+ * igualdade de texto. Usuários sem `employeeId` preenchido (ex.:
+ * administradores sem ficha de RH, ou dado legado anterior à tarefa #450,
+ * que passou a exigir esse vínculo só para logins operacionais novos)
+ * simplesmente não têm nenhuma pesquisa aqui — gracioso, sem erro.
  */
 export async function loadRotinaPesquisas(
   empresaId: string,
-  emailUsuario: string,
+  userId: string,
   nomeLoja: string,
   nomeUsuario: string,
   now: Date = new Date()
 ): Promise<RotinaItem[]> {
-  if (!emailUsuario.trim()) return [];
+  const usuario = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { employeeId: true },
+  });
+  if (!usuario?.employeeId) return [];
 
   const employee = await prisma.employee.findFirst({
-    where: { empresaId, status: "ATIVO", email: { equals: emailUsuario, mode: "insensitive" } },
+    where: { id: usuario.employeeId, empresaId, status: "ATIVO" },
     select: { id: true, setor: true },
   });
   if (!employee) return [];

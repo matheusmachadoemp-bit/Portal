@@ -200,6 +200,18 @@ export type ReuniaoCustomIndicatorDTO = {
   nomeSecundario?: string | null;
   unidadeSecundaria?: "PERCENT" | "CURRENCY" | "NUMBER" | null;
   valorSecundario?: number | null;
+  /**
+   * Terceiro valor (opcional) de um indicador composto — mesma ideia de
+   * `nomeSecundario`/`unidadeSecundaria`/`valorSecundario` acima, mas só pode
+   * existir quando o indicador JÁ tem um segundo valor (ver comentário de
+   * `nomeTerciario` em schema.prisma) — nunca preenchido com o segundo valor
+   * em `null`. `null` nos 3 campos abaixo = sem terceiro valor (indicador
+   * simples ou composto de 2 valores só), igual todo indicador até esta
+   * migration.
+   */
+  nomeTerciario?: string | null;
+  unidadeTerciaria?: "PERCENT" | "CURRENCY" | "NUMBER" | null;
+  valorTerciario?: number | null;
 };
 
 /** @deprecated Use `ReuniaoCustomIndicatorDTO` — mantido só para não quebrar o import
@@ -253,6 +265,11 @@ export async function loadReuniaoCustomIndicators(
       // schema.prisma): fica null até alguém salvar um valor de verdade pro
       // período, mesmo quando o indicador já tem unidadeSecundaria configurada.
       valorSecundario: v?.valorSecundario ?? null,
+      nomeTerciario: ind.nomeTerciario,
+      unidadeTerciaria: ind.unidadeTerciaria,
+      // Mesma regra de valorSecundario acima — null até alguém salvar um valor
+      // de verdade pro período.
+      valorTerciario: v?.valorTerciario ?? null,
     };
   });
 }
@@ -270,6 +287,9 @@ export type ReuniaoCustomIndicatorInput = {
   /** Só é gravado de fato quando o indicador tem `unidadeSecundaria`
    * configurada — ver `upsertReuniaoCustomIndicatorValues` abaixo. */
   valorSecundario?: string | number;
+  /** Só é gravado de fato quando o indicador tem `unidadeTerciaria`
+   * configurada — ver `upsertReuniaoCustomIndicatorValues` abaixo. */
+  valorTerciario?: string | number;
 };
 
 /**
@@ -309,10 +329,19 @@ export async function upsertReuniaoCustomIndicatorValues(
           indicator.unidadeSecundaria && c.valorSecundario !== undefined && c.valorSecundario !== ""
             ? Number(c.valorSecundario)
             : null;
+        // Mesma regra de valorSecundario acima, agora pro terceiro valor — só
+        // grava valorTerciario quando o indicador tem unidadeTerciaria
+        // configurada (que por sua vez só existe quando unidadeSecundaria
+        // também existe — ver comentário de nomeTerciario em schema.prisma),
+        // nunca a partir só do que o payload mandar.
+        const valorTerciario =
+          indicator.unidadeTerciaria && c.valorTerciario !== undefined && c.valorTerciario !== ""
+            ? Number(c.valorTerciario)
+            : null;
         return prisma.reuniaoCustomIndicatorValue.upsert({
           where: { indicatorId_periodo: { indicatorId: c.id, periodo } },
-          update: { valor, valorReferencia, valorSecundario },
-          create: { indicatorId: c.id, periodo, valor, valorReferencia, valorSecundario },
+          update: { valor, valorReferencia, valorSecundario, valorTerciario },
+          create: { indicatorId: c.id, periodo, valor, valorReferencia, valorSecundario, valorTerciario },
         });
       })
   );
@@ -385,6 +414,89 @@ export function parseSecondaryIndicatorFields(body: {
   };
 }
 
+/** Resultado de `parseTertiaryIndicatorFields` — mesma forma de `SecondaryIndicatorFieldsResult`,
+ * ver comentário dela para o significado de cada variante (`touched`/`ok`). */
+export type TertiaryIndicatorFieldsResult =
+  | { touched: false }
+  | { touched: true; ok: true; nomeTerciario: string | null; unidadeTerciaria: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null }
+  | { touched: true; ok: false; error: string };
+
+/**
+ * Valida o par `nomeTerciario`/`unidadeTerciaria` vindo do body de criar/editar
+ * um indicador — mesma lógica de `parseSecondaryIndicatorFields` acima, agora
+ * pro terceiro valor (ex.: "Pedidos por canal" com um terceiro número além do
+ * principal e do segundo). Não checa aqui a dependência "só pode ter 3º valor
+ * se já tiver o 2º" — isso cruza informação dos 2 pares (e, na edição, também
+ * do indicador já salvo) e por isso é responsabilidade de
+ * `validateTertiaryRequiresSecondary`, chamada separadamente pela rota depois
+ * de resolver os dois pares.
+ */
+export function parseTertiaryIndicatorFields(body: {
+  nomeTerciario?: unknown;
+  unidadeTerciaria?: unknown;
+}): TertiaryIndicatorFieldsResult {
+  const nomeProvided = body.nomeTerciario !== undefined;
+  const unidadeProvided = body.unidadeTerciaria !== undefined;
+  if (!nomeProvided && !unidadeProvided) return { touched: false };
+
+  const nome = typeof body.nomeTerciario === "string" ? body.nomeTerciario.trim() : "";
+  const unidade = body.unidadeTerciaria;
+  const hasNome = nome !== "";
+  const hasUnidade = unidade !== undefined && unidade !== null && unidade !== "";
+
+  if (!hasNome && !hasUnidade) return { touched: true, ok: true, nomeTerciario: null, unidadeTerciaria: null };
+  if (hasNome !== hasUnidade) {
+    return {
+      touched: true,
+      ok: false,
+      error:
+        "Para um indicador com 3 valores, informe o nome e a unidade do terceiro valor juntos (ou deixe os dois em branco para um indicador com 1 ou 2 valores).",
+    };
+  }
+  if (!REUNIAO_INDICATOR_UNIDADES.includes(unidade as (typeof REUNIAO_INDICATOR_UNIDADES)[number])) {
+    return { touched: true, ok: false, error: "Unidade do terceiro valor inválida." };
+  }
+  return {
+    touched: true,
+    ok: true,
+    nomeTerciario: nome,
+    unidadeTerciaria: unidade as (typeof REUNIAO_INDICATOR_UNIDADES)[number],
+  };
+}
+
+/**
+ * Confere a regra "só pode ter um terceiro valor se também tiver o segundo"
+ * (ver comentário de `nomeTerciario` em schema.prisma) — chamada pelas 10
+ * rotas de criar/editar indicador depois de resolver tanto
+ * `parseSecondaryIndicatorFields` quanto `parseTertiaryIndicatorFields`; esta
+ * função só cruza os dois resultados JÁ RESOLVIDOS pro estado FINAL (depois
+ * desta operação), não o resultado "cru" de cada parse — importante na
+ * edição: se o body desmarca o segundo valor mas nem toca no terceiro (que o
+ * indicador já tinha configurado), o estado final ainda ficaria inconsistente
+ * (3º valor "sobrevivendo" sem o 2º) se a checagem olhasse só pra o que foi
+ * tocado nesta requisição; por isso a chamadora sempre resolve o estado FINAL
+ * de cada um antes de chamar esta função (ver comentário de uso nas rotas).
+ *
+ * `efetivoTemSecundario`/`efetivoTemTerciario`: true quando o indicador VAI
+ * TER o 2º/3º valor depois desta operação — na criação, é direto o que o
+ * body está pedindo agora (`secondary.ok && secondary.unidadeSecundaria !==
+ * null`, mesma coisa pro terciário); na edição, quando o campo correspondente
+ * não foi tocado (`touched: false`), é o que o indicador já tinha antes
+ * (`!!indicatorAtual.unidadeSecundaria`/`unidadeTerciaria`), igual ao
+ * raciocínio de "campo não tocado mantém o que já estava salvo" usado pelos
+ * outros campos do PATCH.
+ *
+ * Devolve uma mensagem de erro (pra responder 400) quando o estado final
+ * ficaria com um terceiro valor sem o segundo, ou `null` quando está tudo
+ * consistente.
+ */
+export function validateTertiaryRequiresSecondary(efetivoTemSecundario: boolean, efetivoTemTerciario: boolean): string | null {
+  if (efetivoTemTerciario && !efetivoTemSecundario) {
+    return 'Para ter um terceiro valor, o indicador precisa ter o segundo valor também (marque "Este indicador tem um segundo valor" primeiro).';
+  }
+  return null;
+}
+
 /**
  * Cria um novo indicador na seção "Fechamento do mês" de uma reunião
  * específica (`meetingKey`) — sempre no fim da lista (maior `order` + 1)
@@ -395,7 +507,11 @@ export function parseSecondaryIndicatorFields(body: {
  *
  * `nomeSecundario`/`unidadeSecundaria` são opcionais (indicador "composto",
  * ver `parseSecondaryIndicatorFields`) — passe `null` nos dois (ou omita) pra
- * um indicador simples, como todo indicador criado até hoje.
+ * um indicador simples, como todo indicador criado até hoje. Mesma ideia para
+ * `nomeTerciario`/`unidadeTerciaria` (ver `parseTertiaryIndicatorFields` e
+ * `validateTertiaryRequiresSecondary` — a chamadora já confirmou a
+ * dependência do 3º valor no 2º antes de chegar aqui, esta função não repete
+ * essa checagem).
  */
 export async function createReuniaoCustomIndicator(params: {
   empresaId: string;
@@ -406,6 +522,8 @@ export async function createReuniaoCustomIndicator(params: {
   valorPadrao: number;
   nomeSecundario?: string | null;
   unidadeSecundaria?: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null;
+  nomeTerciario?: string | null;
+  unidadeTerciaria?: (typeof REUNIAO_INDICATOR_UNIDADES)[number] | null;
   createdById: string;
 }) {
   const maxOrder = await prisma.reuniaoCustomIndicator.aggregate({
@@ -423,6 +541,8 @@ export async function createReuniaoCustomIndicator(params: {
       valorPadrao: params.valorPadrao,
       nomeSecundario: params.nomeSecundario ?? null,
       unidadeSecundaria: params.unidadeSecundaria ?? null,
+      nomeTerciario: params.nomeTerciario ?? null,
+      unidadeTerciaria: params.unidadeTerciaria ?? null,
       order: (maxOrder._max.order ?? 0) + 1,
       createdById: params.createdById,
     },
