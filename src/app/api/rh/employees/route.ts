@@ -57,6 +57,17 @@ export async function POST(req: Request) {
   if (!body.name || !String(body.name).trim()) {
     return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
   }
+  // Contato de emergência (nome + telefone de algum familiar/pessoa próxima) é obrigatório para
+  // todo colaborador novo — pedido direto do usuário. Continua opcional NO BANCO (`String?` em
+  // `schema.prisma`): colaboradores já cadastrados antes desta mudança não têm esse dado, então a
+  // coluna não pode ser NOT NULL — a obrigatoriedade é só nesta validação de API + no `required`
+  // do formulário.
+  if (!body.emergencyContactName || !String(body.emergencyContactName).trim()) {
+    return NextResponse.json({ error: "Nome do contato de emergência é obrigatório." }, { status: 400 });
+  }
+  if (!body.emergencyContactPhone || !String(body.emergencyContactPhone).trim()) {
+    return NextResponse.json({ error: "Telefone do contato de emergência é obrigatório." }, { status: 400 });
+  }
 
   // Cargo/Setor passam pelo catálogo de RH (EmployeeCargo/EmployeeSetor) em vez de gravar o texto
   // solto: reaproveita o item já cadastrado quando o texto bate, ou cadastra um item novo na hora
@@ -90,6 +101,8 @@ export async function POST(req: Request) {
       lastEvaluationNote: body.lastEvaluationNote || null,
       lastTrainingDate: body.lastTrainingDate ? new Date(body.lastTrainingDate) : null,
       lastTrainingName: body.lastTrainingName || null,
+      emergencyContactName: body.emergencyContactName,
+      emergencyContactPhone: body.emergencyContactPhone,
     },
   });
 

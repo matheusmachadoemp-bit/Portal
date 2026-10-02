@@ -41,6 +41,8 @@ type EmployeeDTO = {
   lastEvaluationNote: string | null;
   lastTrainingDate: string | null;
   lastTrainingName: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
   empresa: { name: string };
 };
 
@@ -159,6 +161,8 @@ export function EmployeeProfileClient({
     lastEvaluationNote: employee.lastEvaluationNote ?? "",
     lastTrainingDate: employee.lastTrainingDate ? format(new Date(employee.lastTrainingDate), "yyyy-MM-dd") : "",
     lastTrainingName: employee.lastTrainingName ?? "",
+    emergencyContactName: employee.emergencyContactName ?? "",
+    emergencyContactPhone: employee.emergencyContactPhone ?? "",
   });
 
   // Catálogo de Cargos/Setores já cadastrados (EmployeeCargo/EmployeeSetor, mesma loja do
@@ -464,6 +468,10 @@ export function EmployeeProfileClient({
                   : null
               }
             />
+            <InfoRow
+              label="Contato de emergência"
+              value={[employee.emergencyContactName, employee.emergencyContactPhone].filter(Boolean).join(" — ") || null}
+            />
           </div>
         </div>
       )}
@@ -699,6 +707,23 @@ export function EmployeeProfileClient({
             </Field>
             <Field label="Último treinamento (nome)">
               <input value={form.lastTrainingName} onChange={(e) => setForm({ ...form, lastTrainingName: e.target.value })} className="input" />
+            </Field>
+            <Field label="Contato de emergência (nome)">
+              <input
+                required
+                value={form.emergencyContactName}
+                onChange={(e) => setForm({ ...form, emergencyContactName: e.target.value })}
+                className="input"
+                placeholder="Nome de um familiar/pessoa próxima"
+              />
+            </Field>
+            <Field label="Contato de emergência (telefone)">
+              <input
+                required
+                value={form.emergencyContactPhone}
+                onChange={(e) => setForm({ ...form, emergencyContactPhone: e.target.value })}
+                className="input"
+              />
             </Field>
           </div>
           <button
