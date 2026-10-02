@@ -11,6 +11,8 @@ import {
   FechamentoDoMesSection,
   FechamentoDoMesEditor,
   useFechamentoDoMes,
+  fetchFechamentoDoMesIndicatorsForPdf,
+  buildCustomIndicatorPdfEntries,
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
@@ -133,6 +135,14 @@ export function CozinhaClient({
     // padrão da Reunião Gerente (ver fetchMetasProximoMesForPdf).
     const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/cozinha");
 
+    // Busca os indicadores customizados ("Fechamento do mês") de cada período comparado,
+    // fresquinhos do servidor (mesmo motivo de fetchMetasProximoMesForPdf acima) — a rota
+    // GET só devolve os indicadores de UM período por chamada, então busca um por período
+    // comparado, em paralelo (até 3 chamadas). Ver buildCustomIndicatorPdfEntries.
+    const customIndicatorsByPeriodo = await Promise.all(
+      periodosComparados.map((p) => fetchFechamentoDoMesIndicatorsForPdf("/api/reuniao/cozinha", p))
+    );
+
     function historico<K extends "cmvPercent" | "desperdicioValor" | "tempoPedidoMinutos" | "organizacaoPercent">(
       key: K,
       atualValue: number | null
@@ -197,6 +207,10 @@ export function CozinhaClient({
           premio: 0,
           historico: historico("organizacaoPercent", organizacaoValor),
         },
+        // Indicadores customizados cadastrados pelo usuário em "Fechamento do mês" (ex.:
+        // qualquer indicador criado em "Novo indicador") — sem isso, qualquer indicador
+        // customizado desaparecia do PDF mesmo aparecendo normalmente na tela (card #467).
+        ...buildCustomIndicatorPdfEntries(periodosComparados, customIndicatorsByPeriodo),
       ],
       metasProximoMes: {
         periodoLabel: metasData.periodoLabel,

@@ -8,7 +8,11 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
-import { indicatorAccentColor } from "@/components/reuniao/fechamento-do-mes";
+import {
+  indicatorAccentColor,
+  fetchFechamentoDoMesIndicatorsForPdf,
+  buildCustomIndicatorPdfEntries,
+} from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
@@ -271,6 +275,14 @@ export function GerenteClient({
     // "nenhuma meta cadastrada" em vez de pular a página.
     const metasData = await fetchMetasProximoMesForPdf("/api/reuniao/gerente");
 
+    // Busca os indicadores customizados ("Fechamento do mês") de cada período comparado,
+    // fresquinhos do servidor (mesmo motivo de fetchMetasProximoMesForPdf acima) — a rota
+    // GET só devolve os indicadores de UM período por chamada, então busca um por período
+    // comparado, em paralelo (até 3 chamadas). Ver buildCustomIndicatorPdfEntries.
+    const customIndicatorsByPeriodo = await Promise.all(
+      periodosComparados.map((p) => fetchFechamentoDoMesIndicatorsForPdf("/api/reuniao/gerente", p))
+    );
+
     function historico<K extends "faturamentoTotalValor" | "cmvPercent" | "turnoverPercent" | "checklistOperacionalPercent">(
       key: K,
       atualValue: number | null
@@ -334,6 +346,11 @@ export function GerenteClient({
           premio: 0,
           historico: historico("checklistOperacionalPercent", checklistValor),
         },
+        // Indicadores customizados cadastrados pelo usuário em "Fechamento do mês" (ex.:
+        // Ticket Médio Salão/Delivery, ou qualquer outro criado em "Novo indicador") — sem
+        // isso, qualquer indicador customizado desaparecia do PDF mesmo aparecendo
+        // normalmente na tela (card #467).
+        ...buildCustomIndicatorPdfEntries(periodosComparados, customIndicatorsByPeriodo),
       ],
       metasProximoMes: {
         periodoLabel: metasData.periodoLabel,
