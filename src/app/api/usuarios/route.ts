@@ -4,6 +4,18 @@ import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
 import { hasModulePermission, resolveDefaultPermissionProfileId } from "@/lib/authz";
 
+// Papéis OPERACIONAIS — quem de fato tem (ou deveria ter) uma ficha de RH de verdade (cargo,
+// treinamento, pontuação) por trás do login. Usado só na criação (ver bloco de `employeeId`
+// abaixo) pra exigir o vínculo com `Employee` desde o nascimento do usuário — pedido direto do
+// Matheus depois de ver RH/Universidade/Checklist contarem a mesma pessoa como gente diferente
+// quando esse vínculo fica de fora (ver comentário no bloco de `employeeId` mais abaixo e a
+// correção equivalente em src/lib/rh-insights.ts, insight #8 "Treinamento em atraso").
+// ADMINISTRADOR/GESTOR ficam de fora de propósito: são níveis de acesso ao SISTEMA (dono,
+// administrador), não necessariamente alguém com cargo/ficha de RH — o próprio Matheus mantém 2
+// contas desse tipo sem ficha, intencionalmente. Espelhado em `usuarios-client.tsx`
+// (validação client-side) — qualquer mudança aqui precisa ser replicada lá.
+const OPERATIONAL_ROLES = ["GERENTE", "SUPERVISOR", "COLABORADOR"];
+
 async function ensureAdmin() {
   const session = await auth();
   if (!session?.user) return null;
@@ -107,9 +119,21 @@ export async function POST(req: Request) {
   const permissionProfileId = body.permissionProfileId || (await resolveDefaultPermissionProfileId(role));
 
   // employeeId (vínculo com a ficha de RH — Fechamento do Dia passou a exigir isso pra saber
-  // quem pode preencher qual cargo): opcional, mas se informado precisa existir e não estar
-  // vinculado a outro User — devolve um erro claro em vez de deixar a constraint `@unique` do
-  // banco estourar como 500.
+  // quem pode preencher qual cargo, e RH/Universidade/Checklist usam o mesmo vínculo pra não
+  // tratar a mesma pessoa como gente diferente em cada módulo, ver OPERATIONAL_ROLES acima):
+  // OBRIGATÓRIO na criação para os papéis operacionais (Gerente/Supervisor/Colaborador);
+  // continua opcional para Administrador/Gestor. Quando informado (nos dois casos), precisa
+  // existir e não estar vinculado a outro User — devolve um erro claro em vez de deixar a
+  // constraint `@unique` do banco estourar como 500.
+  if (OPERATIONAL_ROLES.includes(role) && !body.employeeId) {
+    return NextResponse.json(
+      {
+        error:
+          "Para o nível de acesso Gerente, Supervisor ou Colaborador, selecione a ficha de funcionário (RH) deste usuário — é o que permite computar pontuação, conquistas e os dados de RH/Universidade/Checklist como uma pessoa só.",
+      },
+      { status: 400 }
+    );
+  }
   let employeeId: string | null = null;
   if (body.employeeId) {
     const employee = await prisma.employee.findUnique({ where: { id: body.employeeId }, select: { id: true, user: { select: { id: true } } } });
