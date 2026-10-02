@@ -1703,6 +1703,12 @@ model Employee {
   lastEvaluationNote    String?
   lastTrainingDate      DateTime?
   lastTrainingName      String?
+  /// Contato de algum familiar/pessoa próxima do colaborador, para a empresa conseguir acionar em
+  /// caso de emergência (acidente, mal súbito etc.) — pedido direto do usuário olhando o modal
+  /// "Editar colaborador" de RH > Colaboradores. Texto livre, sem máscara/validação de formato,
+  /// mesmo padrão de `phone`/`gestorResponsavel` (não é dado sensível como `pixKey`/`salarioFixo`).
+  emergencyContactName  String?
+  emergencyContactPhone String?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 

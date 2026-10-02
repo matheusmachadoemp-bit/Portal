@@ -240,11 +240,16 @@ export function Sidebar({
         <div className="flex items-center gap-1">
           <button
             onClick={() => setCollapsed((v) => !v)}
+            aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
             className="hidden lg:block text-nord-gray hover:text-white"
           >
             {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
           </button>
-          <button onClick={() => setMobileOpen(false)} className="lg:hidden text-nord-gray hover:text-white">
+          <button
+            onClick={() => setMobileOpen(false)}
+            aria-label="Fechar menu"
+            className="lg:hidden text-nord-gray hover:text-white"
+          >
             <X size={20} />
           </button>
         </div>
@@ -465,7 +470,12 @@ function CategoryRow({
         }`}
       >
         {isAdmin && !collapsed && (
-          <button {...attributes} {...listeners} className="text-nord-gray/50 hover:text-white cursor-grab shrink-0">
+          <button
+            {...attributes}
+            {...listeners}
+            aria-label={`Reordenar categoria ${cat.name}`}
+            className="text-nord-gray/50 hover:text-white cursor-grab shrink-0"
+          >
             <GripVertical size={14} />
           </button>
         )}
@@ -478,6 +488,7 @@ function CategoryRow({
             if (cat.linked !== false) router.push(`/portal/${cat.key}`);
             if (hasSubs) onToggleExpand();
           }}
+          aria-label={cat.name}
           className={`flex-1 flex items-center gap-2.5 text-sm py-1 min-w-0 ${
             active ? "text-white font-medium" : "text-nord-gray hover:text-white"
           }`}
@@ -488,6 +499,8 @@ function CategoryRow({
         {!collapsed && hasSubs && (
           <button
             onClick={onToggleExpand}
+            aria-label={expanded ? `Recolher subcategorias de ${cat.name}` : `Expandir subcategorias de ${cat.name}`}
+            aria-expanded={expanded}
             className={`shrink-0 ${active ? "text-white/80 hover:text-white" : "text-nord-gray/60 hover:text-white"}`}
           >
             <ChevronDown size={14} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
@@ -497,6 +510,7 @@ function CategoryRow({
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen((v) => !v)}
+              aria-label={`Mais opções de ${cat.name}`}
               className={`opacity-0 group-hover:opacity-100 ${active ? "text-white/80 hover:text-white" : "text-nord-gray/60 hover:text-white"}`}
             >
               <MoreVertical size={14} />
@@ -583,7 +597,12 @@ function SubRow({
   return (
     <li ref={setNodeRef} style={style} className="group flex items-center gap-1">
       {isAdmin && (
-        <button {...attributes} {...listeners} className="text-nord-gray/40 hover:text-white cursor-grab shrink-0">
+        <button
+          {...attributes}
+          {...listeners}
+          aria-label={`Reordenar subcategoria ${sub.name}`}
+          className="text-nord-gray/40 hover:text-white cursor-grab shrink-0"
+        >
           <GripVertical size={12} />
         </button>
       )}
@@ -600,6 +619,7 @@ function SubRow({
         <div className="relative shrink-0">
           <button
             onClick={() => setMenuOpen((v) => !v)}
+            aria-label={`Mais opções de ${sub.name}`}
             className="text-nord-gray/50 hover:text-white opacity-0 group-hover:opacity-100"
           >
             <MoreVertical size={12} />

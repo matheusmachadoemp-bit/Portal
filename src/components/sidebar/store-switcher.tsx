@@ -74,6 +74,7 @@ export function StoreSwitcher({
       <button
         onClick={() => setOpen((v) => !v)}
         disabled={switching}
+        aria-label={collapsed && !compact ? `Loja atual: ${label}. Trocar de loja` : undefined}
         className={
           compact
             ? "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-panel border border-nord-border text-white hover:border-nord-blue transition disabled:opacity-60"

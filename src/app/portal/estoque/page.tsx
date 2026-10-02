@@ -4,7 +4,8 @@ import { EstoqueDashboardClient } from "./dashboard/dashboard-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { ingredientCostPerUnit } from "@/lib/estoque";
 import { productTotalCost } from "@/lib/ficha";
-import { cmvRealValor, cmvTeoricoPercentCatalogo, valorComprasNoPeriodo, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
+import { cmvRealValor, cmvTeoricoPercentCatalogo, cmvTeoricoPercentPonderado, valorComprasNoPeriodo, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
+import { quantidadeVendidaPorProdutoNoPeriodo } from "@/lib/cmv-server";
 import { addDays, startOfWeek, subDays, subWeeks } from "date-fns";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -56,7 +57,7 @@ export default async function EstoquePage() {
   const earliestPeriodStart = weekBoundaries.reduce((min, w) => (w.weekStart < min ? w.weekStart : min), since);
   const snapshotDates = [since, now, ...weekBoundaries.flatMap((w) => [w.weekStart, w.weekEnd])];
 
-  const [ingredients, snapshots, movements, products, losses, purchases, pendingCounts, salesEntries] = await Promise.all([
+  const [ingredients, snapshots, movements, products, losses, purchases, pendingCounts, contagensAprovadas, salesEntries, quantidadeVendida] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
     // Valor do estoque em cada instante (início/fim do período de
     // PERIOD_DAYS dias e de cada semana do gráfico) resolvido no banco, 1
@@ -85,9 +86,16 @@ export default async function EstoquePage() {
     prisma.loss.findMany({ where: { empresaId: { in: empresaIds }, data: { gte: since } } }),
     prisma.purchase.findMany({ where: { empresaId: { in: empresaIds }, data: { gte: since } }, include: { items: true } }),
     prisma.stockCount.count({ where: { empresaId: { in: empresaIds }, status: { in: ["RASCUNHO", "EM_ANDAMENTO"] } } }),
+    // Pelo menos 1 contagem física já aprovada alguma vez — sem isso,
+    // `ingredient.estoqueAtual` nunca foi reconciliado com uma contagem real
+    // (só compras/perdas/ajustes manuais desde o cadastro do insumo), então
+    // `cmvRealPercent`/`diferencaPP` abaixo não têm uma base física confiável
+    // pra comparar com o teórico — ver uso em `temContagemAprovada`.
+    prisma.stockCount.count({ where: { empresaId: { in: empresaIds }, status: "APROVADA" } }),
     prisma.salesEntry.findMany({
       where: { empresaId: { in: empresaIds }, date: { gte: startOfWeek(subWeeks(now, WEEKS_SERIE), { weekStartsOn: 1 }) } },
     }),
+    quantidadeVendidaPorProdutoNoPeriodo(empresaIds, since, now),
   ]);
 
   const estoqueEm = (at: Date) => valorEstoqueDeSnapshot(ingredients, snapshots.get(at.getTime())!);
@@ -132,9 +140,16 @@ export default async function EstoquePage() {
     count: movementsInPeriod.filter((m) => m.type === type).length,
   }));
 
-  // --- CMV: teórico (catálogo blended) x real (estoque inicial + compras - estoque final) x meta ---
-  const productsWithCost = products.map((p) => ({ ...p, totalCost: productTotalCost(p.ingredients) }));
-  const cmvTeoricoPercent = cmvTeoricoPercentCatalogo(productsWithCost);
+  // --- CMV: teórico (ponderado pelo mix de vendas) x real (estoque inicial + compras - estoque
+  // final) x meta ---
+  const productsWithCost = products.map((p) => ({
+    ...p,
+    totalCost: productTotalCost(p.ingredients),
+    quantidadeVendida: quantidadeVendida.get(p.id) ?? 0,
+  }));
+  // cmvTeoricoPercentPonderado (ver @/lib/cmv) cai no blended por catálogo só se nenhuma venda do
+  // período tiver produto identificado.
+  const cmvTeoricoPercent = cmvTeoricoPercentPonderado(productsWithCost) ?? cmvTeoricoPercentCatalogo(productsWithCost);
   const faturamentoNoPeriodo = salesEntries
     .filter((r) => r.date >= since)
     .reduce((sum, r) => sum + r.faturamentoDelivery + r.faturamentoSalao, 0);
@@ -146,6 +161,10 @@ export default async function EstoquePage() {
   const cmvRealPercent = faturamentoNoPeriodo ? (cmvRealValorPeriodo / faturamentoNoPeriodo) * 100 : 0;
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaFinanceira = cmvRealValorPeriodo - (cmvTeoricoPercent / 100) * faturamentoNoPeriodo;
+  // Sem nenhuma movimentação de estoque no período — "Sem dados" em vez de "0%" (achado de
+  // produção, 02/10/2026; mesmo flag de computeCmvReal em @/lib/cmv-server).
+  const semMovimentacaoCmv = movementsInPeriod.length === 0;
+  const temContagemAprovada = contagensAprovadas > 0;
 
   const valorPerdas = losses.reduce((sum, l) => sum + l.valorEstimado, 0);
   const valorCompras = purchases.reduce((sum, p) => sum + p.items.reduce((s, it) => s + it.valorTotal, 0), 0);
@@ -173,10 +192,29 @@ export default async function EstoquePage() {
   if (divergenciaMussarela) alertas.push({ label: `${divergenciaMussarela.name} com estoque abaixo do mínimo`, tone: "danger" });
   if (critico.length) alertas.push({ label: `${critico.length} produto(s) abaixo do estoque mínimo`, tone: "warning" });
   if (semMovimentacao.length) alertas.push({ label: `${semMovimentacao.length} produto(s) sem movimentação em ${PERIOD_DAYS} dias`, tone: "warning" });
-  if (semFornecedor.length) alertas.push({ label: `${semFornecedor.length} produto(s) sem ficha técnica de fornecedor`, tone: "warning" });
+  // Rótulo corrigido: isto é sobre INSUMO sem fornecedor principal cadastrado
+  // (`Ingredient.fornecedorPrincipalId`) — nada a ver com "ficha técnica"
+  // (receita de produto, ver `produtosSemFicha` abaixo). O texto antigo
+  // ("produto(s) sem ficha técnica de fornecedor") usava essa mesma palavra
+  // pras duas coisas e tinha a entidade errada ("produto" em vez de
+  // "insumo"), fazendo os dois alertas lado a lado parecerem a mesma
+  // contagem — ex.: "5 sem ficha técnica de fornecedor" e "0 sem ficha
+  // técnica" no mesmo painel, quando são métricas totalmente diferentes
+  // (fornecedor cadastrado x receita completa).
+  if (semFornecedor.length) alertas.push({ label: `${semFornecedor.length} insumo(s) sem fornecedor cadastrado`, tone: "warning" });
   if (produtosSemFicha.length) alertas.push({ label: `${produtosSemFicha.length} item(ns) do cardápio sem ficha técnica`, tone: "danger" });
   if (valorPerdas > 0) alertas.push({ label: `Desperdício de ${valorPerdas.toFixed(2).replace(".", ",")} registrado no período`, tone: "warning" });
-  if (Math.abs(diferencaPP) > 3) alertas.push({ label: `Diferença entre estoque físico e sistema acima de 3 p.p.`, tone: "danger" });
+  // Só dispara com pelo menos 1 contagem física já aprovada (ver
+  // `temContagemAprovada` acima) e com movimentação de estoque no período
+  // (`semMovimentacaoCmv`, mesmo flag usado pelo card "Diferença Real x
+  // Teórico" acima) — sem contagem, não há "estoque físico" confiável pra
+  // comparar; sem movimentação, `cmvRealPercent` cai artificialmente pra 0%
+  // e `diferencaPP` fica bem negativo, o que antes disparava "Crítico" aqui
+  // ao mesmo tempo que o card ao lado mostrava "Sem dados" (achado do
+  // Teulis, revisão da Ficha Técnica/CMV).
+  if (!semMovimentacaoCmv && temContagemAprovada && Math.abs(diferencaPP) > 3) {
+    alertas.push({ label: `Diferença entre estoque físico e sistema acima de 3 p.p.`, tone: "danger" });
+  }
 
   return (
     <PageContainer title="Estoque" subtitle="Visão geral">
@@ -198,9 +236,11 @@ export default async function EstoquePage() {
           periodDays={PERIOD_DAYS}
           cmvRealPercent={cmvRealPercent}
           cmvTeoricoPercent={cmvTeoricoPercent}
+          semMovimentacaoCmv={semMovimentacaoCmv}
           metaCmvPercent={metaCmvPercent}
           diferencaPP={diferencaPP}
           diferencaFinanceira={diferencaFinanceira}
+          temContagemAprovada={temContagemAprovada}
           valorCompras={valorCompras}
           valorPerdas={valorPerdas}
           contagensPendentes={pendingCounts}

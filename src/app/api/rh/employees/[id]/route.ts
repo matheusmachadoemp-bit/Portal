@@ -5,6 +5,7 @@ import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import { spStartOfDay } from "@/lib/timezone";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -30,6 +31,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (body.photoUrl && !isValidBlobUrl(body.photoUrl)) {
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
+  }
+
+  // Contato de emergência é obrigatório (mesma regra do POST — ver racional lá), mas só checamos
+  // quando o campo foi de fato enviado no corpo (`!== undefined`): este PATCH também é chamado com
+  // um corpo parcial contendo só `{ photoUrl }` pela troca rápida de foto (handlePhotoChange em
+  // colaboradores-client.tsx / employee-profile-client.tsx), que não deve ser bloqueada por esta
+  // validação. O formulário de edição completo sempre manda os dois campos (ficaram `required` no
+  // HTML), então na prática só dispara se o campo for enviado vazio.
+  if (body.emergencyContactName !== undefined && (!body.emergencyContactName || !String(body.emergencyContactName).trim())) {
+    return NextResponse.json({ error: "Nome do contato de emergência é obrigatório." }, { status: 400 });
+  }
+  if (body.emergencyContactPhone !== undefined && (!body.emergencyContactPhone || !String(body.emergencyContactPhone).trim())) {
+    return NextResponse.json({ error: "Telefone do contato de emergência é obrigatório." }, { status: 400 });
   }
 
   // Mesmo catálogo de RH (EmployeeCargo/EmployeeSetor) da criação (ver @/lib/rh-server) — só
@@ -58,24 +72,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       cargo: cargoResolvido,
       setor: setorResolvido,
       photoUrl: body.photoUrl !== undefined ? (body.photoUrl ? String(body.photoUrl) : null) : undefined,
-      admissionDate: body.admissionDate ? new Date(body.admissionDate) : undefined,
-      terminationDate: body.terminationDate ? new Date(body.terminationDate) : body.terminationDate === null ? null : undefined,
+      admissionDate: body.admissionDate ? spStartOfDay(body.admissionDate) : undefined,
+      terminationDate: body.terminationDate ? spStartOfDay(body.terminationDate) : body.terminationDate === null ? null : undefined,
       status: body.status ?? undefined,
       phone: body.phone ?? undefined,
       email: body.email ?? undefined,
       cpf: body.cpf ?? undefined,
       pixKey: body.pixKey ?? undefined,
-      birthDate: body.birthDate !== undefined ? (body.birthDate ? new Date(body.birthDate) : null) : undefined,
+      birthDate: body.birthDate !== undefined ? (body.birthDate ? spStartOfDay(body.birthDate) : null) : undefined,
       escala: body.escala ?? undefined,
       gestorResponsavel: body.gestorResponsavel ?? undefined,
       supervisorResponsavel: body.supervisorResponsavel ?? undefined,
       salarioFixo: body.salarioFixo !== undefined ? (body.salarioFixo ? Number(body.salarioFixo) : null) : undefined,
       lastEvaluationDate:
-        body.lastEvaluationDate !== undefined ? (body.lastEvaluationDate ? new Date(body.lastEvaluationDate) : null) : undefined,
+        body.lastEvaluationDate !== undefined ? (body.lastEvaluationDate ? spStartOfDay(body.lastEvaluationDate) : null) : undefined,
       lastEvaluationNote: body.lastEvaluationNote ?? undefined,
       lastTrainingDate:
-        body.lastTrainingDate !== undefined ? (body.lastTrainingDate ? new Date(body.lastTrainingDate) : null) : undefined,
+        body.lastTrainingDate !== undefined ? (body.lastTrainingDate ? spStartOfDay(body.lastTrainingDate) : null) : undefined,
       lastTrainingName: body.lastTrainingName ?? undefined,
+      emergencyContactName: body.emergencyContactName ?? undefined,
+      emergencyContactPhone: body.emergencyContactPhone ?? undefined,
     },
   });
 

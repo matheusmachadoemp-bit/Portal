@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { resolveEmployeeCargo, resolveEmployeeSetor } from "@/lib/rh-server";
+import { spStartOfDay } from "@/lib/timezone";
 
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -57,6 +58,17 @@ export async function POST(req: Request) {
   if (!body.name || !String(body.name).trim()) {
     return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
   }
+  // Contato de emergência (nome + telefone de algum familiar/pessoa próxima) é obrigatório para
+  // todo colaborador novo — pedido direto do usuário. Continua opcional NO BANCO (`String?` em
+  // `schema.prisma`): colaboradores já cadastrados antes desta mudança não têm esse dado, então a
+  // coluna não pode ser NOT NULL — a obrigatoriedade é só nesta validação de API + no `required`
+  // do formulário.
+  if (!body.emergencyContactName || !String(body.emergencyContactName).trim()) {
+    return NextResponse.json({ error: "Nome do contato de emergência é obrigatório." }, { status: 400 });
+  }
+  if (!body.emergencyContactPhone || !String(body.emergencyContactPhone).trim()) {
+    return NextResponse.json({ error: "Telefone do contato de emergência é obrigatório." }, { status: 400 });
+  }
 
   // Cargo/Setor passam pelo catálogo de RH (EmployeeCargo/EmployeeSetor) em vez de gravar o texto
   // solto: reaproveita o item já cadastrado quando o texto bate, ou cadastra um item novo na hora
@@ -74,22 +86,24 @@ export async function POST(req: Request) {
       name: body.name,
       cargo: cargoResolvido.nome,
       setor: setorResolvido.nome,
-      admissionDate: new Date(body.admissionDate),
-      terminationDate: body.terminationDate ? new Date(body.terminationDate) : null,
+      admissionDate: spStartOfDay(body.admissionDate),
+      terminationDate: body.terminationDate ? spStartOfDay(body.terminationDate) : null,
       status: body.status || "ATIVO",
       phone: body.phone || null,
       email: body.email || null,
       cpf: body.cpf || null,
       pixKey: body.pixKey || null,
-      birthDate: body.birthDate ? new Date(body.birthDate) : null,
+      birthDate: body.birthDate ? spStartOfDay(body.birthDate) : null,
       escala: body.escala || null,
       gestorResponsavel: body.gestorResponsavel || null,
       supervisorResponsavel: body.supervisorResponsavel || null,
       salarioFixo: body.salarioFixo ? Number(body.salarioFixo) : null,
-      lastEvaluationDate: body.lastEvaluationDate ? new Date(body.lastEvaluationDate) : null,
+      lastEvaluationDate: body.lastEvaluationDate ? spStartOfDay(body.lastEvaluationDate) : null,
       lastEvaluationNote: body.lastEvaluationNote || null,
-      lastTrainingDate: body.lastTrainingDate ? new Date(body.lastTrainingDate) : null,
+      lastTrainingDate: body.lastTrainingDate ? spStartOfDay(body.lastTrainingDate) : null,
       lastTrainingName: body.lastTrainingName || null,
+      emergencyContactName: body.emergencyContactName,
+      emergencyContactPhone: body.emergencyContactPhone,
     },
   });
 

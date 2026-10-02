@@ -20,6 +20,11 @@ type CmvRealData = {
   custoConsumido: number;
   faturamentoDelivery: number;
   faturamentoSalao: number;
+  /** Nenhuma movimentação de estoque (entrada/saída/ajuste/perda/transferência/inventário) no
+   * período — sem isso, "CMV Real %" mostrava "0%" (parecia "custo perfeito") quando na verdade é
+   * "não há como calcular ainda" (loja nova, período sem nenhum lançamento). Ver computeCmvReal
+   * em @/lib/cmv-server. */
+  semMovimentacao: boolean;
 };
 
 export function CmvRealClient({
@@ -34,6 +39,7 @@ export function CmvRealClient({
   custoConsumido,
   faturamentoDelivery,
   faturamentoSalao,
+  semMovimentacao,
   metaCmvPercent,
   initialMode,
   initialKey,
@@ -61,6 +67,7 @@ export function CmvRealClient({
     custoConsumido,
     faturamentoDelivery,
     faturamentoSalao,
+    semMovimentacao,
   });
 
   const options = mode === "semana" ? listClosedWeeks() : listClosedMonths();
@@ -90,7 +97,10 @@ export function CmvRealClient({
   const faturamento =
     criterio === "TOTAL" ? data.faturamentoDelivery + data.faturamentoSalao : criterio === "SALAO" ? data.faturamentoSalao : data.faturamentoDelivery;
   const cmvRealPercent = faturamento ? (data.custoConsumido / faturamento) * 100 : 0;
-  const diferenca = cmvRealPercent - metaCmvPercent;
+  // "Sem dados" (não "0%") quando não houve nenhuma movimentação de estoque no período — 0%
+  // enganava, dando a entender "custo zero" quando na verdade é "não há como calcular ainda"
+  // (achado de produção, 02/10/2026). diferenca/cor do card só fazem sentido com um número real.
+  const diferenca = data.semMovimentacao ? 0 : cmvRealPercent - metaCmvPercent;
 
   return (
     <div className="space-y-6">
@@ -140,14 +150,20 @@ export function CmvRealClient({
         cards={[
           { key: "faturamento-periodo", label: `Faturamento (${periodLabel})`, value: formatCurrency(faturamento), icon: "DollarSign" },
           { key: "custo-consumido", label: "Custo consumido", value: formatCurrency(data.custoConsumido), icon: "Warehouse", color: "#eab308" },
-          { key: "cmv-real-percent", label: "CMV Real %", value: formatPercent(cmvRealPercent), icon: "Percent", color: diferenca > 0 ? "#ef4444" : "#22c55e" },
+          {
+            key: "cmv-real-percent",
+            label: "CMV Real %",
+            value: data.semMovimentacao ? "Sem dados" : formatPercent(cmvRealPercent),
+            icon: "Percent",
+            color: data.semMovimentacao ? undefined : diferenca > 0 ? "#ef4444" : "#22c55e",
+          },
           {
             key: "diferenca-meta",
             label: "Diferença para a meta",
-            value: `${diferenca >= 0 ? "+" : ""}${diferenca.toFixed(1)} p.p.`,
-            icon: diferenca > 0 ? "TriangleAlert" : "CheckCircle2",
-            color: diferenca > 0 ? "#ef4444" : "#22c55e",
-            hint: `Meta: ${formatPercent(metaCmvPercent)}`,
+            value: data.semMovimentacao ? "Sem dados" : `${diferenca >= 0 ? "+" : ""}${diferenca.toFixed(1)} p.p.`,
+            icon: data.semMovimentacao ? "Percent" : diferenca > 0 ? "TriangleAlert" : "CheckCircle2",
+            color: data.semMovimentacao ? undefined : diferenca > 0 ? "#ef4444" : "#22c55e",
+            hint: data.semMovimentacao ? "Sem movimentação de estoque no período" : `Meta: ${formatPercent(metaCmvPercent)}`,
           },
         ]}
       />
