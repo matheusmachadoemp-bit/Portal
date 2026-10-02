@@ -445,12 +445,25 @@ export function ChecklistClient({
   }
 
   async function toggleActive(t: Template) {
-    await fetch(`/api/checklist/templates/${t.id}`, {
+    // Envia TODOS os campos que `PATCH /api/checklist/templates/[id]` grava —
+    // essa rota não é um patch parcial de verdade (recalcula cada campo a
+    // partir do body recebido, com fallback fixo quando ausente, ver
+    // src/app/api/checklist/templates/[id]/route.ts). Antes desta correção,
+    // faltavam description/categoria/turno/responsavelId/substitutoId/
+    // substituirAutomaticamente/fotoChecklist/exigirObservacaoProblema e os 5
+    // campos de cobrança automática — pausar/retomar um checklist pelo botão
+    // rápido da lista resetava todos eles silenciosamente para o padrão
+    // (null/false/"SEM_FOTO"/30-15-30-60/cobrança ativa), mesmo sem o usuário
+    // ter pedido nenhuma dessas mudanças.
+    const res = await fetch(`/api/checklist/templates/${t.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: t.name,
+        description: t.description,
         setor: t.setor,
+        categoria: t.categoria,
+        turno: t.turno,
         recurrence: t.recurrence,
         startDate: t.startDate,
         endDate: t.endDate,
@@ -463,10 +476,29 @@ export function ChecklistClient({
         sexta: t.sexta,
         sabado: t.sabado,
         domingo: t.domingo,
+        responsavelId: t.responsavelId,
+        substitutoId: t.substitutoId,
+        substituirAutomaticamente: t.substituirAutomaticamente,
+        fotoChecklist: t.fotoChecklist,
+        exigirObservacaoProblema: t.exigirObservacaoProblema,
+        cobrancaAtiva: t.cobrancaAtiva,
+        avisoAntesMinutos: t.avisoAntesMinutos,
+        avisoAtrasoResponsavelMinutos: t.avisoAtrasoResponsavelMinutos,
+        alertaCriticoMinutos: t.alertaCriticoMinutos,
+        naoRealizadoMinutos: t.naoRealizadoMinutos,
         active: !t.active,
         itens: t.itens,
       }),
     });
+    // Antes desta correção, uma falha aqui (ex.: responsável/substituto perdeu acesso à loja —
+    // o PATCH valida isso e devolve 400, ver src/app/api/checklist/templates/[id]/route.ts) era
+    // ignorada em silêncio: o modal de confirmação fechava normalmente e o admin achava que tinha
+    // pausado/retomado o checklist, mas `active` nunca mudava, sem nenhuma pista do motivo. Mesmo
+    // padrão de `doDelete`, logo abaixo, que já tratava isso corretamente.
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      alert(data?.error || "Não foi possível alterar esse checklist.");
+    }
     setConfirmToggleId(null);
     await refreshTemplates();
   }

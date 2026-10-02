@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { ConfiguracoesClient } from "./configuracoes-client";
-import { getActiveEmpresaContext, getUserEmpresas } from "@/lib/empresa";
+import { empresaIdsForContext, getActiveEmpresaContext, getUserEmpresas } from "@/lib/empresa";
 
 export default async function ConfiguracoesPage() {
   const session = await auth();
@@ -48,6 +48,38 @@ export default async function ConfiguracoesPage() {
   const metasCmv = isAdmin ? await getUserEmpresas(session.user.id, session.user.role) : [];
   const canEditMetaCmv = ctx?.mode === "single" && (await hasModulePermission(session.user.id, "configuracoes", "canEdit"));
 
+  // "Notificações de checklist" — pedido do Matheus: poder ajustar, sem depender de um agente
+  // mexer no código, os limiares de cobrança automática de cada checklist (já existentes em
+  // ChecklistTemplate.cobrancaAtiva/avisoAntesMinutos/avisoAtrasoResponsavelMinutos/
+  // alertaCriticoMinutos/naoRealizadoMinutos, lidos por processChecklistEscalations em
+  // src/lib/checklist-server.ts) sem precisar entrar em cada checklist individualmente. Lista
+  // TODOS os checklists visíveis no contexto de loja atual — uma loja só, ou todas no modo Grupo
+  // Nord (`empresaIdsForContext`), igual `GET /api/checklist/templates` já faz hoje. Diferente de
+  // "Metas de CMV por loja" (editável só com uma loja específica ativa): aqui a edição é por
+  // checklist (cada linha já carrega sua própria empresaId, ver
+  // src/app/api/configuracoes/checklist-notificacoes/[id]/route.ts), então não precisa restringir
+  // a edição ao modo loja única.
+  const checklistTemplates = isAdmin
+    ? await prisma.checklistTemplate.findMany({
+        where: { empresaId: { in: ctx ? empresaIdsForContext(ctx) : [] } },
+        select: {
+          id: true,
+          name: true,
+          setor: true,
+          categoria: true,
+          turno: true,
+          cobrancaAtiva: true,
+          avisoAntesMinutos: true,
+          avisoAtrasoResponsavelMinutos: true,
+          alertaCriticoMinutos: true,
+          naoRealizadoMinutos: true,
+          empresa: { select: { name: true } },
+        },
+        orderBy: [{ empresa: { name: "asc" } }, { name: "asc" }],
+      })
+    : [];
+  const canEditChecklistNotificacoes = isAdmin && (await hasModulePermission(session.user.id, "configuracoes", "canEdit"));
+
   return (
     <PageContainer title="Configurações" subtitle="Conta, integrações e auditoria">
       <ConfiguracoesClient
@@ -62,6 +94,21 @@ export default async function ConfiguracoesPage() {
         metasCmv={metasCmv.map((e) => ({ id: e.id, name: e.name, metaCmvPercent: e.metaCmvPercent }))}
         activeEmpresaId={ctx?.mode === "single" ? ctx.empresa.id : null}
         canEditMetaCmv={canEditMetaCmv}
+        checklistTemplates={checklistTemplates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          empresaNome: t.empresa.name,
+          setor: t.setor,
+          categoria: t.categoria,
+          turno: t.turno,
+          cobrancaAtiva: t.cobrancaAtiva,
+          avisoAntesMinutos: t.avisoAntesMinutos,
+          avisoAtrasoResponsavelMinutos: t.avisoAtrasoResponsavelMinutos,
+          alertaCriticoMinutos: t.alertaCriticoMinutos,
+          naoRealizadoMinutos: t.naoRealizadoMinutos,
+        }))}
+        showChecklistEmpresaColumn={ctx?.mode === "grupo"}
+        canEditChecklistNotificacoes={canEditChecklistNotificacoes}
         saipos={
           isAdmin && ctx?.mode === "single"
             ? {
