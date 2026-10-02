@@ -13,6 +13,7 @@ export function StatCard({
   labelClassName = "text-sm text-white",
   invertDeltaColor = false,
   href,
+  action,
 }: {
   label: string;
   value: string;
@@ -25,6 +26,8 @@ export function StatCard({
   invertDeltaColor?: boolean;
   /** Quando informado, o card inteiro vira um link para o módulo relacionado (ex.: card de faturamento -> Vendas). */
   href?: string;
+  /** Elemento pequeno e clicável (ex.: botão de ícone) renderizado ao lado do valor — usado para ações rápidas como revelar/ocultar um valor sensível. */
+  action?: ReactNode;
 }) {
   const rising = (delta ?? 0) >= 0;
   const good = rising !== invertDeltaColor;
@@ -45,7 +48,16 @@ export function StatCard({
         )}
         <span className={`truncate ${labelClassName}`} title={label}>{label}</span>
       </div>
-      <span className="text-white text-2xl font-semibold tracking-tight truncate">{value}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-white text-2xl font-semibold tracking-tight truncate min-w-0 flex-1">{value}</span>
+        {action && (
+          // Span só pra impedir o clique de "borbulhar" pro Link do card (quando `href` é usado);
+          // a ação em si (ex.: botão) já tem seu próprio papel/rótulo de acessibilidade.
+          <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            {action}
+          </span>
+        )}
+      </div>
       <div className="flex items-center gap-1 min-h-[20px]">
         {delta !== undefined && delta !== null && (
           <span
