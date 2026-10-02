@@ -1,3 +1,11 @@
+// `ingredientCostPerUnit` mora em `@/lib/estoque` (usada também por valorização de estoque,
+// contagens e perdas) — importada e reexportada aqui para quem já importa de `@/lib/ficha`
+// continuar funcionando sem mudar o import. Ver o comentário na definição (em `@/lib/estoque`)
+// para a fórmula certa e o histórico do bug: custo da Ficha Técnica deflacionado por dividir
+// `precoAtual` por `quantidadeEmbalagem` à toa (achado de produção, loja Zarki Sushi, 02/10/2026).
+import { ingredientCostPerUnit } from "@/lib/estoque";
+export { ingredientCostPerUnit };
+
 export const PRODUCT_CATEGORY_LABEL: Record<string, string> = {
   PIZZA_SALGADA: "Pizzas Salgadas",
   PIZZA_DOCE: "Pizzas Doces",
@@ -75,6 +83,8 @@ export function defaultFichaTecnicaSub(empresaKey: string | undefined): string {
 
 export type IngredientForCalc = {
   precoAtual: number;
+  /** Não entra mais no cálculo de custo (ver `ingredientCostPerUnit`) — mantido aqui só porque
+   * todo chamador passa o `Ingredient` inteiro do Prisma, que sempre tem este campo. */
   quantidadeEmbalagem: number;
 };
 
@@ -83,11 +93,6 @@ export type ProductIngredientForCalc = {
   percentualPerda: number;
   ingredient: IngredientForCalc;
 };
-
-export function ingredientCostPerUnit(ingredient: IngredientForCalc): number {
-  if (!ingredient.quantidadeEmbalagem) return 0;
-  return ingredient.precoAtual / ingredient.quantidadeEmbalagem;
-}
 
 export function productIngredientCost(pi: ProductIngredientForCalc): number {
   const costPerUnit = ingredientCostPerUnit(pi.ingredient);

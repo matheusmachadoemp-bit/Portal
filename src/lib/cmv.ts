@@ -114,15 +114,43 @@ export function cmvRealValor(estoqueInicial: number, compras: number, estoqueFin
 /**
  * CMV teórico "blended": soma do custo de todas as fichas técnicas do
  * catálogo dividida pela soma dos preços de venda — equivalente ao CMV%
- * médio se cada produto vendesse exatamente uma unidade. É uma
- * aproximação: o sistema ainda não registra a quantidade vendida por
- * produto, então não é possível ponderar pelo mix real de vendas.
+ * médio se cada produto vendesse exatamente uma unidade. Usada só como
+ * FALLBACK de `cmvTeoricoPercentPonderado` (ver abaixo) quando não há
+ * nenhuma venda com produto identificado no período (ex.: catálogo
+ * cadastrado mas nenhuma venda ainda registrada/importada apontando pra
+ * esses produtos) — nesse caso ponderar pelo mix dá 0/0, e mostrar "a média
+ * do catálogo" é uma estimativa melhor do que não mostrar nada.
  */
 export function cmvTeoricoPercentCatalogo(products: { totalCost: number; precoVenda: number }[]): number {
   const valid = products.filter((p) => p.precoVenda > 0);
   const totalCusto = valid.reduce((sum, p) => sum + p.totalCost, 0);
   const totalVenda = valid.reduce((sum, p) => sum + p.precoVenda, 0);
   if (!totalVenda) return 0;
+  return (totalCusto / totalVenda) * 100;
+}
+
+/**
+ * CMV teórico ponderado pelo MIX de vendas do período: soma (quantidade vendida × custo da
+ * ficha técnica) de cada produto, dividida pela soma (quantidade vendida × preço de venda) —
+ * reflete o peso real de cada produto no faturamento, em vez de tratar o catálogo inteiro como
+ * se cada produto vendesse exatamente 1 unidade (`cmvTeoricoPercentCatalogo`, acima). É a fórmula
+ * certa de "CMV teórico" (achado de produção, revisão de 02/10/2026): com 1 produto só cadastrado
+ * (estado atual da Zarki Sushi em produção) o resultado é idêntico ao blended — a diferença só
+ * aparece quando há mais de um produto com peso de venda diferente, mas a fórmula já precisa
+ * estar certa antes disso pra não ter que trocar de novo quando o catálogo crescer.
+ *
+ * Retorna `null` (não 0) quando nenhum produto do conjunto teve venda com produto identificado no
+ * período (`quantidadeVendida` de todos é 0, ou nenhum tem `precoVenda` cadastrado) — 0% real
+ * seria "vendeu e não teve custo nenhum", bem diferente de "não dá pra saber o mix ainda"; quem
+ * chama decide o fallback (`?? cmvTeoricoPercentCatalogo(...)`).
+ */
+export function cmvTeoricoPercentPonderado(
+  products: { totalCost: number; precoVenda: number; quantidadeVendida: number }[]
+): number | null {
+  const valid = products.filter((p) => p.precoVenda > 0 && p.quantidadeVendida > 0);
+  const totalVenda = valid.reduce((sum, p) => sum + p.precoVenda * p.quantidadeVendida, 0);
+  if (!totalVenda) return null;
+  const totalCusto = valid.reduce((sum, p) => sum + p.totalCost * p.quantidadeVendida, 0);
   return (totalCusto / totalVenda) * 100;
 }
 

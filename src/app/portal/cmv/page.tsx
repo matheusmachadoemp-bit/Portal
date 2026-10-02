@@ -5,7 +5,8 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { cmvPercent, productTotalCost, PRODUCT_CATEGORY_LABEL } from "@/lib/ficha";
-import { cmvRealValor, cmvTeoricoPercentCatalogo, valorComprasNoPeriodo, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
+import { cmvRealValor, cmvTeoricoPercentCatalogo, cmvTeoricoPercentPonderado, valorComprasNoPeriodo, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
+import { quantidadeVendidaPorProdutoNoPeriodo } from "@/lib/cmv-server";
 import { CmvCharts } from "./charts";
 import { startOfDay, subDays } from "date-fns";
 import { auth } from "@/auth";
@@ -52,7 +53,7 @@ export default async function CmvPage() {
   });
   const snapshotDates = [periodStart, now, ...dayBoundaries.flatMap((d) => [d.day, d.end])];
 
-  const [products, ingredients, snapshots, movements, salesEntries] = await Promise.all([
+  const [products, ingredients, snapshots, movements, salesEntries, quantidadeVendida] = await Promise.all([
     prisma.product.findMany({
       where: { empresaId: { in: empresaIds } },
       include: { ingredients: { include: { ingredient: true } } },
@@ -72,12 +73,20 @@ export default async function CmvPage() {
       select: { ingredientId: true, type: true, quantidade: true, estoqueApos: true, createdAt: true },
     }),
     prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: periodStart } } }),
+    quantidadeVendidaPorProdutoNoPeriodo(empresaIds, periodStart, now),
   ]);
 
   const estoqueEm = (at: Date) => valorEstoqueDeSnapshot(ingredients, snapshots.get(at.getTime())!);
 
-  const productsWithCost = products.map((p) => ({ ...p, totalCost: productTotalCost(p.ingredients) }));
-  const cmvTeoricoPercent = cmvTeoricoPercentCatalogo(productsWithCost);
+  const productsWithCost = products.map((p) => ({
+    ...p,
+    totalCost: productTotalCost(p.ingredients),
+    quantidadeVendida: quantidadeVendida.get(p.id) ?? 0,
+  }));
+  // CMV teórico ponderado pelo mix de vendas dos últimos 30 dias (ver cmvTeoricoPercentPonderado
+  // em @/lib/cmv) — cai no blended por catálogo só se nenhuma venda do período tiver produto
+  // identificado.
+  const cmvTeoricoPercent = cmvTeoricoPercentPonderado(productsWithCost) ?? cmvTeoricoPercentCatalogo(productsWithCost);
 
   const faturamentoNoPeriodo = (start: Date, end: Date) =>
     salesEntries
@@ -91,10 +100,14 @@ export default async function CmvPage() {
   const cmvRealValorPeriodo = cmvRealValor(estoqueInicial, compras, estoqueFinal);
   const cmvRealPercent = faturamentoMes ? (cmvRealValorPeriodo / faturamentoMes) * 100 : 0;
   const cmvTeoricoValorPeriodo = (cmvTeoricoPercent / 100) * faturamentoMes;
+  // Nenhuma movimentação de estoque nos últimos 30 dias (loja nova/sem lançamento) — "Sem dados"
+  // em vez de "0%" (achado de produção, 02/10/2026): 0% dava a entender "custo perfeito" quando na
+  // verdade não há como calcular ainda. Ver mesmo flag em computeCmvReal (@/lib/cmv-server).
+  const semMovimentacaoEstoque = movements.length === 0;
 
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaValor = cmvRealValorPeriodo - cmvTeoricoValorPeriodo;
-  const divergenciaAlta = Math.abs(diferencaPP) > DIVERGENCIA_ALERTA_PP;
+  const divergenciaAlta = !semMovimentacaoEstoque && Math.abs(diferencaPP) > DIVERGENCIA_ALERTA_PP;
 
   const dailySeries = dayBoundaries.map(({ day, end }) => {
     const faturamentoDia = faturamentoNoPeriodo(day, end);
@@ -111,7 +124,7 @@ export default async function CmvPage() {
 
   const categoriaChart = Object.entries(PRODUCT_CATEGORY_LABEL).map(([key, label]) => {
     const items = productsWithCost.filter((p) => p.category === key && p.precoVenda > 0);
-    const value = cmvTeoricoPercentCatalogo(items);
+    const value = cmvTeoricoPercentPonderado(items) ?? cmvTeoricoPercentCatalogo(items);
     return { name: label, value: Math.round(value * 10) / 10 };
   }).filter((c) => c.value > 0);
 
@@ -125,10 +138,10 @@ export default async function CmvPage() {
     <PageContainer title="CMV" subtitle="Teórico x Real">
       <div className="space-y-6">
         <p className="text-xs text-nord-gray bg-nord-panel border border-nord-border rounded-lg px-3 py-2">
-          O CMV teórico é calculado a partir do catálogo de fichas técnicas (custo total ÷ preço de venda de
-          cada produto), pois o sistema ainda não registra a quantidade vendida por produto — não reflete o
-          mix real de vendas. O CMV real usa o estoque (Estoque Inicial + Compras − Estoque Final) valorizado
-          ao preço atual dos insumos.
+          O CMV teórico é calculado ponderando o custo de cada ficha técnica pela quantidade vendida de cada
+          produto no período (mix de vendas); sem nenhuma venda com produto identificado no período, cai na
+          média simples do catálogo. O CMV real usa o estoque (Estoque Inicial + Compras − Estoque Final)
+          valorizado ao preço atual dos insumos.
         </p>
 
         <SortableStatCards
@@ -136,15 +149,21 @@ export default async function CmvPage() {
           className="grid grid-cols-2 md:grid-cols-4 gap-4"
           cards={[
             { key: "cmv-teorico", label: "CMV Teórico (%)", value: formatPercent(cmvTeoricoPercent), icon: "ClipboardList", color: "#2952E3" },
-            { key: "cmv-real", label: "CMV Real (%)", value: formatPercent(cmvRealPercent), icon: "Warehouse", color: "#eab308" },
+            {
+              key: "cmv-real",
+              label: "CMV Real (%)",
+              value: semMovimentacaoEstoque ? "Sem dados" : formatPercent(cmvRealPercent),
+              icon: "Warehouse",
+              color: semMovimentacaoEstoque ? undefined : "#eab308",
+            },
             { key: "cmv-real-valor", label: "CMV Real (R$, 30d)", value: formatCurrency(cmvRealValorPeriodo), icon: "DollarSign" },
             {
               key: "diferenca",
               label: "Diferença",
-              value: `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
-              icon: divergenciaAlta ? "TriangleAlert" : "CheckCircle2",
-              color: divergenciaAlta ? "#ef4444" : "#22c55e",
-              hint: formatCurrency(diferencaValor),
+              value: semMovimentacaoEstoque ? "Sem dados" : `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`,
+              icon: semMovimentacaoEstoque ? "Percent" : divergenciaAlta ? "TriangleAlert" : "CheckCircle2",
+              color: semMovimentacaoEstoque ? undefined : divergenciaAlta ? "#ef4444" : "#22c55e",
+              hint: semMovimentacaoEstoque ? "Sem movimentação de estoque nos últimos 30 dias" : formatCurrency(diferencaValor),
             },
           ]}
         />

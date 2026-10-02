@@ -30,6 +30,7 @@ export function ComparativoClient({
   custoConsumido,
   cmvTeoricoValor,
   metaCmvPercent,
+  semMovimentacao,
   semanal,
   perdasPorSetorChart,
   plans: initialPlans,
@@ -40,6 +41,11 @@ export function ComparativoClient({
   custoConsumido: number;
   cmvTeoricoValor: number;
   metaCmvPercent: number;
+  /** Nenhuma movimentação de estoque no período — "Sem dados" em vez de "0%" (achado de
+   * produção, 02/10/2026; ver computeCmvReal em @/lib/cmv-server). Antes disso, `classificarCmv`
+   * já tentava detectar essa situação por uma pista indireta (`cmvRealPercent > 0 ||
+   * cmvTeoricoPercent > 0`) — trocado pelo sinal real vindo do servidor. */
+  semMovimentacao: boolean;
   semanal: { periodo: string; real: number; teorico: number }[];
   perdasPorSetorChart: { name: string; value: number }[];
   plans: Plan[];
@@ -53,7 +59,7 @@ export function ComparativoClient({
 
   const diferencaPP = cmvRealPercent - cmvTeoricoPercent;
   const diferencaValor = custoConsumido - cmvTeoricoValor;
-  const classificacao = classificarCmv(cmvRealPercent, metaCmvPercent, cmvRealPercent > 0 || cmvTeoricoPercent > 0);
+  const classificacao = classificarCmv(cmvRealPercent, metaCmvPercent, !semMovimentacao);
 
   async function refreshPlans() {
     const res = await fetch("/api/estoque/planos-acao");
@@ -111,17 +117,17 @@ export function ComparativoClient({
             storageKey="estoque-comparativo-kpi-order"
             className="grid grid-cols-2 gap-4"
             cards={[
-              { key: "cmv-real", label: "CMV Real", value: formatPercent(cmvRealPercent), icon: "Warehouse", hint: formatCurrency(custoConsumido) },
+              { key: "cmv-real", label: "CMV Real", value: semMovimentacao ? "Sem dados" : formatPercent(cmvRealPercent), icon: "Warehouse", hint: formatCurrency(custoConsumido) },
               { key: "cmv-teorico", label: "CMV Teórico", value: formatPercent(cmvTeoricoPercent), icon: "Calculator", hint: formatCurrency(cmvTeoricoValor) },
             ]}
           />
         </div>
-        <div className="col-span-2 nord-card p-4 flex flex-col justify-center gap-2 border-t-2" style={{ borderTopColor: diferencaPP > 0 ? "#ef4444" : "#22c55e" }}>
+        <div className="col-span-2 nord-card p-4 flex flex-col justify-center gap-2 border-t-2" style={{ borderTopColor: semMovimentacao ? undefined : diferencaPP > 0 ? "#ef4444" : "#22c55e" }}>
           <span className="text-xs text-nord-gray">Diferença</span>
           <span className="text-white text-2xl font-semibold tracking-tight">
-            {diferencaPP >= 0 ? "+" : ""}{diferencaPP.toFixed(1)} p.p.
+            {semMovimentacao ? "Sem dados" : `${diferencaPP >= 0 ? "+" : ""}${diferencaPP.toFixed(1)} p.p.`}
           </span>
-          <span className="text-xs text-nord-gray">{formatCurrency(diferencaValor)}</span>
+          <span className="text-xs text-nord-gray">{semMovimentacao ? "Sem movimentação de estoque no período" : formatCurrency(diferencaValor)}</span>
           <div className="flex items-center gap-2 flex-wrap pt-1">
             <Badge tone={classificacao.tone}>{classificacao.label}</Badge>
             <span className="text-xs text-nord-gray">Meta: {metaCmvPercent}%</span>

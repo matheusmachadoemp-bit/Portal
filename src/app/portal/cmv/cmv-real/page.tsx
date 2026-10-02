@@ -43,6 +43,7 @@ export default async function CmvRealPage() {
           custoConsumido={result.custoConsumido}
           faturamentoDelivery={result.faturamentoDelivery}
           faturamentoSalao={result.faturamentoSalao}
+          semMovimentacao={result.semMovimentacao}
           metaCmvPercent={metaCmvPercent}
           initialMode="mes"
           initialKey={mesFechado.key}

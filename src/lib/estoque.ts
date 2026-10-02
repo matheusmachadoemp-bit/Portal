@@ -30,9 +30,30 @@ export function applyMovement(currentStock: number, type: string, quantidade: nu
   return currentStock - quantidade;
 }
 
-export function ingredientCostPerUnit(ingredient: { precoAtual: number; quantidadeEmbalagem: number }): number {
-  if (!ingredient.quantidadeEmbalagem) return 0;
-  return ingredient.precoAtual / ingredient.quantidadeEmbalagem;
+/**
+ * Custo de 1 unidade de `Ingredient.unidade` (kg, l, un...) — função central usada por TODO
+ * cálculo de custo do sistema (Ficha Técnica/CMV via `@/lib/ficha`, valorização de estoque,
+ * contagens, perdas). Até a correção abaixo (achado de produção, revisão de 02/10/2026, loja
+ * Zarki Sushi — "Combo Salmão 20 peças" aparecia com custo de R$ 22,76 em vez de ≈ R$ 44,32),
+ * dividia `precoAtual` por `quantidadeEmbalagem`, tratando `precoAtual` como "preço da embalagem
+ * inteira comprada" — mas `precoAtual` NÃO é isso: é mantido pelo resto do sistema como preço de
+ * 1 unidade de `unidade` (mesma unidade de `estoqueAtual`), não da embalagem. Prova, nos dois
+ * únicos lugares que escrevem `precoAtual` automaticamente a partir de uma compra de verdade:
+ * `POST /api/estoque/recebimento` e `.../recebimento/responder/[token]/finalizar/route.ts` fazem
+ * `precoAtual: item.valorUnitario` direto, sem dividir por nada, e `PurchaseItem.valorUnitario` é
+ * inequivocamente "preço por 1 `unidade`" (`valorTotal = quantidade(na unidade) × valorUnitario`,
+ * ex.: 25kg de Arroz a R$12 = R$300, ou seja R$12/kg — não R$12 pela embalagem de 5kg que
+ * `quantidadeEmbalagem` registra). `src/lib/producao-indicadores-server.ts` também usa
+ * `ingredient.precoAtual` direto como "preço por unidade" sem dividir por nada. A divisão por
+ * `quantidadeEmbalagem` deflacionava o custo de qualquer insumo com embalagem > 1 (ex.: Nori:
+ * embalagem de 50un fazia o sistema achar que cada folha custava R$1,80/50 = R$0,036, quando o
+ * preço de 1 folha já é R$1,80) — silenciosamente "escondendo" a maior parte do custo de qualquer
+ * ficha técnica com insumo comprado em pacote/caixa/saco. `quantidadeEmbalagem` continua existindo
+ * no cadastro do insumo (tamanho de embalagem típica, usado em telas de compra/recebimento), só
+ * não entra mais nesta conta — não remova a divisão de volta sem reconferir essa prova.
+ */
+export function ingredientCostPerUnit(ingredient: { precoAtual: number }): number {
+  return ingredient.precoAtual;
 }
 
 // ---------------------------------------------------------------------------

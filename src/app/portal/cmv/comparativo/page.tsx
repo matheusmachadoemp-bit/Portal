@@ -2,8 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { ComparativoClient } from "./comparativo-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
-import { breakdownMovimentacoesNoPeriodo, cmvRealValor, cmvTeoricoPercentCatalogo, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
-import { productTotalCost } from "@/lib/ficha";
+import { breakdownMovimentacoesNoPeriodo, cmvRealValor, cmvTeoricoPercentCatalogo, cmvTeoricoPercentPonderado, snapshotsEstoqueEmDatas, valorEstoqueDeSnapshot } from "@/lib/cmv";
+import { quantidadeVendidaPorProdutoNoPeriodo } from "@/lib/cmv-server";
+import { productTotalCost, ingredientCostPerUnit } from "@/lib/ficha";
 import { startOfWeek, subDays, subWeeks } from "date-fns";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
@@ -57,7 +58,7 @@ export default async function ComparativoPage() {
   const earliestPeriodStart = weekBoundaries.reduce((min, w) => (w.weekStart < min ? w.weekStart : min), since);
   const snapshotDates = [since, now, ...weekBoundaries.flatMap((w) => [w.weekStart, w.weekEnd])];
 
-  const [ingredients, snapshots, movements, salesEntries, products, plans] = await Promise.all([
+  const [ingredients, snapshots, movements, salesEntries, products, plans, quantidadeVendida] = await Promise.all([
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } } }),
     // Valor do estoque em cada instante (início/fim do KPI e de cada
     // semana) resolvido no banco, 1 query indexada por data distinta — ver
@@ -70,15 +71,24 @@ export default async function ComparativoPage() {
     prisma.salesEntry.findMany({ where: { empresaId: { in: empresaIds }, date: { gte: subWeeks(now, WEEKS_SERIE) } } }),
     prisma.product.findMany({ where: { empresaId: { in: empresaIds } }, include: { ingredients: { include: { ingredient: true } } } }),
     prisma.actionPlan.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { createdAt: "desc" }, include: { createdBy: { select: { name: true } } } }),
+    quantidadeVendidaPorProdutoNoPeriodo(empresaIds, since, now),
   ]);
 
   const estoqueEm = (at: Date) => valorEstoqueDeSnapshot(ingredients, snapshots.get(at.getTime())!);
 
-  const productsWithCost = products.map((p) => ({ ...p, totalCost: productTotalCost(p.ingredients) }));
-  const cmvTeoricoPercent = cmvTeoricoPercentCatalogo(productsWithCost);
+  const productsWithCost = products.map((p) => ({
+    ...p,
+    totalCost: productTotalCost(p.ingredients),
+    quantidadeVendida: quantidadeVendida.get(p.id) ?? 0,
+  }));
+  // CMV teórico ponderado pelo mix de vendas do período (ver cmvTeoricoPercentPonderado em
+  // @/lib/cmv) — cai no blended por catálogo só se nenhuma venda do período tiver produto
+  // identificado.
+  const cmvTeoricoPercent = cmvTeoricoPercentPonderado(productsWithCost) ?? cmvTeoricoPercentCatalogo(productsWithCost);
 
   const estoqueInicial = estoqueEm(since);
   const estoqueFinal = estoqueEm(now);
+  const movementsNoPeriodo = movements.filter((m) => m.createdAt >= since && m.createdAt <= now);
   const breakdown = breakdownMovimentacoesNoPeriodo(ingredients, movements, since, now);
   const custoConsumido = cmvRealValor(
     estoqueInicial + breakdown.transferenciasRecebidas,
@@ -90,6 +100,9 @@ export default async function ComparativoPage() {
     .reduce((s, e) => s + e.faturamentoDelivery + e.faturamentoSalao, 0);
   const cmvRealPercent = faturamentoPeriodo ? (custoConsumido / faturamentoPeriodo) * 100 : 0;
   const cmvTeoricoValor = (cmvTeoricoPercent / 100) * faturamentoPeriodo;
+  // Nenhuma movimentação de estoque no período de PERIOD_DAYS dias — "Sem dados" em vez de "0%"
+  // (achado de produção, 02/10/2026). Ver mesmo flag em computeCmvReal (@/lib/cmv-server).
+  const semMovimentacao = movementsNoPeriodo.length === 0;
 
   const semanal = weekBoundaries.map(({ weekStart, weekEnd }) => {
     const inicioSemana = estoqueEm(weekStart);
@@ -105,7 +118,7 @@ export default async function ComparativoPage() {
   });
 
   const perdasPorSetor = new Map<string, number>();
-  const custoById = new Map(ingredients.map((i) => [i.id, i.precoAtual / (i.quantidadeEmbalagem || 1)]));
+  const custoById = new Map(ingredients.map((i) => [i.id, ingredientCostPerUnit(i)]));
   for (const m of movements.filter((m) => m.type === "PERDA" && m.createdAt >= since)) {
     const ing = ingredients.find((i) => i.id === m.ingredientId);
     const setor = ing?.setor ?? "Sem setor";
@@ -123,6 +136,7 @@ export default async function ComparativoPage() {
           custoConsumido={custoConsumido}
           cmvTeoricoValor={cmvTeoricoValor}
           metaCmvPercent={metaCmvPercent}
+          semMovimentacao={semMovimentacao}
           semanal={semanal}
           perdasPorSetorChart={perdasPorSetorChart}
           plans={plans.map((p) => ({

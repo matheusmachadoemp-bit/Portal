@@ -6,7 +6,7 @@ import { Section, Badge, ProgressBar } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST } from "@/lib/estoque";
+import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST, ingredientCostPerUnit } from "@/lib/estoque";
 import { AgendaLembretesModal } from "../contagem/agenda-lembretes-modal";
 
 type CountRow = {
@@ -205,8 +205,8 @@ export function ContagemMensalClient({
 
   const pendentes = items.filter((i) => i.quantidadeContada === null).length;
   const checklistCompleto = MONTHLY_COUNT_CHECKLIST.every((c) => checklist[c.key]);
-  const valorEsperado = items.reduce((s, i) => s + i.estoqueEsperado * (i.ingredient.precoAtual / (i.ingredient.quantidadeEmbalagem || 1)), 0);
-  const valorContado = items.reduce((s, i) => s + (i.quantidadeContada ?? i.estoqueEsperado) * (i.ingredient.precoAtual / (i.ingredient.quantidadeEmbalagem || 1)), 0);
+  const valorEsperado = items.reduce((s, i) => s + i.estoqueEsperado * ingredientCostPerUnit(i.ingredient), 0);
+  const valorContado = items.reduce((s, i) => s + (i.quantidadeContada ?? i.estoqueEsperado) * ingredientCostPerUnit(i.ingredient), 0);
 
   async function aprovarFechamento() {
     if (!active) return;

@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import { ingredientCostPerUnit } from "@/lib/estoque";
 
 export async function GET() {
   const session = await auth();
@@ -57,7 +58,9 @@ export async function POST(req: Request) {
 
   const quantidade = Number(body.quantidade) || 0;
   const estoqueApos = Math.max(0, ingredient.estoqueAtual - quantidade);
-  const valorEstimado = body.valorEstimado !== undefined ? Number(body.valorEstimado) : (ingredient.precoAtual / (ingredient.quantidadeEmbalagem || 1)) * quantidade;
+  // ingredientCostPerUnit: precoAtual já é o preço de 1 `unidade` (ver comentário na definição em
+  // @/lib/estoque) — não dividir por quantidadeEmbalagem de novo.
+  const valorEstimado = body.valorEstimado !== undefined ? Number(body.valorEstimado) : ingredientCostPerUnit(ingredient) * quantidade;
 
   const [loss] = await prisma.$transaction([
     prisma.loss.create({
