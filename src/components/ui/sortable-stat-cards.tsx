@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { GripVertical } from "lucide-react";
 import { DndContext, DragEndEvent, closestCenter } from "@dnd-kit/core";
 import { useDndSensors } from "@/lib/use-dnd-sensors";
@@ -24,6 +24,8 @@ export type SortableStatCardConfig = {
   invertDeltaColor?: boolean;
   /** Quando informado, o card inteiro vira um link para o módulo relacionado. */
   href?: string;
+  /** Elemento pequeno e clicável (ex.: botão de ícone) renderizado ao lado do valor — usado para ações rápidas como revelar/ocultar um valor sensível. */
+  action?: ReactNode;
 };
 
 function SortableCard({ id, locked, children }: { id: string; locked: boolean; children: React.ReactNode }) {
@@ -160,6 +162,7 @@ export function SortableStatCards({
             hint={card.hint}
             invertDeltaColor={card.invertDeltaColor}
             href={card.href}
+            action={card.action}
           />
         ),
       }))}

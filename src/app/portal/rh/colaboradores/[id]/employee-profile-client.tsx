@@ -399,21 +399,22 @@ export function EmployeeProfileClient({
                 : "••••••"
               : "-",
             icon: "DollarSign",
+            action: employee.salarioFixo != null ? (
+              <button
+                type="button"
+                onClick={() => toggleReveal("salario")}
+                title={revealedFields.salario ? "Ocultar salário fixo" : "Revelar salário fixo"}
+                aria-label={revealedFields.salario ? "Ocultar salário fixo" : "Revelar salário fixo"}
+                className="text-nord-gray hover:text-white"
+              >
+                {revealedFields.salario ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            ) : undefined,
           },
           { key: "comissoes", label: "Comissões", value: formatCurrency(financeTotals.comissao), icon: "TrendingUp" },
           { key: "bonificacoes", label: "Bonificações", value: formatCurrency(financeTotals.bonificacao), icon: "Gift" },
         ]}
       />
-      {employee.salarioFixo != null && (
-        <button
-          type="button"
-          onClick={() => toggleReveal("salario")}
-          className="flex items-center gap-1.5 -mt-2 text-[11px] text-nord-gray hover:text-white"
-        >
-          {revealedFields.salario ? <EyeOff size={11} /> : <Eye size={11} />}
-          {revealedFields.salario ? "Ocultar salário fixo" : "Revelar salário fixo"}
-        </button>
-      )}
 
       <div className="flex gap-2 flex-wrap">
         {TABS.map((t) => (
