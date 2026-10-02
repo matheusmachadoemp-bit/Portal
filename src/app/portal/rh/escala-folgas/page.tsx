@@ -72,6 +72,13 @@ export default async function EscalaFolgasPage() {
   const canCreate = ctx?.mode === "single" && canManageRh;
   const canEdit = await hasModulePermission(session.user.id, "rh", "canEdit");
   const canDelete = await hasModulePermission(session.user.id, "rh", "canDelete");
+  // Cadastrar um TIPO de folga (catálogo global, sem loja — ver
+  // `src/app/api/rh/escala-folgas/day-off-types/route.ts`) não tem a mesma ambiguidade de "em qual
+  // loja gravar" que criar uma folga em si tem — por isso usa só a permissão crua `rh:canCreate`,
+  // sem combinar com `ctx.mode`, diferente de `canCreate` acima. Sem essa flag separada, a opção
+  // "+ Cadastrar novo tipo..." ficava escondida até mesmo ao EDITAR uma folga já existente no modo
+  // Grupo Nord consolidado — apesar de editar não depender de loja única nenhuma (achado do Teulis).
+  const canManageDayOffTypes = canManageRh;
 
   // Colaboradores ATIVOS pro select de "Colaborador" do formulário "Adicionar folga" — só busca
   // quando o formulário pode de fato ser usado (`canCreate`, que já implica loja única
@@ -101,6 +108,7 @@ export default async function EscalaFolgasPage() {
         canCreate={canCreate}
         canEdit={canEdit}
         canDelete={canDelete}
+        canManageDayOffTypes={canManageDayOffTypes}
         employees={employees}
       />
     </PageContainer>
