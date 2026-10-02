@@ -45,6 +45,13 @@ model User {
   failedLoginAttempts Int                @default(0)
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
+  /// Atualizado (com throttle de ~5min, ver callback `jwt` em `src/auth.ts`) a cada
+  /// requisição autenticada que passa por `auth()` — reflete a última vez que a pessoa
+  /// de fato usou o site (navegou alguma página), não só o momento em que digitou a
+  /// senha. Distinto de `lastLoginAt` (gravado só no instante exato do login, usado por
+  /// `isFirstLogin`): os dois coexistem com significados diferentes: a tela de Usuários
+  /// exibe o maior entre os dois como "Último acesso".
+  lastActivityAt      DateTime?
   canViewGrupoNord    Boolean            @default(false)
   defaultEmpresaId    String?
   defaultEmpresa      Empresa?           @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])

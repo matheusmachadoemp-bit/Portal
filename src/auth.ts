@@ -25,6 +25,19 @@ const LOCKOUT_MS = 15 * 60 * 1000;
 const LOGIN_RATE_LIMIT_MAX = 30;
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
+// Intervalo mínimo entre gravações de `lastActivityAt` (ver callback `jwt` abaixo). O
+// callback roda a cada requisição autenticada de QUALQUER usuário logado (toda Server
+// Component/Route Handler/Server Action que chama `auth()`), então gravar a cada request
+// geraria um `UPDATE` na tabela `User` por carregamento de página, de todo mundo, o tempo
+// todo — caro sem necessidade, já que "Último acesso" é só informativo (não precisa ter
+// precisão de segundos). 5 minutos é uma troca deliberada entre "quão fresco o dado fica"
+// (no pior caso, a tela mostra uma atividade até 5min atrasada em relação ao instante real)
+// e "quantos writes extra isso gera" (no máximo 1 UPDATE por usuário ativo a cada 5min,
+// independente de quantas páginas essa pessoa carregar nesse intervalo). Mesma ordem de
+// grandeza do `maxAge` de outras decisões de cache já existentes no app; ajustável sem
+// migration, só mudando esta constante.
+const ACTIVITY_THROTTLE_MS = 5 * 60 * 1000;
+
 // Subclasse de erro dedicada (mesmo mecanismo que o Auth.js já usa pra
 // diferenciar "credenciais inválidas" de outros motivos de falha — ver
 // `code` em `CredentialsSignin` de `@auth/core/errors`) pra dar pro
@@ -200,6 +213,39 @@ const { handlers, signIn, signOut, auth: uncachedAuth } = NextAuth({
         // sem precisar tocar em nenhuma dessas rotas.
         token.role = dbUser.role;
         token.avatarUrl = dbUser.avatarUrl;
+
+        // `lastActivityAt`: reflete a última vez que esta pessoa de fato usou
+        // o site (qualquer página carregada enquanto logada), diferente de
+        // `lastLoginAt` (só o instante exato do login, nunca tocado aqui —
+        // ver `authorize` acima). Throttled via `updateMany` condicional (ver
+        // `ACTIVITY_THROTTLE_MS`): não escreve nada se já houver um valor
+        // gravado há menos de 5min, sem precisar de uma leitura extra antes —
+        // a própria condição do `WHERE` decide, no banco, se o `UPDATE` tem
+        // efeito ou não (a maioria das requisições de um usuário já ativo
+        // não gera escrita nenhuma). `await`ado (não "fire-and-forget") de
+        // propósito: em produção (Vercel, serverless, ver comentários acima
+        // sobre `LOCKOUT_MS`/`migrate-deploy.sh`) uma Promise não aguardada
+        // corre o risco de ser cortada no meio quando a função termina de
+        // responder, perdendo a escrita de forma silenciosa e inconsistente.
+        // Mas isso é um `try/catch` PRÓPRIO, separado do `catch` externo
+        // (que invalida a sessão): é só um dado informativo pra tela de
+        // Usuários — uma falha aqui não deve derrubar a sessão de ninguém
+        // do jeito que uma falha ao revalidar `active`/`role` acima deve.
+        try {
+          await prisma.user.updateMany({
+            where: {
+              id: userId,
+              OR: [
+                { lastActivityAt: null },
+                { lastActivityAt: { lt: new Date(Date.now() - ACTIVITY_THROTTLE_MS) } },
+              ],
+            },
+            data: { lastActivityAt: new Date() },
+          });
+        } catch (error) {
+          console.error("[auth] Falha ao atualizar lastActivityAt (não afeta a sessão):", error);
+        }
+
         return token;
       } catch (error) {
         // Falha ao consultar o banco (ex.: banco fora do ar por um

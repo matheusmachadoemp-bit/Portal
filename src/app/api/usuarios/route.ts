@@ -56,6 +56,7 @@ export async function GET() {
     phone: u.phone,
     employeeId: u.employeeId,
     lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
+    lastActivityAt: u.lastActivityAt ? u.lastActivityAt.toISOString() : null,
     createdAt: u.createdAt.toISOString(),
     pushSubscriptionsCount: u._count.pushSubscriptions,
     permissions: u.permissions.map((p) => ({ moduleKey: p.moduleKey, level: p.level })),
