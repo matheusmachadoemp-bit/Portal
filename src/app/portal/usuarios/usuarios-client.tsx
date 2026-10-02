@@ -14,6 +14,7 @@ type UserDTO = {
   active: boolean;
   phone: string | null;
   lastLoginAt: string | null;
+  lastActivityAt: string | null;
   createdAt: string;
   pushSubscriptionsCount: number;
   permissions: { moduleKey: string; level: string }[];
@@ -53,6 +54,21 @@ const EMPLOYEE_STATUS_LABEL: Record<string, string> = {
   AFASTADO: "Afastado",
   DESLIGADO: "Desligado",
 };
+
+// "Último acesso" exibido na tabela abaixo é o MAIOR entre `lastLoginAt` (só o instante
+// exato do login, ver `authorize` em `src/auth.ts`) e `lastActivityAt` (atualizado, com
+// throttle de ~5min, a cada página carregada enquanto logado — ver callback `jwt` no mesmo
+// arquivo). Precisa comparar os dois porque, nos primeiros minutos depois de um login, o
+// `jwt` pode ainda não ter rodado de novo (throttle) — nesse intervalo `lastLoginAt` é
+// momentaneamente a informação mais recente disponível. Depois da primeira requisição
+// seguinte ao login, `lastActivityAt` passa a ser sempre ≥ `lastLoginAt` (todo login já
+// dispara o `jwt` na sequência), mas calcular o maior dos dois cobre os dois casos sem
+// depender de qual aconteceu por último.
+function lastAccessAt(u: Pick<UserDTO, "lastLoginAt" | "lastActivityAt">): string | null {
+  if (!u.lastLoginAt) return u.lastActivityAt;
+  if (!u.lastActivityAt) return u.lastLoginAt;
+  return new Date(u.lastActivityAt) > new Date(u.lastLoginAt) ? u.lastActivityAt : u.lastLoginAt;
+}
 
 const emptyForm = {
   name: "",
@@ -286,45 +302,48 @@ export function UsuariosClient({
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-nord-border/50 hover:bg-white/5">
-                <td className="py-2.5 pr-4 text-white">{u.name}</td>
-                <td className="py-2.5 pr-4 text-nord-gray">{u.email}</td>
-                <td className="py-2.5 pr-4">
-                  <Badge tone={ROLE_TONE[u.role]}>{u.role}</Badge>
-                </td>
-                <td className="py-2.5 pr-4">
-                  <Badge tone={u.active ? "success" : "danger"}>{u.active ? "Ativo" : "Inativo"}</Badge>
-                </td>
-                <td className="py-2.5 pr-4">
-                  <div className="flex items-center gap-1.5 whitespace-nowrap">
-                    <Badge tone={u.pushSubscriptionsCount > 0 ? "success" : "default"}>
-                      {u.pushSubscriptionsCount > 0 ? "Ativas" : "Desativadas"}
-                    </Badge>
-                    {u.pushSubscriptionsCount > 0 && (
-                      <span className="text-[11px] text-nord-gray">
-                        {u.pushSubscriptionsCount} dispositivo{u.pushSubscriptionsCount > 1 ? "s" : ""}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="py-2.5 pr-4 text-nord-gray">
-                  {u.lastLoginAt ? format(new Date(u.lastLoginAt), "dd/MM/yyyy HH:mm") : "Nunca acessou"}
-                </td>
-                <td className="py-2.5 pr-4">
-                  <div className="flex items-center gap-2 justify-end">
-                    <button onClick={() => openEdit(u)} className="text-nord-gray hover:text-white">
-                      <Pencil size={14} />
-                    </button>
-                    {u.id !== currentUserId && (
-                      <button onClick={() => setConfirmDeleteId(u.id)} className="text-nord-gray hover:text-nord-danger">
-                        <Trash2 size={14} />
+            {users.map((u) => {
+              const accessAt = lastAccessAt(u);
+              return (
+                <tr key={u.id} className="border-b border-nord-border/50 hover:bg-white/5">
+                  <td className="py-2.5 pr-4 text-white">{u.name}</td>
+                  <td className="py-2.5 pr-4 text-nord-gray">{u.email}</td>
+                  <td className="py-2.5 pr-4">
+                    <Badge tone={ROLE_TONE[u.role]}>{u.role}</Badge>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <Badge tone={u.active ? "success" : "danger"}>{u.active ? "Ativo" : "Inativo"}</Badge>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      <Badge tone={u.pushSubscriptionsCount > 0 ? "success" : "default"}>
+                        {u.pushSubscriptionsCount > 0 ? "Ativas" : "Desativadas"}
+                      </Badge>
+                      {u.pushSubscriptionsCount > 0 && (
+                        <span className="text-[11px] text-nord-gray">
+                          {u.pushSubscriptionsCount} dispositivo{u.pushSubscriptionsCount > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-4 text-nord-gray">
+                    {accessAt ? format(new Date(accessAt), "dd/MM/yyyy HH:mm") : "Nunca acessou"}
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <div className="flex items-center gap-2 justify-end">
+                      <button onClick={() => openEdit(u)} className="text-nord-gray hover:text-white">
+                        <Pencil size={14} />
                       </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {u.id !== currentUserId && (
+                        <button onClick={() => setConfirmDeleteId(u.id)} className="text-nord-gray hover:text-nord-danger">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
