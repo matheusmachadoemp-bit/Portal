@@ -4827,26 +4827,40 @@ enum LojaNordRedemptionStatus {
   CANCELADO
 }
 
+/// Como uma regra é avaliada: `EVENTO_PONTUAL` dispara na hora (ex.: tarefa concluída, falta
+/// registrada); `AGREGADO_MENSAL` só faz sentido calculado em lote no fechamento do mês (ex.:
+/// pontualidade perfeita, que depende de olhar o mês inteiro de uma vez). Existe como campo
+/// próprio (em vez de inferir pelo `activityType`) porque a Fase 2 (tela de edição) precisa saber
+/// disso pra decidir quais campos mostrar (ex.: `limiteDiario` não faz sentido numa regra que só
+/// pode disparar 1x por mês) e a Fase 3 (cron mensal) precisa filtrar por isso sem hardcodar a
+/// lista de `activityType` agregados no código.
+enum LojaNordRuleGatilho {
+  EVENTO_PONTUAL
+  AGREGADO_MENSAL
+}
+
 /// Regra configurável de pontuação por tipo de atividade (Tela "Regras de
 /// pontuação"). `activityType` é uma chave livre (não enum) para permitir
 /// cadastrar novos tipos de atividade sem migração — a lógica de crédito
 /// automático (integração com Tarefas/Checklist/Cursos) busca a regra pelo
-/// `activityType` correspondente.
+/// `activityType` correspondente. `pontos` pode ser negativo (regras de
+/// penalidade, ex.: falta/atestado/advertência/suspensão).
 model LojaNordPointRule {
-  id             String    @id @default(cuid())
-  activityType   String    @unique
+  id             String              @id @default(cuid())
+  activityType   String              @unique
   label          String
   pontos         Int
+  gatilho        LojaNordRuleGatilho @default(EVENTO_PONTUAL)
   limiteDiario   Int?
   limiteMensal   Int?
-  exigeValidacao Boolean   @default(false)
-  setores        String[]  @default([])
-  empresaIds     String[]  @default([])
+  exigeValidacao Boolean             @default(false)
+  setores        String[]            @default([])
+  empresaIds     String[]            @default([])
   validoDe       DateTime?
   validoAte      DateTime?
-  active         Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  active         Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   transactions LojaNordPointTransaction[]
 }

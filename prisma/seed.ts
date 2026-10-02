@@ -2578,6 +2578,57 @@ async function main() {
     });
   }
 
+  // --- Loja Nord: regras de pontuação (LojaNordPointRule) ---
+  // Fase 1 da tela "Regras de pontuação" (/portal/loja-nord/regras): antes desta fase a tela só
+  // mostrava a constante estática LOJA_NORD_DEFAULT_RULES (src/lib/loja-nord.ts) — nenhuma linha
+  // existia no banco. Os valores abaixo (pontos, gatilho) são um CHUTE INICIAL EDITÁVEL, não uma
+  // regra de negócio fixa: o Matheus pediu explicitamente para poder cadastrar regra nova e editar
+  // qualquer regra (inclusive estas 12) com o valor que quiser, a qualquer momento, via
+  // `/api/loja-nord/regras` (Administrador). `update: {}` de propósito, mesmo racional já usado
+  // pelos DAY_OFF_TYPES mais abaixo: depois do primeiro seed, um admin já pode ter editado o valor
+  // de uma regra — rodar o seed de novo (ex.: provisionar um ambiente novo) nunca deve reverter
+  // essa edição.
+  //
+  // As 5 últimas (FALTA/ATESTADO/ADVERTENCIA/SUSPENSAO/PONTUALIDADE_PERFEITA_MENSAL) são ligadas a
+  // RH/Ponto Eletrônico (pedido do Matheus feito durante a investigação desta mesma tarefa) e
+  // ainda não têm nenhuma integração automática de crédito/débito (isso é Fase 3, separada, em
+  // sub-fases por módulo) — cadastradas aqui só para já existirem como regra configurável, igual
+  // as 7 primeiras já existiam como sugestão estática desde antes desta fase. `gatilho`
+  // AGREGADO_MENSAL só na pontualidade perfeita (só faz sentido calculada em lote no fechamento do
+  // mês); as outras 4 são EVENTO_PONTUAL porque descontam no momento em que a Occurrence é
+  // registrada (decisão explícita do Matheus — não espera o status saír de PENDENTE).
+  const LOJA_NORD_POINT_RULES: {
+    activityType: string;
+    label: string;
+    pontos: number;
+    gatilho: "EVENTO_PONTUAL" | "AGREGADO_MENSAL";
+  }[] = [
+    { activityType: "TAREFA_SIMPLES", label: "Tarefa simples concluída", pontos: 10, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "TAREFA_PRIORITARIA", label: "Tarefa prioritária concluída", pontos: 30, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "CHECKLIST_NO_HORARIO", label: "Checklist concluído no horário", pontos: 20, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "CHECKLIST_ATRASADO", label: "Checklist atrasado", pontos: 5, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "CURSO_CONCLUIDO", label: "Curso concluído", pontos: 100, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "AVALIACAO_APROVADA", label: "Avaliação aprovada", pontos: 50, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "SEQUENCIA_SEMANAL", label: "Sequência semanal sem atraso", pontos: 100, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "FALTA", label: "Falta registrada", pontos: -50, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "ATESTADO", label: "Atestado apresentado", pontos: -20, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "ADVERTENCIA", label: "Advertência recebida", pontos: -100, gatilho: "EVENTO_PONTUAL" },
+    { activityType: "SUSPENSAO", label: "Suspensão aplicada", pontos: -200, gatilho: "EVENTO_PONTUAL" },
+    {
+      activityType: "PONTUALIDADE_PERFEITA_MENSAL",
+      label: "Pontualidade perfeita no mês",
+      pontos: 150,
+      gatilho: "AGREGADO_MENSAL",
+    },
+  ];
+  for (const rule of LOJA_NORD_POINT_RULES) {
+    await prisma.lojaNordPointRule.upsert({
+      where: { activityType: rule.activityType },
+      update: {},
+      create: rule,
+    });
+  }
+
   // --- RH: catálogo de Cargos e Setores (EmployeeCargo/EmployeeSetor) ---
   // Populado a partir de TODO `Employee`/`FechamentoCargo` já criado neste seed — precisa rodar
   // por último, depois de todo o resto. Mesmo backfill que a migration
