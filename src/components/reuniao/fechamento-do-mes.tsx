@@ -6,8 +6,11 @@ import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IconPicker } from "@/components/ui/icon-picker";
+import { statusOf } from "@/components/reuniao/indicator-card";
+import { periodoShortLabel } from "@/lib/reuniao";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import type { ReuniaoCustomIndicatorDTO } from "@/lib/reuniao-server";
+import type { MeetingIndicator } from "@/lib/reuniao-pdf";
 
 /**
  * "Fechamento do mês": lista de indicadores de referência (nome + ícone + 1
@@ -53,6 +56,133 @@ function formatIndicatorValue(unidade: FechamentoIndicator["unidade"], value: nu
  * tela antes de virar helper). */
 function unidadeSuffix(unidade: FechamentoIndicator["unidade"]) {
   return unidade === "PERCENT" ? "(%)" : unidade === "CURRENCY" ? "(R$)" : "";
+}
+
+/**
+ * Busca, fresquinhos do servidor, os indicadores do "Fechamento do mês" de UM
+ * período específico — não reaproveita o estado já carregado na tela (mesmo
+ * padrão de `fetchMetasProximoMesForPdf`, em metas-proximo-mes.tsx). Usado
+ * pelo `exportPdf()` de cada reunião (ver `buildCustomIndicatorPdfEntries`
+ * abaixo) pra montar o histórico comparativo de cada indicador customizado no
+ * PDF: a rota `GET /api/reuniao/{sub}?periodo=X` de cada reunião só devolve os
+ * indicadores de UM período por chamada, e não existe hoje uma rota que
+ * devolva o histórico de vários períodos de uma vez — por isso chame esta
+ * função uma vez por período comparado (2-3 chamadas, em paralelo com
+ * Promise.all). Em caso de erro de rede/resposta não-OK, cai num fallback de
+ * lista vazia em vez de travar a exportação.
+ */
+export async function fetchFechamentoDoMesIndicatorsForPdf(apiBase: string, periodo: string): Promise<FechamentoIndicator[]> {
+  try {
+    const res = await fetch(`${apiBase}?periodo=${periodo}`);
+    if (!res.ok) return [];
+    const data = await res.json().catch(() => null);
+    return data?.customIndicators ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Unidade do indicador customizado (`PERCENT`/`CURRENCY`/`NUMBER`) → `Unit` do
+ * PDF (`MeetingIndicator`, em reuniao-pdf.ts). `NUMBER` cai em `"quantity"` —
+ * mesma formatação ("un.") já usada hoje no PDF para contagens simples (ex.:
+ * "Meta: {produto}" da Reunião Salão). */
+function pdfUnitFor(unidade: FechamentoIndicator["unidade"]): MeetingIndicator["unit"] {
+  if (unidade === "PERCENT") return "percent";
+  if (unidade === "CURRENCY") return "currency";
+  return "quantity";
+}
+
+/**
+ * Monta as entradas de `MeetingIndicator` (reuniao-pdf.ts) de TODOS os
+ * indicadores customizados da seção "Fechamento do mês" — chamado pelo
+ * `exportPdf()` de cada uma das reuniões e ADICIONADO aos indicadores fixos
+ * que já existem lá (nunca os substitui). Sem isso, qualquer indicador
+ * customizado criado pelo usuário (ex.: em "Novo indicador") simplesmente não
+ * aparecia no PDF exportado, mesmo já aparecendo normalmente na tela (card
+ * #467 — "ele puxa as informações antigas").
+ *
+ * `indicatorsByPeriodo` é o resultado de uma chamada de
+ * `fetchFechamentoDoMesIndicatorsForPdf` por período em `periodosComparados`
+ * (mesma ordem — do mais antigo pro mais recente). A lista/ordem dos
+ * indicadores em si não muda de um período pro outro (só o valor salvo neles
+ * muda) — por isso quem decide QUAIS indicadores (e em que ordem) entram no
+ * PDF é sempre o ÚLTIMO período (o mês selecionado na tela); um indicador
+ * excluído entre dois dos períodos comparados simplesmente não aparece.
+ *
+ * Cada indicador gera 1 página (valor principal/`valorReferencia`) e, quando
+ * é um indicador "composto" (`unidadeSecundaria`/`unidadeTerciaria`
+ * configuradas — ver schema.prisma), mais 1 página por valor extra
+ * (2º/3º), na sequência — mesmo histórico comparativo, só que do
+ * `valorSecundario`/`valorTerciario`.
+ */
+export function buildCustomIndicatorPdfEntries(
+  periodosComparados: string[],
+  indicatorsByPeriodo: FechamentoIndicator[][]
+): MeetingIndicator[] {
+  const current = indicatorsByPeriodo[indicatorsByPeriodo.length - 1] ?? [];
+
+  function historicoFor(indicatorId: string, getValue: (ind: FechamentoIndicator) => number | null) {
+    return periodosComparados.map((periodo, idx) => {
+      const ind = indicatorsByPeriodo[idx]?.find((i) => i.id === indicatorId);
+      if (!ind) return { monthLabel: periodoShortLabel(periodo), value: null };
+      // `primeiroPeriodoComValor` é o período mais antigo com um
+      // ReuniaoCustomIndicatorValue de verdade salvo pra este indicador (null =
+      // nunca teve nenhum valor salvo ainda). NÃO usar `createdAt` aqui — os
+      // indicadores fixos migrados (Faturamento Total, CMV etc., ver
+      // comentário de `primeiroPeriodoComValor` em reuniao-server.ts) têm
+      // `createdAt` recente mesmo tendo meses de valor real salvo antes disso.
+      // Período pedido é ANTERIOR ao primeiro período com valor real (ou o
+      // indicador nunca teve valor nenhum): mostra "sem dado" (null → "-" no
+      // PDF), nunca um valor fabricado a partir do valorPadrao. Comparação
+      // lexicográfica entre strings "YYYY-MM" funciona porque ambas têm o
+      // mesmo formato. A partir desse período (inclusive), comportamento de
+      // sempre: cai no valorPadrao quando este período específico não tem
+      // valor salvo (gap dentro do intervalo "ativo" do indicador).
+      if (ind.primeiroPeriodoComValor === null || periodo < ind.primeiroPeriodoComValor) {
+        return { monthLabel: periodoShortLabel(periodo), value: null };
+      }
+      return { monthLabel: periodoShortLabel(periodo), value: getValue(ind) };
+    });
+  }
+
+  const entries: MeetingIndicator[] = [];
+  for (const ind of current) {
+    entries.push({
+      key: `custom-${ind.id}`,
+      label: ind.nome,
+      unit: pdfUnitFor(ind.unidade),
+      meta: 0,
+      metaDirection: "max",
+      status: statusOf(null),
+      premio: 0,
+      historico: historicoFor(ind.id, (i) => i.valorReferencia),
+    });
+    if (ind.unidadeSecundaria && ind.nomeSecundario) {
+      entries.push({
+        key: `custom-${ind.id}-secundario`,
+        label: ind.nomeSecundario,
+        unit: pdfUnitFor(ind.unidadeSecundaria),
+        meta: 0,
+        metaDirection: "max",
+        status: statusOf(null),
+        premio: 0,
+        historico: historicoFor(ind.id, (i) => i.valorSecundario ?? null),
+      });
+    }
+    if (ind.unidadeTerciaria && ind.nomeTerciario) {
+      entries.push({
+        key: `custom-${ind.id}-terciario`,
+        label: ind.nomeTerciario,
+        unit: pdfUnitFor(ind.unidadeTerciaria),
+        meta: 0,
+        metaDirection: "max",
+        status: statusOf(null),
+        premio: 0,
+        historico: historicoFor(ind.id, (i) => i.valorTerciario ?? null),
+      });
+    }
+  }
+  return entries;
 }
 
 /**
@@ -411,10 +541,15 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       // ainda não tem valor salvo em nenhum período, então cai no valorPadrao
       // (mesma regra de loadReuniaoCustomIndicators). Idem para valorSecundario/
       // valorTerciario: sem período salvo ainda, começam null mesmo que o
-      // indicador já nasça composto.
+      // indicador já nasça composto. `primeiroPeriodoComValor` também começa
+      // null pelo mesmo motivo (nenhum ReuniaoCustomIndicatorValue existe
+      // ainda pra ele) — é exatamente o estado que faz `historicoFor` (ver
+      // buildCustomIndicatorPdfEntries acima) mostrar "sem dado" em qualquer
+      // período comparado, até o primeiro valor ser salvo de verdade.
       const created: FechamentoIndicator = {
         id: data.indicator.id,
         nome: data.indicator.nome,
+        primeiroPeriodoComValor: null,
         icon: data.indicator.icon,
         unidade: data.indicator.unidade,
         valorPadrao: data.indicator.valorPadrao,
