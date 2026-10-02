@@ -226,6 +226,20 @@ Otavio, Nina, Teulis) deve derrubar o próprio `next dev`/servidor de teste
 antes de reportar a tarefa como concluída — nunca deixar um processo de
 teste vivo no worktree depois do relatório final.
 
+Terceiro episódio da mesma classe, desta vez quase causado por um comando
+largo demais em vez de um processo esquecido: o Caio, ao encerrar seu
+próprio `next dev` de teste, rodou `pkill -f "next dev"` sem escopo — um
+padrão que mata QUALQUER processo cujo nome bata, de qualquer worktree,
+não só o seu. Ele mesmo percebeu o risco logo depois (viu no `ps aux` que
+havia um `next dev` de outra tarefa rodando em paralelo numa porta
+diferente), conferiu, e confirmou que esse outro processo sobreviveu sem
+dano — mas foi sorte de timing, não garantia. Regra: ao encerrar o próprio
+servidor de teste, **nunca** use `pkill`/`killall` por nome de processo
+(`next dev`, `node`, etc.) — mate só o PID específico que você mesmo
+iniciou (guarde o PID do `next dev &` que você sobe, ou filtre por `cwd`/
+diretório de trabalho do processo antes de matar, nunca só pelo nome do
+comando), do mesmo jeito que o Teulis já faz nas próprias revisões.
+
 ## Isolar cada tarefa em uma branch/worktree própria
 
 Depois de um episódio em que Caio e Mylon, rodando ao mesmo tempo, editaram
