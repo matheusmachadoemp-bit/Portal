@@ -198,9 +198,8 @@ function escalationMessage(
 /**
  * Notifica donos/gerentes toda vez que um funcionário conclui um checklist
  * — no prazo ou atrasado. A conclusão atrasada é a parte que mais importa:
- * `processChecklistEscalations` roda a cada poucos minutos (GitHub Actions,
- * ver .github/workflows/checklist-escalations.yml, mais o cron diário do
- * Vercel como reforço — ver vercel.json) mas só reavalia ocorrências ainda
+ * `processChecklistEscalations` roda a cada 5 minutos (Vercel Cron nativo,
+ * plano Pro — ver vercel.json) mas só reavalia ocorrências ainda
  * em aberto: uma vez com `completedAt` preenchido, `dueEscalationLevels`
  * não gera mais nenhum nível de cobrança pra ela (não recalcula níveis pra
  * quem já concluiu). Então um checklist concluído poucos minutos atrasado

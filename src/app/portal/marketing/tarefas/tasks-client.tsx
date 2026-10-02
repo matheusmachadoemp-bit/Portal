@@ -353,7 +353,12 @@ function KanbanColumn({
         <span className="text-xs font-medium text-white">{label}</span>
         <span className="text-[10px] text-nord-gray ml-auto">{tasks.length}</span>
       </div>
-      <div className="space-y-2 min-h-[40px]">
+      {/* Altura fixa (não `min-h`/`max-h`): todas as colunas ficam sempre do mesmo
+          tamanho, com espaço confortável pra ~5 cards, não importa quantos cards
+          cada uma tenha. Com poucos cards sobra espaço vazio (não encolhe); com
+          mais de 5, o excedente rola só aqui dentro (`overflow-y-auto`), sem
+          esticar a coluna nem desalinhar as colunas vizinhas. */}
+      <div className="space-y-2 h-[536px] overflow-y-auto nord-scrollbar pr-0.5">
         {tasks.map((t) => (
           <DraggableCard key={t.id} task={t} onOpen={onOpen} canEdit={canEdit} />
         ))}

@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { processFechamentoAlertas } from "@/lib/fechamento-server";
 
 /**
- * Disparo agendado (Vercel Cron, ver vercel.json — roda pouco depois da meia-noite de São
- * Paulo, depois que o prazo de "ontem" já venceu), autenticado via CRON_SECRET. Ver
+ * Disparo agendado (Vercel Cron nativo, plano Pro, a cada 5 min — ver vercel.json), autenticado
+ * via CRON_SECRET. Antes do upgrade pro Pro, o Vercel Hobby só rodava este cron 1x/dia (pouco
+ * depois da meia-noite de São Paulo, já com o prazo de "ontem" vencido) e a cadência real de
+ * poucos minutos vinha de um workflow redundante no GitHub Actions — removido depois do upgrade,
+ * já que o Vercel Cron nativo passou a cobrir a mesma frequência direto. Ver
  * `processFechamentoAlertas` (@/lib/fechamento-server) para a lógica de negócio: notifica o
  * dono (usuários ADMINISTRADOR) de cada `FechamentoCargo` cujo fechamento não foi enviado até o
  * prazo.

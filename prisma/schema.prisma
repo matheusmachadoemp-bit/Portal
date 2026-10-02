@@ -45,6 +45,13 @@ model User {
   failedLoginAttempts Int                @default(0)
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
+  /// Atualizado (com throttle de ~5min, ver callback `jwt` em `src/auth.ts`) a cada
+  /// requisição autenticada que passa por `auth()` — reflete a última vez que a pessoa
+  /// de fato usou o site (navegou alguma página), não só o momento em que digitou a
+  /// senha. Distinto de `lastLoginAt` (gravado só no instante exato do login, usado por
+  /// `isFirstLogin`): os dois coexistem com significados diferentes: a tela de Usuários
+  /// exibe o maior entre os dois como "Último acesso".
+  lastActivityAt      DateTime?
   canViewGrupoNord    Boolean            @default(false)
   defaultEmpresaId    String?
   defaultEmpresa      Empresa?           @relation("UserDefaultEmpresa", fields: [defaultEmpresaId], references: [id])
@@ -4541,7 +4548,7 @@ model Chamado {
   resolvidoEm        DateTime?
   /// Quando o aviso de "chamado atrasado" (processChamadoAtrasoAlertas, @/lib/manutencao-server.ts)
   /// foi disparado — idempotência da checagem periódica de atraso (GET /api/manutencao/chamados/alertas/run,
-  /// GitHub Actions .github/workflows/manutencao-chamados-atrasados.yml): null = ainda não avisado (ou
+  /// Vercel Cron nativo a cada 15 min, ver vercel.json): null = ainda não avisado (ou
   /// nunca ficou atrasado); a checagem só processa chamados com prazo vencido, status ativo e este
   /// campo nulo, e preenche com o instante do aviso assim que notifica. Diferente do Checklist
   /// (ChecklistEscalationLog) e do Fechamento do Dia (FechamentoEscalationLog), aqui não há vários
