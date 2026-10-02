@@ -102,6 +102,7 @@ export function NotificationBell() {
       <button
         ref={btnRef}
         onClick={toggleOpen}
+        aria-label={unreadCount > 0 ? `Notificações (${unreadCount} não lida${unreadCount === 1 ? "" : "s"})` : "Notificações"}
         className="relative w-8 h-8 rounded-lg flex items-center justify-center text-nord-gray hover:text-white hover:bg-white/5 transition"
       >
         <Bell size={17} />

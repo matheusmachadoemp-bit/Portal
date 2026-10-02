@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { Section } from "@/components/ui/stat-card";
+import { ChartEmptyState, isChartDataEmpty } from "@/components/ui/chart-empty-state";
 import { formatCurrency, formatPercent } from "@/lib/calc";
 import { Download } from "lucide-react";
 import {
@@ -203,20 +204,24 @@ export function DreClient({
       </Section>
 
       <Section title="Evolução mensal — Faturamento x Lucro Líquido">
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={monthlyEvolution}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-            <XAxis dataKey="month" stroke="#9a9aa2" fontSize={11} />
-            <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
-            <Tooltip
-              contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
-              formatter={(v) => formatCurrency(Number(v))}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="faturamento" name="Faturamento" stroke="#2952E3" strokeWidth={2} />
-            <Line type="monotone" dataKey="lucroLiquido" name="Lucro Líquido" stroke="#22c55e" strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
+        {isChartDataEmpty(monthlyEvolution, ["faturamento", "lucroLiquido"]) ? (
+          <ChartEmptyState height={260} />
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={monthlyEvolution}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
+              <XAxis dataKey="month" stroke="#9a9aa2" fontSize={11} />
+              <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
+              <Tooltip
+                contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
+                formatter={(v) => formatCurrency(Number(v))}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line type="monotone" dataKey="faturamento" name="Faturamento" stroke="#2952E3" strokeWidth={2} />
+              <Line type="monotone" dataKey="lucroLiquido" name="Lucro Líquido" stroke="#22c55e" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </Section>
     </div>
   );

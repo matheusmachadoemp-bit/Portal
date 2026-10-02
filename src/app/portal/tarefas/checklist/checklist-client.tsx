@@ -345,7 +345,7 @@ export function ChecklistClient({
     const emAndamento = filtered.filter((o) => o.status === "EM_ANDAMENTO").length;
     const atrasados = filtered.filter((o) => o.status === "ATRASADO").length;
     const naoRealizados = filtered.filter((o) => o.status === "NAO_REALIZADO").length;
-    const conformidade = previstos > 0 ? (concluidosNoPrazo / previstos) * 100 : 0;
+    const conformidade = previstos > 0 ? (concluidosNoPrazo / previstos) * 100 : null;
     return { previstos, concluidosNoPrazo, emAndamento, atrasados, naoRealizados, conformidade };
   }, [filtered]);
 
@@ -548,11 +548,17 @@ export function ChecklistClient({
         <div className="flex items-center gap-2 flex-wrap">
           <input
             type="date"
+            aria-label="Data do checklist"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="input date-input"
           />
-          <select value={filterSetor} onChange={(e) => setFilterSetor(e.target.value)} className="input input-compact">
+          <select
+            aria-label="Filtrar por setor"
+            value={filterSetor}
+            onChange={(e) => setFilterSetor(e.target.value)}
+            className="input input-compact"
+          >
             <option value="">Todos os setores</option>
             {GOAL_CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -560,7 +566,12 @@ export function ChecklistClient({
               </option>
             ))}
           </select>
-          <select value={filterResponsavel} onChange={(e) => setFilterResponsavel(e.target.value)} className="input input-compact">
+          <select
+            aria-label="Filtrar por responsável"
+            value={filterResponsavel}
+            onChange={(e) => setFilterResponsavel(e.target.value)}
+            className="input input-compact"
+          >
             <option value="">Todos os responsáveis</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
@@ -568,7 +579,12 @@ export function ChecklistClient({
               </option>
             ))}
           </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input input-compact">
+          <select
+            aria-label="Filtrar por status"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="input input-compact"
+          >
             <option value="">Todos os status</option>
             {Object.entries(CHECKLIST_STATUS_LABEL).map(([k, v]) => (
               <option key={k} value={k}>
@@ -577,7 +593,12 @@ export function ChecklistClient({
             ))}
           </select>
           {turnos.length > 0 && (
-            <select value={filterTurno} onChange={(e) => setFilterTurno(e.target.value)} className="input input-compact">
+            <select
+              aria-label="Filtrar por turno"
+              value={filterTurno}
+              onChange={(e) => setFilterTurno(e.target.value)}
+              className="input input-compact"
+            >
               <option value="">Todos os turnos</option>
               {turnos.map((t) => (
                 <option key={t} value={t}>
@@ -629,7 +650,7 @@ export function ChecklistClient({
           {
             key: "conformidade",
             label: "Conformidade",
-            value: `${kpis.conformidade.toFixed(0)}%`,
+            value: kpis.conformidade != null ? `${kpis.conformidade.toFixed(0)}%` : "—",
             icon: "TrendingUp",
             color: "#f59e0b",
           },

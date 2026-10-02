@@ -71,9 +71,21 @@ export function PeriodFilterBar<K extends string = RollingPeriodKey>({
       </div>
       {selected === "personalizado" && (
         <div className="flex items-center gap-2 mt-2">
-          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input !w-auto" />
+          <input
+            type="date"
+            aria-label="Data inicial do período"
+            value={customFrom}
+            onChange={(e) => setCustomFrom(e.target.value)}
+            className="input !w-auto"
+          />
           <span className="text-xs text-nord-gray">até</span>
-          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input !w-auto" />
+          <input
+            type="date"
+            aria-label="Data final do período"
+            value={customTo}
+            onChange={(e) => setCustomTo(e.target.value)}
+            className="input !w-auto"
+          />
           <button
             onClick={() => onApply(selected, customFrom, customTo)}
             disabled={!customFrom || !customTo || loading}

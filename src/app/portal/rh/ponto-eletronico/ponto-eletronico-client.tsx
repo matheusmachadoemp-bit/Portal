@@ -7,6 +7,7 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
+import { ChartEmptyState, isChartDataEmpty } from "@/components/ui/chart-empty-state";
 import { formatNumber } from "@/lib/calc";
 import { pontoAlerts, type TimeEntryLike } from "@/lib/rh-helpers";
 import { format } from "date-fns";
@@ -347,45 +348,57 @@ export function PontoEletronicoClient({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Section title="Horas trabalhadas por mês">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} margin={{ top: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-              <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
-              <YAxis stroke="#9a9aa2" fontSize={11} />
-              <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="horas" name="Horas" fill="#2952E3" radius={[6, 6, 0, 0]}>
-                <LabelList dataKey="horas" content={makeColumnValueLabel((v) => formatNumber(v, 1))} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {isChartDataEmpty(chartData, ["horas"]) ? (
+            <ChartEmptyState height={220} />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={chartData} margin={{ top: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
+                <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
+                <YAxis stroke="#9a9aa2" fontSize={11} />
+                <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
+                <Bar dataKey="horas" name="Horas" fill="#2952E3" radius={[6, 6, 0, 0]}>
+                  <LabelList dataKey="horas" content={makeColumnValueLabel((v) => formatNumber(v, 1))} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </Section>
         <Section title="Atrasos e faltas por mês">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} margin={{ top: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-              <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
-              <YAxis stroke="#9a9aa2" fontSize={11} />
-              <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
-              <Bar dataKey="atrasos" name="Atrasos" fill="#eab308" radius={[6, 6, 0, 0]}>
-                <LabelList dataKey="atrasos" content={makeColumnValueLabel(formatNumber)} />
-              </Bar>
-              <Bar dataKey="faltas" name="Faltas" fill="#ef4444" radius={[6, 6, 0, 0]}>
-                <LabelList dataKey="faltas" content={makeColumnValueLabel(formatNumber)} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {isChartDataEmpty(chartData, ["atrasos", "faltas"]) ? (
+            <ChartEmptyState height={220} />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={chartData} margin={{ top: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
+                <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
+                <YAxis stroke="#9a9aa2" fontSize={11} />
+                <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} />
+                <Bar dataKey="atrasos" name="Atrasos" fill="#eab308" radius={[6, 6, 0, 0]}>
+                  <LabelList dataKey="atrasos" content={makeColumnValueLabel(formatNumber)} />
+                </Bar>
+                <Bar dataKey="faltas" name="Faltas" fill="#ef4444" radius={[6, 6, 0, 0]}>
+                  <LabelList dataKey="faltas" content={makeColumnValueLabel(formatNumber)} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </Section>
         <div className="md:col-span-2">
           <Section title="Banco de horas acumulado">
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-                <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
-                <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v}h`} />
-                <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} formatter={(v) => `${v}h`} />
-                <Line type="monotone" dataKey="banco" name="Banco de horas" stroke="#22c55e" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            {isChartDataEmpty(chartData, ["banco"]) ? (
+              <ChartEmptyState height={220} />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
+                  <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
+                  <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v}h`} />
+                  <Tooltip contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }} formatter={(v) => `${v}h`} />
+                  <Line type="monotone" dataKey="banco" name="Banco de horas" stroke="#22c55e" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </Section>
         </div>
       </div>

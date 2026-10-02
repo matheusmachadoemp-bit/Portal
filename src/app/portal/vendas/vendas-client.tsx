@@ -9,6 +9,7 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { ImportFallbackWarning } from "@/components/ui/import-fallback-warning";
 import type { ImportFallbackBucket } from "@/lib/import-fallback";
+import { ChartEmptyState, isChartDataEmpty } from "@/components/ui/chart-empty-state";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -304,6 +305,7 @@ export function VendasClient({
             <div className="flex items-center gap-1">
               <input
                 type="date"
+                aria-label="Data inicial do período"
                 value={customFrom}
                 onChange={(e) => setCustomFrom(e.target.value)}
                 className="bg-nord-card border border-nord-border rounded-lg px-2 py-1 text-xs text-white"
@@ -311,6 +313,7 @@ export function VendasClient({
               <span className="text-nord-gray text-xs">até</span>
               <input
                 type="date"
+                aria-label="Data final do período"
                 value={customTo}
                 onChange={(e) => setCustomTo(e.target.value)}
                 className="bg-nord-card border border-nord-border rounded-lg px-2 py-1 text-xs text-white"
@@ -377,20 +380,24 @@ export function VendasClient({
       />
 
       <Section title="Evolução do faturamento no período">
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-            <XAxis dataKey="date" stroke="#9a9aa2" fontSize={11} />
-            <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
-            <Tooltip
-              contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
-              formatter={(v) => formatCurrency(Number(v))}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area type="monotone" dataKey="Delivery" stackId="1" stroke="#2952E3" fill="#2952E3" fillOpacity={0.5} />
-            <Area type="monotone" dataKey="Salão" stackId="1" stroke="#4d70ff" fill="#4d70ff" fillOpacity={0.5} />
-          </AreaChart>
-        </ResponsiveContainer>
+        {isChartDataEmpty(chartData, ["Delivery", "Salão"]) ? (
+          <ChartEmptyState height={260} />
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
+              <XAxis dataKey="date" stroke="#9a9aa2" fontSize={11} />
+              <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
+              <Tooltip
+                contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
+                formatter={(v) => formatCurrency(Number(v))}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Area type="monotone" dataKey="Delivery" stackId="1" stroke="#2952E3" fill="#2952E3" fillOpacity={0.5} />
+              <Area type="monotone" dataKey="Salão" stackId="1" stroke="#4d70ff" fill="#4d70ff" fillOpacity={0.5} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
       </Section>
 
       <Section
@@ -441,11 +448,16 @@ export function VendasClient({
                   <td className="py-2 pr-4">
                     {canCreate && (
                       <div className="flex items-center gap-2 justify-end">
-                        <button onClick={() => openEdit(e)} className="text-nord-gray hover:text-white">
+                        <button
+                          onClick={() => openEdit(e)}
+                          aria-label={`Editar lançamento de ${format(new Date(e.date), "dd/MM/yyyy")}`}
+                          className="text-nord-gray hover:text-white"
+                        >
                           <Pencil size={14} />
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(e.id)}
+                          aria-label={`Excluir lançamento de ${format(new Date(e.date), "dd/MM/yyyy")}`}
                           className="text-nord-gray hover:text-nord-danger"
                         >
                           <Trash2 size={14} />

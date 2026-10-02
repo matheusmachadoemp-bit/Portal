@@ -63,7 +63,12 @@ export function TaskFiltersBar({
 
       <div className="flex flex-wrap items-center gap-2">
         {showEmpresaFilter && (
-          <select value={filters.empresaId} onChange={(e) => set("empresaId", e.target.value)} className="filter-select">
+          <select
+            aria-label="Filtrar por unidade"
+            value={filters.empresaId}
+            onChange={(e) => set("empresaId", e.target.value)}
+            className="filter-select"
+          >
             <option value="">Todas as unidades</option>
             {empresas.map((e) => (
               <option key={e.id} value={e.id}>
@@ -73,7 +78,12 @@ export function TaskFiltersBar({
           </select>
         )}
 
-        <select value={filters.sectorKey} onChange={(e) => set("sectorKey", e.target.value)} className="filter-select">
+        <select
+          aria-label="Filtrar por setor"
+          value={filters.sectorKey}
+          onChange={(e) => set("sectorKey", e.target.value)}
+          className="filter-select"
+        >
           <option value="">Todos os setores</option>
           {TASK_SECTORS.map((s) => (
             <option key={s} value={s}>
@@ -82,7 +92,12 @@ export function TaskFiltersBar({
           ))}
         </select>
 
-        <select value={filters.responsavelId} onChange={(e) => set("responsavelId", e.target.value)} className="filter-select">
+        <select
+          aria-label="Filtrar por responsável"
+          value={filters.responsavelId}
+          onChange={(e) => set("responsavelId", e.target.value)}
+          className="filter-select"
+        >
           <option value="">Todos os responsáveis</option>
           {users.map((u) => (
             <option key={u.id} value={u.id}>
@@ -91,7 +106,12 @@ export function TaskFiltersBar({
           ))}
         </select>
 
-        <select value={filters.status} onChange={(e) => set("status", e.target.value)} className="filter-select">
+        <select
+          aria-label="Filtrar por status"
+          value={filters.status}
+          onChange={(e) => set("status", e.target.value)}
+          className="filter-select"
+        >
           <option value="">Todos os status</option>
           {TASK_STATUS_OPTIONS.map((s) => (
             <option key={s.key} value={s.key}>
@@ -100,7 +120,12 @@ export function TaskFiltersBar({
           ))}
         </select>
 
-        <select value={filters.priority} onChange={(e) => set("priority", e.target.value)} className="filter-select">
+        <select
+          aria-label="Filtrar por prioridade"
+          value={filters.priority}
+          onChange={(e) => set("priority", e.target.value)}
+          className="filter-select"
+        >
           <option value="">Todas as prioridades</option>
           {TASK_PRIORITY_OPTIONS.map((p) => (
             <option key={p.key} value={p.key}>

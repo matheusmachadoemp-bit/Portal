@@ -1,9 +1,14 @@
 "use client";
 
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
+import { ChartEmptyState, isChartDataEmpty } from "@/components/ui/chart-empty-state";
 import { formatCurrency } from "@/lib/calc";
 
 export function FaturamentoComparisonChart({ data }: { data: { dia: number; atual: number; anterior: number }[] }) {
+  if (isChartDataEmpty(data, ["atual", "anterior"])) {
+    return <ChartEmptyState height={220} />;
+  }
+
   return (
     <ResponsiveContainer width="100%" height={220}>
       <LineChart data={data}>

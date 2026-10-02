@@ -407,6 +407,21 @@ export function ProdutosClient({
               + adicionar ingrediente
             </button>
           </div>
+          {/* Cabeçalho das colunas (item #7b, achado de revisão 02/10/2026): "Qtd." e "% perda"
+              só apareciam como placeholder DENTRO do campo — some assim que a pessoa digita um
+              valor, e ninguém mais sabe o que aquele número representa. Este cabeçalho fica
+              visível o tempo todo, alinhado com as mesmas colunas (grid-cols-12) de cada
+              `IngredientRow` abaixo; os inputs também ganharam `aria-label` para quem usa leitor
+              de tela. */}
+          {lines.length > 0 && (
+            <div className="grid grid-cols-12 gap-2 px-1 mb-1" aria-hidden="true">
+              <span className="col-span-1" />
+              <span className="col-span-4 text-[11px] text-nord-gray">Insumo</span>
+              <span className="col-span-3 text-[11px] text-nord-gray">Qtd.</span>
+              <span className="col-span-3 text-[11px] text-nord-gray">% perda</span>
+              <span className="col-span-1" />
+            </div>
+          )}
           {/* `id` fixo: só existe uma instância de DndContext nesta tela hoje (um modal de
               produto aberto por vez), mas fixar evita depender do contador automático do
               dnd-kit (compartilhado com outras telas), que pode divergir entre servidor e
@@ -501,6 +516,7 @@ function IngredientRow({
       </select>
       <input
         type="number"
+        aria-label="Qtd."
         placeholder="Qtd."
         value={line.quantidadeUsada}
         onChange={(e) => onUpdate({ quantidadeUsada: e.target.value })}
@@ -508,6 +524,7 @@ function IngredientRow({
       />
       <input
         type="number"
+        aria-label="% perda"
         placeholder="% perda"
         value={line.percentualPerda}
         onChange={(e) => onUpdate({ percentualPerda: e.target.value })}
