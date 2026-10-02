@@ -31,7 +31,7 @@ export default async function AniversariantesPage() {
       return {
         id: c.id,
         nome: c.nome,
-        dataNascimento: c.dataNascimento!.toISOString(),
+        dataNascimento: c.dataNascimento!.toISOString().slice(0, 10),
         diasAte: differenceInCalendarDays(proximo, now),
         lojaNome: c.empresa.name,
         lojaColor: c.empresa.color,
