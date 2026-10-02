@@ -377,8 +377,8 @@ export async function getManutencaoDashboardData(empresaIds: string[], filtros: 
 // ---------------------------------------------------------------------------
 // Cron de atraso — pedido do usuário: "caso o chamado entre em manutenções atrasadas, chegar
 // uma notificação também" (ver GET /api/manutencao/chamados/alertas/run, chamado periodicamente
-// pelo GitHub Actions — .github/workflows/manutencao-chamados-atrasados.yml — com o Vercel Cron
-// diário como reforço, ver vercel.json; mesmo padrão de .github/workflows/checklist-escalations.yml).
+// a cada 15 min pelo Vercel Cron nativo, plano Pro — ver vercel.json; mesmo padrão de
+// /api/checklist/escalations/run).
 // ---------------------------------------------------------------------------
 
 /**

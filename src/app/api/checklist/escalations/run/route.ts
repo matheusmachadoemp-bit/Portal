@@ -8,8 +8,9 @@ import { generateChecklistOccurrences, processChecklistEscalations, refreshOccur
  * Quantos dias antes de hoje essa rota também revisita em busca de
  * ocorrências presas num status não-terminal (na prática, ATRASADO). Sem
  * isso, uma ocorrência só é revisitada enquanto `date` é hoje — se o cron
- * (GitHub Actions a cada 5 min, ver .github/workflows/checklist-escalations.yml,
- * mais o reforço diário do Vercel, ver vercel.json) ficar indisponível bem
+ * (Vercel Cron nativo, plano Pro, a cada 5 min — ver vercel.json; antes do
+ * upgrade pro Pro rodava via GitHub Actions, com o Vercel Hobby só como
+ * reforço diário, workflow removido nessa migração) ficar indisponível bem
  * na janela em que ela cruza o limiar de atraso, ela nunca mais seria
  * revisitada (o dia seguinte já filtra só `date: hoje`) e ficaria presa em
  * ATRASADO pra sempre, sem nunca virar NAO_REALIZADO nem gerar a cobrança
