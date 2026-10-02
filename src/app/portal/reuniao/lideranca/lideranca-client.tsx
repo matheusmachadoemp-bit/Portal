@@ -5,7 +5,7 @@ import { Trash2 } from "lucide-react";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { FechamentoDoMesSection, FechamentoDoMesEditor, useFechamentoDoMes, type FechamentoIndicator } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection } from "@/components/reuniao/metas-proximo-mes";
-import { periodoLabel } from "@/lib/reuniao";
+import { nextPeriodo, periodoLabel } from "@/lib/reuniao";
 
 type Meeting = { id: string; periodo: string };
 
@@ -37,7 +37,7 @@ export function LiderancaClient({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fdm = useFechamentoDoMes("/api/reuniao/lideranca", selectedPeriodo, initialCustomIndicators);
-  const mp = useMetasProximoMes("/api/reuniao/lideranca", canCreate);
+  const mp = useMetasProximoMes("/api/reuniao/lideranca", canCreate, nextPeriodo(selectedPeriodo));
 
   const mounted = useRef(false);
   useEffect(() => {
