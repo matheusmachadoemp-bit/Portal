@@ -6,30 +6,37 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { TASK_PRIORITY_LABEL, TASK_PRIORITY_COLOR } from "@/lib/tarefas";
 import type { TaskDTO } from "./types";
 
-function CircularRate({ percent }: { percent: number }) {
+/**
+ * `percent: null` representa "sem dado pra calcular" (ex.: nenhuma tarefa no
+ * período, 0 de 0) — mostra "—" e o anel vazio, em vez de "0%" (que pareceria
+ * uma taxa de conclusão real de 0%, o que é enganoso).
+ */
+function CircularRate({ percent }: { percent: number | null }) {
   const size = 72;
   const stroke = 7;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const clamped = Math.max(0, Math.min(100, percent));
+  const clamped = percent == null ? 0 : Math.max(0, Math.min(100, percent));
   const offset = c - (clamped / 100) * c;
   return (
     <svg width={size} height={size} className="shrink-0">
       <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} fill="none" />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        stroke="#22c55e"
-        strokeWidth={stroke}
-        fill="none"
-        strokeDasharray={c}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
+      {percent != null && (
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="#22c55e"
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      )}
       <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" className="fill-white text-sm font-semibold">
-        {Math.round(clamped)}%
+        {percent == null ? "—" : `${Math.round(clamped)}%`}
       </text>
     </svg>
   );
@@ -45,7 +52,7 @@ export function TaskDashboardCards({ tasks }: { tasks: TaskDTO[] }) {
     const concluidas = tasks.filter((t) => t.status === "CONCLUIDA");
     const emAndamento = tasks.filter((t) => t.status === "EM_ANDAMENTO");
     const atrasadas = tasks.filter((t) => t.overdue);
-    const taxa = tasks.length > 0 ? (concluidas.length / tasks.length) * 100 : 0;
+    const taxa = tasks.length > 0 ? (concluidas.length / tasks.length) * 100 : null;
 
     const proximosVencimentos = tasks
       .filter((t) => t.dueDate && t.status !== "CONCLUIDA")
@@ -68,7 +75,7 @@ export function TaskDashboardCards({ tasks }: { tasks: TaskDTO[] }) {
             value: String(stats.concluidas.length),
             icon: "CheckCircle2",
             color: "#22c55e",
-            hint: `${tasks.length ? Math.round((stats.concluidas.length / tasks.length) * 100) : 0}% do total`,
+            hint: tasks.length ? `${Math.round((stats.concluidas.length / tasks.length) * 100)}% do total` : "Sem tarefas no período",
           },
           { key: "em-andamento", label: "Em andamento", value: String(stats.emAndamento.length), icon: "Clock", color: "#eab308" },
           { key: "atrasadas", label: "Atrasadas", value: String(stats.atrasadas.length), icon: "AlertTriangle", color: "#ef4444" },

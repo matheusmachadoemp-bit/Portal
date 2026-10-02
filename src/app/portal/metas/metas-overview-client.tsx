@@ -68,7 +68,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
   const concluidas = filtered.filter((g) => g.status === "CONCLUIDA").length;
   const emAndamento = filtered.filter((g) => g.status === "EM_ANDAMENTO" || g.status === "EM_RISCO").length;
   const naoAtingidas = filtered.filter((g) => g.status === "NAO_ATINGIDA").length;
-  const percentGeral = total ? (concluidas / total) * 100 : 0;
+  const percentGeral = total ? (concluidas / total) * 100 : null;
 
   const proximasDeAtingir = filtered.filter((g) => g.status === "EM_RISCO");
   // Modo consolidado (ex.: "Grupo Nord") pode listar metas de mais de uma loja ao mesmo
@@ -80,7 +80,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
     const items = filtered.filter((g) => g.category === cat);
     const avgPercent = items.length
       ? items.reduce((sum, g) => sum + Math.max(0, Math.min(goalPercent(g), 100)), 0) / items.length
-      : 0;
+      : null;
     return {
       category: cat,
       total: items.length,
@@ -112,13 +112,13 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
           { key: "concluidas", label: "Concluídas", value: String(concluidas), icon: "CheckCircle2", color: "#22c55e" },
           { key: "em-andamento", label: "Em andamento", value: String(emAndamento), icon: "Clock", color: "#2952E3" },
           { key: "nao-atingidas", label: "Não atingidas", value: String(naoAtingidas), icon: "XCircle", color: "#ef4444" },
-          { key: "percent-geral-concluido", label: "% geral concluído", value: `${percentGeral.toFixed(0)}%`, icon: "TrendingUp", color: "#f59e0b" },
+          { key: "percent-geral-concluido", label: "% geral concluído", value: percentGeral != null ? `${percentGeral.toFixed(0)}%` : "—", icon: "TrendingUp", color: "#f59e0b" },
         ]}
       />
 
       <Section title="Filtros">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <select value={setor} onChange={(e) => setSetor(e.target.value)} className="input">
+          <select aria-label="Filtrar por setor" value={setor} onChange={(e) => setSetor(e.target.value)} className="input">
             <option value="">Todos os setores</option>
             {GOAL_CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -126,7 +126,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
               </option>
             ))}
           </select>
-          <select value={responsavel} onChange={(e) => setResponsavel(e.target.value)} className="input">
+          <select aria-label="Filtrar por responsável" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} className="input">
             <option value="">Todos os responsáveis</option>
             {responsaveis.map((r) => (
               <option key={r} value={r}>
@@ -134,7 +134,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
               </option>
             ))}
           </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="input">
+          <select aria-label="Filtrar por status" value={status} onChange={(e) => setStatus(e.target.value)} className="input">
             <option value="">Todos os status</option>
             {Object.entries(GOAL_STATUS_LABEL).map(([k, v]) => (
               <option key={k} value={k}>
@@ -143,7 +143,7 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
             ))}
           </select>
           <div className="flex items-center gap-1.5">
-            <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} className="input" />
+            <input type="month" aria-label="Filtrar por mês" value={mes} onChange={(e) => setMes(e.target.value)} className="input" />
             {mes && (
               <button onClick={() => setMes("")} className="text-xs text-nord-blue-light hover:underline shrink-0">
                 Todos
@@ -186,12 +186,12 @@ export function MetasOverviewClient({ goals }: { goals: GoalDTO[] }) {
                 <p className="text-white text-sm font-medium">{GOAL_CATEGORY_LABEL[s.category]}</p>
                 <ChevronRight size={14} className="text-nord-gray" />
               </div>
-              <ProgressBar percent={s.avgPercent} color={s.avgPercent >= 100 ? "#22c55e" : "#2952E3"} />
+              <ProgressBar percent={s.avgPercent ?? 0} color={s.avgPercent != null && s.avgPercent >= 100 ? "#22c55e" : "#2952E3"} />
               <div className="flex items-center justify-between text-[11px] text-nord-gray mt-1.5">
                 <span>
                   {s.concluidas}/{s.total} concluídas
                 </span>
-                <span>{s.avgPercent.toFixed(0)}% média</span>
+                <span>{s.avgPercent != null ? `${s.avgPercent.toFixed(0)}% média` : "— média"}</span>
               </div>
             </Link>
           ))}

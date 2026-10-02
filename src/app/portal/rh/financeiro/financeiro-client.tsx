@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, Download } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
+import { ChartEmptyState, isChartDataEmpty } from "@/components/ui/chart-empty-state";
 import { apiRequest } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
@@ -277,24 +278,28 @@ export function FinanceiroClient({
       )}
 
       <Section title="Evolução dos recebimentos">
-        <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient id="colorRecebimentos" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.5} />
-                <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
-            <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
-            <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
-            <Tooltip
-              contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
-              formatter={(v) => formatCurrency(Number(v))}
-            />
-            <Area type="monotone" dataKey="valor" name="Recebido" stroke="#22c55e" fill="url(#colorRecebimentos)" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
+        {isChartDataEmpty(chartData, ["valor"]) ? (
+          <ChartEmptyState height={240} />
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="colorRecebimentos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.5} />
+                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
+              <XAxis dataKey="mes" stroke="#9a9aa2" fontSize={11} />
+              <YAxis stroke="#9a9aa2" fontSize={11} tickFormatter={(v) => `${v / 1000}k`} />
+              <Tooltip
+                contentStyle={{ background: "#1a1a1d", border: "1px solid #2a2a2e", borderRadius: 8 }}
+                formatter={(v) => formatCurrency(Number(v))}
+              />
+              <Area type="monotone" dataKey="valor" name="Recebido" stroke="#22c55e" fill="url(#colorRecebimentos)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
       </Section>
 
       <FormError message={rowError} />

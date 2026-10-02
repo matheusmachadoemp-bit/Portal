@@ -2,6 +2,7 @@
 
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LabelList } from "recharts";
 import { makeColumnValueLabel } from "@/components/ui/bar-value-label";
+import { ChartEmptyState, isChartDataEmpty } from "@/components/ui/chart-empty-state";
 import { formatCurrency } from "@/lib/calc";
 
 function formatCompact(value: number): string {
@@ -10,6 +11,10 @@ function formatCompact(value: number): string {
 }
 
 export function PorHoraChart({ data }: { data: { label: string; faturamento: number }[] }) {
+  if (isChartDataEmpty(data, ["faturamento"])) {
+    return <ChartEmptyState height={280} />;
+  }
+
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 16 }}>
