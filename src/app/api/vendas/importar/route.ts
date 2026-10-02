@@ -381,7 +381,7 @@ export async function POST(req: Request) {
       agg.taxaServicoValor += taxaServico;
       linhasValidas++;
 
-      const dateTime = parseOrderDateTime(rawDate) ?? date;
+      const dateTime = parseOrderDateTime(rawDate) ?? spDay;
       const platform = columnMap.canalVenda !== undefined ? mapCanalToPlatform(String(row[columnMap.canalVenda] ?? "")) : "SITE_PROPRIO";
       const formaPagamento = columnMap.pagamento !== undefined ? mapPagamento(String(row[columnMap.pagamento] ?? "")) : "OUTRO";
       if (formaPagamento === "OUTRO") semFormaPagamento++;
