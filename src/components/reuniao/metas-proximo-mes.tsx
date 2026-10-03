@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2, Trophy } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
@@ -113,21 +113,64 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean, periodo: s
   const [deleteTarget, setDeleteTarget] = useState<MetaProximoMes | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  /**
+   * Existem dois caminhos independentes que buscam metas do servidor e escrevem no mesmo
+   * estado (`metas`): o `useEffect` abaixo (dispara quando `periodo` muda — ex. a tela trocou
+   * de mês selecionado) e `refreshMetas()` (chamado por `createMeta()`/`saveEdit()`/
+   * `confirmDelete()` depois do respectivo POST/PATCH/DELETE). Sem coordenação entre os dois, a
+   * resposta atrasada de um caminho pode sobrescrever a tela com meta de um período que não é
+   * mais o selecionado — mesma classe de corrida (e mesma solução, token de geração
+   * compartilhado via `beginFetch()`) já corrigida em gerente-client.tsx e em
+   * `useFechamentoDoMes` (fechamento-do-mes.tsx); ver os comentários ao redor de
+   * `fetchGenerationRef`/`beginFetch` nesses dois arquivos para o raciocínio completo.
+   *
+   * Importante (mesmo cuidado de lá): o token de `refreshMetas()` precisa ser obtido pelo
+   * CHAMADOR (`createMeta`, `saveEdit`, `confirmDelete`) como a PRIMEIRA coisa que cada um faz
+   * — antes de disparar a própria mutação (POST/PATCH/DELETE) que antecede o `refreshMetas` —
+   * nunca só dentro do `refreshMetas()` em si, depois da mutação já ter respondido. Senão, o
+   * tempo da própria mutação abriria uma janela extra em que uma troca de período poderia
+   * "vencer" essa edição mesmo tendo acontecido depois dela, na ordem real dos cliques do
+   * usuário.
+   */
+  const fetchGenerationRef = useRef(0);
+  function beginFetch(): number {
+    fetchGenerationRef.current += 1;
+    return fetchGenerationRef.current;
+  }
+
   useEffect(() => {
     if (!canLoad) return;
     let cancelled = false;
+    const token = beginFetch();
     fetch(`${apiBase}/metas-proximo-mes?periodo=${periodo}`)
       .then((res) => res.json())
-      .then((data) => !cancelled && setMetas(data.metas ?? []))
+      .then((data) => {
+        // `cancelled`: esta própria instância do efeito foi desmontada/re-executada (ex.:
+        // `periodo` mudou de novo) antes da resposta chegar. `token !== fetchGenerationRef.current`:
+        // uma busca MAIS NOVA — deste mesmo efeito reexecutando, OU de `refreshMetas()` — já
+        // começou desde então; ver o comentário de `fetchGenerationRef` acima. Nos dois casos,
+        // descarta a resposta em silêncio.
+        if (cancelled || token !== fetchGenerationRef.current) return;
+        setMetas(data.metas ?? []);
+      })
       .finally(() => !cancelled && setMetasLoading(false));
     return () => {
       cancelled = true;
     };
   }, [apiBase, canLoad, periodo]);
 
-  async function refreshMetas() {
+  // `token` vem do CHAMADOR (ver o comentário de `fetchGenerationRef`/`beginFetch` acima) —
+  // obtido por ele antes de disparar a própria mutação (POST/PATCH/DELETE), nunca gerado aqui
+  // dentro. Gerar um token novo aqui, DEPOIS da mutação já ter respondido, reabriria
+  // exatamente o buraco que este mecanismo existe pra fechar (ver o mesmo comentário).
+  async function refreshMetas(token: number) {
     const res = await fetch(`${apiBase}/metas-proximo-mes?periodo=${periodo}`);
     const data = await res.json();
+    // Se uma busca mais nova (de qualquer chamador de refreshMetas(), ou do efeito de troca de
+    // período acima) já começou enquanto esta estava em andamento, descarta a resposta por
+    // completo — pra não sobrescrever a tela com meta de um período que não é mais o
+    // selecionado (ver comentário de `fetchGenerationRef`/`beginFetch` acima).
+    if (token !== fetchGenerationRef.current) return;
     setMetas(data.metas ?? []);
   }
 
@@ -142,6 +185,10 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean, periodo: s
       setNewError("Informe o valor-alvo da meta (ex.: 35%, 15min).");
       return;
     }
+    // Pega o token ANTES do POST (não só antes do refreshMetas) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui. Só
+    // depois das validações acima (nenhuma delas dispara fetch nenhum).
+    const token = beginFetch();
     setCreating(true);
     try {
       const res = await fetch(`${apiBase}/metas-proximo-mes`, {
@@ -156,7 +203,7 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean, periodo: s
       }
       setNewOpen(false);
       setNewForm(buildMetaForm(null));
-      await refreshMetas();
+      await refreshMetas(token);
     } finally {
       setCreating(false);
     }
@@ -179,6 +226,10 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean, periodo: s
       setEditError("Informe o valor-alvo da meta.");
       return;
     }
+    // Pega o token ANTES do PATCH (não só antes do refreshMetas) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui. Só
+    // depois das validações acima (nenhuma delas dispara fetch nenhum).
+    const token = beginFetch();
     setSavingEdit(true);
     try {
       const res = await fetch(`${apiBase}/metas-proximo-mes/${editTarget.id}`, {
@@ -192,7 +243,7 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean, periodo: s
         return;
       }
       setEditTarget(null);
-      await refreshMetas();
+      await refreshMetas(token);
     } finally {
       setSavingEdit(false);
     }
@@ -200,11 +251,14 @@ export function useMetasProximoMes(apiBase: string, canLoad: boolean, periodo: s
 
   async function confirmDelete() {
     if (!deleteTarget || deleting) return;
+    // Pega o token ANTES do DELETE (não só antes do refreshMetas) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima.
+    const token = beginFetch();
     setDeleting(true);
     try {
       await fetch(`${apiBase}/metas-proximo-mes/${deleteTarget.id}`, { method: "DELETE" });
       setDeleteTarget(null);
-      await refreshMetas();
+      await refreshMetas(token);
     } finally {
       setDeleting(false);
     }
