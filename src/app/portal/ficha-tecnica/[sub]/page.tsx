@@ -41,18 +41,19 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   const canManageFichaTecnica = await hasModulePermission(session.user.id, "ficha-tecnica", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageFichaTecnica;
 
-  const allProducts = await prisma.product.findMany({
-    where: { empresaId: { in: empresaIds }, precoVenda: { gt: 0 } },
-    select: { precoVenda: true, ingredients: { include: { ingredient: true } } },
-  });
-  const cmvValues = allProducts.map((p) => cmvPercent(productTotalCost(p.ingredients), p.precoVenda));
-  const cmvMedioCardapio = cmvValues.length ? cmvValues.reduce((s, v) => s + v, 0) / cmvValues.length : 0;
-  const cmvMedioCard = (
-    <StatCard label="CMV médio do cardápio" value={formatPercent(cmvMedioCardapio)} icon="Calculator" />
-  );
-
   if (sub === "insumos") {
-    const [ingredients, categories, suppliers] = await Promise.all([
+    // Card "CMV médio do cardápio": média do CMV% de TODOS os produtos com `precoVenda > 0`,
+    // não importa a categoria — faz sentido só aqui, porque "Insumos" não tem uma categoria de
+    // produto própria pra filtrar (é a lista de ingredientes, comum a qualquer categoria). Nas
+    // abas de categoria (ver ramo abaixo), o card mostra a média só daquela categoria — ver
+    // histórico da tarefa #476/#477 (Matheus relatou que o número "fixo" do card não batia com a
+    // conta manual dele: o problema não era a fórmula, era nunca filtrar por categoria, já que o
+    // MESMO card de cardápio inteiro aparecia em toda aba, inclusive dentro de "Pizzas Salgadas").
+    const [allProducts, ingredients, categories, suppliers] = await Promise.all([
+      prisma.product.findMany({
+        where: { empresaId: { in: empresaIds }, precoVenda: { gt: 0 } },
+        select: { precoVenda: true, ingredients: { include: { ingredient: true } } },
+      }),
       prisma.ingredient.findMany({
         where: { empresaId: { in: empresaIds } },
         orderBy: { name: "asc" },
@@ -65,6 +66,12 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
       prisma.stockCategory.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { order: "asc" } }),
       prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
     ]);
+    const cmvValues = allProducts.map((p) => cmvPercent(productTotalCost(p.ingredients), p.precoVenda));
+    const cmvMedioCardapio = cmvValues.length ? cmvValues.reduce((s, v) => s + v, 0) / cmvValues.length : 0;
+    const cmvMedioCard = (
+      <StatCard label="CMV médio do cardápio" value={formatPercent(cmvMedioCardapio)} icon="Calculator" />
+    );
+
     const serialized = ingredients.map((i) => ({
       ...i,
       lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.toISOString() : null,
@@ -114,6 +121,20 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
         })
       : Promise.resolve(null),
   ]);
+
+  // Card "CMV médio — <categoria>": média do CMV% só dos produtos DESTA categoria (reaproveita a
+  // query `products` acima, já filtrada por `category: info.category`, em vez de somar o cardápio
+  // inteiro — ver comentário equivalente no ramo "insumos"). Mesmo critério de antes pra produto
+  // sem preço de venda cadastrado: excluído da média (não entra como "CMV 0%"), em vez de alterar
+  // o filtro da query `products` em si (ela também alimenta `QualidadePanel`/`ProdutosClient`, que
+  // precisam continuar vendo produtos com `precoVenda` zerado/ainda não preenchido).
+  const cmvValues = products
+    .filter((p) => p.precoVenda > 0)
+    .map((p) => cmvPercent(productTotalCost(p.ingredients), p.precoVenda));
+  const cmvMedioCategoria = cmvValues.length ? cmvValues.reduce((s, v) => s + v, 0) / cmvValues.length : 0;
+  const cmvMedioCard = (
+    <StatCard label={`CMV médio — ${info.label}`} value={formatPercent(cmvMedioCategoria)} icon="Calculator" />
+  );
 
   const taxaIfoodPadrao = ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : 30;
 
