@@ -173,6 +173,46 @@ function buildTertiaryPayload(form: IndicatorFormState) {
   };
 }
 
+/**
+ * Rastreia, por período, se uma mutação (salvar o fechamento do mês, excluir a reunião) está
+ * em andamento NESTE MOMENTO — em vez de um único `useState<boolean>` compartilhado por todos
+ * os períodos, que trataria "existe uma mutação em andamento, de QUALQUER período" como se
+ * fosse sempre a do período que está na tela agora. Isso fazia o botão de salvar/excluir
+ * aparecer "Salvando.../Excluindo..." (e desabilitado) num período Q sem nada pendente, só
+ * porque uma mutação do período P (ex.: o usuário salvou P e trocou rápido pra Q antes do POST
+ * responder) ainda não tinha terminado em segundo plano (#474).
+ *
+ * `isPending(periodo)` é o que a UI usa pra decidir texto/estado do botão — sempre comparando
+ * contra o período realmente exibido (`selectedPeriodo`/`current.periodo`), nunca "existe algo
+ * rodando em algum período". `start`/`finish` marcam um período específico como pendente/livre;
+ * um `Set` (não uma única `string | null`) porque mais de um período pode estar com uma mutação
+ * em voo ao mesmo tempo (ex.: salva P, troca pra Q antes da resposta, e também salva Q) — uma
+ * única string seria sobrescrita pelo período mais recente e "esqueceria" o anterior ainda em
+ * andamento, arriscando inclusive um segundo POST concorrente pro MESMO período se o usuário
+ * voltasse nele e clicasse salvar de novo antes do primeiro terminar.
+ *
+ * Só serve pra `saving`/`deleting` (ações de um período específico: o fechamento do mês de
+ * `selectedPeriodo`, a reunião de `current.periodo`) — `creatingIndicator`/
+ * `savingEditIndicator`/`deletingIndicator` ficam de fora de propósito: criar/editar/excluir um
+ * indicador é uma ação sobre a DEFINIÇÃO do indicador (nome/unidade/ícone/valor padrão), que
+ * vale pra todos os períodos igualmente (ver rotas em src/app/api/reuniao/gerente/indicadores/)
+ * — não existe um "período certo" pra comparar, então não há o mesmo risco de UI presa num
+ * período errado.
+ */
+function usePeriodoMutating(): [(periodo: string) => boolean, (periodo: string) => void, (periodo: string) => void] {
+  const [pending, setPending] = useState<Set<string>>(() => new Set());
+  const isPending = (periodo: string) => pending.has(periodo);
+  const start = (periodo: string) => setPending((prev) => (prev.has(periodo) ? prev : new Set(prev).add(periodo)));
+  const finish = (periodo: string) =>
+    setPending((prev) => {
+      if (!prev.has(periodo)) return prev;
+      const next = new Set(prev);
+      next.delete(periodo);
+      return next;
+    });
+  return [isPending, start, finish];
+}
+
 export function GerenteClient({
   initialMeetings,
   initialCurrent,
@@ -202,13 +242,20 @@ export function GerenteClient({
   const [current, setCurrent] = useState(initialCurrent);
   const [metrics, setMetrics] = useState(initialMetrics);
   const [form, setForm] = useState(buildForm(initialCurrent));
-  const [saving, setSaving] = useState(false);
+  const [isSaving, startSaving, finishSaving] = usePeriodoMutating();
   const [loading, setLoading] = useState(false);
   const [fechamentoModalOpen, setFechamentoModalOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [isDeleting, startDeleting, finishDeleting] = usePeriodoMutating();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [comparePeriodos, setComparePeriodos] = useState<[string, string, string]>(["", "", ""]);
+
+  // `saving`/`deleting` só devem refletir uma mutação do período que está REALMENTE em tela
+  // agora (#474), não "existe uma mutação em andamento, de QUALQUER período" — ver comentário
+  // de `usePeriodoMutating` acima. O save do fechamento do mês (`submit`) é sempre do período
+  // `selectedPeriodo`; o delete da reunião (`doDelete`) é sempre do período de `current`.
+  const saving = isSaving(selectedPeriodo);
+  const deleting = current ? isDeleting(current.periodo) : false;
 
   const [customIndicators, setCustomIndicators] = useState(initialCustomIndicators);
   const [customForm, setCustomForm] = useState(buildCustomForm(initialCustomIndicators));
@@ -241,36 +288,46 @@ export function GerenteClient({
    * os valores na tela seriam de P, podendo até ser salvos como se fossem de Q se o usuário
    * confirmar o fechamento nesse meio-tempo (achado do Teulis na revisão da #472).
    *
-   * `fetchGenerationRef`/`beginFetch()` resolvem isso com um token de geração compartilhado
-   * pelos dois caminhos — mesmo mecanismo já usado por `useFechamentoDoMes` (ver os
-   * comentários ao redor de `fetchGenerationRef`/`beginFetch`/`sync` em
-   * src/components/reuniao/fechamento-do-mes.tsx): toda busca que vai terminar escrevendo
-   * nesse estado chama `beginFetch()` ANTES de disparar o fetch, guarda o token devolvido, e só
-   * aplica o resultado (`setState`) se esse token ainda for o mais recente quando a resposta
-   * chegar — uma resposta fora de ordem, de qualquer um dos dois caminhos, é descartada em
-   * silêncio (sem aplicar nem parte do resultado).
+   * 1ª correção (#473): um token de geração compartilhado (`fetchGenerationRef`/`beginFetch()`)
+   * pelos dois caminhos — toda busca que ia escrever nesse estado pegava um token ANTES de
+   * disparar o próprio fetch, e só aplicava o resultado se esse token ainda fosse O MAIS
+   * RECENTE quando a resposta chegasse (ou seja: "alguma coisa mais nova começou desde então,
+   * em QUALQUER período"). Resolvia o cenário acima, mas o critério "mais recente" era GLOBAL,
+   * não por período — o que criou um bug novo (achado do Teulis numa 3ª rodada de revisão,
+   * #477): criar um indicador A (resposta lenta) e, antes dela voltar, já editar um indicador B
+   * (resposta rápida) no MESMO período P fazia o token de A "perder" pro token de B mesmo os
+   * dois sendo do período que CONTINUA selecionado — nenhum dos dois é mais stale que o outro
+   * em relação a P, mas o token de A, sendo numericamente menor, era descartado mesmo chegando
+   * depois. Resultado: o indicador A criado "sumia" da tela (continuava existindo no banco) até
+   * trocar de período ou recarregar.
    *
-   * Detalhe importante (achado do Teulis numa 2ª rodada de revisão desta mesma correção,
-   * ainda na #473): o token de `refresh()` precisa ser obtido pelo CHAMADOR (`submit`,
-   * `createIndicator`, `saveEditIndicator`, `confirmDeleteIndicator`, `doDelete`) como a
-   * PRIMEIRA coisa que cada um faz — antes de disparar a própria mutação (POST/PATCH/DELETE)
-   * que antecede o `refresh` — nunca só dentro do `refresh()` em si, depois da mutação já ter
-   * respondido. Esse detalhe importa porque o token representa "quando o USUÁRIO manifestou
-   * essa intenção", não "quando a última etapa de rede dessa intenção finalmente conseguiu
-   * rodar": se o token só fosse pego depois da mutação responder, o tempo da PRÓPRIA mutação
-   * (que pode ser lento) vira uma janela extra em que uma troca de período pode pegar um
-   * token "mais recente" ANTES do refresh pegar o seu — mesmo quando, na ordem real dos
-   * cliques do usuário, salvar em P aconteceu ANTES de trocar pra Q. Nesse caso o token do
-   * refresh(P), sendo pego depois (e portanto numericamente maior), "venceria" a comparação
-   * mesmo representando a ação mais antiga — exatamente o oposto do que deveria acontecer.
-   * Por isso cada chamador pega o próprio token ANTES do fetch da mutação e repassa pra
-   * `refresh(targetPeriodo, token)` (ver a assinatura abaixo).
+   * Critério atual (#477): em vez de "meu token ainda é o mais recente", `refresh()` pergunta
+   * "meu `targetPeriodo` ainda é o período selecionado agora" — comparando contra
+   * `selectedPeriodoRef` (ref abaixo, sempre atualizado; diferente de ler `selectedPeriodo`
+   * direto de dentro de uma closure antiga, que refletiria o período de QUANDO aquela chamada
+   * específica começou, não o de agora). Isso cobre o cenário original da #472/#473 (trocar de
+   * período ainda descarta a resposta de um período abandonado) sem reabrir a #477 (duas
+   * mutações independentes no MESMO período não competem mais entre si — cada uma aplica o
+   * próprio resultado, não importa a ordem de chegada, desde que o período ainda seja o
+   * selecionado quando a resposta chegar).
+   *
+   * Isso deixa de proteger, conscientemente, um caso bem mais raro e específico (pra não virar
+   * um buraco sem fundo de sutileza de ordenação de rede): a própria busca deste `useEffect` ao
+   * ENTRAR num período Q sendo tão lenta que só resolve DEPOIS do `refresh()` de uma mutação
+   * feita nesse MESMO Q (ex.: o usuário já salva algo em Q antes da carga inicial de Q
+   * terminar) — nesse caso a carga inicial, mesmo tendo começado antes, poderia sobrescrever o
+   * resultado mais novo da mutação com um dado um pouco mais antigo de Q. Diferente da
+   * #472/#473 (o usuário SAI de Q) e da #477 (duas mutações, nenhuma "causa" a outra), aqui as
+   * duas buscas não têm nada que garanta que uma reflita pelo menos o efeito da outra. Não
+   * reproduzido nem reportado até hoje (exigiria mutar o período muito rápido logo depois de
+   * entrar nele, mais a rede entregar as respostas fora de ordem) — se um dia isso virar um
+   * problema real, a correção é uma "geração" própria POR PERÍODO (não um contador global
+   * compartilhado entre períodos diferentes, que é exatamente o que causava a #477).
    */
-  const fetchGenerationRef = useRef(0);
-  function beginFetch(): number {
-    fetchGenerationRef.current += 1;
-    return fetchGenerationRef.current;
-  }
+  const selectedPeriodoRef = useRef(selectedPeriodo);
+  useEffect(() => {
+    selectedPeriodoRef.current = selectedPeriodo;
+  }, [selectedPeriodo]);
 
   useEffect(() => {
     if (!mounted.current) {
@@ -278,17 +335,16 @@ export function GerenteClient({
       return;
     }
     let cancelled = false;
-    const token = beginFetch();
     setLoading(true);
     fetch(`/api/reuniao/gerente?periodo=${selectedPeriodo}`)
       .then((res) => res.json())
       .then((data) => {
         // `cancelled`: esta própria instância do efeito foi desmontada/re-executada (ex.:
-        // `selectedPeriodo` mudou de novo) antes da resposta chegar. `token !==
-        // fetchGenerationRef.current`: uma busca MAIS NOVA — deste mesmo efeito reexecutando,
-        // OU de `refresh()` — já começou desde então; ver o comentário de `fetchGenerationRef`
-        // acima. Nos dois casos, descarta a resposta em silêncio.
-        if (cancelled || token !== fetchGenerationRef.current) return;
+        // `selectedPeriodo` mudou de novo) antes da resposta chegar — descarta em silêncio.
+        // Não compara mais contra nenhum token compartilhado com `refresh()` (ver comentário de
+        // `selectedPeriodoRef` acima sobre por que os dois caminhos não precisam mais disso pra
+        // não se atropelarem).
+        if (cancelled) return;
         setCurrent(data.current);
         setMetrics(data.metrics);
         setForm(buildForm(data.current));
@@ -419,19 +475,21 @@ export function GerenteClient({
     });
   }
 
-  // `token` vem do CHAMADOR (ver o comentário de `fetchGenerationRef`/`beginFetch` acima) —
-  // obtido por ele antes de disparar a própria mutação (POST/PATCH/DELETE), nunca gerado
-  // aqui dentro. Gerar um token novo aqui, DEPOIS da mutação já ter respondido, reabriria
-  // exatamente o buraco que este mecanismo existe pra fechar (ver o mesmo comentário).
-  async function refresh(targetPeriodo: string, token: number) {
+  // `targetPeriodo` vem do CHAMADOR (ver o comentário de `selectedPeriodoRef` acima) — o
+  // período que o usuário realmente tinha em mente quando disparou a mutação, capturado antes
+  // do POST/PATCH/DELETE que antecede este `refresh`, não lido de novo depois (se o usuário já
+  // tiver trocado de período nesse meio-tempo, pegar `selectedPeriodo` de novo aqui apontaria
+  // pro período NOVO, não pro que essa mutação pertence).
+  async function refresh(targetPeriodo: string) {
     const res = await fetch(`/api/reuniao/gerente?periodo=${targetPeriodo}`);
     const data = await res.json();
-    // Se uma busca mais nova (de qualquer chamador de refresh(), ou do efeito de troca de
-    // período) já começou enquanto esta estava em andamento, descarta a resposta POR
+    // Se o usuário já trocou de período desde que esta busca começou, descarta a resposta POR
     // COMPLETO — sem aplicar nem o preserva-rascunho abaixo, nem o overwrite de
     // `meetings`/`current`/`metrics` — pra não sobrescrever a tela com dado de um período que
-    // não é mais o selecionado (ver comentário de `fetchGenerationRef`/`beginFetch` acima).
-    if (token !== fetchGenerationRef.current) return;
+    // não é mais o selecionado (ver comentário de `selectedPeriodoRef` acima). Duas mutações
+    // independentes do MESMO período (`targetPeriodo === selectedPeriodoRef.current` pras
+    // duas) passam por aqui sem se atropelar — cada uma aplica o próprio resultado.
+    if (targetPeriodo !== selectedPeriodoRef.current) return;
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
@@ -473,11 +531,11 @@ export function GerenteClient({
   }
 
   async function submit() {
+    // Guarda contra duplo-envio do MESMO período (`saving` já é `isSaving(selectedPeriodo)` —
+    // ver comentário de `usePeriodoMutating`); um save de outro período em andamento não
+    // bloqueia este.
     if (saving) return;
-    // Pega o token ANTES do POST (não só antes do refresh) — ver o comentário de
-    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
-    const token = beginFetch();
-    setSaving(true);
+    startSaving(selectedPeriodo);
     try {
       await fetch("/api/reuniao/gerente", {
         method: "POST",
@@ -487,9 +545,9 @@ export function GerenteClient({
           customIndicators: customIndicators.map((ind) => ({ id: ind.id, ...customForm[ind.id] })),
         }),
       });
-      await refresh(selectedPeriodo, token);
+      await refresh(selectedPeriodo);
     } finally {
-      setSaving(false);
+      finishSaving(selectedPeriodo);
     }
   }
 
@@ -508,10 +566,6 @@ export function GerenteClient({
       setNewIndicatorError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
       return;
     }
-    // Pega o token ANTES do POST (não só antes do refresh) — ver o comentário de
-    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
-    // Só depois das validações acima (nenhuma delas dispara fetch nenhum).
-    const token = beginFetch();
     setCreatingIndicator(true);
     try {
       const res = await fetch("/api/reuniao/gerente/indicadores", {
@@ -533,7 +587,7 @@ export function GerenteClient({
       }
       setNewIndicatorOpen(false);
       setNewIndicatorForm(emptyIndicatorForm());
-      await refresh(selectedPeriodo, token);
+      await refresh(selectedPeriodo);
     } finally {
       setCreatingIndicator(false);
     }
@@ -571,10 +625,6 @@ export function GerenteClient({
       setEditIndicatorError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
       return;
     }
-    // Pega o token ANTES do PATCH (não só antes do refresh) — ver o comentário de
-    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
-    // Só depois das validações acima (nenhuma delas dispara fetch nenhum).
-    const token = beginFetch();
     setSavingEditIndicator(true);
     try {
       const res = await fetch(`/api/reuniao/gerente/indicadores/${editIndicatorTarget.id}`, {
@@ -595,7 +645,7 @@ export function GerenteClient({
         return;
       }
       setEditIndicatorTarget(null);
-      await refresh(selectedPeriodo, token);
+      await refresh(selectedPeriodo);
     } finally {
       setSavingEditIndicator(false);
     }
@@ -603,25 +653,22 @@ export function GerenteClient({
 
   async function confirmDeleteIndicator() {
     if (!deleteIndicatorTarget || deletingIndicator) return;
-    // Pega o token ANTES do DELETE (não só antes do refresh) — ver o comentário de
-    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
-    const token = beginFetch();
     setDeletingIndicator(true);
     try {
       await fetch(`/api/reuniao/gerente/indicadores/${deleteIndicatorTarget.id}`, { method: "DELETE" });
       setDeleteIndicatorTarget(null);
-      await refresh(selectedPeriodo, token);
+      await refresh(selectedPeriodo);
     } finally {
       setDeletingIndicator(false);
     }
   }
 
   async function doDelete() {
+    // Guarda contra duplo-envio do MESMO período (`deleting` já é `isDeleting(current.periodo)`
+    // — ver comentário de `usePeriodoMutating`); um delete de outro período em andamento não
+    // bloqueia este.
     if (deleting || !current) return;
-    // Pega o token ANTES do DELETE (não só antes do refresh) — ver o comentário de
-    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
-    const token = beginFetch();
-    setDeleting(true);
+    startDeleting(current.periodo);
     setDeleteError(null);
     try {
       const res = await fetch(`/api/reuniao/gerente?periodo=${current.periodo}`, { method: "DELETE" });
@@ -632,18 +679,18 @@ export function GerenteClient({
       }
       setConfirmDelete(false);
       // `setCurrent(null)`/`setForm(buildForm(null))`, diferente de `setConfirmDelete` acima
-      // (só estado do modal de confirmação, não dado de período), também precisam do mesmo
-      // token — sem isso, excluir a reunião de P enquanto o usuário já trocou pra outro
-      // período Q zeraria `current`/notas na tela de Q quando este DELETE atrasado respondesse,
-      // mesmo Q nunca tendo sido excluído (mesma classe de corrida do comentário de
-      // `fetchGenerationRef`/`beginFetch` acima, só que vindo do DELETE em vez do GET).
-      if (token === fetchGenerationRef.current) {
+      // (só estado do modal de confirmação, não dado de período), também precisam checar se o
+      // período excluído ainda é o selecionado — sem isso, excluir a reunião de P enquanto o
+      // usuário já trocou pra outro período Q zeraria `current`/notas na tela de Q quando este
+      // DELETE atrasado respondesse, mesmo Q nunca tendo sido excluído (mesma classe de corrida
+      // do comentário de `selectedPeriodoRef` acima, só que vindo do DELETE em vez do GET).
+      if (current.periodo === selectedPeriodoRef.current) {
         setCurrent(null);
         setForm(buildForm(null));
       }
-      await refresh(selectedPeriodo, token);
+      await refresh(selectedPeriodo);
     } finally {
-      setDeleting(false);
+      finishDeleting(current.periodo);
     }
   }
 
