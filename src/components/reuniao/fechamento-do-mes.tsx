@@ -391,6 +391,17 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
     return fetchGenerationRef.current;
   }
 
+  /** Verifica se `token` (obtido de `beginFetch()`) ainda é a busca mais recente — usado pela
+   * própria tela (ex. `refresh()`/`doDelete()` de cada reunião, ver salao-client.tsx e
+   * equivalentes) pra proteger campos "soltos" que não passam por `sync()` (ex.
+   * `meetings`/`current`/`metrics`/`comentarios`, e campos específicos de cada tela como
+   * `produtoForm`) com o MESMO token/geração compartilhado dos indicadores, sem precisar de
+   * um contador próprio só pra esses campos — mesmo raciocínio do comentário de
+   * `useFechamentoDoMes` acima. */
+  function isLatest(token: number): boolean {
+    return token === fetchGenerationRef.current;
+  }
+
   /** Aplica os indicadores vindos do servidor — mas só se `token` (obtido de
    * `beginFetch()` chamado antes do fetch que trouxe esses dados) ainda for
    * a busca mais recente; uma resposta fora de ordem é descartada em
@@ -455,9 +466,15 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
    * aqui (depois do PATCH já ter tido sucesso no servidor) é engolido em
    * silêncio — o dado real já está correto, só o estado desta aba que fica
    * desatualizado até trocar de período ou recarregar a página; não vale
-   * quebrar a UI do modal (que já fechou) por causa disso. */
-  async function refreshIndicators(targetPeriodo: string) {
-    const token = beginFetch();
+   * quebrar a UI do modal (que já fechou) por causa disso.
+   *
+   * `token` vem do CHAMADOR (`saveEdit`), obtido por ele ANTES de disparar o próprio PATCH —
+   * nunca gerado aqui dentro, depois da mutação já ter respondido. Mesmo cuidado do
+   * comentário de `fetchGenerationRef`/`beginFetch` em gerente-client.tsx: se o token só
+   * fosse pego aqui, o tempo do PRÓPRIO PATCH abriria uma janela extra em que uma troca de
+   * período poderia "vencer" essa edição mesmo tendo acontecido depois dela, na ordem real
+   * dos cliques do usuário. */
+  async function refreshIndicators(targetPeriodo: string, token: number) {
     try {
       const res = await fetch(`${apiBase}?periodo=${targetPeriodo}`);
       const data = await res.json().catch(() => null);
@@ -605,6 +622,10 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       setEditError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
       return;
     }
+    // Pega o token ANTES do PATCH (não só antes do refreshIndicators) — ver o comentário de
+    // `refreshIndicators` acima e o mesmo cuidado em gerente-client.tsx/saveEditIndicator. Só
+    // depois das validações acima (nenhuma delas dispara fetch nenhum).
+    const token = beginFetch();
     setSavingEdit(true);
     try {
       const res = await fetch(`${apiBase}/indicadores/${editTarget.id}`, {
@@ -629,7 +650,7 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
       // estado local a partir da resposta do PATCH (que não diz se o período
       // atual já tinha ou não um valorReferencia próprio salvo) — ver o
       // comentário de `useFechamentoDoMes` acima.
-      await refreshIndicators(periodo);
+      await refreshIndicators(periodo, token);
     } finally {
       setSavingEdit(false);
     }
@@ -670,6 +691,7 @@ export function useFechamentoDoMes(apiBase: string, periodo: string, initialCust
     customFormTerciario,
     beginFetch,
     sync,
+    isLatest,
     updateValorReferencia,
     updateValorSecundario,
     updateValorTerciario,

@@ -110,7 +110,14 @@ export function CozinhaClient({
     fetch(`/api/reuniao/cozinha?periodo=${selectedPeriodo}`)
       .then((res) => res.json())
       .then((data) => {
-        if (cancelled) return;
+        // `cancelled`: esta própria instância do efeito foi desmontada/re-executada (ex.:
+        // `selectedPeriodo` mudou de novo) antes da resposta chegar. `!fdm.isLatest(fdmToken)`:
+        // uma busca MAIS NOVA — deste mesmo efeito reexecutando, OU de `refresh()` (disparado
+        // por `submit()`/`doDelete()`) — já começou desde então; ver o comentário de
+        // `fetchGenerationRef`/`beginFetch`/`isLatest` em fechamento-do-mes.tsx e o mesmo
+        // cuidado em gerente-client.tsx. Nos dois casos, descarta a resposta em silêncio (sem
+        // sobrescrever a tela com dado de um período que não é mais o selecionado).
+        if (cancelled || !fdm.isLatest(fdmToken)) return;
         setCurrent(data.current);
         setMetrics(data.metrics);
         setForm(buildForm(data.current));
@@ -224,18 +231,30 @@ export function CozinhaClient({
     });
   }
 
-  async function refresh(targetPeriodo: string) {
-    const fdmToken = fdm.beginFetch();
+  // `token` vem do CHAMADOR (`submit`/`doDelete`), obtido por ele ANTES de disparar a própria
+  // mutação (POST/DELETE) — nunca gerado aqui dentro. Ver o comentário de `fetchGenerationRef`/
+  // `beginFetch`/`isLatest` em fechamento-do-mes.tsx e o mesmo cuidado em gerente-client.tsx:
+  // gerar o token só aqui, depois da mutação já ter respondido, reabriria exatamente o buraco
+  // que esse mecanismo existe pra fechar.
+  async function refresh(targetPeriodo: string, token: number) {
     const res = await fetch(`/api/reuniao/cozinha?periodo=${targetPeriodo}`);
     const data = await res.json();
+    // Se uma busca mais nova (do efeito de troca de período, ou de outra chamada de refresh())
+    // já começou enquanto esta estava em andamento, descarta a resposta POR COMPLETO — sem
+    // aplicar nem os campos "soltos" abaixo, nem o fdm.sync() — pra não sobrescrever a tela com
+    // dado de um período que não é mais o selecionado.
+    if (!fdm.isLatest(token)) return;
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
-    fdm.sync(fdmToken, data.customIndicators ?? []);
+    fdm.sync(token, data.customIndicators ?? []);
   }
 
   async function submit() {
     if (saving) return;
+    // Pega o token ANTES do POST (não só antes do refresh) — ver o comentário de `refresh`
+    // acima sobre por que isso precisa acontecer já aqui.
+    const token = fdm.beginFetch();
     setSaving(true);
     try {
       await fetch("/api/reuniao/cozinha", {
@@ -243,7 +262,7 @@ export function CozinhaClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formToPayload(selectedPeriodo, form), customIndicators: fdm.buildIndicatorsPayload() }),
       });
-      await refresh(selectedPeriodo);
+      await refresh(selectedPeriodo, token);
     } finally {
       setSaving(false);
     }
@@ -259,6 +278,9 @@ export function CozinhaClient({
 
   async function doDelete() {
     if (deleting || !current) return;
+    // Pega o token ANTES do DELETE (não só antes do refresh) — ver o comentário de `refresh`
+    // acima.
+    const token = fdm.beginFetch();
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -269,9 +291,17 @@ export function CozinhaClient({
         return;
       }
       setConfirmDelete(false);
-      setCurrent(null);
-      setForm(buildForm(null));
-      await refresh(selectedPeriodo);
+      // `setCurrent(null)`/`setForm`, diferente de `setConfirmDelete` acima (só estado do
+      // modal de confirmação, não dado de período), também precisam do mesmo token — sem
+      // isso, excluir a reunião de P enquanto o usuário já trocou pra outro período Q zeraria
+      // a tela de Q quando este DELETE atrasado respondesse, mesmo Q nunca tendo sido
+      // excluído (mesma classe de corrida do comentário de `refresh` acima, só que vindo do
+      // DELETE em vez do GET).
+      if (fdm.isLatest(token)) {
+        setCurrent(null);
+        setForm(buildForm(null));
+      }
+      await refresh(selectedPeriodo, token);
     } finally {
       setDeleting(false);
     }
