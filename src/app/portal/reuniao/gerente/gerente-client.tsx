@@ -226,17 +226,69 @@ export function GerenteClient({
   const mp = useMetasProximoMes("/api/reuniao/gerente", canCreate, nextPeriodo(selectedPeriodo));
 
   const mounted = useRef(false);
+
+  /**
+   * Existem dois caminhos independentes que buscam dados do servidor e escrevem no mesmo
+   * estado (`current`/`metrics`/`customIndicators`/`customForm` etc.): o `useEffect` abaixo
+   * (dispara quando `selectedPeriodo` muda) e `refresh()` (chamado depois de criar/editar/
+   * excluir um indicador, ou depois de salvar o fechamento do mês em `submit()`). Sem
+   * coordenação entre os dois, a resposta atrasada de um caminho pode sobrescrever a tela com
+   * dado de um período que não é mais o selecionado: ex. o usuário edita um indicador no
+   * período P e salva (dispara `refresh(P)`, que demora pra responder), troca pro período Q
+   * antes dela voltar — a troca já atualiza a tela certinho pra Q (via o efeito abaixo), mas
+   * quando a resposta atrasada de `refresh(P)` finalmente chega, ela sobrescreveria a tela (já
+   * em Q) com o dado de P sem nenhum aviso — o seletor de período continuaria mostrando Q, mas
+   * os valores na tela seriam de P, podendo até ser salvos como se fossem de Q se o usuário
+   * confirmar o fechamento nesse meio-tempo (achado do Teulis na revisão da #472).
+   *
+   * `fetchGenerationRef`/`beginFetch()` resolvem isso com um token de geração compartilhado
+   * pelos dois caminhos — mesmo mecanismo já usado por `useFechamentoDoMes` (ver os
+   * comentários ao redor de `fetchGenerationRef`/`beginFetch`/`sync` em
+   * src/components/reuniao/fechamento-do-mes.tsx): toda busca que vai terminar escrevendo
+   * nesse estado chama `beginFetch()` ANTES de disparar o fetch, guarda o token devolvido, e só
+   * aplica o resultado (`setState`) se esse token ainda for o mais recente quando a resposta
+   * chegar — uma resposta fora de ordem, de qualquer um dos dois caminhos, é descartada em
+   * silêncio (sem aplicar nem parte do resultado).
+   *
+   * Detalhe importante (achado do Teulis numa 2ª rodada de revisão desta mesma correção,
+   * ainda na #473): o token de `refresh()` precisa ser obtido pelo CHAMADOR (`submit`,
+   * `createIndicator`, `saveEditIndicator`, `confirmDeleteIndicator`, `doDelete`) como a
+   * PRIMEIRA coisa que cada um faz — antes de disparar a própria mutação (POST/PATCH/DELETE)
+   * que antecede o `refresh` — nunca só dentro do `refresh()` em si, depois da mutação já ter
+   * respondido. Esse detalhe importa porque o token representa "quando o USUÁRIO manifestou
+   * essa intenção", não "quando a última etapa de rede dessa intenção finalmente conseguiu
+   * rodar": se o token só fosse pego depois da mutação responder, o tempo da PRÓPRIA mutação
+   * (que pode ser lento) vira uma janela extra em que uma troca de período pode pegar um
+   * token "mais recente" ANTES do refresh pegar o seu — mesmo quando, na ordem real dos
+   * cliques do usuário, salvar em P aconteceu ANTES de trocar pra Q. Nesse caso o token do
+   * refresh(P), sendo pego depois (e portanto numericamente maior), "venceria" a comparação
+   * mesmo representando a ação mais antiga — exatamente o oposto do que deveria acontecer.
+   * Por isso cada chamador pega o próprio token ANTES do fetch da mutação e repassa pra
+   * `refresh(targetPeriodo, token)` (ver a assinatura abaixo).
+   */
+  const fetchGenerationRef = useRef(0);
+  function beginFetch(): number {
+    fetchGenerationRef.current += 1;
+    return fetchGenerationRef.current;
+  }
+
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
       return;
     }
     let cancelled = false;
+    const token = beginFetch();
     setLoading(true);
     fetch(`/api/reuniao/gerente?periodo=${selectedPeriodo}`)
       .then((res) => res.json())
       .then((data) => {
-        if (cancelled) return;
+        // `cancelled`: esta própria instância do efeito foi desmontada/re-executada (ex.:
+        // `selectedPeriodo` mudou de novo) antes da resposta chegar. `token !==
+        // fetchGenerationRef.current`: uma busca MAIS NOVA — deste mesmo efeito reexecutando,
+        // OU de `refresh()` — já começou desde então; ver o comentário de `fetchGenerationRef`
+        // acima. Nos dois casos, descarta a resposta em silêncio.
+        if (cancelled || token !== fetchGenerationRef.current) return;
         setCurrent(data.current);
         setMetrics(data.metrics);
         setForm(buildForm(data.current));
@@ -367,9 +419,19 @@ export function GerenteClient({
     });
   }
 
-  async function refresh(targetPeriodo: string) {
+  // `token` vem do CHAMADOR (ver o comentário de `fetchGenerationRef`/`beginFetch` acima) —
+  // obtido por ele antes de disparar a própria mutação (POST/PATCH/DELETE), nunca gerado
+  // aqui dentro. Gerar um token novo aqui, DEPOIS da mutação já ter respondido, reabriria
+  // exatamente o buraco que este mecanismo existe pra fechar (ver o mesmo comentário).
+  async function refresh(targetPeriodo: string, token: number) {
     const res = await fetch(`/api/reuniao/gerente?periodo=${targetPeriodo}`);
     const data = await res.json();
+    // Se uma busca mais nova (de qualquer chamador de refresh(), ou do efeito de troca de
+    // período) já começou enquanto esta estava em andamento, descarta a resposta POR
+    // COMPLETO — sem aplicar nem o preserva-rascunho abaixo, nem o overwrite de
+    // `meetings`/`current`/`metrics` — pra não sobrescrever a tela com dado de um período que
+    // não é mais o selecionado (ver comentário de `fetchGenerationRef`/`beginFetch` acima).
+    if (token !== fetchGenerationRef.current) return;
     setMeetings(data.meetings);
     setCurrent(data.current);
     setMetrics(data.metrics);
@@ -412,6 +474,9 @@ export function GerenteClient({
 
   async function submit() {
     if (saving) return;
+    // Pega o token ANTES do POST (não só antes do refresh) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
+    const token = beginFetch();
     setSaving(true);
     try {
       await fetch("/api/reuniao/gerente", {
@@ -422,7 +487,7 @@ export function GerenteClient({
           customIndicators: customIndicators.map((ind) => ({ id: ind.id, ...customForm[ind.id] })),
         }),
       });
-      await refresh(selectedPeriodo);
+      await refresh(selectedPeriodo, token);
     } finally {
       setSaving(false);
     }
@@ -443,6 +508,10 @@ export function GerenteClient({
       setNewIndicatorError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
       return;
     }
+    // Pega o token ANTES do POST (não só antes do refresh) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
+    // Só depois das validações acima (nenhuma delas dispara fetch nenhum).
+    const token = beginFetch();
     setCreatingIndicator(true);
     try {
       const res = await fetch("/api/reuniao/gerente/indicadores", {
@@ -464,7 +533,7 @@ export function GerenteClient({
       }
       setNewIndicatorOpen(false);
       setNewIndicatorForm(emptyIndicatorForm());
-      await refresh(selectedPeriodo);
+      await refresh(selectedPeriodo, token);
     } finally {
       setCreatingIndicator(false);
     }
@@ -502,6 +571,10 @@ export function GerenteClient({
       setEditIndicatorError("Informe o nome do terceiro valor (ou desmarque a opção de terceiro valor).");
       return;
     }
+    // Pega o token ANTES do PATCH (não só antes do refresh) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
+    // Só depois das validações acima (nenhuma delas dispara fetch nenhum).
+    const token = beginFetch();
     setSavingEditIndicator(true);
     try {
       const res = await fetch(`/api/reuniao/gerente/indicadores/${editIndicatorTarget.id}`, {
@@ -522,7 +595,7 @@ export function GerenteClient({
         return;
       }
       setEditIndicatorTarget(null);
-      await refresh(selectedPeriodo);
+      await refresh(selectedPeriodo, token);
     } finally {
       setSavingEditIndicator(false);
     }
@@ -530,11 +603,14 @@ export function GerenteClient({
 
   async function confirmDeleteIndicator() {
     if (!deleteIndicatorTarget || deletingIndicator) return;
+    // Pega o token ANTES do DELETE (não só antes do refresh) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
+    const token = beginFetch();
     setDeletingIndicator(true);
     try {
       await fetch(`/api/reuniao/gerente/indicadores/${deleteIndicatorTarget.id}`, { method: "DELETE" });
       setDeleteIndicatorTarget(null);
-      await refresh(selectedPeriodo);
+      await refresh(selectedPeriodo, token);
     } finally {
       setDeletingIndicator(false);
     }
@@ -542,6 +618,9 @@ export function GerenteClient({
 
   async function doDelete() {
     if (deleting || !current) return;
+    // Pega o token ANTES do DELETE (não só antes do refresh) — ver o comentário de
+    // `fetchGenerationRef`/`beginFetch` acima sobre por que isso precisa acontecer já aqui.
+    const token = beginFetch();
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -552,9 +631,17 @@ export function GerenteClient({
         return;
       }
       setConfirmDelete(false);
-      setCurrent(null);
-      setForm(buildForm(null));
-      await refresh(selectedPeriodo);
+      // `setCurrent(null)`/`setForm(buildForm(null))`, diferente de `setConfirmDelete` acima
+      // (só estado do modal de confirmação, não dado de período), também precisam do mesmo
+      // token — sem isso, excluir a reunião de P enquanto o usuário já trocou pra outro
+      // período Q zeraria `current`/notas na tela de Q quando este DELETE atrasado respondesse,
+      // mesmo Q nunca tendo sido excluído (mesma classe de corrida do comentário de
+      // `fetchGenerationRef`/`beginFetch` acima, só que vindo do DELETE em vez do GET).
+      if (token === fetchGenerationRef.current) {
+        setCurrent(null);
+        setForm(buildForm(null));
+      }
+      await refresh(selectedPeriodo, token);
     } finally {
       setDeleting(false);
     }
