@@ -63,6 +63,7 @@ type IngredientLine = { key: string; ingredientId: string; quantidadeUsada: stri
 const emptyForm = {
   name: "",
   code: "",
+  category: "",
   photoUrl: "",
   taxaIfood: "",
   description: "",
@@ -84,6 +85,7 @@ export function ProdutosClient({
   initialProducts,
   ingredientOptions,
   category,
+  categoryOptions,
   canCreate = true,
   isGrupoNordMode = true,
   taxaIfoodPadrao,
@@ -91,6 +93,10 @@ export function ProdutosClient({
   initialProducts: ProductDTO[];
   ingredientOptions: IngredientOption[];
   category: string;
+  /** Categorias que o dropdown "Categoria" do formulário pode oferecer — já filtradas pela loja
+   * ativa (ver cálculo em `[sub]/page.tsx`, a partir de `FICHA_TECNICA_SUB_MAP`). Nunca inclui
+   * categoria de uma loja diferente da atual. */
+  categoryOptions: { value: string; label: string }[];
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
@@ -117,7 +123,7 @@ export function ProdutosClient({
 
   function openNew() {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, category });
     setLines([{ key: newLineKey(), ingredientId: ingredientOptions[0]?.id ?? "", quantidadeUsada: "", percentualPerda: "0" }]);
     setFormError(null);
     setShowForm(true);
@@ -128,6 +134,7 @@ export function ProdutosClient({
     setForm({
       name: p.name,
       code: p.code,
+      category: p.category,
       photoUrl: p.photoUrl ?? "",
       taxaIfood: p.taxaIfood !== null ? String(p.taxaIfood) : "",
       description: p.description ?? "",
@@ -219,7 +226,10 @@ export function ProdutosClient({
     setSubmitting(true);
     setFormError(null);
     try {
-      const payload = { ...form, category, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
+      // `form.category` já viaja dentro do spread abaixo (o campo "Categoria" do formulário —
+      // ver <select> mais abaixo) — não force de volta a categoria da aba atual aqui, senão a
+      // troca de categoria nunca seria salva.
+      const payload = { ...form, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
       const res = editing
         ? await fetch(`/api/ficha-tecnica/produtos/${editing.id}`, {
             method: "PATCH",
@@ -363,6 +373,15 @@ export function ProdutosClient({
           </Field>
           <Field label="Código">
             <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="input" />
+          </Field>
+          <Field label="Categoria">
+            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input">
+              {categoryOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Rendimento">
             <input value={form.rendimento} onChange={(e) => setForm({ ...form, rendimento: e.target.value })} className="input" />
