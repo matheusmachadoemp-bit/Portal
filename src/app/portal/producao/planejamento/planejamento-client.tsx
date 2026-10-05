@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { BookOpen, RefreshCw, Sparkles } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { PRODUCTION_PRIORITY_COLOR, PRODUCTION_PRIORITY_LABEL } from "@/lib/producao";
 import type { ProductionOrderDTO } from "../types";
+import { ModoPreparoModal } from "../modo-preparo-modal";
 import { AjusteModal } from "./ajuste-modal";
 
 export function PlanejamentoClient({
@@ -17,7 +18,9 @@ export function PlanejamentoClient({
 }) {
   const [ordens, setOrdens] = useState(initialOrdens);
   const [loading, setLoading] = useState(false);
+  const [semanaFeriado, setSemanaFeriado] = useState(false);
   const [ajustando, setAjustando] = useState<ProductionOrderDTO | null>(null);
+  const [vendoModoPreparo, setVendoModoPreparo] = useState<ProductionOrderDTO | null>(null);
 
   const amanha = new Date();
   amanha.setDate(amanha.getDate() + 1);
@@ -36,7 +39,7 @@ export function PlanejamentoClient({
       const res = await fetch("/api/producao/planejamento/gerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: amanha.toISOString() }),
+        body: JSON.stringify({ date: amanha.toISOString(), semanaFeriado }),
       });
       if (res.ok) await refresh();
     } finally {
@@ -52,13 +55,19 @@ export function PlanejamentoClient({
         title={amanha.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
         action={
           canManage ? (
-            <button
-              onClick={gerarPlano}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
-            >
-              {loading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />} Gerar plano
-            </button>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-xs text-nord-gray cursor-pointer select-none">
+                <input type="checkbox" checked={semanaFeriado} onChange={(e) => setSemanaFeriado(e.target.checked)} />
+                Semana de feriado (+20% de margem)
+              </label>
+              <button
+                onClick={gerarPlano}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
+              >
+                {loading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />} Gerar plano
+              </button>
+            </div>
           ) : undefined
         }
       >
@@ -83,6 +92,7 @@ export function PlanejamentoClient({
                 <th className="py-2 px-3">Sugestão</th>
                 <th className="py-2 px-3">Aprovado</th>
                 <th className="py-2 px-3">Prioridade</th>
+                <th className="py-2 px-3" />
                 {canManage && <th className="py-2 px-3" />}
               </tr>
             </thead>
@@ -93,6 +103,14 @@ export function PlanejamentoClient({
                     <span className="flex items-center gap-1.5">
                       <DynamicIcon name={o.productionItem.category.icon} size={14} style={{ color: o.productionItem.category.color }} />
                       {o.productionItem.name}
+                      {o.productionItem.setor && (
+                        <DynamicIcon
+                          name={o.productionItem.setor.icon}
+                          size={12}
+                          style={{ color: o.productionItem.setor.color }}
+                          aria-label={o.productionItem.setor.name}
+                        />
+                      )}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-nord-gray">
@@ -118,6 +136,11 @@ export function PlanejamentoClient({
                       {PRODUCTION_PRIORITY_LABEL[o.prioridade] ?? o.prioridade}
                     </span>
                   </td>
+                  <td className="py-2 px-3">
+                    <button onClick={() => setVendoModoPreparo(o)} className="flex items-center gap-1 text-xs text-nord-gray hover:text-white">
+                      <BookOpen size={12} /> Modo de preparo
+                    </button>
+                  </td>
                   {canManage && (
                     <td className="py-2 px-3">
                       <button onClick={() => setAjustando(o)} className="text-xs text-nord-blue-light hover:underline">
@@ -142,6 +165,7 @@ export function PlanejamentoClient({
           }}
         />
       )}
+      {vendoModoPreparo && <ModoPreparoModal ordem={vendoModoPreparo} onClose={() => setVendoModoPreparo(null)} />}
     </div>
   );
 }

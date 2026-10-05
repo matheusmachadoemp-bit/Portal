@@ -20,17 +20,23 @@ export default async function ProducaoHojePage() {
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
 
-  const [ordens, categorias, teamMembers] = await Promise.all([
+  const [ordens, categorias, setores, teamMembers] = await Promise.all([
     prisma.productionOrder.findMany({
       where: { empresaId: { in: empresaIds }, date: { gte: dayStart, lt: dayEnd } },
       orderBy: { prazo: "asc" },
       include: {
-        productionItem: { include: { category: { select: { id: true, name: true, color: true, icon: true } } } },
+        productionItem: {
+          include: {
+            category: { select: { id: true, name: true, color: true, icon: true } },
+            setor: { select: { id: true, name: true, color: true, icon: true } },
+          },
+        },
         responsavel: { select: { id: true, name: true } },
         ajustePor: { select: { id: true, name: true } },
       },
     }),
     prisma.productionCategory.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.productionSetor.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
     getSelectableTeamMembers(empresaIds),
   ]);
 
@@ -46,7 +52,7 @@ export default async function ProducaoHojePage() {
 
   return (
     <PageContainer title="Produção" subtitle="Produção de Hoje" backHref="/portal/producao" backLabel="Produção">
-      <HojeClient initialOrdens={serialized as never} categorias={categorias} teamMembers={teamMembers} />
+      <HojeClient initialOrdens={serialized as never} categorias={categorias} setores={setores} teamMembers={teamMembers} />
     </PageContainer>
   );
 }

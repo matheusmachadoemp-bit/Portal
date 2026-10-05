@@ -6,7 +6,8 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { PRODUCTION_ITEM_TYPE_LABEL, PRODUCTION_ITEM_TYPE_OPTIONS, PRODUCTION_PRIORITY_OPTIONS } from "@/lib/producao";
-import type { CategoriaOption, ProductionItemDTO } from "../types";
+import type { CategoriaOption, ProductionItemDTO, SetorOption } from "../types";
+import { NovaCategoriaModal, type CategoriaCriada } from "../nova-categoria-modal";
 
 type IngredientOption = { id: string; name: string; unidade: string };
 type IngredienteLine = { key: string; ingredientId: string; quantidadeUsada: string; unidade: string };
@@ -14,8 +15,10 @@ type IngredienteLine = { key: string; ingredientId: string; quantidadeUsada: str
 const emptyForm = {
   name: "",
   categoryId: "",
+  setorId: "",
   unidade: "kg",
   descricao: "",
+  modoPreparo: "",
   tipo: "VARIAVEL",
   quantidadeMinima: "0",
   margemSeguranca: "0",
@@ -33,16 +36,20 @@ function newLineKey() {
 export function ProdutosClient({
   initialItens,
   categorias,
+  setores,
   ingredientOptions,
   canCreate = true,
 }: {
   initialItens: ProductionItemDTO[];
   categorias: CategoriaOption[];
+  setores: SetorOption[];
   ingredientOptions: IngredientOption[];
   canCreate?: boolean;
 }) {
   const [itens, setItens] = useState(initialItens);
+  const [categoriasState, setCategoriasState] = useState<CategoriaOption[]>(categorias);
   const [showForm, setShowForm] = useState(false);
+  const [showNovaCategoria, setShowNovaCategoria] = useState(false);
   const [editing, setEditing] = useState<ProductionItemDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [lines, setLines] = useState<IngredienteLine[]>([]);
@@ -58,7 +65,7 @@ export function ProdutosClient({
 
   function openNew() {
     setEditing(null);
-    setForm({ ...emptyForm, categoryId: categorias[0]?.id ?? "" });
+    setForm({ ...emptyForm, categoryId: categoriasState[0]?.id ?? "" });
     setLines([]);
     setError(null);
     setShowForm(true);
@@ -69,8 +76,10 @@ export function ProdutosClient({
     setForm({
       name: item.name,
       categoryId: item.category.id,
+      setorId: item.setorId ?? "",
       unidade: item.unidade,
       descricao: item.descricao ?? "",
+      modoPreparo: item.modoPreparo ?? "",
       tipo: item.tipo,
       quantidadeMinima: String(item.quantidadeMinima),
       margemSeguranca: String(item.margemSeguranca),
@@ -102,6 +111,14 @@ export function ProdutosClient({
     setLines((l) => l.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
 
+  function categoriaCriada(categoria: CategoriaCriada) {
+    setCategoriasState((c) => [...c, categoria]);
+    // Já que o usuário acabou de criar essa categoria de dentro do próprio
+    // formulário do produto, o mais útil é deixá-la já selecionada em vez de
+    // fazer ele voltar no <select> e procurar de novo.
+    setForm((f) => ({ ...f, categoryId: categoria.id }));
+  }
+
   async function submit() {
     if (saving) return;
     if (!form.name || !form.categoryId) {
@@ -112,6 +129,7 @@ export function ProdutosClient({
     setError(null);
     const payload = {
       ...form,
+      setorId: form.setorId || null,
       ingredientId: form.ingredientId || null,
       ingredientes: lines.filter((l) => l.ingredientId && l.quantidadeUsada),
     };
@@ -203,14 +221,47 @@ export function ProdutosClient({
         <div className="grid grid-cols-2 gap-3">
           <label className="block col-span-2">
             <span className="block text-xs text-nord-gray mb-1">Nome</span>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              list="producao-nome-sugestoes"
+              placeholder="Digite ou escolha um insumo da ficha técnica"
+              className="input"
+            />
+            <datalist id="producao-nome-sugestoes">
+              {ingredientOptions.map((i) => (
+                <option key={i.id} value={i.name} />
+              ))}
+            </datalist>
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Categoria</span>
-            <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="input">
-              {categorias.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+            <div className="flex items-center gap-2">
+              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} className="input flex-1">
+                {categoriasState.length === 0 && <option value="">Nenhuma categoria cadastrada</option>}
+                {categoriasState.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowNovaCategoria(true)}
+                title="Nova categoria"
+                className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg border border-nord-border text-nord-gray hover:text-white hover:border-white/30"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Setor (opcional)</span>
+            <select value={form.setorId} onChange={(e) => setForm({ ...form, setorId: e.target.value })} className="input">
+              <option value="">Nenhum</option>
+              {setores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </select>
@@ -276,6 +327,19 @@ export function ProdutosClient({
               previsão de vendas calcule a necessidade automaticamente.
             </span>
           </label>
+          <label className="block col-span-2">
+            <span className="block text-xs text-nord-gray mb-1">Modo de preparo (opcional)</span>
+            <textarea
+              value={form.modoPreparo}
+              onChange={(e) => setForm({ ...form, modoPreparo: e.target.value })}
+              rows={4}
+              className="input"
+              placeholder="Ex.: 1) Cozinhe o arroz na proporção 2:1... 2) Tempere com..."
+            />
+            <span className="block text-[11px] text-nord-gray mt-1">
+              Esse passo a passo aparece pra equipe de produção no botão &quot;Modo de preparo&quot; da tela Produção de Hoje.
+            </span>
+          </label>
         </div>
 
         <div className="mt-4">
@@ -328,6 +392,8 @@ export function ProdutosClient({
           {saving ? "Salvando..." : "Salvar"}
         </button>
       </Modal>
+
+      <NovaCategoriaModal open={showNovaCategoria} onClose={() => setShowNovaCategoria(false)} onCreated={categoriaCriada} />
 
       <ConfirmDialog
         open={!!confirmDeleteId}
