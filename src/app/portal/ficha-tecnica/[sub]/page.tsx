@@ -138,6 +138,17 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
 
   const taxaIfoodPadrao = ctx?.mode === "single" ? ctx.empresa.taxaIfoodPadrao : 30;
 
+  // Opções do dropdown "Categoria" no formulário de produto: reaproveita o mesmo
+  // FICHA_TECNICA_SUB_MAP que já define as abas do menu lateral (prisma/seed.ts) em vez de listar
+  // o enum ProductCategory inteiro — assim o formulário nunca oferece categoria de uma loja
+  // diferente da ativa (ex.: Zarki Sushi nunca vê "Burgers", só de Nord Pizza). `empresaKey ===
+  // undefined` = categoria compartilhada entre as duas lojas (Combos/Bebidas/Drinks/Sobremesas),
+  // sempre incluída junto com as específicas da loja ativa.
+  const currentStoreKey = ctx?.mode === "single" ? ctx.empresa.key : undefined;
+  const categoryOptions = Object.values(FICHA_TECNICA_SUB_MAP)
+    .filter((subInfo) => subInfo.empresaKey === undefined || subInfo.empresaKey === currentStoreKey)
+    .map((subInfo) => ({ value: subInfo.category, label: subInfo.label }));
+
   const serializedProducts = products.map((p) => ({
     ...p,
     createdAt: p.createdAt.toISOString(),
@@ -179,6 +190,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
           initialProducts={serializedProducts}
           ingredientOptions={serializedIngredients}
           category={info.category}
+          categoryOptions={categoryOptions}
           canCreate={canCreate}
           isGrupoNordMode={ctx?.mode !== "single"}
           taxaIfoodPadrao={taxaIfoodPadrao}
