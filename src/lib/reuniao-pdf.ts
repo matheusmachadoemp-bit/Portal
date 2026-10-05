@@ -116,6 +116,72 @@ function messageFor(status: Status) {
   return { text: "AINDA SEM DADOS PARA ESSE INDICADOR", color: COLOR.grayLight };
 }
 
+/**
+ * Pequeno triângulo apontando para cima/baixo, desenhado com forma vetorial (mesma técnica de
+ * `drawTrophy` acima) em vez de caractere Unicode (ex. "↑"/"↓") — as fontes padrão do jsPDF
+ * (helvetica/times/courier) só cobrem WinAnsi/Latin-1 e não têm glifo de seta, então o
+ * caractere sairia em branco no PDF gerado.
+ */
+function drawTrendTriangle(doc: jsPDF, cx: number, cy: number, size: number, direction: "up" | "down") {
+  setColor(doc, "setFillColor", COLOR.blue);
+  const half = size / 2;
+  if (direction === "up") {
+    doc.triangle(cx, cy - half, cx - half, cy + half, cx + half, cy + half, "F");
+  } else {
+    doc.triangle(cx, cy + half, cx - half, cy - half, cx + half, cy - half, "F");
+  }
+}
+
+/**
+ * Comparativo "mês x mês" (pedido do Matheus): variação % entre o ÚLTIMO período do histórico
+ * (o mês exportado) e o PENÚLTIMO (o imediatamente anterior a ele), desenhado embaixo das
+ * barras de cada card de indicador — além das barras, que já comparam os períodos
+ * selecionados na tela (até 3 meses).
+ *
+ * Sempre NEUTRO (sem verde/vermelho de "bom"/"ruim"): o único sinal de direção que existe hoje
+ * por indicador é `metaDirection`, mas ele está sempre fixo em `"max"` em todo lugar que monta
+ * um `MeetingIndicator` — não reflete se, pra aquele indicador específico (ex.: CMV,
+ * Cancelamentos, tempo de entrega), menor é melhor. Colorir como positivo/negativo em cima
+ * desse dado inventaria uma leitura que o sistema não garante de verdade — por isso a seta e o
+ * texto usam sempre a mesma cor de destaque (azul), só indicando o sentido (cresceu/caiu),
+ * nunca se isso é bom ou ruim.
+ *
+ * Omite o comparativo (não desenha nada) quando falta dado pra calcular: histórico com menos
+ * de 2 pontos, qualquer um dos dois values nulo (sem dado cadastrado naquele período), ou o
+ * anterior sendo 0 (divisão por zero) — nunca mostra "N/A" nem deixa um cálculo quebrado.
+ */
+function drawMonthComparison(doc: jsPDF, historico: MeetingIndicator["historico"], centerX: number, y: number) {
+  const atual = historico[historico.length - 1];
+  const anterior = historico[historico.length - 2];
+  if (!atual || !anterior || atual.value === null || anterior.value === null || anterior.value === 0) return;
+
+  // `Math.abs` no denominador (mesmo padrão de `compareToPrevious` em reuniao.ts): sem isso, um
+  // indicador que pode ficar negativo (ex.: um "Saldo de caixa" customizado) dividindo por um
+  // anterior negativo inverteria o sinal da variação — ex.: de -R$50 pra +R$50 (melhora) e de
+  // +R$50 pra -R$50 (piora) dariam o MESMO resultado (-200%) sem o `Math.abs` aqui.
+  const variacao = ((atual.value - anterior.value) / Math.abs(anterior.value)) * 100;
+  const pct = Math.abs(variacao).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const sign = variacao > 0 ? "+" : variacao < 0 ? "-" : "";
+  const text = `${sign}${pct}% vs. ${anterior.monthLabel.toUpperCase()}`;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  setColor(doc, "setTextColor", COLOR.blue);
+
+  if (variacao === 0) {
+    centeredText(doc, text, centerX, y);
+    return;
+  }
+
+  const triangleSize = 3;
+  const gap = 2;
+  const textWidth = doc.getTextWidth(text);
+  const totalWidth = triangleSize + gap + textWidth;
+  const startX = centerX - totalWidth / 2;
+  drawTrendTriangle(doc, startX + triangleSize / 2, y - 1.3, triangleSize, variacao > 0 ? "up" : "down");
+  doc.text(text, startX + triangleSize + gap, y);
+}
+
 export function exportMeetingReportPdf(params: {
   fileSlug: string;
   empresaName: string;
@@ -229,6 +295,9 @@ export function exportMeetingReportPdf(params: {
 
     setColor(doc, "setDrawColor", COLOR.grayLight);
     doc.line(chartLeft, chartBottom, chartRight, chartBottom);
+
+    // comparativo mês x mês, logo abaixo do eixo das barras (ver `drawMonthComparison`)
+    drawMonthComparison(doc, historico, centerX, chartBottom + 10);
 
     // faixa de mensagem
     const msg = messageFor(currentStatus);
