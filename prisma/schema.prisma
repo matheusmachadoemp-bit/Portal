@@ -2608,6 +2608,15 @@ enum ProductCategory {
   URAMAKI
   HOT_ROLL
   ENTRADA
+  // Reorganização do cardápio da Zarki Sushi por MODALIDADE de venda (substituindo as abas por
+  // tipo de prato acima — ver FICHA_TECNICA_SUB_MAP em src/lib/ficha.ts): cada modalidade é um
+  // cadastro de produto separado (o mesmo prato pode ter até 3 fichas técnicas, uma por
+  // modalidade, já que porção/embalagem mudam por canal). Os 6 valores acima (SUSHI..ENTRADA)
+  // continuam existindo no enum por causa de produtos já cadastrados com eles — só pararam de
+  // ter uma aba/Subcategory ativa (ver migration ficha_tecnica_modalidade_sushi).
+  DELIVERY
+  LA_CARTE
+  RODIZIO
 }
 
 model Ingredient {

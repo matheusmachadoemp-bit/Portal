@@ -153,22 +153,30 @@ const CATEGORIES = [
       { key: "bebidas", name: "Bebidas", icon: "CupSoda" },
       { key: "drinks", name: "Drinks", icon: "Martini" },
       { key: "insumos", name: "Insumos", icon: "Boxes" },
-      { key: "entradas", name: "Entradas", icon: "Soup", empresaKey: "zarki-sushi" },
-      { key: "sashimis", name: "Sashimis", icon: "Fish", empresaKey: "zarki-sushi" },
-      { key: "sushis", name: "Sushis", icon: "Utensils", empresaKey: "zarki-sushi" },
-      { key: "temakis", name: "Temakis", icon: "IceCreamCone", empresaKey: "zarki-sushi" },
-      { key: "uramakis", name: "Uramakis", icon: "Layers", empresaKey: "zarki-sushi" },
-      { key: "hot-rolls", name: "Hot Rolls", icon: "Flame", empresaKey: "zarki-sushi" },
-      // Sem `empresaKey` de propósito: "sobremesa" é um conceito de cardápio genérico o bastante
-      // pra cada loja ter as suas (petit gateau na Nord Pizza, mochi/cheesecake de matchá na
-      // Zarki, por ex.) sem precisar de categorias de produto separadas — mesmo raciocínio de
-      // Combos/Bebidas/Drinks, também compartilhadas. Ver
-      // prisma/migrations/20260923120000_ficha_tecnica_sobremesas_subcategoria para o histórico
-      // (categoria de produto SOBREMESA e a rota /portal/ficha-tecnica/sobremesas já existiam,
-      // mas nunca teve link no menu lateral). Entra no FIM da lista (order 16, depois de
-      // "hot-rolls"=15) — mesmo raciocínio de "ficha_tecnica_categorias_por_loja", que também
-      // evitou deslocar as subcategorias já existentes.
-      { key: "sobremesas", name: "Sobremesas", icon: "CakeSlice" },
+      // As 6 subcategorias de tipo-de-prato da Zarki Sushi que existiam aqui (Entradas, Sashimis,
+      // Sushis, Temakis, Uramakis, Hot Rolls) foram substituídas pelas 3 de modalidade de venda
+      // mais abaixo (delivery/la-carte/rodizio) — ver
+      // prisma/migrations/20261005120000_ficha_tecnica_modalidade_sushi, que desativa (não
+      // exclui, mantém histórico) as linhas já existentes em banco já semeado. Esta lista `subs`
+      // só cobre banco novo do zero (upsert) — por isso as 6 nem aparecem mais aqui.
+      //
+      // `empresaKey: "nord-pizza"` em "sobremesas" — antes era compartilhada entre as duas lojas
+      // (sem empresaKey). Deixou de fazer sentido pra Zarki Sushi, que agora organiza o cardápio
+      // por modalidade de venda em vez de por tipo de prato — uma sobremesa da Zarki passa a
+      // entrar na ficha técnica de uma das 3 modalidades, igual qualquer outro prato. Não afeta
+      // em nada o que a Nord Pizza já tinha. "order" muda de posição aqui (banco novo do zero,
+      // baseado no índice no array — ver `subOrder` no loop abaixo) em relação ao banco de
+      // produção (migration acima, que preserva o order=16 original de "sobremesas" e não
+      // reordena nenhuma linha já existente) — divergência sem efeito prático, já que cada lado
+      // só precisa ficar consistente com ele mesmo.
+      { key: "sobremesas", name: "Sobremesas", icon: "CakeSlice", empresaKey: "nord-pizza" },
+      // Cardápio da Zarki Sushi por MODALIDADE de venda (Delivery/À La Carte/Rodízio) — a pedido
+      // do Matheus, cada modalidade é um cadastro de produto SEPARADO (o mesmo prato pode ter até
+      // 3 fichas técnicas diferentes, uma por modalidade, já que porção/embalagem mudam por
+      // canal). Ver enum ProductCategory em prisma/schema.prisma e a migration citada acima.
+      { key: "delivery", name: "Delivery", icon: "Bike", empresaKey: "zarki-sushi" },
+      { key: "la-carte", name: "À La Carte", icon: "UtensilsCrossed", empresaKey: "zarki-sushi" },
+      { key: "rodizio", name: "Rodízio", icon: "CookingPot", empresaKey: "zarki-sushi" },
     ],
   },
   {

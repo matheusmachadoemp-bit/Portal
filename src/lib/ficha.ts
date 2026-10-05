@@ -28,6 +28,14 @@ export const PRODUCT_CATEGORY_LABEL: Record<string, string> = {
   URAMAKI: "Uramakis",
   HOT_ROLL: "Hot Rolls",
   ENTRADA: "Entradas",
+  // Reorganização do cardápio da Zarki Sushi por MODALIDADE de venda (substitui as 6 categorias
+  // de tipo-de-prato acima nas abas/formulário — ver FICHA_TECNICA_SUB_MAP abaixo). Os valores
+  // acima continuam com rótulo aqui de propósito: produtos já cadastrados com eles continuam
+  // existindo no banco (ver migration ficha_tecnica_modalidade_sushi) e ainda aparecem no
+  // gráfico de CMV por categoria, só sem nenhuma aba no menu lateral até serem reclassificados.
+  DELIVERY: "Delivery",
+  LA_CARTE: "À La Carte",
+  RODIZIO: "Rodízio",
 };
 
 /**
@@ -55,13 +63,22 @@ export const FICHA_TECNICA_SUB_MAP: Record<string, FichaTecnicaSubInfo> = {
   burgers: { category: "BURGER", label: "Burgers", empresaKey: "nord-pizza" },
   bebidas: { category: "BEBIDA", label: "Bebidas" },
   drinks: { category: "DRINK", label: "Drinks" },
-  sobremesas: { category: "SOBREMESA", label: "Sobremesas" },
-  entradas: { category: "ENTRADA", label: "Entradas", empresaKey: "zarki-sushi" },
-  sashimis: { category: "SASHIMI", label: "Sashimis", empresaKey: "zarki-sushi" },
-  sushis: { category: "SUSHI", label: "Sushis", empresaKey: "zarki-sushi" },
-  temakis: { category: "TEMAKI", label: "Temakis", empresaKey: "zarki-sushi" },
-  uramakis: { category: "URAMAKI", label: "Uramakis", empresaKey: "zarki-sushi" },
-  "hot-rolls": { category: "HOT_ROLL", label: "Hot Rolls", empresaKey: "zarki-sushi" },
+  // `empresaKey: "nord-pizza"` — antes era compartilhada entre as duas lojas (sem empresaKey).
+  // Deixou de fazer sentido pra Zarki Sushi, que agora organiza o cardápio por modalidade de
+  // venda (Delivery/À La Carte/Rodízio, abaixo) em vez de por tipo de prato — uma sobremesa da
+  // Zarki passa a entrar na ficha técnica de uma dessas 3 modalidades, igual qualquer outro
+  // prato. Não afeta em nada o que a Nord Pizza já tinha.
+  sobremesas: { category: "SOBREMESA", label: "Sobremesas", empresaKey: "nord-pizza" },
+  // Cardápio da Zarki Sushi por MODALIDADE de venda (substitui as 6 abas por tipo de prato que
+  // existiam aqui antes — Entradas/Sashimis/Sushis/Temakis/Uramakis/Hot Rolls — ver enum
+  // ProductCategory em prisma/schema.prisma e migration ficha_tecnica_modalidade_sushi). A
+  // pedido do Matheus: cada modalidade é um cadastro de produto SEPARADO (o mesmo prato pode ter
+  // até 3 fichas técnicas diferentes — uma por modalidade — já que porção/embalagem mudam por
+  // canal). Os produtos já cadastrados nas 6 categorias antigas continuam no banco, só sem
+  // nenhuma aba que os mostre até serem reclassificados manualmente.
+  delivery: { category: "DELIVERY", label: "Delivery", empresaKey: "zarki-sushi" },
+  "la-carte": { category: "LA_CARTE", label: "À La Carte", empresaKey: "zarki-sushi" },
+  rodizio: { category: "RODIZIO", label: "Rodízio", empresaKey: "zarki-sushi" },
 };
 
 const FICHA_TECNICA_DEFAULT_SUB = "pizzas-salgadas";
