@@ -5,7 +5,6 @@ import { Pencil, FileDown, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import {
   FechamentoDoMesSection,
@@ -16,8 +15,7 @@ import {
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
-import { formatNumber } from "@/lib/calc";
-import { nextPeriodo, periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
+import { nextPeriodo, periodoLabel, resolveComparePeriodos } from "@/lib/reuniao";
 
 type Meeting = {
   id: string;
@@ -32,22 +30,22 @@ type Meeting = {
   createdBy: { name: string };
 };
 
-type Metrics = { cancelamentoPercent: number | null };
-
 function formToPayload(periodo: string, form: ReturnType<typeof buildForm>) {
   return { periodo, ...form };
 }
 
 // Avaliações (iFood), Tempo de Entrega e Chamados não têm mais input no modal "Fechamento
 // do mês" (seção "Resultado do período" removida a pedido do usuário), mas continuam
-// inicializados aqui a partir do registro já salvo: eles ainda aparecem (somente leitura) na
-// tabela "Histórico de reuniões" mais abaixo e entram no comparativo do PDF exportado (ver
-// `avaliacaoValor`/`tempoEntregaValor`/`chamadosValor` e `historico()` em `exportPdf`). A
-// rota POST /api/reuniao/delivery trata qualquer um desses 3 campos ausente no body como
-// "grava null" (ver route.ts) — se o form parasse de incluí-los, salvar o modal por qualquer
-// outro motivo (ex.: só um indicador do "Fechamento do mês") apagaria retroativamente um
-// valor já lançado em um mês anterior. Mesmo padrão usado na Reunião Gerente/Salão (ver
-// gerente-client.tsx/salao-client.tsx).
+// inicializados aqui a partir do registro já salvo pra fazer round-trip no `submit()`:
+// pararam de ter qualquer exibição na tela (nem no modal, nem na tabela "Histórico de
+// reuniões" — removida de lá por duplicar, com valor DIFERENTE, o indicador dinâmico de
+// mesmo nome no "Fechamento do mês"; ver comentário acima de `FechamentoDoMesEditor`/da
+// tabela mais abaixo), mas o valor continua sendo lido do banco e reenviado por baixo, sem
+// input nenhum alterando-o. A rota POST /api/reuniao/delivery trata qualquer um desses 3
+// campos ausente no body como "grava null" (ver route.ts) — se o form parasse de incluí-los,
+// salvar o modal por qualquer outro motivo (ex.: só um indicador do "Fechamento do mês")
+// apagaria retroativamente um valor já lançado em um mês anterior. Mesmo padrão usado na
+// Reunião Gerente/Salão (ver gerente-client.tsx/salao-client.tsx).
 function buildForm(m?: Meeting | null) {
   return {
     avaliacaoNota: m?.avaliacaoNota != null ? String(m.avaliacaoNota) : "",
@@ -60,7 +58,6 @@ function buildForm(m?: Meeting | null) {
 export function DeliveryClient({
   initialMeetings,
   initialCurrent,
-  initialMetrics,
   initialCustomIndicators,
   periodo,
   canCreate,
@@ -70,7 +67,6 @@ export function DeliveryClient({
 }: {
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
-  initialMetrics: Metrics;
   initialCustomIndicators: FechamentoIndicator[];
   periodo: string;
   canCreate: boolean;
@@ -84,7 +80,6 @@ export function DeliveryClient({
   const [meetings, setMeetings] = useState(initialMeetings);
   const [selectedPeriodo, setSelectedPeriodo] = useState(periodo);
   const [current, setCurrent] = useState(initialCurrent);
-  const [metrics, setMetrics] = useState(initialMetrics);
   const [form, setForm] = useState(buildForm(initialCurrent));
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -118,7 +113,6 @@ export function DeliveryClient({
         // sobrescrever a tela com dado de um período que não é mais o selecionado).
         if (cancelled || !fdm.isLatest(fdmToken)) return;
         setCurrent(data.current);
-        setMetrics(data.metrics);
         setForm(buildForm(data.current));
         fdm.sync(fdmToken, data.customIndicators ?? []);
       })
@@ -128,10 +122,6 @@ export function DeliveryClient({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fdm.sync só chama setState estáveis por baixo (ver useFechamentoDoMes); incluir `fdm` recriaria o efeito a cada render (objeto novo) e causaria um loop de fetch.
   }, [selectedPeriodo]);
-
-  const avaliacaoValor = form.avaliacaoNota ? Number(form.avaliacaoNota) : null;
-  const tempoEntregaValor = form.tempoEntregaMinutos ? Number(form.tempoEntregaMinutos) : null;
-  const chamadosValor = form.chamadosPercent ? Number(form.chamadosPercent) : null;
 
   async function exportPdf() {
     const { exportMeetingReportPdf } = await import("@/lib/reuniao-pdf");
@@ -150,23 +140,15 @@ export function DeliveryClient({
       periodosComparados.map((p) => fetchFechamentoDoMesIndicatorsForPdf("/api/reuniao/delivery", p))
     );
 
-    function historico<K extends "cancelamentoPercent" | "avaliacaoNota" | "tempoEntregaMinutos" | "chamadosPercent">(
-      key: K,
-      atualValue: number | null
-    ) {
-      return periodosComparados.map((p) => {
-        if (p === selectedPeriodo) return { monthLabel: periodoShortLabel(p), value: atualValue };
-        const m = meetings.find((mm) => mm.periodo === p);
-        return { monthLabel: periodoShortLabel(p), value: m ? m[key] : null };
-      });
-    }
-
-    // Cancelamento, Avaliações, Tempo de Entrega e Chamados deixaram de ter
-    // meta/premiação (viraram indicadores informativos; um valor de referência
-    // livre entra na lista de "Fechamento do mês" quando fizer sentido) — o PDF
-    // por enquanto só mostra o histórico do valor real de cada um, sem linha de
-    // meta nem premiação (o relatório em si ainda precisa de um redesenho,
-    // pensado em cima do conceito de "bateu a meta").
+    // Cancelamento, Avaliações, Tempo de Entrega e Chamados eram 4 indicadores fixos aqui,
+    // calculados/congelados à parte (ver histórico desta mesma tarefa) — removidos do PDF a
+    // pedido do Matheus porque duplicavam, com fonte e valor DIFERENTES, os indicadores de
+    // mesmo nome que já vêm de `buildCustomIndicatorPdfEntries` (o "Fechamento do mês" que o
+    // usuário realmente edita hoje). Cancelamento era recalculado ao vivo a cada save (podendo
+    // legitimamente estar zerado por falta de Fechamento do Dia/vendas de delivery, não por
+    // falta de cadastro) e Avaliações/Tempo de Entrega/Chamados estavam congelados desde que a
+    // seção "Resultado do período" foi removida da tela — nos dois casos, a fonte de verdade
+    // pro usuário é só o indicador dinâmico abaixo.
     exportMeetingReportPdf({
       fileSlug: "reuniao-delivery",
       empresaName,
@@ -174,46 +156,6 @@ export function DeliveryClient({
       premiacaoTotal: 0,
       observacoes: form.notas,
       indicators: [
-        {
-          key: "cancelamento",
-          label: "Cancelamento",
-          unit: "percent",
-          meta: 0,
-          metaDirection: "min",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("cancelamentoPercent", metrics.cancelamentoPercent),
-        },
-        {
-          key: "avaliacao",
-          label: "Avaliações (iFood)",
-          unit: "rating",
-          meta: 0,
-          metaDirection: "max",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("avaliacaoNota", avaliacaoValor),
-        },
-        {
-          key: "tempo-entrega",
-          label: "Tempo de Entrega",
-          unit: "minutes",
-          meta: 0,
-          metaDirection: "min",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("tempoEntregaMinutos", tempoEntregaValor),
-        },
-        {
-          key: "chamados",
-          label: "Chamados",
-          unit: "percent",
-          meta: 0,
-          metaDirection: "min",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("chamadosPercent", chamadosValor),
-        },
         // Indicadores customizados cadastrados pelo usuário em "Fechamento do mês" (ex.:
         // qualquer indicador criado em "Novo indicador") — sem isso, qualquer indicador
         // customizado desaparecia do PDF mesmo aparecendo normalmente na tela (card #467).
@@ -246,7 +188,6 @@ export function DeliveryClient({
     if (!fdm.isLatest(token)) return;
     setMeetings(data.meetings);
     setCurrent(data.current);
-    setMetrics(data.metrics);
     fdm.sync(token, data.customIndicators ?? []);
   }
 
@@ -272,7 +213,6 @@ export function DeliveryClient({
     setSelectedPeriodo(m.periodo);
     setCurrent(m);
     setForm(buildForm(m));
-    setMetrics({ cancelamentoPercent: m.cancelamentoPercent });
     setFechamentoModalOpen(true);
   }
 
@@ -362,11 +302,11 @@ export function DeliveryClient({
         >
           <div className="space-y-5">
             {/* Seção "Resultado do período" (Avaliações iFood + Tempo de Entrega + Chamados)
-                removida a pedido do usuário — aparecia sempre vazia no modal. Os valores
-                continuam aparecendo, só que somente leitura, na tabela "Histórico de
-                reuniões" mais abaixo na tela (fora do modal) — ver comentário de `buildForm`
-                acima para como esses 3 campos continuam "congelados" no round-trip do
-                `submit()`. */}
+                removida a pedido do usuário — aparecia sempre vazia no modal. Os 3 campos
+                continuam "congelados" no round-trip do `submit()` (ver comentário de
+                `buildForm` acima), mas pararam de ter qualquer exibição na tela (nem no modal,
+                nem na tabela "Histórico de reuniões" — removida de lá por duplicar, com valor
+                DIFERENTE, o indicador dinâmico de mesmo nome no "Fechamento do mês"). */}
             <FechamentoDoMesEditor fdm={fdm} />
 
             <div className="flex items-center justify-between pt-2 border-t border-nord-border">
@@ -431,6 +371,13 @@ export function DeliveryClient({
 
       {canCreate && <MetasProximoMesSection mp={mp} canDelete={canDeleteMetas} />}
 
+      {/* Período + Editar (navegação rápida pra abrir o Fechamento do mês de um mês já
+          lançado) — chegou a ter colunas de Cancelamento/Avaliações/Tempo de Entrega/Chamados
+          aqui, mas eram lidas de DeliveryMeeting (cálculo ao vivo congelado no momento do
+          save, ou campo congelado desde que "Resultado do período" foi removida), duplicando
+          com valores DIFERENTES os indicadores de mesmo nome do "Fechamento do mês" —
+          removidas a pedido do Matheus (mesma decisão do PDF, ver comentário em `exportPdf`
+          acima). */}
       {meetings.length > 0 && (
         <Section title="Histórico de reuniões">
           <div className="overflow-x-auto nord-scrollbar">
@@ -442,26 +389,6 @@ export function DeliveryClient({
                       <DynamicIcon name="Calendar" size={13} className="text-nord-blue-light" /> Período
                     </span>
                   </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="XCircle" size={13} className="text-nord-blue-light" /> Cancelamento
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="Star" size={13} className="text-nord-blue-light" /> Avaliações
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="Truck" size={13} className="text-nord-blue-light" /> Tempo de Entrega
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="PhoneCall" size={13} className="text-nord-blue-light" /> Chamados
-                    </span>
-                  </th>
                   <th className="py-2 px-3"></th>
                 </tr>
               </thead>
@@ -469,10 +396,6 @@ export function DeliveryClient({
                 {meetings.map((m) => (
                   <tr key={m.id} className={`border-b border-nord-border/50 ${m.periodo === selectedPeriodo ? "bg-white/5" : ""}`}>
                     <td className="py-2 px-3 text-white capitalize">{periodoLabel(m.periodo)}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.cancelamentoPercent === null ? "-" : `${formatNumber(m.cancelamentoPercent, 1)}%`}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.avaliacaoNota === null ? "-" : m.avaliacaoNota}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.tempoEntregaMinutos === null ? "-" : `${m.tempoEntregaMinutos} min`}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.chamadosPercent === null ? "-" : `${m.chamadosPercent}%`}</td>
                     <td className="py-2 px-3">
                       {canCreate && (
                         <button onClick={() => editHistoryRow(m)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">

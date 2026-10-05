@@ -210,6 +210,33 @@ export type ReuniaoCustomIndicatorDTO = {
   valor: number | null;
   valorReferencia: number;
   /**
+   * `true` quando já existe um `ReuniaoCustomIndicatorValue` de verdade salvo
+   * para este indicador NESTE período específico (`periodo`, o mesmo
+   * parâmetro de `loadReuniaoCustomIndicators`) — `false` quando este
+   * período cai num "buraco" (indicador usado antes e depois, mas sem valor
+   * salvo exatamente aqui) OU quando o indicador nunca recebeu valor nenhum.
+   * Non-null/non-undefined sempre que vem de `loadReuniaoCustomIndicators`
+   * de verdade (`?:` só por causa da construção manual client-side em
+   * `fechamento-do-mes.tsx`, ver comentário de `nomeSecundario` abaixo).
+   *
+   * Sinal CONFIÁVEL de "tem valor cadastrado neste período" — ao contrário
+   * de `valor` (acima), que está morto (nada grava um `valor` não-null desde
+   * que a antiga seção "Resultado do período" foi removida da tela — nem
+   * `buildIndicatorsPayload()`/o submit do Gerente mandam um `valor` de
+   * verdade no POST, nem o backfill de `primeiroPeriodoComValor`/migrations
+   * gravou algo ali, ver 20260914140000_gerente_fechamento_do_mes e
+   * 20260914160000_salao_cozinha_delivery_fechamento_do_mes: sempre NULL,
+   * mesmo para o histórico real copiado "pra trás") e diferente de só usar
+   * `primeiroPeriodoComValor` (não cobre um "buraco" no meio do intervalo
+   * ativo — indicador usado em julho e setembro mas sem valor em agosto
+   * especificamente ainda cairia no valorPadrao fabricado se só olhasse
+   * `periodo >= primeiroPeriodoComValor`). Usado por
+   * `buildCustomIndicatorPdfEntries` (fechamento-do-mes.tsx) para decidir se
+   * mostra o valor real do período no PDF ou omite a linha/mostra "-" —
+   * nunca fabricar um valor a partir do valorPadrao como se fosse cadastrado.
+   */
+  cadastradoNoPeriodo?: boolean;
+  /**
    * Segundo valor (opcional) de um indicador "composto" — ex.: "Cancelamentos"
    * registra um percentual (nome/unidade/valorReferencia acima) + uma
    * quantidade (nomeSecundario/unidadeSecundaria/valorSecundario). `null` nos
@@ -293,6 +320,12 @@ export async function loadReuniaoCustomIndicators(
 
   return indicators.map((ind) => {
     const v = valueByIndicator.get(ind.id);
+    // ANTES de qualquer `??`/fallback abaixo: `v` só é `undefined` quando a
+    // query de `values` (que já filtra por `periodo`, acima) não achou
+    // nenhuma linha de ReuniaoCustomIndicatorValue pra este indicador NESTE
+    // período exato — exatamente o sinal que `cadastradoNoPeriodo` expõe
+    // (ver comentário do campo no tipo `ReuniaoCustomIndicatorDTO`).
+    const cadastradoNoPeriodo = v !== undefined;
     return {
       id: ind.id,
       nome: ind.nome,
@@ -302,6 +335,7 @@ export async function loadReuniaoCustomIndicators(
       valorPadrao: ind.valorPadrao,
       valor: v?.valor ?? null,
       valorReferencia: v?.valorReferencia ?? ind.valorPadrao,
+      cadastradoNoPeriodo,
       nomeSecundario: ind.nomeSecundario,
       unidadeSecundaria: ind.unidadeSecundaria,
       // Sem fallback pra valorPadrao (não existe "valorPadraoSecundario" — ver
