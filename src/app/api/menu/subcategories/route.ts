@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
+import { ensureDefaultModulePermissions } from "@/lib/authz";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -12,6 +13,15 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+
+  // Busca a categoria mãe antes de criar (em vez de deixar a FK constraint do
+  // `prisma.subcategory.create` abaixo estourar um 500 pra um `categoryId` inválido): precisamos
+  // da `key` dela de qualquer forma, pra `ensureDefaultModulePermissions` logo abaixo.
+  const category = await prisma.category.findUnique({ where: { id: body.categoryId } });
+  if (!category) {
+    return NextResponse.json({ error: "Categoria não encontrada." }, { status: 400 });
+  }
+
   const maxOrder = await prisma.subcategory.aggregate({
     where: { categoryId: body.categoryId },
     _max: { order: true },
@@ -27,6 +37,15 @@ export async function POST(req: Request) {
       order: (maxOrder._max.order ?? 0) + 1,
     },
   });
+
+  // Uma subcategoria nova sem override próprio herda a visibilidade da CATEGORIA inteira (ver
+  // buildVisibilityResolver/hasModulePermission) — então o que precisa de uma linha de
+  // ModulePermission garantida é a `key` da categoria mãe, não uma chave composta. Idempotente
+  // (upsert) e inofensivo pra uma categoria já conhecida (ex.: "financeiro": todo perfil já tem
+  // linha própria desde o seed, então isto não faz nada) — só tem efeito de verdade pra uma
+  // categoria criada pela própria sidebar, cuja `key` nunca existiu em `MODULES`. Ver comentário
+  // completo em `ensureDefaultModulePermissions` (@/lib/authz).
+  await ensureDefaultModulePermissions(category.key);
 
   revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ subcategory });

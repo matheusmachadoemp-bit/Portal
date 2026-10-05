@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
+import { ensureDefaultModulePermissions } from "@/lib/authz";
 
 export async function GET() {
   const session = await auth();
@@ -46,6 +47,11 @@ export async function POST(req: Request) {
       after: JSON.stringify(category),
     },
   });
+
+  // Sem isto, a `key` nova (`custom-${Date.now()}`, nunca vista por nenhum ModulePermission)
+  // deixaria até o próprio Gestor que acabou de criar sem conseguir ver a categoria — ver
+  // comentário completo em `ensureDefaultModulePermissions` (@/lib/authz).
+  await ensureDefaultModulePermissions(category.key);
 
   revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ category });

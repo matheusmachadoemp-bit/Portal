@@ -23,7 +23,9 @@ export type CategoryDTO = {
   active: boolean;
   isSystem: boolean;
   contentType: string;
-  /** Se falso, a categoria não navega pra /portal/{key} ao ser clicada — vira só um agrupador visual das subcategorias. */
+  /** Vestigial desde 2026-10: `sidebar.tsx` não usa mais este campo pra decidir navegação —
+   * clicar numa categoria com subcategoria só expande/recolhe, incondicional; sem nenhuma
+   * subcategoria, sempre navega. Ver comentário de `Category.linked` em prisma/schema.prisma. */
   linked: boolean;
   subcategories: SubcategoryDTO[];
 };

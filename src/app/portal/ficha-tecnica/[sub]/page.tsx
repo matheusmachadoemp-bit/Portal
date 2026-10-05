@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { StatCard } from "@/components/ui/stat-card";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { ProdutosClient } from "./produtos-client";
 import { InsumosClient } from "./insumos-client";
 import { QualidadePanel } from "./qualidade-panel";
@@ -10,6 +10,7 @@ import { productTotalCost, cmvPercent, FICHA_TECNICA_SUB_MAP, defaultFichaTecnic
 import { formatPercent } from "@/lib/calc";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { GenericModulePage } from "@/components/generic-module/generic-module-page";
 
 const SUB_MAP = FICHA_TECNICA_SUB_MAP;
 
@@ -97,7 +98,16 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   }
 
   const info = SUB_MAP[sub];
-  if (!info) notFound();
+  if (!info) {
+    // `sub` não é uma aba hardcoded conhecida (FICHA_TECNICA_SUB_MAP) — antes de desistir
+    // (notFound de verdade), tenta achar uma Subcategory cadastrada no banco com essa key dentro
+    // da categoria "ficha-tecnica" (criada pela sidebar, sem mapa próprio ainda) e cair no
+    // conteúdo genérico de fallback. `GenericModulePage`/`loadGenericContent` já fazem essa busca
+    // e já chamam `notFound()` de verdade se nem isso bater — ver @/lib/generic-content. O gate de
+    // cargo (MANAGER_ROLES) e de permissão de módulo acima desta linha já rodaram, então esta
+    // chamada não abre nenhum acesso que a função já não tivesse liberado.
+    return <GenericModulePage categoryKey="ficha-tecnica" subcategoryKey={sub} />;
+  }
   // `sub` é uma aba válida (existe no SUB_MAP), mas pode ser de OUTRA loja (ex.: acessar
   // /portal/ficha-tecnica/pizzas-salgadas direto pela URL com a Zarki Sushi ativa) — nesse caso
   // redireciona pra aba padrão da loja ativa em vez de renderizar uma lista vazia sem explicação

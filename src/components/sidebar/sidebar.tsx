@@ -481,12 +481,27 @@ function CategoryRow({
         )}
         <button
           onClick={() => {
-            // `!== false` (não `=== true`): trata ausência do campo (cache
-            // desatualizado após uma migração que alterou a coluna direto no
-            // banco, sem passar por revalidateTag) como "tem link" — o
-            // padrão do schema — em vez de travar a categoria inteira.
-            if (cat.linked !== false) router.push(`/portal/${cat.key}`);
-            if (hasSubs) onToggleExpand();
+            // Categoria é só separador visual do menu lateral — quem tem funcionalidade/página
+            // própria é a SUBCATEGORIA (decisão do Matheus, 2026-10). Clicar na categoria NUNCA
+            // navega quando ela tem subcategoria: só expande/recolhe a lista, não importa o valor
+            // de `cat.linked` (campo mantido no schema por ora, mas não é mais lido pra decidir
+            // isto — ver prisma/schema.prisma). Categorias sem nenhuma subcategoria (hoje: Início,
+            // Configurações, Usuários) não têm o que expandir, então continuam navegando direto
+            // pra /portal/{key} — senão ficariam sem nenhuma ação possível ao clicar.
+            //
+            // Antes, a condição era `cat.linked !== false` (navegava SEMPRE que `linked` não
+            // fosse explicitamente `false`) RODANDO JUNTO com o toggle de expand — ou seja, pra
+            // qualquer categoria com subcategorias e `linked` ausente/true (ex.: Reunião, Marketing
+            // — a maioria, já que só "vendas"/"tarefas" tinham `linked: false` seedado), um clique
+            // ao mesmo tempo expandia a lista E navegava pra /portal/{key}; se aquela rota raiz
+            // fizesse um redirect() pra uma sub padrão (ex.: src/app/portal/reuniao/page.tsx ->
+            // /portal/reuniao/salao), o efeito observado era "cliquei em Reunião e ele abriu
+            // Reunião Salão sozinho" — exatamente o comportamento reportado.
+            if (hasSubs) {
+              onToggleExpand();
+            } else {
+              router.push(`/portal/${cat.key}`);
+            }
           }}
           aria-label={cat.name}
           className={`flex-1 flex items-center gap-2.5 text-sm py-1 min-w-0 ${

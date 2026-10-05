@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { PageContainer } from "@/components/page-container";
 import { MetasClient } from "./metas-client";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { GenericModulePage } from "@/components/generic-module/generic-module-page";
 
 const SUB_MAP: Record<string, { category: string; label: string }> = {
   gerencia: { category: "GERENCIA", label: "Metas da Gerência" },
@@ -23,7 +24,16 @@ export default async function MetasSubPage({ params }: { params: Promise<{ sub: 
 
   const { sub } = await params;
   const info = SUB_MAP[sub];
-  if (!info) notFound();
+  if (!info) {
+    // `sub` não é uma aba hardcoded conhecida (SUB_MAP acima) — antes de desistir (notFound de
+    // verdade), tenta achar uma Subcategory cadastrada no banco com essa key dentro da categoria
+    // "metas" (criada pela sidebar, sem mapa próprio ainda) e cair no conteúdo genérico de
+    // fallback. `GenericModulePage`/`loadGenericContent` já fazem essa busca e já chamam
+    // `notFound()` de verdade se nem isso bater — ver @/lib/generic-content. O gate de permissão
+    // de módulo acima desta linha já rodou, então esta chamada não abre nenhum acesso que a
+    // função já não tivesse liberado.
+    return <GenericModulePage categoryKey="metas" subcategoryKey={sub} />;
+  }
 
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
