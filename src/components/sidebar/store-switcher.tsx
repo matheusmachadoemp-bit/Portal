@@ -43,7 +43,24 @@ export function StoreSwitcher({
     });
     setOpen(false);
     setSwitching(false);
+    // Depois de trocar a loja ativa, manda sempre pra Início em vez de só
+    // atualizar a página atual: várias telas do Portal guardam o dado vindo
+    // do servidor num useState(initialProps) que só é lido na primeira
+    // montagem — router.refresh() sozinho reaproveita o componente cliente já
+    // montado (preserva state/scroll de propósito, é assim que o Next
+    // documenta), então essas telas continuariam mostrando o dado da loja
+    // ANTERIOR até o usuário navegar pra outro lugar e voltar. Navegar pra
+    // Início força a troca de página de verdade (desmonta a tela atual,
+    // monta a Início do zero), o que já resolve isso sem precisar auditar
+    // tela por tela. router.refresh() continua antes: invalida o cache de
+    // rota do Next inteiro, então se o usuário já tiver visitado a Início
+    // nesta sessão, o push abaixo não serve uma versão em cache de antes da
+    // troca. Mesmo caminho serve pra troca de loja normal e pra troca pro
+    // "Grupo Nord" (ambas chamam switchTo). Se o usuário já estiver na
+    // Início, o push pra mesma rota não desmonta nada (confirmado testando
+    // ao vivo) — é inofensivo, só rola a página pro topo.
     router.refresh();
+    router.push("/portal/inicio");
   }
 
   if (empresas.length <= 1 && !canViewGrupoNord) {
