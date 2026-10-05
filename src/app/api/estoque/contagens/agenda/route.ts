@@ -64,6 +64,9 @@ export async function POST(req: Request) {
   if (!isValidHorario(body.horario)) {
     return NextResponse.json({ error: "Informe um horário válido (HH:mm)." }, { status: 400 });
   }
+  if (body.horarioLimite !== undefined && body.horarioLimite !== null && body.horarioLimite !== "" && !isValidHorario(body.horarioLimite)) {
+    return NextResponse.json({ error: "Informe um horário-limite válido (HH:mm)." }, { status: 400 });
+  }
 
   if (body.responsavelId) {
     const responsavel = await prisma.user.findUnique({ where: { id: body.responsavelId }, select: { id: true } });
@@ -91,6 +94,7 @@ export async function POST(req: Request) {
       setor: body.setor || null,
       responsavelId: body.responsavelId || null,
       horario: body.horario,
+      horarioLimite: body.horarioLimite || null,
       active: body.active !== undefined ? !!body.active : true,
       ...weekdayData,
     },

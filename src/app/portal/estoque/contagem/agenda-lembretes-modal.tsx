@@ -56,11 +56,13 @@ function diasResumo(s: ScheduleRow): string {
 }
 
 /**
- * Botão "Lembretes" + modal de configuração da agenda de notificação de contagem (dias da semana
- * + horário + setor/responsável opcionais) — usado tanto por `ContagemSemanalClient` quanto por
- * `ContagemMensalClient`, um pra cada `type` de StockCountSchedule (ver schema.prisma). Só agenda
- * a notificação (disparada pelo cron em GET /api/estoque/contagens/lembretes/run); não cria a
- * StockCount automaticamente.
+ * Botão "Lembretes" + modal de configuração da agenda/recorrência de contagem (dias da semana +
+ * horário + setor/responsável opcionais) — usado tanto por `ContagemSemanalClient` quanto por
+ * `ContagemMensalClient`, um pra cada `type` de StockCountSchedule (ver schema.prisma). Esta
+ * mesma recorrência tanto dispara a notificação de lembrete quanto gera a `StockCount` do dia
+ * automaticamente (`generateStockCounts`, src/lib/estoque-server.ts) — as duas coisas disparadas
+ * pelo mesmo cron, GET /api/estoque/contagens/lembretes/run. Este modal em si só edita os campos
+ * da recorrência (dias/horário/setor/responsável); não mexe em nenhuma `StockCount` diretamente.
  */
 export function AgendaLembretesModal({
   type,

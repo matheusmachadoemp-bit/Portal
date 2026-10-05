@@ -3466,30 +3466,50 @@ enum CountStatus {
 }
 
 model StockCount {
-  id               String      @id @default(cuid())
+  id               String              @id @default(cuid())
   empresaId        String
-  empresa          Empresa     @relation(fields: [empresaId], references: [id])
+  empresa          Empresa             @relation(fields: [empresaId], references: [id])
   type             CountType
   setor            String?
   semana           Int?
   mes              Int?
   ano              Int
-  dataContagem     DateTime    @default(now())
+  dataContagem     DateTime            @default(now())
   responsavel      String?
   horaInicio       String?
   horaFim          String?
-  status           CountStatus @default(RASCUNHO)
+  status           CountStatus         @default(RASCUNHO)
   checklistJson    String?
   motivoReabertura String?
   aprovadoPor      String?
   aprovadoEm       DateTime?
-  createdById      String
-  createdBy        User        @relation("StockCountCreatedBy", fields: [createdById], references: [id])
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  /// Prazo (dia + hora) pra terminar a contagem — mesmo padrão de `ProductionOrder.prazo`. Só
+  /// preenchido quando a contagem nasce de uma `StockCountSchedule` com `horarioLimite`
+  /// configurado (ver `generateStockCounts` em src/lib/estoque-server.ts); contagens manuais hoje
+  /// não enviam prazo pela tela, mas o campo é opcional pra aceitar quando enviarem.
+  prazo            DateTime?
+  /// Recorrência (`StockCountSchedule`) que gerou esta contagem automaticamente — `null` pra
+  /// contagens manuais (criadas por um humano logado via POST /api/estoque/contagens). `onDelete:
+  /// SetNull`: apagar o agendamento não deve apagar o histórico de contagens já geradas por ele.
+  /// `@@unique([scheduleId, dataContagem])` abaixo garante nunca gerar duas contagens da mesma
+  /// recorrência no mesmo dia (idempotência via upsert, mesmo padrão de
+  /// `ChecklistOccurrence.@@unique([templateId, date])`) — múltiplos `scheduleId: null` (contagens
+  /// manuais) nunca colidem entre si nesse unique, porque o Postgres trata NULL como distinto de
+  /// qualquer outro NULL num índice único.
+  scheduleId       String?
+  schedule         StockCountSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  /// `null` = contagem gerada automaticamente por uma `StockCountSchedule` (sem usuário logado no
+  /// momento da criação — mesmo racional de `ChecklistOccurrence` não ter `createdById`). Só
+  /// contagens criadas manualmente (POST /api/estoque/contagens por um humano logado) preenchem
+  /// este campo.
+  createdById      String?
+  createdBy        User?               @relation("StockCountCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   items StockCountItem[]
 
+  @@unique([scheduleId, dataContagem])
   @@index([empresaId, type, ano])
 }
 
@@ -3522,39 +3542,54 @@ model StockCountItem {
   @@index([countId])
 }
 
-/// Agenda de lembretes de contagem de estoque — não cria a `StockCount` automaticamente, só
-/// dispara uma notificação (sino + push) pro responsável nos dias/horário configurados,
-/// lembrando de iniciar a contagem manualmente. Mesmo padrão de recorrência (booleanos de dia da
-/// semana + "HH:mm" em vez de array) já usado por `ChecklistTemplate` e `FechamentoCargo` — ver
-/// comentário de `StockSector` acima sobre `setor` continuar texto livre, não FK. Diferente de
-/// `StockSector`, esta é por loja (tem `empresaId`): cada loja agenda seus próprios lembretes.
+/// Agenda/recorrência de contagem de estoque — gera a `StockCount` do dia automaticamente
+/// (`generateStockCounts`, src/lib/estoque-server.ts, chamada pelo cron em GET
+/// /api/estoque/contagens/lembretes/run ANTES de notificar, mesmo padrão de
+/// `generateChecklistOccurrences`/`/api/checklist/escalations/run`) E dispara uma notificação
+/// (sino + push) pro responsável nos dias/horário configurados. Até a geração automática ser
+/// adicionada, esta agenda só disparava a notificação (lembrete) — a contagem em si sempre exigia
+/// alguém iniciar manualmente; `StockCount.scheduleId`/`createdById` nulável preservam esse
+/// histórico (contagens geradas antes dessa mudança continuam com `scheduleId: null`). Mesmo
+/// padrão de recorrência (booleanos de dia da semana + "HH:mm" em vez de array) já usado por
+/// `ChecklistTemplate` e `FechamentoCargo` — ver comentário de `StockSector` acima sobre `setor`
+/// continuar texto livre, não FK. Diferente de `StockSector`, esta é por loja (tem `empresaId`):
+/// cada loja agenda seus próprios lembretes/contagens.
 model StockCountSchedule {
-  id            String    @id @default(cuid())
-  empresaId     String
-  empresa       Empresa   @relation(fields: [empresaId], references: [id])
-  type          CountType
+  id                 String    @id @default(cuid())
+  empresaId          String
+  empresa            Empresa   @relation(fields: [empresaId], references: [id])
+  type               CountType
   /// null = "todos os setores", mesma semântica de `StockCount.setor`.
-  setor         String?
+  setor              String?
   /// Quem recebe a notificação — `User` (login), não `Employee`: o push é por sessão/
   /// `PushSubscription`, que é ligada a `User` (ver `src/lib/notifications.ts`).
-  responsavelId String?
-  responsavel   User?     @relation("StockCountScheduleResponsavel", fields: [responsavelId], references: [id])
-  horario       String // "HH:mm" America/Sao_Paulo
-  segunda       Boolean   @default(true)
-  terca         Boolean   @default(true)
-  quarta        Boolean   @default(true)
-  quinta        Boolean   @default(true)
-  sexta         Boolean   @default(true)
-  sabado        Boolean   @default(true)
-  domingo       Boolean   @default(true)
-  active        Boolean   @default(true)
+  responsavelId      String?
+  responsavel        User?     @relation("StockCountScheduleResponsavel", fields: [responsavelId], references: [id])
+  horario            String // "HH:mm" America/Sao_Paulo — horário do lembrete (notificação).
+  /// "HH:mm" America/Sao_Paulo, opcional — horário-limite do dia pra terminar a contagem gerada
+  /// automaticamente por esta recorrência (mesma ideia de `ChecklistTemplate.dueTime`). Usado só
+  /// na geração (`generateStockCounts`, src/lib/estoque-server.ts) pra computar `StockCount.prazo`
+  /// — `null` aqui significa "sem prazo", não "mesmo horário do lembrete".
+  horarioLimite      String?
+  segunda            Boolean   @default(true)
+  terca              Boolean   @default(true)
+  quarta             Boolean   @default(true)
+  quinta             Boolean   @default(true)
+  sexta              Boolean   @default(true)
+  sabado             Boolean   @default(true)
+  domingo            Boolean   @default(true)
+  active             Boolean   @default(true)
   /// "YYYY-MM-DD" (fuso São Paulo) do último lembrete efetivamente enviado — garante que o cron
   /// (que roda a cada poucos minutos, ver GET /api/estoque/contagens/lembretes/run) nunca envie
   /// duplicado pro mesmo agendamento no mesmo dia, mesmo rodando várias vezes dentro da janela de
   /// tolerância do horário configurado.
   ultimoLembreteData String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  /// Contagens geradas automaticamente por esta recorrência (ver `StockCount.scheduleId`) — não
+  /// inclui contagens manuais, que nunca têm `scheduleId` preenchido.
+  stockCounts StockCount[]
 
   @@index([empresaId, type])
 }

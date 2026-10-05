@@ -107,7 +107,10 @@ export function ContagemMensalClient({
         aprovadoEm: c.aprovadoEm,
         totalItens: (c.items as unknown[]).length,
         conferidos: (c.items as { quantidadeContada: number | null }[]).filter((i) => i.quantidadeContada !== null).length,
-        createdByName: (c.createdBy as { name: string }).name,
+        // `createdBy` vem `null` quando a contagem foi gerada automaticamente por uma
+        // `StockCountSchedule` (sem usuário logado que a criou) — ver generateStockCounts em
+        // src/lib/estoque-server.ts.
+        createdByName: (c.createdBy as { name: string } | null)?.name ?? "—",
       }))
     );
   }
