@@ -1219,6 +1219,7 @@ model MarketingFile {
   name         String
   space        String         @default("biblioteca")
   category     String         @default("Artes")
+  lancado      Boolean        @default(false)
   fileUrl      String
   mimeType     String?
   sizeBytes    Int?
