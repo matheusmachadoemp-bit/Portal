@@ -110,10 +110,22 @@ function drawWordmark(doc: jsPDF, x: number, y: number) {
   doc.text("NORD", x + 7, y);
 }
 
+/**
+ * Mensagem de destaque pra status com META REAL por trás ("batida"/"abaixo" — hoje só as metas
+ * de venda por produto da Reunião Salão, `SalaoProductGoal`, calculam isso de verdade a partir
+ * de quantidade vendida vs. meta). Devolve `null` (não desenha nada) pro terceiro caso
+ * ("sem-dado"): TODO indicador dinâmico do "Fechamento do mês" (ver `buildCustomIndicatorPdfEntries`
+ * em fechamento-do-mes.tsx) chega aqui sempre com esse status, via `statusOf(null)` hardcoded —
+ * não existe meta real por trás desse mecanismo, então mostrar uma frase (fosse "sem dados" ou
+ * qualquer outra) ali seria inventar uma leitura que o sistema não garante. Antes desta função
+ * devolver `null` pro fallback, o PDF mostrava "AINDA SEM DADOS PARA ESSE INDICADOR" pra
+ * QUALQUER indicador dinâmico, com dado cadastrado ou não — contraditório quando o comparativo
+ * mês x mês (`drawMonthComparison`) logo acima já mostrava a variação de verdade.
+ */
 function messageFor(status: Status) {
   if (status === "batida") return { text: "PARABÉNS! EXCELENTE RESULTADO", color: COLOR.success };
   if (status === "abaixo") return { text: "VAMOS SUPERAR ESSA META NO PRÓXIMO MÊS!", color: COLOR.warning };
-  return { text: "AINDA SEM DADOS PARA ESSE INDICADOR", color: COLOR.grayLight };
+  return null;
 }
 
 /**
@@ -165,7 +177,7 @@ function drawMonthComparison(doc: jsPDF, historico: MeetingIndicator["historico"
   const text = `${sign}${pct}% vs. ${anterior.monthLabel.toUpperCase()}`;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(15);
   setColor(doc, "setTextColor", COLOR.blue);
 
   if (variacao === 0) {
@@ -299,12 +311,15 @@ export function exportMeetingReportPdf(params: {
     // comparativo mês x mês, logo abaixo do eixo das barras (ver `drawMonthComparison`)
     drawMonthComparison(doc, historico, centerX, chartBottom + 10);
 
-    // faixa de mensagem
+    // faixa de mensagem — só desenha quando `messageFor` devolve algo (status "batida"/"abaixo",
+    // com meta real por trás); ver o comentário de `messageFor` acima.
     const msg = messageFor(currentStatus);
-    setColor(doc, "setTextColor", msg.color);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    centeredText(doc, msg.text, centerX, pageHeight - 38);
+    if (msg) {
+      setColor(doc, "setTextColor", msg.color);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      centeredText(doc, msg.text, centerX, pageHeight - 38);
+    }
 
     if (currentStatus === "batida" && ind.premio > 0) {
       setColor(doc, "setTextColor", COLOR.gold);
