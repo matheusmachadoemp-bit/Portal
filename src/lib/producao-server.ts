@@ -28,13 +28,32 @@ export async function notifyProducaoUsers(userIds: string[], type: string, title
   await Promise.all(userIds.map((userId) => notifyUser(userId, type, title, body, null)));
 }
 
-/** Inicia uma ordem: registra responsável/hora de início e avança o status. */
-export async function iniciarProductionOrder(orderId: string, userId: string) {
+/** Inicia uma ordem: registra responsável/hora de início e avança o status.
+ * `responsavelId` é quem vai de fato produzir o item (ex.: o chef escolhe
+ * "foi a Jessie" no tablet) — se não vier, cai no comportamento antigo (usa
+ * `userId`, quem está logado/chamando a rota). `userId` continua sendo
+ * sempre quem de fato acionou "iniciar" (autor do registro no histórico),
+ * mesmo quando o responsável escolhido é outra pessoa — mesma distinção que
+ * `ajustar`/`reatribuir` já fazem entre "quem fez" e "pra quem é". Validar
+ * que `responsavelId` tem acesso à loja da ordem é responsabilidade de quem
+ * chama (ver PATCH /api/producao/ordens/[id], mesmo padrão já usado por
+ * "reatribuir"). */
+export async function iniciarProductionOrder(orderId: string, userId: string, responsavelId?: string | null) {
+  const resolvedResponsavelId = responsavelId || userId;
   const order = await prisma.productionOrder.update({
     where: { id: orderId },
-    data: { status: "EM_PRODUCAO", responsavelId: userId, horaInicio: new Date() },
+    data: { status: "EM_PRODUCAO", responsavelId: resolvedResponsavelId, horaInicio: new Date() },
   });
-  await logProductionOrderHistory(orderId, userId, "INICIADO");
+
+  // Só busca o nome (pra deixar o histórico legível pra humano, em vez de um
+  // id cru) quando alguém de fato escolheu outra pessoa — no caso comum
+  // (responsavelId omitido, cai no próprio userId) não vale o round-trip extra.
+  let detail: string | null = null;
+  if (resolvedResponsavelId !== userId) {
+    const responsavel = await prisma.user.findUnique({ where: { id: resolvedResponsavelId }, select: { name: true } });
+    detail = `Responsável definido ao iniciar: ${responsavel?.name ?? resolvedResponsavelId}`;
+  }
+  await logProductionOrderHistory(orderId, userId, "INICIADO", detail);
   return order;
 }
 

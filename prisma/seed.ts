@@ -1781,6 +1781,19 @@ async function main() {
     });
   }
 
+  // --- Produção: setores (compartilhados entre lojas, mesmo padrão de categoria) ---
+  const PRODUCTION_SETORES = [
+    { key: "cozinha-quente", name: "Cozinha Quente", color: "#f97316", icon: "Flame" },
+    { key: "cozinha-fria", name: "Cozinha Fria", color: "#38bdf8", icon: "Snowflake" },
+  ];
+  for (const [idx, setor] of PRODUCTION_SETORES.entries()) {
+    await prisma.productionSetor.upsert({
+      where: { key: setor.key },
+      update: { name: setor.name, color: setor.color, icon: setor.icon, order: idx },
+      create: { ...setor, order: idx },
+    });
+  }
+
   // --- Produção: pesos padrão por dia da semana + configurações, por loja ---
   const DEFAULT_WEEKDAY_WEIGHTS = [8, 8, 10, 12, 18, 24, 20]; // dom..sáb, soma 100
   for (const empresa of [nordPizza, zarkiSushi]) {

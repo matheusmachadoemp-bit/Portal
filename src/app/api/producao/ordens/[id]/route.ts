@@ -22,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const ordem = await prisma.productionOrder.findUnique({
     where: { id },
     include: {
-      productionItem: { include: { category: true } },
+      productionItem: { include: { category: true, setor: true } },
       responsavel: { select: { id: true, name: true } },
       ajustePor: { select: { id: true, name: true } },
       forecast: true,
@@ -72,7 +72,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
 
   if (body.action === "iniciar") {
-    const ordem = await iniciarProductionOrder(id, session.user.id);
+    // `responsavelId` opcional: dá pra escolher QUEM da equipe vai produzir o
+    // item (ex.: o chef no tablet escolhe "foi a Jessie"), em vez de assumir
+    // sempre quem está logado. Mesma checagem de acesso à loja já usada na
+    // action "reatribuir" — sem isso, qualquer usuário ativo da empresa toda
+    // podia ser escolhido pra uma ordem de uma loja à qual não tem acesso.
+    let responsavelId: string | undefined;
+    if (body.responsavelId) {
+      const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], existing.empresaId);
+      if (invalidIds.length > 0) {
+        return NextResponse.json({ error: "Esse colaborador não tem acesso a esta loja." }, { status: 400 });
+      }
+      responsavelId = body.responsavelId;
+    }
+    const ordem = await iniciarProductionOrder(id, session.user.id, responsavelId);
     return NextResponse.json({ ordem });
   }
 

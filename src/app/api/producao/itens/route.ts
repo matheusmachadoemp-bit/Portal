@@ -32,6 +32,7 @@ export async function GET(req: Request) {
     orderBy: { name: "asc" },
     include: {
       category: { select: { id: true, name: true, color: true, icon: true } },
+      setor: { select: { id: true, name: true, color: true, icon: true } },
       ingredientes: { include: { ingredient: { select: { id: true, name: true, unidade: true } } }, orderBy: { order: "asc" } },
       stock: true,
     },
@@ -76,10 +77,12 @@ export async function POST(req: Request) {
       data: {
         empresaId: empresa.id,
         categoryId: body.categoryId,
+        setorId: body.setorId || null,
         name: body.name,
         unidade: body.unidade || "kg",
         fotoUrl: body.fotoUrl || null,
         descricao: body.descricao || null,
+        modoPreparo: body.modoPreparo || null,
         tipo: body.tipo || "VARIAVEL",
         quantidadeMinima: Number(body.quantidadeMinima) || 0,
         margemSeguranca: Number(body.margemSeguranca) || 0,

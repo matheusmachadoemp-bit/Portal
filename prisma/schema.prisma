@@ -5025,6 +5025,27 @@ model ProductionCategory {
   items ProductionItem[]
 }
 
+/**
+ * Setor de produção (ex.: Cozinha Quente / Cozinha Fria) — mesmo padrão de
+ * `ProductionCategory`: catálogo compartilhado entre lojas (sem `empresaId`),
+ * editável no futuro (Produção > Configurações, Fase 2). O isolamento por
+ * loja de cada item continua vindo de `ProductionItem.empresaId`, igual já
+ * funciona hoje para categoria.
+ */
+model ProductionSetor {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  color     String   @default("#2952E3")
+  icon      String   @default("ChefHat")
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items ProductionItem[]
+}
+
 enum ProductionItemType {
   FIXO
   VARIAVEL
@@ -5036,10 +5057,18 @@ model ProductionItem {
   empresa             Empresa            @relation(fields: [empresaId], references: [id])
   categoryId          String
   category            ProductionCategory @relation(fields: [categoryId], references: [id])
+  setorId             String?
+  setor               ProductionSetor?   @relation(fields: [setorId], references: [id])
   name                String
   unidade             String             @default("kg")
   fotoUrl             String?
   descricao           String?
+  /**
+   * Texto livre, mesmo padrão de `Product.modoPreparo` (Ficha Técnica) — sem
+   * estrutura de "passos", a receita de verdade é cadastrada depois pelo
+   * usuário.
+   */
+  modoPreparo         String?
   tipo                ProductionItemType @default(VARIAVEL)
   quantidadeMinima    Float              @default(0)
   margemSeguranca     Float              @default(0)
@@ -5218,12 +5247,19 @@ model ProductionWeekdayWeight {
 }
 
 model ProductionSettings {
-  id                  String   @id @default(cuid())
-  empresaId           String   @unique
-  empresa             Empresa  @relation(fields: [empresaId], references: [id])
-  semanasParaMedia    Int      @default(4)
-  toleranciaAlertaPct Float    @default(10)
-  updatedAt           DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  empresaId            String   @unique
+  empresa              Empresa  @relation(fields: [empresaId], references: [id])
+  semanasParaMedia     Int      @default(4)
+  toleranciaAlertaPct  Float    @default(10)
+  /**
+   * Margem extra usada no lugar da `ProductionItem.margemSeguranca`
+   * individual quando a geração do plano é marcada como semana de feriado
+   * (`semanaFeriado: true` em POST /api/producao/planejamento/gerar) — só
+   * afeta esse cálculo específico, nunca sobrescreve a margem salva no item.
+   */
+  margemFeriadoPercent Float    @default(20)
+  updatedAt            DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------
