@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/page-container";
 import { GerenteClient } from "./gerente-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
-import { computeGerenteMetrics, loadGerenteCustomIndicators } from "@/lib/reuniao-server";
+import { loadGerenteCustomIndicators } from "@/lib/reuniao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -25,9 +25,6 @@ export default async function ReuniaoGerentePage() {
   });
 
   const isSingle = ctx?.mode === "single";
-  const metrics = isSingle
-    ? await computeGerenteMetrics(ctx.empresa.id, periodo)
-    : { faturamentoTotalValor: null, cmvPercent: null, npsPercent: null, cancelamentoDeliveryPercent: null };
   const current = isSingle ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
   const customIndicators = isSingle ? await loadGerenteCustomIndicators(ctx.empresa.id, periodo) : [];
 
@@ -53,7 +50,6 @@ export default async function ReuniaoGerentePage() {
       <GerenteClient
         initialMeetings={meetings.map((m) => ({ ...m, createdAt: m.createdAt.toISOString(), updatedAt: m.updatedAt.toISOString() }))}
         initialCurrent={current ? { ...current, createdAt: current.createdAt.toISOString(), updatedAt: current.updatedAt.toISOString() } : null}
-        initialMetrics={metrics}
         initialCustomIndicators={customIndicators}
         periodo={periodo}
         canCreate={canCreate}

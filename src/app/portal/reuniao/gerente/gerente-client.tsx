@@ -6,7 +6,6 @@ import { Section } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { IconPicker } from "@/components/ui/icon-picker";
-import { statusOf } from "@/components/reuniao/indicator-card";
 import { CompareMonthsPicker } from "@/components/reuniao/compare-months";
 import {
   indicatorAccentColor,
@@ -15,7 +14,7 @@ import {
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
 import { formatCurrency, formatNumber } from "@/lib/calc";
-import { nextPeriodo, periodoLabel, periodoShortLabel, resolveComparePeriodos } from "@/lib/reuniao";
+import { nextPeriodo, periodoLabel, resolveComparePeriodos } from "@/lib/reuniao";
 import type { GerenteCustomIndicatorDTO } from "@/lib/reuniao-server";
 
 type Meeting = {
@@ -38,13 +37,6 @@ type Meeting = {
   createdAt: string;
   updatedAt: string;
   createdBy: { name: string };
-};
-
-type Metrics = {
-  faturamentoTotalValor: number | null;
-  cmvPercent: number | null;
-  npsPercent: number | null;
-  cancelamentoDeliveryPercent: number | null;
 };
 
 function formToPayload(periodo: string, form: ReturnType<typeof buildForm>) {
@@ -216,7 +208,6 @@ function usePeriodoMutating(): [(periodo: string) => boolean, (periodo: string) 
 export function GerenteClient({
   initialMeetings,
   initialCurrent,
-  initialMetrics,
   initialCustomIndicators,
   periodo,
   canCreate,
@@ -226,7 +217,6 @@ export function GerenteClient({
 }: {
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
-  initialMetrics: Metrics;
   initialCustomIndicators: GerenteCustomIndicatorDTO[];
   periodo: string;
   canCreate: boolean;
@@ -240,7 +230,6 @@ export function GerenteClient({
   const [meetings, setMeetings] = useState(initialMeetings);
   const [selectedPeriodo, setSelectedPeriodo] = useState(periodo);
   const [current, setCurrent] = useState(initialCurrent);
-  const [metrics, setMetrics] = useState(initialMetrics);
   const [form, setForm] = useState(buildForm(initialCurrent));
   const [isSaving, startSaving, finishSaving] = usePeriodoMutating();
   const [loading, setLoading] = useState(false);
@@ -276,7 +265,7 @@ export function GerenteClient({
 
   /**
    * Existem dois caminhos independentes que buscam dados do servidor e escrevem no mesmo
-   * estado (`current`/`metrics`/`customIndicators`/`customForm` etc.): o `useEffect` abaixo
+   * estado (`current`/`customIndicators`/`customForm` etc.): o `useEffect` abaixo
    * (dispara quando `selectedPeriodo` muda) e `refresh()` (chamado depois de criar/editar/
    * excluir um indicador, ou depois de salvar o fechamento do mês em `submit()`). Sem
    * coordenação entre os dois, a resposta atrasada de um caminho pode sobrescrever a tela com
@@ -346,7 +335,6 @@ export function GerenteClient({
         // não se atropelarem).
         if (cancelled) return;
         setCurrent(data.current);
-        setMetrics(data.metrics);
         setForm(buildForm(data.current));
         setCustomIndicators(data.customIndicators ?? []);
         setCustomForm(buildCustomForm(data.customIndicators ?? []));
@@ -356,12 +344,6 @@ export function GerenteClient({
       cancelled = true;
     };
   }, [selectedPeriodo]);
-
-  // `form.turnoverPercent`/`form.checklistOperacionalPercent` não têm mais input (congelados,
-  // ver `buildForm`), mas continuam refletindo o valor já salvo — dá pra seguir usando como fonte
-  // do comparativo do PDF sem mudança de comportamento.
-  const turnoverValor = form.turnoverPercent ? Number(form.turnoverPercent) : null;
-  const checklistValor = form.checklistOperacionalPercent ? Number(form.checklistOperacionalPercent) : null;
 
   function customIndicatorState(ind: GerenteCustomIndicatorDTO) {
     const entry = customForm[ind.id] ?? { valor: "", valorReferencia: String(ind.valorPadrao), valorSecundario: "", valorTerciario: "" };
@@ -394,22 +376,15 @@ export function GerenteClient({
       periodosComparados.map((p) => fetchFechamentoDoMesIndicatorsForPdf("/api/reuniao/gerente", p))
     );
 
-    function historico<K extends "faturamentoTotalValor" | "cmvPercent" | "turnoverPercent" | "checklistOperacionalPercent">(
-      key: K,
-      atualValue: number | null
-    ) {
-      return periodosComparados.map((p) => {
-        if (p === selectedPeriodo) return { monthLabel: periodoShortLabel(p), value: atualValue };
-        const m = meetings.find((mm) => mm.periodo === p);
-        return { monthLabel: periodoShortLabel(p), value: m ? m[key] : null };
-      });
-    }
-
-    // Os 4 indicadores fixos deixaram de ter meta/premiação (viraram entradas
-    // de referência livres na lista de "Fechamento do mês") — por enquanto o
-    // PDF só mostra o histórico do valor real de cada um, sem linha de meta
-    // nem premiação (o relatório em si ainda precisa de um redesenho, já que
-    // foi todo pensado em cima do conceito de "bateu a meta").
+    // Faturamento Total, CMV, Turnover e Checklist Operacional eram 4 indicadores fixos aqui,
+    // calculados/congelados à parte (ver histórico desta mesma tarefa) — removidos do PDF a
+    // pedido do Matheus porque duplicavam, com fonte e valor DIFERENTES, os indicadores de
+    // mesmo nome que já vêm de `buildCustomIndicatorPdfEntries` (o "Fechamento do mês" que o
+    // usuário realmente edita hoje). Os 2 primeiros eram recalculados ao vivo a cada save
+    // (podendo legitimamente estar zerados por falta de Fechamento do Dia, não por falta de
+    // cadastro) e os 2 últimos estavam congelados desde que a seção "Resultado do período" foi
+    // removida da tela (sem nenhum input que ainda os alimentasse) — nos dois casos, a fonte de
+    // verdade pro usuário é só o indicador dinâmico abaixo.
     exportMeetingReportPdf({
       fileSlug: "reuniao-gerente",
       empresaName,
@@ -417,46 +392,6 @@ export function GerenteClient({
       premiacaoTotal: 0,
       observacoes: form.notas,
       indicators: [
-        {
-          key: "faturamento",
-          label: "Faturamento Total",
-          unit: "currency",
-          meta: 0,
-          metaDirection: "max",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("faturamentoTotalValor", metrics.faturamentoTotalValor),
-        },
-        {
-          key: "cmv",
-          label: "CMV",
-          unit: "percent",
-          meta: 0,
-          metaDirection: "min",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("cmvPercent", metrics.cmvPercent),
-        },
-        {
-          key: "turnover",
-          label: "Turnover",
-          unit: "percent",
-          meta: 0,
-          metaDirection: "min",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("turnoverPercent", turnoverValor),
-        },
-        {
-          key: "checklist",
-          label: "Checklist Operacional",
-          unit: "percent",
-          meta: 0,
-          metaDirection: "max",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("checklistOperacionalPercent", checklistValor),
-        },
         // Indicadores customizados cadastrados pelo usuário em "Fechamento do mês" (ex.:
         // Ticket Médio Salão/Delivery, ou qualquer outro criado em "Novo indicador") — sem
         // isso, qualquer indicador customizado desaparecia do PDF mesmo aparecendo
@@ -485,14 +420,13 @@ export function GerenteClient({
     const data = await res.json();
     // Se o usuário já trocou de período desde que esta busca começou, descarta a resposta POR
     // COMPLETO — sem aplicar nem o preserva-rascunho abaixo, nem o overwrite de
-    // `meetings`/`current`/`metrics` — pra não sobrescrever a tela com dado de um período que
+    // `meetings`/`current` — pra não sobrescrever a tela com dado de um período que
     // não é mais o selecionado (ver comentário de `selectedPeriodoRef` acima). Duas mutações
     // independentes do MESMO período (`targetPeriodo === selectedPeriodoRef.current` pras
     // duas) passam por aqui sem se atropelar — cada uma aplica o próprio resultado.
     if (targetPeriodo !== selectedPeriodoRef.current) return;
     setMeetings(data.meetings);
     setCurrent(data.current);
-    setMetrics(data.metrics);
     const nextIndicators: GerenteCustomIndicatorDTO[] = data.customIndicators ?? [];
     // Criar/editar/excluir UM indicador no modal "Fechamento do mês" chama este refresh pra
     // recarregar a lista inteira do servidor — sem cuidado, isso sobrescreve `customForm` por
@@ -698,12 +632,6 @@ export function GerenteClient({
     setSelectedPeriodo(m.periodo);
     setCurrent(m);
     setForm(buildForm(m));
-    setMetrics({
-      faturamentoTotalValor: m.faturamentoTotalValor,
-      cmvPercent: m.cmvPercent,
-      npsPercent: m.npsPercent,
-      cancelamentoDeliveryPercent: m.cancelamentoDeliveryPercent,
-    });
     setFechamentoModalOpen(true);
   }
 
@@ -1308,6 +1236,12 @@ export function GerenteClient({
           page.tsx). */}
       {canCreate && <MetasProximoMesSection mp={mp} canDelete={canDeleteMetas} />}
 
+      {/* Período + Editar (navegação rápida pra abrir o Fechamento do mês de um mês já
+          lançado) — chegou a ter colunas de Faturamento/CMV/Turnover/Checklist aqui, mas eram
+          lidas de GerenteMeeting (cálculo ao vivo congelado no momento do save, ou campo
+          congelado desde que "Resultado do período" foi removida), duplicando com valores
+          DIFERENTES os indicadores de mesmo nome do "Fechamento do mês" — removidas a pedido
+          do Matheus (mesma decisão do PDF, ver comentário em `exportPdf` acima). */}
       {meetings.length > 0 && (
         <Section title="Histórico de reuniões">
           <div className="overflow-x-auto nord-scrollbar">
@@ -1319,26 +1253,6 @@ export function GerenteClient({
                       <DynamicIcon name="Calendar" size={13} className="text-nord-blue-light" /> Período
                     </span>
                   </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="DollarSign" size={13} className="text-nord-blue-light" /> Faturamento
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="Percent" size={13} className="text-nord-blue-light" /> CMV
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="UserMinus" size={13} className="text-nord-blue-light" /> Turnover
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="ClipboardCheck" size={13} className="text-nord-blue-light" /> Checklist
-                    </span>
-                  </th>
                   <th className="py-2 px-3"></th>
                 </tr>
               </thead>
@@ -1346,10 +1260,6 @@ export function GerenteClient({
                 {meetings.map((m) => (
                   <tr key={m.id} className={`border-b border-nord-border/50 ${m.periodo === selectedPeriodo ? "bg-white/5" : ""}`}>
                     <td className="py-2 px-3 text-white capitalize">{periodoLabel(m.periodo)}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.faturamentoTotalValor === null ? "-" : formatCurrency(m.faturamentoTotalValor)}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.cmvPercent === null ? "-" : `${formatNumber(m.cmvPercent, 1)}%`}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.turnoverPercent === null ? "-" : `${m.turnoverPercent}%`}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.checklistOperacionalPercent === null ? "-" : `${m.checklistOperacionalPercent}%`}</td>
                     <td className="py-2 px-3">
                       {canCreate && (
                         <button onClick={() => editHistoryRow(m)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">

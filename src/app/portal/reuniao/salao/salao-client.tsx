@@ -16,7 +16,7 @@ import {
   type FechamentoIndicator,
 } from "@/components/reuniao/fechamento-do-mes";
 import { useMetasProximoMes, MetasProximoMesSection, fetchMetasProximoMesForPdf } from "@/components/reuniao/metas-proximo-mes";
-import { formatCurrency, formatNumber } from "@/lib/calc";
+import { formatCurrency } from "@/lib/calc";
 import { nextPeriodo, periodoLabel, periodoShortLabel, resolveComparePeriodos, SALAO_PRODUTOS_PADRAO } from "@/lib/reuniao";
 
 type ProdutoMeta = { produto: string; quantidade: number | null; meta: number; premiacao: number };
@@ -41,7 +41,6 @@ type Meeting = {
   produtoMetas: ProdutoMeta[];
 };
 
-type Metrics = { npsPercent: number | null; faturamentoValor: number; ticketMedioValor: number | null };
 type MelhorVendedor = { nome: string | null; valor: number | null };
 type Comentario = { nome: string; comentario: string; nota: number };
 
@@ -104,7 +103,6 @@ function meetingPremiacaoTotal(m: Meeting) {
 export function SalaoClient({
   initialMeetings,
   initialCurrent,
-  initialMetrics,
   initialComentarios,
   initialCustomIndicators,
   periodo,
@@ -115,7 +113,6 @@ export function SalaoClient({
 }: {
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
-  initialMetrics: Metrics;
   /** Não é mais desestruturada acima (a seção "Melhor vendedor do mês" saiu da
    * tela, pedido do usuário — sempre aparecia vazia). O tipo continua exigindo
    * essa prop porque `page.tsx` ainda calcula e passa `initialMelhorVendedor`
@@ -136,7 +133,6 @@ export function SalaoClient({
   const [meetings, setMeetings] = useState(initialMeetings);
   const [selectedPeriodo, setSelectedPeriodo] = useState(periodo);
   const [current, setCurrent] = useState(initialCurrent);
-  const [metrics, setMetrics] = useState(initialMetrics);
   const [comentarios, setComentarios] = useState(initialComentarios);
   const [form, setForm] = useState(buildForm(initialCurrent));
   const [produtoForm, setProdutoForm] = useState(buildProdutoForm(initialCurrent));
@@ -172,7 +168,6 @@ export function SalaoClient({
         // sobrescrever a tela com dado de um período que não é mais o selecionado).
         if (cancelled || !fdm.isLatest(fdmToken)) return;
         setCurrent(data.current);
-        setMetrics(data.metrics);
         setComentarios(data.comentarios);
         setForm(buildForm(data.current));
         setProdutoForm(buildProdutoForm(data.current));
@@ -212,14 +207,14 @@ export function SalaoClient({
       periodosComparados.map((p) => fetchFechamentoDoMesIndicatorsForPdf("/api/reuniao/salao", p))
     );
 
-    function historico<K extends "npsPercent" | "faturamentoValor" | "ticketMedioValor">(key: K, atualValue: number | null) {
-      return periodosComparados.map((p) => {
-        if (p === selectedPeriodo) return { monthLabel: periodoShortLabel(p), value: atualValue };
-        const m = meetings.find((mm) => mm.periodo === p);
-        return { monthLabel: periodoShortLabel(p), value: m ? m[key] : null };
-      });
-    }
-
+    // NPS Geral, Faturamento do Salão e Ticket Médio eram 3 indicadores fixos aqui, recalculados
+    // ao vivo a cada save (ver histórico desta mesma tarefa) — removidos do PDF a pedido do
+    // Matheus porque duplicavam, com fonte e valor DIFERENTES, os indicadores de mesmo nome que
+    // já vêm de `buildCustomIndicatorPdfEntries` (o "Fechamento do mês" que o usuário realmente
+    // edita hoje). Podiam legitimamente estar zerados por falta de Fechamento do Dia, não por
+    // falta de cadastro — a fonte de verdade pro usuário é só o indicador dinâmico abaixo. As
+    // metas por produto continuam com meta+premiação normalmente (mecanismo à parte, que não
+    // mudou).
     exportMeetingReportPdf({
       fileSlug: "reuniao-salao",
       empresaName,
@@ -227,42 +222,6 @@ export function SalaoClient({
       premiacaoTotal,
       observacoes: form.notas,
       indicators: [
-        // NPS Geral, Faturamento do Salão e Ticket Médio deixaram de ter meta/premiação
-        // (viraram indicadores informativos; um valor de referência livre entra na
-        // lista de "Fechamento do mês" quando fizer sentido) — por enquanto o PDF só
-        // mostra o histórico do valor real de cada um, sem linha de meta nem
-        // premiação. As metas por produto abaixo continuam com meta+premiação
-        // normalmente (mecanismo à parte, que não mudou).
-        {
-          key: "nps",
-          label: "NPS Geral",
-          unit: "percent",
-          meta: 0,
-          metaDirection: "max",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("npsPercent", metrics.npsPercent),
-        },
-        {
-          key: "faturamento",
-          label: "Faturamento do Salão",
-          unit: "currency",
-          meta: 0,
-          metaDirection: "max",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("faturamentoValor", metrics.faturamentoValor),
-        },
-        {
-          key: "ticket-medio",
-          label: "Ticket Médio",
-          unit: "currency",
-          meta: 0,
-          metaDirection: "max",
-          status: statusOf(null),
-          premio: 0,
-          historico: historico("ticketMedioValor", metrics.ticketMedioValor),
-        },
         // Indicadores customizados cadastrados pelo usuário em "Fechamento do mês" (ex.:
         // qualquer indicador criado em "Novo indicador") — sem isso, qualquer indicador
         // customizado desaparecia do PDF mesmo aparecendo normalmente na tela (card #467).
@@ -315,7 +274,6 @@ export function SalaoClient({
     if (!fdm.isLatest(token)) return;
     setMeetings(data.meetings);
     setCurrent(data.current);
-    setMetrics(data.metrics);
     setComentarios(data.comentarios);
     fdm.sync(token, data.customIndicators ?? []);
   }
@@ -348,7 +306,6 @@ export function SalaoClient({
     setCurrent(m);
     setForm(buildForm(m));
     setProdutoForm(buildProdutoForm(m));
-    setMetrics({ npsPercent: m.npsPercent, faturamentoValor: m.faturamentoValor ?? 0, ticketMedioValor: m.ticketMedioValor });
     setFechamentoModalOpen(true);
   }
 
@@ -536,6 +493,11 @@ export function SalaoClient({
 
       {canCreate && <MetasProximoMesSection mp={mp} canDelete={canDeleteMetas} />}
 
+      {/* NPS/Faturamento/Ticket Médio removidos destas colunas (mesma decisão do PDF, ver
+          comentário em `exportPdf` acima) — eram lidos de SalaoMeeting (cálculo ao vivo
+          congelado no momento do save), duplicando com valores DIFERENTES os indicadores de
+          mesmo nome do "Fechamento do mês". "Premiação total" continua: vem das metas por
+          produto (SalaoProductGoal), mecanismo à parte que não mudou. */}
       {meetings.length > 0 && (
         <Section title="Histórico de reuniões">
           <div className="overflow-x-auto nord-scrollbar">
@@ -545,21 +507,6 @@ export function SalaoClient({
                   <th className="py-2 px-3">
                     <span className="flex items-center gap-1.5">
                       <DynamicIcon name="Calendar" size={13} className="text-nord-blue-light" /> Período
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="Smile" size={13} className="text-nord-blue-light" /> NPS
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="TrendingUp" size={13} className="text-nord-blue-light" /> Faturamento
-                    </span>
-                  </th>
-                  <th className="py-2 px-3">
-                    <span className="flex items-center gap-1.5">
-                      <DynamicIcon name="Receipt" size={13} className="text-nord-blue-light" /> Ticket Médio
                     </span>
                   </th>
                   <th className="py-2 px-3">
@@ -574,9 +521,6 @@ export function SalaoClient({
                 {meetings.map((m) => (
                   <tr key={m.id} className={`border-b border-nord-border/50 ${m.periodo === selectedPeriodo ? "bg-white/5" : ""}`}>
                     <td className="py-2 px-3 text-white capitalize">{periodoLabel(m.periodo)}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.npsPercent === null ? "-" : `${formatNumber(m.npsPercent, 1)}%`}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.faturamentoValor === null ? "-" : formatCurrency(m.faturamentoValor)}</td>
-                    <td className="py-2 px-3 text-nord-gray">{m.ticketMedioValor === null ? "-" : formatCurrency(m.ticketMedioValor)}</td>
                     <td className="py-2 px-3 text-amber-400">{formatCurrency(meetingPremiacaoTotal(m))}</td>
                     <td className="py-2 px-3">
                       {canCreate && (

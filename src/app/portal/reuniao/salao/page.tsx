@@ -4,12 +4,7 @@ import { PageContainer } from "@/components/page-container";
 import { SalaoClient } from "./salao-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
-import {
-  computeSalaoMetrics,
-  computeMelhorVendedor,
-  computeComentariosDestaque,
-  loadReuniaoCustomIndicators,
-} from "@/lib/reuniao-server";
+import { computeMelhorVendedor, computeComentariosDestaque, loadReuniaoCustomIndicators } from "@/lib/reuniao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -30,9 +25,6 @@ export default async function ReuniaoSalaoPage() {
   });
 
   const isSingle = ctx?.mode === "single";
-  const metrics = isSingle
-    ? await computeSalaoMetrics(ctx.empresa.id, periodo)
-    : { npsPercent: null, faturamentoValor: 0, ticketMedioValor: null };
   const melhorVendedor = isSingle ? await computeMelhorVendedor(ctx.empresa.id, periodo) : { nome: null, valor: null };
   const comentarios = isSingle ? await computeComentariosDestaque(ctx.empresa.id, periodo) : [];
 
@@ -60,7 +52,6 @@ export default async function ReuniaoSalaoPage() {
       <SalaoClient
         initialMeetings={meetings.map((m) => ({ ...m, createdAt: m.createdAt.toISOString(), updatedAt: m.updatedAt.toISOString() }))}
         initialCurrent={current ? { ...current, createdAt: current.createdAt.toISOString(), updatedAt: current.updatedAt.toISOString() } : null}
-        initialMetrics={metrics}
         initialMelhorVendedor={melhorVendedor}
         initialComentarios={comentarios}
         initialCustomIndicators={customIndicators}

@@ -93,26 +93,36 @@ function pdfUnitFor(unidade: FechamentoIndicator["unidade"]): MeetingIndicator["
 }
 
 /**
- * Monta as entradas de `MeetingIndicator` (reuniao-pdf.ts) de TODOS os
- * indicadores customizados da seção "Fechamento do mês" — chamado pelo
- * `exportPdf()` de cada uma das reuniões e ADICIONADO aos indicadores fixos
- * que já existem lá (nunca os substitui). Sem isso, qualquer indicador
- * customizado criado pelo usuário (ex.: em "Novo indicador") simplesmente não
- * aparecia no PDF exportado, mesmo já aparecendo normalmente na tela (card
- * #467 — "ele puxa as informações antigas").
+ * Monta as entradas de `MeetingIndicator` (reuniao-pdf.ts) dos indicadores
+ * customizados da seção "Fechamento do mês" que de fato têm um valor
+ * cadastrado NO PERÍODO EXPORTADO — chamado pelo `exportPdf()` de cada uma
+ * das reuniões e ADICIONADO aos indicadores fixos que já existem lá (nunca
+ * os substitui). Sem isso, qualquer indicador customizado criado pelo
+ * usuário (ex.: em "Novo indicador") simplesmente não aparecia no PDF
+ * exportado, mesmo já aparecendo normalmente na tela (card #467 — "ele puxa
+ * as informações antigas").
  *
  * `indicatorsByPeriodo` é o resultado de uma chamada de
  * `fetchFechamentoDoMesIndicatorsForPdf` por período em `periodosComparados`
  * (mesma ordem — do mais antigo pro mais recente). A lista/ordem dos
  * indicadores em si não muda de um período pro outro (só o valor salvo neles
- * muda) — por isso quem decide QUAIS indicadores (e em que ordem) entram no
- * PDF é sempre o ÚLTIMO período (o mês selecionado na tela); um indicador
- * excluído entre dois dos períodos comparados simplesmente não aparece.
+ * muda) — por isso quem decide QUAIS indicadores (e em que ordem) PODEM
+ * entrar no PDF é sempre o ÚLTIMO período (o mês selecionado na tela); um
+ * indicador excluído entre dois dos períodos comparados simplesmente não
+ * aparece. "Podem" porque, dentro desse conjunto, cada um ainda passa por um
+ * segundo filtro: só vira entry de fato quando tem valor cadastrado NESTE
+ * período específico — ver o `continue`/checagens de `cadastradoNoPeriodo`/
+ * `valorSecundario`/`valorTerciario` dentro do loop abaixo. Antes dessa
+ * checagem existir, todo indicador cadastrado na empresa aparecia em todo
+ * mês exportado, mesmo sem nunca ter sido preenchido naquele mês (ex.:
+ * "Turnover" aparecendo em agosto com o `valorPadrao` fabricado, mesmo sem
+ * ter sido cadastrado nesse mês — o pedido original desta tarefa).
  *
- * Cada indicador gera 1 página (valor principal/`valorReferencia`) e, quando
- * é um indicador "composto" (`unidadeSecundaria`/`unidadeTerciaria`
- * configuradas — ver schema.prisma), mais 1 página por valor extra
- * (2º/3º), na sequência — mesmo histórico comparativo, só que do
+ * Cada indicador com dado no período gera 1 página (valor principal/
+ * `valorReferencia`) e, quando é um indicador "composto"
+ * (`unidadeSecundaria`/`unidadeTerciaria` configuradas — ver
+ * schema.prisma) com valor cadastrado no 2º/3º campo, mais 1 página por
+ * valor extra, na sequência — mesmo histórico comparativo, só que do
  * `valorSecundario`/`valorTerciario`.
  */
 export function buildCustomIndicatorPdfEntries(
@@ -147,6 +157,20 @@ export function buildCustomIndicatorPdfEntries(
 
   const entries: MeetingIndicator[] = [];
   for (const ind of current) {
+    // Só vira linha no PDF quando este indicador tem um valor de verdade
+    // cadastrado NESTE período (o mês exportado) — `cadastradoNoPeriodo` é o
+    // sinal confiável pra isso (ver comentário do campo em
+    // `ReuniaoCustomIndicatorDTO`, reuniao-server.ts: `true` só quando existe
+    // um `ReuniaoCustomIndicatorValue` de verdade salvo pra este indicador
+    // neste período exato). NÃO usar `valorReferencia` pra essa checagem —
+    // ele sempre tem algum número (cai no `valorPadrao` quando não há valor
+    // salvo), um fallback só de EXIBIÇÃO que não distingue "foi cadastrado"
+    // de "nunca foi preenchido neste mês". `?? false` cobre o indicador
+    // recém-criado no cliente (`createIndicator` em `useFechamentoDoMes`
+    // acima, que monta o objeto na mão sem este campo) — nesse caso nunca há
+    // valor salvo em período nenhum mesmo, então omitir é o resultado certo.
+    if (!(ind.cadastradoNoPeriodo ?? false)) continue;
+
     entries.push({
       key: `custom-${ind.id}`,
       label: ind.nome,
@@ -157,7 +181,12 @@ export function buildCustomIndicatorPdfEntries(
       premio: 0,
       historico: historicoFor(ind.id, (i) => i.valorReferencia),
     });
-    if (ind.unidadeSecundaria && ind.nomeSecundario) {
+    // Segundo valor: diferente de `valorReferencia`, `valorSecundario` já é
+    // um sinal confiável por si só — fica `null` de verdade quando não há
+    // valor salvo pro período, sem fallback pro `valorPadrao` (não existe
+    // "valorPadraoSecundario", ver schema.prisma) — por isso não depende de
+    // `cadastradoNoPeriodo`, só checa o próprio valor.
+    if (ind.unidadeSecundaria && ind.nomeSecundario && ind.valorSecundario != null) {
       entries.push({
         key: `custom-${ind.id}-secundario`,
         label: ind.nomeSecundario,
@@ -169,7 +198,8 @@ export function buildCustomIndicatorPdfEntries(
         historico: historicoFor(ind.id, (i) => i.valorSecundario ?? null),
       });
     }
-    if (ind.unidadeTerciaria && ind.nomeTerciario) {
+    // Terceiro valor — mesma ideia do segundo.
+    if (ind.unidadeTerciaria && ind.nomeTerciario && ind.valorTerciario != null) {
       entries.push({
         key: `custom-${ind.id}-terciario`,
         label: ind.nomeTerciario,
