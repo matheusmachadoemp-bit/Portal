@@ -62,6 +62,7 @@ export default async function ComprasPage() {
     id: p.id,
     numeroNota: p.numeroNota,
     data: p.data.toISOString(),
+    previsaoEntrega: p.previsaoEntrega ? p.previsaoEntrega.toISOString() : null,
     supplierId: p.supplierId,
     supplierName: p.supplier.nomeFantasia ?? p.supplier.razaoSocial,
     compradorResponsavel: p.compradorResponsavel,
