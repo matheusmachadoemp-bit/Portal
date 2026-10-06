@@ -6,6 +6,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
+import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 
 // Campos de cabeçalho que só podem ser editados enquanto a compra ainda não foi recebida — ver
 // bloqueio logo abaixo de `willReceive`. `status`, `numeroNota`, `notaFiscalUrl` e `observacoes`
@@ -25,6 +26,24 @@ const LOCKABLE_HEADER_FIELDS = [
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Checagem de cargo (RECEBIMENTO_MANAGE_ROLES, mesma usada em GET/POST de
+  // /api/estoque/compras — achado do Jonas, 2026-10-01, sobre exposição de preço pago).
+  // `hasModulePermission(..., "canEdit")` abaixo sozinho não bastava: qualquer COLABORADOR com
+  // essa permissão de perfil ligada (sem precisar de cargo nenhum) conseguia editar
+  // fornecedor/datas/desconto/frete/quantidade/valor unitário de um pedido de compra via PATCH
+  // direto, mesmo sem acesso à tela de Compras — inclusive um colaborador que só tem acesso
+  // legítimo à tela de Recebimento de Mercadorias (de onde já vê o `purchaseId`). Roda antes de
+  // qualquer busca no banco, igual ao GET/POST, pra não gastar uma query em quem nem pode chamar
+  // essa rota.
+  if (!RECEBIMENTO_MANAGE_ROLES.includes(session.user.role)) {
+    return NextResponse.json(
+      {
+        error:
+          "Editar pedidos de compra é restrito a Administrador, Gestor, Gerente ou Supervisor. Para conferir ou dar entrada numa mercadoria, use Estoque > Recebimento de Mercadorias.",
+      },
+      { status: 403 }
+    );
+  }
   const { id } = await params;
   const body = await req.json();
 
