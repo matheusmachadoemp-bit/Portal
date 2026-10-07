@@ -1,6 +1,11 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { ACCESS_LEVEL_TO_MODULE_FLAGS, defaultProfileKeyForRole, type PermissionAction } from "@/lib/permissions";
+import {
+  ACCESS_LEVEL_TO_MODULE_FLAGS,
+  defaultLevelForProfileKey,
+  defaultProfileKeyForRole,
+  type PermissionAction,
+} from "@/lib/permissions";
 
 /**
  * Busca TODAS as permissões do usuário — role, perfil atribuído, todos os
@@ -138,4 +143,92 @@ export async function resolveDefaultPermissionProfileId(role: string): Promise<s
     select: { id: true },
   });
   return profile?.id ?? null;
+}
+
+/**
+ * Garante que uma categoria/subcategoria do menu lateral recém-criada pela própria UI (sempre
+ * com uma `moduleKey` nunca vista antes por NENHUM `ModulePermission` — `MODULES`, em
+ * `@/lib/permissions`, é uma lista fixa em código, e `prisma/seed.ts` só cria linhas de
+ * `ModulePermission` para as chaves que já estão lá) não fique travada no pior caso possível:
+ * "nem o Administrador/Gestor que acabou de criar consegue ver o que criou". Ver a regra 6 do
+ * comentário de `hasModulePermission` acima — sem NENHUMA linha pra uma `moduleKey`, o padrão já
+ * é negar pra todo mundo que não seja `role === "ADMINISTRADOR"` (que ignora perfil/linha
+ * completamente, regra 1). `buildVisibilityResolver` (@/lib/permissions, usado pelo menu lateral
+ * em src/app/portal/layout.tsx) segue a mesma regra de negar por padrão sem linha nenhuma.
+ *
+ * Só cria linha para os perfis PADRÃO de quem tem permissão pra criar categoria/subcategoria
+ * pela sidebar — Administrador e Gestor, os dois únicos cargos liberados em
+ * `POST /api/menu`/`POST /api/menu/subcategories` (`ROLE_TO_PERMISSION_PROFILE_KEY`) — no mesmo
+ * nível que `prisma/seed.ts` usaria se essa `moduleKey` estivesse em `MODULES` desde o início
+ * (`defaultLevelForProfileKey`, a mesma função que o seed já usa). Os demais perfis (funcionário,
+ * líder, supervisor, gerente, marketing, financeiro) de propósito NÃO ganham linha nenhuma aqui —
+ * continuam caindo no "nenhuma configuração encontrada" = negado, preservando o padrão de negar
+ * por padrão pra quem não criou a categoria. Garante o mínimo pedido (quem pode criar já enxerga
+ * o que criou, sem precisar de um passo extra de liberar permissão pra si mesmo) sem abrir pra
+ * "todo mundo vê por padrão, sem ninguém ter liberado" — qualquer liberação pra outros perfis
+ * continua sendo uma decisão manual na tela de Permissões, do jeito que já é pra todo o resto.
+ *
+ * Chamada só por `POST /api/menu` (categoria nova) e `POST /api/menu/subcategories` (subcategoria
+ * nova — chamada com a `key` da categoria MÃE, não uma chave composta: uma subcategoria nova
+ * sem override próprio herda a visibilidade da categoria inteira, igual já documentado em
+ * `buildVisibilityResolver`; a tela de Perfis de Permissão hoje só configura módulos inteiros,
+ * nunca subcategorias — ver prisma/seed.ts). `upsert` com `update: {}` (nunca sobrescreve): mesma
+ * semântica do loop de seed — se uma linha já existir (categoria antiga, de antes desta função
+ * existir, ou um admin já tiver configurado manualmente), não pisa em cima.
+ */
+export async function ensureDefaultModulePermissions(moduleKey: string): Promise<void> {
+  const creatorProfileKeys = [defaultProfileKeyForRole("ADMINISTRADOR"), defaultProfileKeyForRole("GESTOR")];
+  const profiles = await prisma.permissionProfile.findMany({
+    where: { key: { in: creatorProfileKeys } },
+    select: { id: true, key: true },
+  });
+
+  await Promise.all(
+    profiles.map((profile) =>
+      prisma.modulePermission.upsert({
+        where: { profileId_moduleKey: { profileId: profile.id, moduleKey } },
+        update: {},
+        create: {
+          profileId: profile.id,
+          moduleKey,
+          ...ACCESS_LEVEL_TO_MODULE_FLAGS[defaultLevelForProfileKey(profile.key)],
+        },
+      })
+    )
+  );
+}
+
+/**
+ * Subcategoria NOVA criada pela sidebar em cima de uma categoria que já existe (RH, Financeiro,
+ * Administrativo, ...): sem uma linha própria ela herdaria o `canView` (e o nível de edição) da
+ * categoria inteira — e o conteúdo genérico (src/lib/generic-content.ts, /api/generic-files) só
+ * confere `hasModulePermission`, sem os gates de cargo (`MANAGER_ROLES`, etc.) que cada módulo
+ * aplica por fora nas próprias páginas. Resultado: um Funcionário passaria a ver e baixar o que
+ * um Gestor enviasse numa subcategoria nova de RH/Financeiro. Por isso a subcategoria nasce com
+ * linha de chave composta (`categoria:subcategoria`) pra TODOS os perfis — Administrador e Gestor
+ * (quem pode criar) no nível padrão do cargo, os demais sem nenhum acesso (`NENHUM`). Uma linha
+ * composta encerra a herança em `hasModulePermission` e em `buildVisibilityResolver`; liberar
+ * pra outras pessoas passa a ser decisão explícita (override por usuário na tela de Usuários).
+ * `upsert` com `update: {}`: nunca sobrescreve uma linha já configurada.
+ */
+export async function ensureDefaultSubcategoryPermissions(categoryKey: string, subcategoryKey: string): Promise<void> {
+  const moduleKey = `${categoryKey}:${subcategoryKey}`;
+  const creatorProfileKeys = new Set([defaultProfileKeyForRole("ADMINISTRADOR"), defaultProfileKeyForRole("GESTOR")]);
+  const profiles = await prisma.permissionProfile.findMany({ select: { id: true, key: true } });
+
+  await Promise.all(
+    profiles.map((profile) =>
+      prisma.modulePermission.upsert({
+        where: { profileId_moduleKey: { profileId: profile.id, moduleKey } },
+        update: {},
+        create: {
+          profileId: profile.id,
+          moduleKey,
+          ...ACCESS_LEVEL_TO_MODULE_FLAGS[
+            creatorProfileKeys.has(profile.key) ? defaultLevelForProfileKey(profile.key) : "NENHUM"
+          ],
+        },
+      })
+    )
+  );
 }

@@ -74,7 +74,7 @@ export function Sidebar({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
-    const activeKey = categories.find((c) => pathname.startsWith(`/portal/${c.key}`))?.id;
+    const activeKey = categories.find((c) => pathname === `/portal/${c.key}` || pathname.startsWith(`/portal/${c.key}/`))?.id;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs expanded menu section to the active route
     if (activeKey) setExpanded((e) => ({ ...e, [activeKey]: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,6 +297,7 @@ export function Sidebar({
                   onToggleExpand={() =>
                     setExpanded((e) => ({ ...e, [cat.id]: !e[cat.id] }))
                   }
+                  onExpandSidebar={() => setCollapsed(false)}
                   pathname={pathname}
                   router={router}
                   isAdmin={isAdmin}
@@ -413,6 +414,7 @@ function CategoryRow({
   collapsed,
   expanded,
   onToggleExpand,
+  onExpandSidebar,
   pathname,
   router,
   isAdmin,
@@ -432,6 +434,7 @@ function CategoryRow({
   collapsed: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
+  onExpandSidebar: () => void;
   pathname: string;
   router: ReturnType<typeof useRouter>;
   isAdmin: boolean;
@@ -451,7 +454,7 @@ function CategoryRow({
     id: cat.id,
   });
   const [menuOpen, setMenuOpen] = useState(false);
-  const active = pathname.startsWith(`/portal/${cat.key}`);
+  const active = pathname === `/portal/${cat.key}` || pathname.startsWith(`/portal/${cat.key}/`);
   const hasSubs = cat.subcategories.length > 0;
 
   const style = {
@@ -481,12 +484,34 @@ function CategoryRow({
         )}
         <button
           onClick={() => {
-            // `!== false` (não `=== true`): trata ausência do campo (cache
-            // desatualizado após uma migração que alterou a coluna direto no
-            // banco, sem passar por revalidateTag) como "tem link" — o
-            // padrão do schema — em vez de travar a categoria inteira.
-            if (cat.linked !== false) router.push(`/portal/${cat.key}`);
-            if (hasSubs) onToggleExpand();
+            // Categoria é só separador visual do menu lateral — quem tem funcionalidade/página
+            // própria é a SUBCATEGORIA (decisão do Matheus, 2026-10). Clicar na categoria NUNCA
+            // navega quando ela tem subcategoria: só expande/recolhe a lista, não importa o valor
+            // de `cat.linked` (campo mantido no schema por ora, mas não é mais lido pra decidir
+            // isto — ver prisma/schema.prisma). Categorias sem nenhuma subcategoria (hoje: Início,
+            // Configurações, Usuários) não têm o que expandir, então continuam navegando direto
+            // pra /portal/{key} — senão ficariam sem nenhuma ação possível ao clicar.
+            //
+            // Antes, a condição era `cat.linked !== false` (navegava SEMPRE que `linked` não
+            // fosse explicitamente `false`) RODANDO JUNTO com o toggle de expand — ou seja, pra
+            // qualquer categoria com subcategorias e `linked` ausente/true (ex.: Reunião, Marketing
+            // — a maioria, já que só "vendas"/"tarefas" tinham `linked: false` seedado), um clique
+            // ao mesmo tempo expandia a lista E navegava pra /portal/{key}; se aquela rota raiz
+            // fizesse um redirect() pra uma sub padrão (ex.: src/app/portal/reuniao/page.tsx ->
+            // /portal/reuniao/salao), o efeito observado era "cliquei em Reunião e ele abriu
+            // Reunião Salão sozinho" — exatamente o comportamento reportado.
+            if (hasSubs) {
+              // Com o menu recolhido (só ícones) a lista de subcategorias não aparece: abre o menu
+              // junto, senão o clique parecia não fazer nada.
+              if (collapsed) {
+                onExpandSidebar();
+                if (!expanded) onToggleExpand();
+              } else {
+                onToggleExpand();
+              }
+            } else {
+              router.push(`/portal/${cat.key}`);
+            }
           }}
           aria-label={cat.name}
           className={`flex-1 flex items-center gap-2.5 text-sm py-1 min-w-0 ${

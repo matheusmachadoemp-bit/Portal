@@ -51,6 +51,7 @@ const CATEGORIES = [
     order: 2,
     contentType: "marketing",
     subs: [
+      { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "calendario", name: "Calendário de Conteúdo", icon: "Calendar" },
       { key: "tarefas", name: "Tarefas", icon: "ListChecks" },
       { key: "parcerias", name: "Parcerias", icon: "Handshake" },
@@ -84,6 +85,7 @@ const CATEGORIES = [
     order: 4,
     contentType: "metas",
     subs: [
+      { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "gerencia", name: "Metas da Gerência", icon: "Briefcase" },
       { key: "salao", name: "Metas do Salão", icon: "Utensils" },
       { key: "cozinha", name: "Metas da Cozinha", icon: "ChefHat" },
@@ -266,6 +268,7 @@ const CATEGORIES = [
     order: 12,
     contentType: "cmv",
     subs: [
+      { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "cmv-teorico", name: "CMV Teórico", icon: "Calculator" },
       { key: "cmv-real", name: "CMV Real", icon: "Warehouse" },
       { key: "comparativo", name: "Comparativo Real x Teórico", icon: "GitCompareArrows" },

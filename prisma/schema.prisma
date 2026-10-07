@@ -109,6 +109,7 @@ model User {
   vaultAccess                        VaultAccessLog[]
   courses                            Course[]
   files                              FileItem[]
+  genericFileItems                   GenericFileItem[]
   products                           Product[]
   occurrences                        Occurrence[]                        @relation("OccurrenceCreatedBy")
   rhFinanceEntries                   EmployeeFinanceEntry[]              @relation("RhFinanceCreatedBy")
@@ -423,29 +424,40 @@ model Category {
   active      Boolean  @default(true)
   isSystem    Boolean  @default(false)
   contentType String   @default("custom")
-  // Se a categoria em si navega para /portal/{key} ao ser clicada no menu lateral (padrão)
-  // ou serve só de agrupador visual pras subcategorias, sem página própria (ex.: "Tarefas",
-  // depois que ganhou uma subcategoria "Tarefas" própria apontando pro quadro principal).
+  // Histórico: até 2026-10, decidia se a categoria em si navegava pra /portal/{key} ao ser
+  // clicada no menu lateral (`true`/ausente) ou só expandia a lista de subcategorias, sem
+  // navegar (`false` — era o caso de "Vendas"/"Tarefas"). Decisão do Matheus (2026-10): a
+  // categoria é só separador visual do menu lateral; quem tem página/funcionalidade própria é
+  // SEMPRE a subcategoria. `src/components/sidebar/sidebar.tsx` não lê mais este campo pra
+  // decidir navegação — clicar numa categoria COM subcategoria só expande/recolhe, incondicional;
+  // só uma categoria SEM NENHUMA subcategoria (Início/Configurações/Usuários) continua navegando
+  // direto (não há o que expandir). Campo mantido no schema (sem migration só por isto — não há
+  // nenhum outro lugar que o leia hoje) por ora, mas vestigial: nenhum código funcional consulta
+  // mais o valor dele.
   linked      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  subcategories Subcategory[]
+  subcategories    Subcategory[]
+  // Conteúdo genérico (pastas/arquivos) de uma categoria SEM módulo específico, usado quando
+  // `linked === true` e a categoria navega direto pra /portal/{key} sem nenhuma subcategoria
+  // selecionada — ver GenericFileItem e src/app/portal/[category]/page.tsx.
+  genericFileItems GenericFileItem[]
 }
 
 model Subcategory {
-  id         String   @id @default(cuid())
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  key        String
-  name       String
-  icon       String   @default("Folder")
-  color      String   @default("#2952E3")
-  order      Int      @default(0)
-  active     Boolean  @default(true)
-  isSystem   Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id               String            @id @default(cuid())
+  categoryId       String
+  category         Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  key              String
+  name             String
+  icon             String            @default("Folder")
+  color            String            @default("#2952E3")
+  order            Int               @default(0)
+  active           Boolean           @default(true)
+  isSystem         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   // Loja dona desta subcategoria (ex.: "Pizzas Salgadas" da Ficha Técnica só faz sentido pra
   // Nord Pizza & Burger, "Sushi" só pra Zarki Sushi). `null` = compartilhada/visível pra todas as
   // lojas (comportamento padrão de sempre, mantido para Financeiro/RH/Estoque/etc. e para as
@@ -459,8 +471,12 @@ model Subcategory {
   // (src/lib/menu-categories.ts), que também alimenta o editor de Perfil de Permissão em
   // Usuários e precisa continuar enxergando as subcategorias de TODAS as lojas (perfil de
   // permissão é por usuário, não por loja ativa).
-  empresaId  String?
-  empresa    Empresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  empresaId        String?
+  empresa          Empresa?          @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  // Conteúdo genérico (pastas/arquivos) desta subcategoria, usado quando ela não cai em nenhuma
+  // rota física/mapa hardcoded específico (Grupo B do catch-all genérico, ou patch do Grupo A em
+  // Ficha Técnica/Metas) — ver GenericFileItem.
+  genericFileItems GenericFileItem[]
 
   @@unique([categoryId, key])
 }
@@ -2580,6 +2596,52 @@ model FileItem {
   updatedAt   DateTime       @updatedAt
 }
 
+// Conteúdo genérico de fallback para categoria/subcategoria do menu lateral (`Category`/
+// `Subcategory`) sem módulo/tela própria — mesmo padrão de pastas de `FileItem` (acima), mas
+// desacoplado do enum fixo `FileFolderType` (ARQUIVO/CARTILHA/LOGO, só usado pelas 3 telas de
+// Administrativo), já que aqui a "pasta" é identificada por uma categoria/subcategoria
+// CADASTRADA NO BANCO (quantidade arbitrária, criada livremente pelo sidebar — ver
+// POST /api/menu e /api/menu/subcategories), não por um valor fixo de enum.
+//
+// Modelo novo em vez de generalizar `FileItem` (cogitado, mas descartado): `FileItem` hoje tem UM
+// único critério de acesso (`ADMINISTRADOR`/`GESTOR`, hardcoded em `/api/admin/files`), enquanto o
+// acesso aqui é dinâmico — depende de `hasModulePermission` para a `key` da categoria/subcategoria
+// dona do registro, que varia por perfil. Separar os dois modelos evita misturar essas duas regras
+// de autorização bem diferentes numa única tabela/rota.
+//
+// Exatamente UM de `categoryId`/`subcategoryId` é preenchido (nunca os dois, nunca nenhum) — ver
+// `resolveGenericScope()` em src/lib/generic-content.ts, que é quem decide qual dos dois usar e é
+// o único caminho de escrita (API em src/app/api/generic-files/**):
+// - `subcategoryId`: conteúdo de uma SUBCATEGORIA sem rota física própria (catch-all
+//   src/app/portal/[category]/[sub]/page.tsx e os [sub]/page.tsx dentro de cada categoria já
+//   existente, ou o patch em ficha-tecnica/metas quando o mapa hardcoded não bate).
+// - `categoryId`: conteúdo da RAIZ de uma categoria com `linked: true` e SEM subcategoria
+//   selecionada (ex.: categoria nova criada pelo sidebar, clicada direto) — ver
+//   src/app/portal/[category]/page.tsx.
+model GenericFileItem {
+  id            String            @id @default(cuid())
+  categoryId    String?
+  category      Category?         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  subcategoryId String?
+  subcategory   Subcategory?      @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  name          String
+  parentId      String?
+  parent        GenericFileItem?  @relation("GenericFileTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children      GenericFileItem[] @relation("GenericFileTree")
+  isFolder      Boolean           @default(false)
+  fileUrl       String?
+  mimeType      String?
+  sizeBytes     Int?
+  version       Int               @default(1)
+  createdById   String
+  createdBy     User              @relation(fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([categoryId])
+  @@index([subcategoryId])
+}
+
 // ---------------------------------------------------------------------------
 // FICHA TECNICA
 // ---------------------------------------------------------------------------
@@ -3457,7 +3519,7 @@ model ReuniaoCustomIndicatorValue {
   /// payload mande um valor por engano) — evita linha "órfã" com um
   /// valorTerciario que não corresponde a nenhum nomeTerciario/
   /// unidadeTerciaria do indicador.
-  valorTerciario Float?
+  valorTerciario  Float?
 
   @@unique([indicatorId, periodo])
 }

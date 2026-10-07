@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
+import { ensureDefaultModulePermissions, ensureDefaultSubcategoryPermissions } from "@/lib/authz";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -12,21 +13,59 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
+  // A `key` vira segmento de URL e parte da chave de permissão composta (`categoria:sub`) — só
+  // letras minúsculas, números e hífen (a UI nunca envia `key`; isto protege chamadas diretas).
+  if (body.key !== undefined && body.key !== null && !/^[a-z0-9-]+$/.test(String(body.key))) {
+    return NextResponse.json({ error: "Chave inválida (use apenas letras minúsculas, números e hífen)." }, { status: 400 });
+  }
+
+  // Busca a categoria mãe antes de criar (em vez de deixar a FK constraint do
+  // `prisma.subcategory.create` abaixo estourar um 500 pra um `categoryId` inválido): precisamos
+  // da `key` dela de qualquer forma, pra `ensureDefaultModulePermissions` logo abaixo.
+  const category = await prisma.category.findUnique({ where: { id: body.categoryId } });
+  if (!category) {
+    return NextResponse.json({ error: "Categoria não encontrada." }, { status: 400 });
+  }
+
   const maxOrder = await prisma.subcategory.aggregate({
     where: { categoryId: body.categoryId },
     _max: { order: true },
   });
 
+  // Permissões restritas gravadas ANTES de criar a subcategoria: se algo falhar no meio, nunca fica
+  // uma subcategoria existente e aberta (herdando o acesso da categoria) — só linhas sobrando,
+  // inofensivas. Ver `ensureDefaultSubcategoryPermissions` (@/lib/authz).
+  const subKey: string = body.key ?? `sub-${Date.now()}`;
+  // Chave já usada nesta categoria: recusa ANTES de gravar permissões (senão as linhas restritas
+  // da chave repetida esconderiam a subcategoria que já existe pros outros perfis).
+  const duplicateKey = await prisma.subcategory.findUnique({
+    where: { categoryId_key: { categoryId: body.categoryId, key: subKey } },
+    select: { id: true },
+  });
+  if (duplicateKey) {
+    return NextResponse.json({ error: "Já existe uma subcategoria com essa chave nesta categoria." }, { status: 409 });
+  }
+  await ensureDefaultSubcategoryPermissions(category.key, subKey);
+
   const subcategory = await prisma.subcategory.create({
     data: {
       categoryId: body.categoryId,
-      key: body.key ?? `sub-${Date.now()}`,
+      key: subKey,
       name: body.name ?? "Nova subcategoria",
       icon: body.icon ?? "Folder",
       color: body.color ?? "#1464F4",
       order: (maxOrder._max.order ?? 0) + 1,
     },
   });
+
+  // Uma subcategoria nova sem override próprio herda a visibilidade da CATEGORIA inteira (ver
+  // buildVisibilityResolver/hasModulePermission) — então o que precisa de uma linha de
+  // ModulePermission garantida é a `key` da categoria mãe, não uma chave composta. Idempotente
+  // (upsert) e inofensivo pra uma categoria já conhecida (ex.: "financeiro": todo perfil já tem
+  // linha própria desde o seed, então isto não faz nada) — só tem efeito de verdade pra uma
+  // categoria criada pela própria sidebar, cuja `key` nunca existiu em `MODULES`. Ver comentário
+  // completo em `ensureDefaultModulePermissions` (@/lib/authz).
+  await ensureDefaultModulePermissions(category.key);
 
   revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ subcategory });
