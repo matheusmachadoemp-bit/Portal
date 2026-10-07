@@ -52,6 +52,7 @@ export function HojeClient({
   const [imprimindo, setImprimindo] = useState<ProductionOrderDTO | null>(null);
   const [vendoModoPreparo, setVendoModoPreparo] = useState<ProductionOrderDTO | null>(null);
   const [gerando, setGerando] = useState(false);
+  const [semanaFeriado, setSemanaFeriado] = useState(false);
   const [gerarFeedback, setGerarFeedback] = useState<{ tone: "success" | "error"; message: string; detail?: string } | null>(
     null
   );
@@ -69,7 +70,7 @@ export function HojeClient({
       const res = await fetch("/api/producao/planejamento/gerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: new Date().toISOString() }),
+        body: JSON.stringify({ date: new Date().toISOString(), semanaFeriado }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data) {
@@ -105,7 +106,7 @@ export function HojeClient({
 
   const filtered = useMemo(() => {
     return ordens
-      .map((o) => ({ ...o, status: effectiveProductionStatus({ prazo: o.prazo, status: o.status }) }))
+      .map((o) => ({ ...o, statusReal: o.status, status: effectiveProductionStatus({ prazo: o.prazo, status: o.status }) }))
       .filter((o) => {
         if (statusFilter !== "TODOS" && o.status !== statusFilter) return false;
         if (categoriaFilter && o.productionItem.category.id !== categoriaFilter) return false;
@@ -168,13 +169,19 @@ export function HojeClient({
           ))}
         </select>
         {canManage && (
-          <button
-            onClick={gerarPlanoHoje}
-            disabled={gerando}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium shrink-0"
-          >
-            {gerando ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />} Gerar plano de hoje
-          </button>
+          <div className="ml-auto flex items-center gap-3 shrink-0">
+            <label className="flex items-center gap-1.5 text-xs text-nord-gray cursor-pointer select-none">
+              <input type="checkbox" checked={semanaFeriado} onChange={(e) => setSemanaFeriado(e.target.checked)} />
+              Feriado
+            </label>
+            <button
+              onClick={gerarPlanoHoje}
+              disabled={gerando}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
+            >
+              {gerando ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />} Gerar plano de hoje
+            </button>
+          </div>
         )}
       </div>
 
@@ -249,7 +256,7 @@ export function HojeClient({
                 <BookOpen size={12} /> Modo de preparo
               </button>
 
-              {ordem.status === "PENDENTE" && (
+              {ordem.statusReal === "PENDENTE" && (
                 <button
                   onClick={() => setIniciando(ordem)}
                   className="w-full flex items-center justify-center gap-1.5 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5"

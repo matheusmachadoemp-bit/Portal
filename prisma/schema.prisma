@@ -5071,7 +5071,7 @@ model ProductionItem {
   modoPreparo         String?
   tipo                ProductionItemType @default(VARIAVEL)
   quantidadeMinima    Float              @default(0)
-  margemSeguranca     Float              @default(0)
+  margemSeguranca     Float              @default(10)
   tamanhoLote         Float?
   validadeDias        Int?
   horarioLimitePadrao String?
@@ -5253,10 +5253,11 @@ model ProductionSettings {
   semanasParaMedia     Int      @default(4)
   toleranciaAlertaPct  Float    @default(10)
   /**
-   * Margem extra usada no lugar da `ProductionItem.margemSeguranca`
-   * individual quando a geração do plano é marcada como semana de feriado
-   * (`semanaFeriado: true` em POST /api/producao/planejamento/gerar) — só
-   * afeta esse cálculo específico, nunca sobrescreve a margem salva no item.
+   * Margem usada quando a geração do plano é marcada como semana de feriado
+   * (`semanaFeriado: true` em POST /api/producao/planejamento/gerar). Vale a
+   * MAIOR entre esta e a `ProductionItem.margemSeguranca` do item (feriado
+   * nunca reduz a margem de um item que já tem uma maior). Só afeta esse
+   * cálculo específico, nunca sobrescreve a margem salva no item.
    */
   margemFeriadoPercent Float    @default(20)
   updatedAt            DateTime @updatedAt

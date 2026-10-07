@@ -21,7 +21,7 @@ const emptyForm = {
   modoPreparo: "",
   tipo: "VARIAVEL",
   quantidadeMinima: "0",
-  margemSeguranca: "0",
+  margemSeguranca: "10",
   tamanhoLote: "",
   validadeDias: "",
   horarioLimitePadrao: "15:00",

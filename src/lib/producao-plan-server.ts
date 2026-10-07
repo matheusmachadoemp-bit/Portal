@@ -123,10 +123,10 @@ export async function generateProductionPlan(
     items.map(async (item): Promise<"created" | "updated" | "skipped"> => {
       const necessidadePrevista = itemDemand.get(item.id) ?? 0;
       const estoqueProntoSnapshot = item.stock?.saldoAtual ?? 0;
-      // Semana de feriado: troca a margem individual do item pela margem de
-      // feriado só para este cálculo (o `item` em si, e o que fica salvo em
-      // `ProductionItem.margemSeguranca`, nunca é alterado por isso).
-      const margemSeguranca = semanaFeriado ? margemFeriadoPercent : item.margemSeguranca;
+      // Semana de feriado: usa a maior entre a margem de feriado e a do item, só para este
+      // cálculo (o que fica salvo em `ProductionItem.margemSeguranca` nunca é alterado) — assim o
+      // feriado nunca reduz a margem de um item que já tem uma maior.
+      const margemSeguranca = semanaFeriado ? Math.max(margemFeriadoPercent, item.margemSeguranca) : item.margemSeguranca;
       const quantidadeSugerida = computeQuantidadeSugerida(necessidadePrevista, estoqueProntoSnapshot, {
         ...item,
         margemSeguranca,

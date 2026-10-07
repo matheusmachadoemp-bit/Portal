@@ -42,3 +42,16 @@ ALTER TABLE "ProductionItem" ADD CONSTRAINT "ProductionItem_setorId_fkey" FOREIG
 -- Idempotente: rodar de novo não tem efeito (depois da primeira execução, só sobra 0 quem foi
 -- reconfigurado manualmente para 0 — ver acima).
 UPDATE "ProductionItem" SET "margemSeguranca" = 10 WHERE "margemSeguranca" = 0;
+
+-- Itens novos também nascem com a margem de segurança combinada (10%), em vez de 0% — senão o
+-- backfill acima só corrigiria os itens que já existem e os próximos voltariam a ficar sem margem.
+ALTER TABLE "ProductionItem" ALTER COLUMN "margemSeguranca" SET DEFAULT 10;
+
+-- Setores padrão (antes só entravam pelo seed, que não roda no deploy): sem eles o seletor de
+-- setor e o filtro de "Produção de Hoje" ficariam vazios logo após publicar. Mesmas keys do seed
+-- (prisma/seed.ts), então rodar o seed depois apenas atualiza, nunca duplica.
+INSERT INTO "ProductionSetor" ("id", "key", "name", "color", "icon", "order", "active", "updatedAt")
+VALUES
+  ('setor_cozinha_quente', 'cozinha-quente', 'Cozinha Quente', '#f97316', 'Flame', 0, true, CURRENT_TIMESTAMP),
+  ('setor_cozinha_fria', 'cozinha-fria', 'Cozinha Fria', '#38bdf8', 'Snowflake', 1, true, CURRENT_TIMESTAMP)
+ON CONFLICT ("key") DO NOTHING;

@@ -78,6 +78,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // action "reatribuir" — sem isso, qualquer usuário ativo da empresa toda
     // podia ser escolhido pra uma ordem de uma loja à qual não tem acesso.
     let responsavelId: string | undefined;
+    if (body.responsavelId !== undefined && body.responsavelId !== null && typeof body.responsavelId !== "string") {
+      return NextResponse.json({ error: "Responsável inválido." }, { status: 400 });
+    }
     if (body.responsavelId) {
       const invalidIds = await findUsersWithoutEmpresaAccess([body.responsavelId], existing.empresaId);
       if (invalidIds.length > 0) {
@@ -86,6 +89,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       responsavelId = body.responsavelId;
     }
     const ordem = await iniciarProductionOrder(id, session.user.id, responsavelId);
+    if (!ordem) {
+      return NextResponse.json(
+        { error: "Esta produção já foi iniciada ou concluída. Atualize a tela para ver o status atual." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ ordem });
   }
 

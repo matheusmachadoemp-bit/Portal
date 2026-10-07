@@ -85,7 +85,10 @@ export async function POST(req: Request) {
         modoPreparo: body.modoPreparo || null,
         tipo: body.tipo || "VARIAVEL",
         quantidadeMinima: Number(body.quantidadeMinima) || 0,
-        margemSeguranca: Number(body.margemSeguranca) || 0,
+        margemSeguranca:
+          body.margemSeguranca === undefined || body.margemSeguranca === null || body.margemSeguranca === ""
+            ? 10
+            : Number(body.margemSeguranca) || 0,
         tamanhoLote: body.tamanhoLote ? Number(body.tamanhoLote) : null,
         validadeDias: body.validadeDias ? Number(body.validadeDias) : null,
         horarioLimitePadrao: body.horarioLimitePadrao || null,

@@ -37,13 +37,19 @@ export async function notifyProducaoUsers(userIds: string[], type: string, title
  * `ajustar`/`reatribuir` já fazem entre "quem fez" e "pra quem é". Validar
  * que `responsavelId` tem acesso à loja da ordem é responsabilidade de quem
  * chama (ver PATCH /api/producao/ordens/[id], mesmo padrão já usado por
- * "reatribuir"). */
+ * "reatribuir"). Devolve `null` quando a ordem já não está pendente. */
 export async function iniciarProductionOrder(orderId: string, userId: string, responsavelId?: string | null) {
   const resolvedResponsavelId = responsavelId || userId;
-  const order = await prisma.productionOrder.update({
-    where: { id: orderId },
+  // Só inicia quem ainda não foi iniciada. O filtro de status no próprio UPDATE (e não um
+  // "ler e depois gravar") evita que dois tablets/cliques simultâneos reiniciem uma ordem que já
+  // está em produção ou concluída — o que trocaria o responsável e, ao finalizar de novo,
+  // duplicaria baixa de insumos, estoque pronto e pontos.
+  const { count } = await prisma.productionOrder.updateMany({
+    where: { id: orderId, status: { in: ["PENDENTE", "ATRASADO"] } },
     data: { status: "EM_PRODUCAO", responsavelId: resolvedResponsavelId, horaInicio: new Date() },
   });
+  if (count === 0) return null;
+  const order = await prisma.productionOrder.findUniqueOrThrow({ where: { id: orderId } });
 
   // Só busca o nome (pra deixar o histórico legível pra humano, em vez de um
   // id cru) quando alguém de fato escolheu outra pessoa — no caso comum
