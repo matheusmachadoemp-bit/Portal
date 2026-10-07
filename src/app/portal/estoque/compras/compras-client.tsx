@@ -10,6 +10,7 @@ import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { PURCHASE_STATUS, PURCHASE_STATUS_LABEL, PURCHASE_STATUS_TONE } from "@/lib/estoque";
+import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 import { type RollingPeriodKey } from "@/lib/periods";
 
 type Item = { id: string; ingredientId: string; ingredientName: string; unidade: string; quantidade: number; valorUnitario: number; valorTotal: number; precoMedioAtual: number };
@@ -17,6 +18,7 @@ type Purchase = {
   id: string;
   numeroNota: string | null;
   data: string;
+  previsaoEntrega: string | null;
   supplierId: string;
   supplierName: string;
   compradorResponsavel: string | null;
@@ -33,6 +35,40 @@ type Purchase = {
 };
 
 type NewItem = { ingredientId: string; quantidade: string; unidade: string; valorUnitario: string };
+
+// Edição de um pedido já existente (botão "Editar" no histórico). Cabeçalho com os mesmos campos
+// de "Nova compra" + os campos extras que a API já aceitava (previsão de entrega, comprador,
+// forma de pagamento, vencimento) — numeroNota/observações/status ficam de fora de propósito: já
+// eram editáveis antes desta tarefa por outros fluxos, e não fazem parte do pedido desta tela. Os
+// itens são fixos (sem adicionar/remover produto): só quantidade e valor unitário são editáveis,
+// ver PATCH /api/estoque/compras/[id].
+type EditForm = {
+  supplierId: string;
+  data: string;
+  previsaoEntrega: string;
+  compradorResponsavel: string;
+  formaPagamento: string;
+  dataVencimento: string;
+  desconto: string;
+  frete: string;
+};
+type EditItem = { id: string; ingredientName: string; unidade: string; quantidade: string; valorUnitario: string; precoMedioAtual: number };
+
+const EMPTY_EDIT_FORM: EditForm = {
+  supplierId: "",
+  data: "",
+  previsaoEntrega: "",
+  compradorResponsavel: "",
+  formaPagamento: "",
+  dataVencimento: "",
+  desconto: "0",
+  frete: "0",
+};
+
+// Mesma lista usada em Financeiro > Contas a Pagar (contas-pagar-client.tsx) para "pagar um
+// fornecedor" — diferente de SALE_PAYMENT_METHODS (como o CLIENTE pagou a loja), que traz
+// Voucher/Pago Online/Fiado, sem sentido para pagamento a fornecedor.
+const PURCHASE_PAYMENT_METHODS = ["PIX", "DINHEIRO", "CARTAO_DEBITO", "CARTAO_CREDITO", "TED", "DOC", "TRANSFERENCIA", "CHEQUE", "OUTRO"] as const;
 
 export function ComprasClient({
   initialPurchases,
@@ -73,6 +109,12 @@ export function ComprasClient({
   const [frete, setFrete] = useState("0");
   const [desconto, setDesconto] = useState("0");
   const [itens, setItens] = useState<NewItem[]>([{ ingredientId: "", quantidade: "", unidade: "", valorUnitario: "" }]);
+
+  const [editing, setEditing] = useState<Purchase | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>(EMPTY_EDIT_FORM);
+  const [editItens, setEditItens] = useState<EditItem[]>([]);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -122,6 +164,7 @@ export function ComprasClient({
           id: p.id,
           numeroNota: p.numeroNota,
           data: p.data,
+          previsaoEntrega: p.previsaoEntrega,
           supplierId: p.supplierId,
           supplierName: (p.supplier as { nomeFantasia: string | null; razaoSocial: string }).nomeFantasia ?? (p.supplier as { razaoSocial: string }).razaoSocial,
           compradorResponsavel: p.compradorResponsavel,
@@ -241,6 +284,85 @@ export function ComprasClient({
     refresh();
   }
 
+  function openEdit(p: Purchase) {
+    setEditError(null);
+    setEditForm({
+      supplierId: p.supplierId,
+      data: p.data.slice(0, 10),
+      previsaoEntrega: p.previsaoEntrega ? p.previsaoEntrega.slice(0, 10) : "",
+      compradorResponsavel: p.compradorResponsavel ?? "",
+      formaPagamento: p.formaPagamento ?? "",
+      dataVencimento: p.dataVencimento ? p.dataVencimento.slice(0, 10) : "",
+      desconto: String(p.desconto),
+      frete: String(p.frete),
+    });
+    setEditItens(
+      p.items.map((it) => ({
+        id: it.id,
+        ingredientName: it.ingredientName,
+        unidade: it.unidade,
+        quantidade: String(it.quantidade),
+        valorUnitario: String(it.valorUnitario),
+        precoMedioAtual: it.precoMedioAtual,
+      }))
+    );
+    setEditing(p);
+  }
+
+  function updateEditItem(idx: number, patch: Partial<Pick<EditItem, "quantidade" | "valorUnitario">>) {
+    setEditItens(editItens.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+
+  async function submitEdit() {
+    if (!editing || editSubmitting) return;
+    setEditError(null);
+    if (!editForm.supplierId) {
+      setEditError("Selecione o fornecedor.");
+      return;
+    }
+    if (!editForm.data) {
+      setEditError("Informe a data da compra.");
+      return;
+    }
+    for (const it of editItens) {
+      if (!it.quantidade || Number(it.quantidade) <= 0) {
+        setEditError("Informe uma quantidade válida (maior que zero) para todos os itens.");
+        return;
+      }
+      if (it.valorUnitario === "" || Number(it.valorUnitario) < 0) {
+        setEditError("Informe um valor unitário válido para todos os itens.");
+        return;
+      }
+    }
+    setEditSubmitting(true);
+    try {
+      const res = await fetch(`/api/estoque/compras/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplierId: editForm.supplierId,
+          data: editForm.data,
+          previsaoEntrega: editForm.previsaoEntrega || null,
+          compradorResponsavel: editForm.compradorResponsavel || null,
+          formaPagamento: editForm.formaPagamento || null,
+          dataVencimento: editForm.dataVencimento || null,
+          desconto: editForm.desconto,
+          frete: editForm.frete,
+          items: editItens.map((it) => ({ id: it.id, quantidade: it.quantidade, valorUnitario: it.valorUnitario })),
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setEditError(d.error ?? "Não foi possível salvar as alterações.");
+        return;
+      }
+      setEditing(null);
+      refresh();
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SortableStatCards
@@ -330,6 +452,11 @@ export function ComprasClient({
                       <button onClick={() => setDetail(p)} className="text-xs text-nord-blue-light hover:underline">
                         Detalhes
                       </button>
+                      {canCreate && !p.recebido && (
+                        <button onClick={() => openEdit(p)} className="text-xs text-nord-gray hover:text-white hover:underline">
+                          Editar
+                        </button>
+                      )}
                       {canCreate && !p.recebido && p.status !== "CANCELADO" && (
                         <button onClick={() => marcarRecebido(p)} className="text-xs text-nord-success hover:underline">
                           Marcar recebido
@@ -420,6 +547,96 @@ export function ComprasClient({
         <button onClick={submit} disabled={submitting} className="btn-primary w-full mt-4 py-2.5">
           {submitting ? "Registrando..." : "Registrar compra"}
         </button>
+      </Modal>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={`Editar compra — ${editing?.supplierName ?? ""}`} widthClass="max-w-3xl">
+        {editing && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+              <label className="block md:col-span-2">
+                <span className="block text-xs text-nord-gray mb-1">Fornecedor</span>
+                <select className="input" value={editForm.supplierId} onChange={(e) => setEditForm({ ...editForm, supplierId: e.target.value })}>
+                  <option value="">Selecione...</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Data</span>
+                <input className="input" type="date" value={editForm.data} onChange={(e) => setEditForm({ ...editForm, data: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Previsão de entrega</span>
+                <input className="input" type="date" value={editForm.previsaoEntrega} onChange={(e) => setEditForm({ ...editForm, previsaoEntrega: e.target.value })} />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="block text-xs text-nord-gray mb-1">Comprador responsável</span>
+                <input className="input" value={editForm.compradorResponsavel} onChange={(e) => setEditForm({ ...editForm, compradorResponsavel: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Forma de pagamento</span>
+                <select className="input" value={editForm.formaPagamento} onChange={(e) => setEditForm({ ...editForm, formaPagamento: e.target.value })}>
+                  <option value="">Selecione...</option>
+                  {PURCHASE_PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>{PAYMENT_METHOD_LABEL[m]}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Vencimento</span>
+                <input className="input" type="date" value={editForm.dataVencimento} onChange={(e) => setEditForm({ ...editForm, dataVencimento: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Desconto (R$)</span>
+                <input className="input" type="number" value={editForm.desconto} onChange={(e) => setEditForm({ ...editForm, desconto: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Frete (R$)</span>
+                <input className="input" type="number" value={editForm.frete} onChange={(e) => setEditForm({ ...editForm, frete: e.target.value })} />
+              </label>
+            </div>
+
+            <div className="space-y-2">
+              <span className="block text-xs text-nord-gray">
+                Itens do pedido — só é possível ajustar quantidade e valor unitário. Para adicionar ou remover produtos, registre uma nova compra.
+              </span>
+              {editItens.map((it, idx) => {
+                const valorLinha = (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0);
+                const acimaMedia = it.precoMedioAtual > 0 && it.valorUnitario !== "" && Number(it.valorUnitario) > it.precoMedioAtual * 1.15;
+                return (
+                  <div key={it.id} className="flex items-center gap-2 nord-card bg-nord-panel/40 px-3 py-2">
+                    <span className="flex-1 text-sm text-white truncate">{it.ingredientName}</span>
+                    <input
+                      className="input w-20"
+                      placeholder="Qtd."
+                      type="number"
+                      value={it.quantidade}
+                      onChange={(e) => updateEditItem(idx, { quantidade: e.target.value })}
+                    />
+                    <span className="text-xs text-nord-gray w-12 shrink-0 text-center">{it.unidade}</span>
+                    <span className="text-nord-gray text-xs">×</span>
+                    <input
+                      className="input w-28"
+                      placeholder="Vlr. unit."
+                      type="number"
+                      value={it.valorUnitario}
+                      onChange={(e) => updateEditItem(idx, { valorUnitario: e.target.value })}
+                    />
+                    {acimaMedia && <Badge tone="warning">Acima da média</Badge>}
+                    <span className="text-nord-gray text-xs">=</span>
+                    <span className="w-24 text-sm text-white text-right shrink-0">{formatCurrency(valorLinha)}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {editError && <p className="text-xs text-nord-danger mt-3">{editError}</p>}
+            <button onClick={submitEdit} disabled={editSubmitting} className="btn-primary w-full mt-4 py-2.5">
+              {editSubmitting ? "Salvando..." : "Salvar alterações"}
+            </button>
+          </>
+        )}
       </Modal>
 
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`Compra — ${detail?.supplierName ?? ""}`} widthClass="max-w-2xl">

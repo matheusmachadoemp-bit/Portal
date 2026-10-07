@@ -46,7 +46,12 @@ export default async function ProducaoHojePage() {
 
   return (
     <PageContainer title="Produção" subtitle="Produção de Hoje" backHref="/portal/producao" backLabel="Produção">
-      <HojeClient initialOrdens={serialized as never} categorias={categorias} teamMembers={teamMembers} />
+      <HojeClient
+        initialOrdens={serialized as never}
+        categorias={categorias}
+        teamMembers={teamMembers}
+        canManage={ctx?.mode === "single"}
+      />
     </PageContainer>
   );
 }
