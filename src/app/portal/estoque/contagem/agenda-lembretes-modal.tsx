@@ -11,6 +11,7 @@ type ScheduleRow = {
   responsavelId: string | null;
   responsavelNome: string | null;
   horario: string;
+  horarioLimite: string | null;
   segunda: boolean;
   terca: boolean;
   quarta: boolean;
@@ -33,12 +34,13 @@ const WEEKDAY_FIELDS = [
 
 type WeekdayKey = (typeof WEEKDAY_FIELDS)[number]["key"];
 
-type FormState = { setor: string; responsavelId: string; horario: string } & Record<WeekdayKey, boolean>;
+type FormState = { setor: string; responsavelId: string; horario: string; horarioLimite: string } & Record<WeekdayKey, boolean>;
 
 const emptyForm: FormState = {
   setor: "",
   responsavelId: "",
   horario: "09:00",
+  horarioLimite: "",
   segunda: true,
   terca: true,
   quarta: true,
@@ -103,6 +105,7 @@ export function AgendaLembretesModal({
             responsavelId: s.responsavelId as string | null,
             responsavelNome: (s.responsavel as { name: string } | null)?.name ?? null,
             horario: s.horario as string,
+            horarioLimite: (s.horarioLimite as string | null) ?? null,
             segunda: s.segunda as boolean,
             terca: s.terca as boolean,
             quarta: s.quarta as boolean,
@@ -215,6 +218,18 @@ export function AgendaLembretesModal({
                     onChange={(e) => setForm({ ...form, horario: e.target.value })}
                   />
                 </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Horário-limite (opcional)</span>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.horarioLimite}
+                    onChange={(e) => setForm({ ...form, horarioLimite: e.target.value })}
+                  />
+                  <span className="block text-[11px] text-nord-gray mt-1">
+                    Prazo da contagem gerada no dia. Em branco = sem prazo.
+                  </span>
+                </label>
               </div>
               <div>
                 <span className="block text-xs text-nord-gray mb-2">Dias da semana</span>
@@ -264,6 +279,7 @@ export function AgendaLembretesModal({
                     <div className="text-xs space-y-0.5">
                       <div className="text-white font-medium">
                         {s.setor ?? "Todos os setores"} — {s.horario}
+                        {s.horarioLimite ? ` (limite ${s.horarioLimite})` : ""}
                       </div>
                       <div className="text-nord-gray">
                         {diasResumo(s)} · {s.responsavelNome ?? "Sem responsável definido"}

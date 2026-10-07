@@ -8,6 +8,7 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST, ingredientCostPerUnit } from "@/lib/estoque";
 import { AgendaLembretesModal } from "../contagem/agenda-lembretes-modal";
+import { IniciarOpcoesCampos, INICIAR_OPCOES_VAZIAS, prazoParaApi, type IniciarOpcoes } from "../contagem/iniciar-opcoes";
 
 type CountRow = {
   id: string;
@@ -72,6 +73,7 @@ export function ContagemMensalClient({
   const [counts, setCounts] = useState(initialCounts);
   const [setor, setSetor] = useState<string>("");
   const [responsavel, setResponsavel] = useState("");
+  const [opcoes, setOpcoes] = useState<IniciarOpcoes>(INICIAR_OPCOES_VAZIAS);
   const [showNew, setShowNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,10 +119,20 @@ export function ContagemMensalClient({
 
   async function iniciarContagem() {
     setError(null);
+    if (opcoes.ingredientIds && opcoes.ingredientIds.length === 0) {
+      setError("Selecione ao menos um item para contar, ou desmarque a escolha manual.");
+      return;
+    }
     const res = await fetch("/api/estoque/contagens", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "MENSAL", setor: setor || undefined, responsavel }),
+      body: JSON.stringify({
+        type: "MENSAL",
+        setor: setor || undefined,
+        responsavel,
+        ingredientIds: opcoes.ingredientIds,
+        prazo: prazoParaApi(opcoes.prazo),
+      }),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
@@ -128,6 +140,7 @@ export function ContagemMensalClient({
       return;
     }
     setShowNew(false);
+    setOpcoes(INICIAR_OPCOES_VAZIAS);
     await refreshList();
   }
 
@@ -256,7 +269,7 @@ export function ContagemMensalClient({
               canCreate={canCreateAgenda}
               canManage={canManageAgenda}
             />
-            <Toolbar onRefresh={refreshList} onAdd={canCreate ? () => { setError(null); setShowNew(true); } : undefined} addLabel="Iniciar fechamento" />
+            <Toolbar onRefresh={refreshList} onAdd={canCreate ? () => { setError(null); setOpcoes(INICIAR_OPCOES_VAZIAS); setShowNew(true); } : undefined} addLabel="Iniciar fechamento" />
           </div>
         }
       >
@@ -352,6 +365,7 @@ export function ContagemMensalClient({
               ))}
             </select>
           </label>
+          <IniciarOpcoesCampos setor={setor} value={opcoes} onChange={setOpcoes} />
           {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={iniciarContagem} className="btn-primary w-full py-2.5">
             Iniciar
