@@ -76,7 +76,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           : body.dataRecebimento === null
           ? null
           : undefined,
-        bankAccountId: body.bankAccountId !== undefined ? body.bankAccountId : undefined,
+        bankAccountId: body.bankAccountId !== undefined ? body.bankAccountId || null : undefined,
         formaRecebimento: body.formaRecebimento ?? undefined,
         parcelado: body.parcelado ?? undefined,
         quantidadeParcelas:
