@@ -43,7 +43,8 @@ export async function buildStockCountItemsData(
  * (fuso América/São_Paulo) esteja marcado — espelha `generateChecklistOccurrences`
  * (src/lib/checklist-server.ts) o mais fiel possível:
  * - 1 chamada por `dateKey` (hoje), nunca um loop de dias — rodar de novo no mesmo dia é seguro e
- *   barato graças ao `upsert` (`update: {}` se já existe, `create` se não existe ainda).
+ *   barato: `StockCountSchedule.ultimaGeracaoData` reivindica o dia/mês de forma atômica (mensal:
+ *   1 contagem por mês) e só gera a partir do horário da agenda.
  * - Sem `createdById` (ninguém "criou" manualmente — mesmo racional de `ChecklistOccurrence` não
  *   ter esse campo) e sem `responsavel` (nome livre, preenchido por quem de fato realiza a
  *   contagem na tela, igual contagens manuais hoje).
@@ -57,7 +58,11 @@ export async function buildStockCountItemsData(
  *   depois. Reaproveitar o comportamento atual significa não inventar aqui um cálculo que não
  *   existe no fluxo manual.
  */
-export async function generateStockCounts(empresaIds: string[], dateKey: string = spDateKey()) {
+export async function generateStockCounts(
+  empresaIds: string[],
+  dateKey: string = spDateKey(),
+  now: Date = new Date()
+) {
   if (empresaIds.length === 0) return;
 
   const day = spStartOfDay(dateKey);
@@ -65,51 +70,109 @@ export async function generateStockCounts(empresaIds: string[], dateKey: string 
   const [anoStr, mesStr] = dateKey.split("-");
   const ano = Number(anoStr);
   const mes = Number(mesStr);
+  const monthPrefix = `${anoStr}-${mesStr}`;
+  const hoje = spDateKey(now) === dateKey;
+  const currentMinutes = spHours(now) * 60 + spMinutes(now);
 
-  // Só os campos usados para montar a contagem — o restante do agendamento (responsável,
-  // horário do lembrete, etc.) não é lido aqui.
   const schedules = await prisma.stockCountSchedule.findMany({
     where: {
       empresaId: { in: empresaIds },
       active: true,
       [weekdayField]: true,
     },
-    select: { id: true, empresaId: true, type: true, setor: true, horarioLimite: true },
+    select: {
+      id: true,
+      empresaId: true,
+      type: true,
+      setor: true,
+      horario: true,
+      horarioLimite: true,
+      ultimaGeracaoData: true,
+    },
   });
 
-  await Promise.all(
-    schedules.map(async (schedule) => {
-      const items = await buildStockCountItemsData(schedule.empresaId, schedule.setor);
-      const prazo = schedule.horarioLimite ? spDateTime(dateKey, schedule.horarioLimite) : null;
-      return prisma.stockCount.upsert({
-        where: { scheduleId_dataContagem: { scheduleId: schedule.id, dataContagem: day } },
-        update: {},
-        create: {
-          empresaId: schedule.empresaId,
-          type: schedule.type,
-          setor: schedule.setor,
-          scheduleId: schedule.id,
-          dataContagem: day,
-          ano,
-          mes: schedule.type === "MENSAL" ? mes : null,
-          semana: null,
-          prazo,
-          createdById: null,
-          responsavel: null,
-          // `status` fica no default do schema (`RASCUNHO`) e `checklistJson` fica `null` —
-          // diferente da criação manual (POST /api/estoque/contagens), que já marca
-          // `EM_ANDAMENTO`/inicializa o checklist porque ali é sempre uma pessoa clicando
-          // "Iniciar contagem"/"Iniciar fechamento" agora. Aqui ninguém "iniciou" ainda; quem
-          // abrir a contagem gerada é que efetivamente começa (mesmo racional de
-          // `ChecklistOccurrence` nascer `AGENDADO`, não já "em andamento"). `checklistJson:
-          // null` é seguro pro fechamento mensal: a tela já trata isso como "{}" ao abrir (ver
-          // `contagem-mensal-client.tsx`, `setChecklist(c.checklistJson ? JSON.parse(...) :
-          // {})`).
-          items: { create: items },
+  // Uma agenda por vez e cada uma isolada em try/catch: um erro numa agenda não pode impedir as
+  // outras (nem os lembretes, que rodam depois no mesmo cron) de seguirem.
+  for (const schedule of schedules) {
+    try {
+      // A contagem só nasce quando chega o horário da agenda: `estoqueEsperado` é uma foto do
+      // estoque no momento da geração, e fotografar à meia-noite faria qualquer entrega/perda
+      // do começo do dia virar "divergência" falsa. (Datas retroativas passadas pra `dateKey`
+      // não têm "agora" pra comparar, então geram direto.)
+      if (hoje) {
+        const [h, m] = schedule.horario.split(":").map(Number);
+        if (currentMinutes < h * 60 + m) continue;
+      }
+
+      // Reivindicação atômica do dia (semanal) ou do mês (mensal — 1 fechamento por mês, no
+      // primeiro dia marcado da agenda, não uma contagem completa por dia marcado). Só quem
+      // consegue gravar `ultimaGeracaoData` cria a contagem: crons simultâneos não duplicam, e
+      // uma contagem excluída à mão não reaparece no tick seguinte.
+      const alreadyClaimed =
+        schedule.type === "MENSAL"
+          ? { ultimaGeracaoData: { startsWith: monthPrefix } }
+          : { ultimaGeracaoData: dateKey };
+      const claim = await prisma.stockCountSchedule.updateMany({
+        where: {
+          id: schedule.id,
+          OR: [{ ultimaGeracaoData: null }, { NOT: alreadyClaimed }],
         },
+        data: { ultimaGeracaoData: dateKey },
       });
-    })
-  );
+      if (claim.count === 0) continue;
+
+      const release = () =>
+        prisma.stockCountSchedule.updateMany({
+          where: { id: schedule.id, ultimaGeracaoData: dateKey },
+          data: { ultimaGeracaoData: schedule.ultimaGeracaoData },
+        });
+
+      const items = await buildStockCountItemsData(schedule.empresaId, schedule.setor);
+      if (items.length === 0) {
+        // Setor sem insumos ativos (ou setor removido): não cria contagem vazia — e devolve a
+        // reivindicação pra tentar de novo se alguém cadastrar insumos depois, no mesmo dia.
+        await release();
+        continue;
+      }
+
+      const prazo = schedule.horarioLimite ? spDateTime(dateKey, schedule.horarioLimite) : null;
+      try {
+        await prisma.stockCount.create({
+          data: {
+            empresaId: schedule.empresaId,
+            type: schedule.type,
+            setor: schedule.setor,
+            scheduleId: schedule.id,
+            dataContagem: day,
+            ano,
+            mes: schedule.type === "MENSAL" ? mes : null,
+            semana: null,
+            prazo,
+            createdById: null,
+            responsavel: null,
+            // `status` fica no default do schema (`RASCUNHO`) e `checklistJson` fica `null` —
+            // diferente da criação manual (POST /api/estoque/contagens), que já marca
+            // `EM_ANDAMENTO`/inicializa o checklist porque ali é sempre uma pessoa clicando
+            // "Iniciar contagem"/"Iniciar fechamento" agora. Aqui ninguém "iniciou" ainda; a
+            // primeira conferência salva em PATCH /api/estoque/contagens/[id] é que avança pra
+            // EM_ANDAMENTO. `checklistJson: null` é seguro pro fechamento mensal: a tela já
+            // trata isso como "{}" ao abrir (ver `contagem-mensal-client.tsx`).
+            items: { create: items },
+          },
+        });
+      } catch (err) {
+        // P2002: outra execução já criou a contagem desse (agenda, dia) — o `@@unique` segura o
+        // duplicado e a reivindicação fica como está. Qualquer outro erro devolve a reivindicação
+        // pra a próxima execução (15 min) tentar de novo.
+        if ((err as { code?: string }).code !== "P2002") {
+          await release();
+          throw err;
+        }
+      }
+    } catch (err) {
+      console.error(`[estoque] falha ao gerar contagem da agenda ${schedule.id}:`, err);
+    }
+  }
 }
 
 /**
@@ -166,9 +229,9 @@ export async function processStockCountReminders(now: Date = new Date()): Promis
       userId: schedule.responsavelId!,
       type: "ESTOQUE_CONTAGEM_LEMBRETE",
       title: "Lembrete de contagem de estoque",
-      body: `Hora de iniciar a contagem ${COUNT_TYPE_LABEL[schedule.type] ?? schedule.type.toLowerCase()}${
+      body: `Sua contagem ${COUNT_TYPE_LABEL[schedule.type] ?? schedule.type.toLowerCase()}${
         schedule.setor ? ` do setor ${schedule.setor}` : ""
-      }.`,
+      } já está pronta para conferir.`,
       priority: "INFORMACAO",
       url: "/portal/estoque/contagem",
     });

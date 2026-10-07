@@ -16,9 +16,9 @@ function isValidHorario(value: unknown): value is string {
 }
 
 /**
- * Agenda de lembretes de contagem (dias da semana + horário + responsável/setor) — não cria a
- * `StockCount` automaticamente, só agenda a notificação disparada por
- * GET /api/estoque/contagens/lembretes/run (ver cron em vercel.json, a cada 15 min via Vercel
+ * Agenda de contagem (dias da semana + horário + responsável/setor + horário-limite opcional) —
+ * a mesma recorrência gera a `StockCount` do dia (`generateStockCounts`) e agenda a notificação,
+ * ambas disparadas por GET /api/estoque/contagens/lembretes/run (ver cron em vercel.json, a cada 15 min via Vercel
  * Cron nativo). Configuração (gate `canEdit`), não dado operacional do dia a dia — por isso
  * todos os verbos usam `canEdit`.
  */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type InsumoOption = { id: string; name: string; setor: string | null };
 
@@ -40,6 +40,13 @@ export function IniciarOpcoesCampos({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
 
+  // Sempre o valor mais recente (o efeito de carregar a lista roda assíncrono; sem isso ele
+  // gravaria de volta um prazo/seleção antigos capturados no início do carregamento).
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  });
+
   // Recarrega a lista ao ligar a seleção manual ou trocar o setor (os ids antigos deixam de valer).
   useEffect(() => {
     if (!manual) return;
@@ -47,6 +54,9 @@ export function IniciarOpcoesCampos({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- busca a lista ao ligar a seleção manual
     setLoading(true);
     setLoadError(null);
+    // Enquanto a lista não chega (ou se falhar), nenhum item está selecionado: assim "Iniciar"
+    // nunca sai com os itens do setor anterior nem com "todos" por engano.
+    onChange({ ...valueRef.current, ingredientIds: [] });
     fetch(`/api/estoque/contagens/insumos${setor ? `?setor=${encodeURIComponent(setor)}` : ""}`)
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
@@ -57,7 +67,7 @@ export function IniciarOpcoesCampos({
         }
         const list = (data.ingredients ?? []) as InsumoOption[];
         setInsumos(list);
-        onChange({ ...value, ingredientIds: list.map((i) => i.id) });
+        onChange({ ...valueRef.current, ingredientIds: list.map((i) => i.id) });
       })
       .catch(() => {
         if (!cancelled) setLoadError("Falha de conexão ao carregar os insumos.");

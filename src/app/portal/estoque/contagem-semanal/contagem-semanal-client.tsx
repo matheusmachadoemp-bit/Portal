@@ -9,6 +9,7 @@ import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, ingredientCostPerUnit } from "@/lib/estoque";
 import { AgendaLembretesModal } from "../contagem/agenda-lembretes-modal";
+import { PrazoCell } from "../contagem/prazo-cell";
 import { IniciarOpcoesCampos, INICIAR_OPCOES_VAZIAS, prazoParaApi, type IniciarOpcoes } from "../contagem/iniciar-opcoes";
 
 type CountRow = {
@@ -21,6 +22,7 @@ type CountRow = {
   horaInicio: string | null;
   horaFim: string | null;
   status: string;
+  prazo: string | null;
   totalItens: number;
   conferidos: number;
   createdByName: string;
@@ -103,6 +105,7 @@ export function ContagemSemanalClient({
         horaInicio: c.horaInicio,
         horaFim: c.horaFim,
         status: c.status,
+        prazo: (c.prazo as string | null) ?? null,
         totalItens: (c.items as unknown[]).length,
         conferidos: (c.items as { quantidadeContada: number | null }[]).filter((i) => i.quantidadeContada !== null).length,
         // `createdBy` vem `null` quando a contagem foi gerada automaticamente por uma
@@ -261,6 +264,7 @@ export function ContagemSemanalClient({
                 <th className="py-2 pr-4">Setor</th>
                 <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4">Progresso</th>
+                <th className="py-2 pr-4">Prazo</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4" />
               </tr>
@@ -277,6 +281,7 @@ export function ContagemSemanalClient({
                       <span className="text-xs text-nord-gray whitespace-nowrap">{c.conferidos}/{c.totalItens}</span>
                     </div>
                   </td>
+                  <td className="py-2.5 pr-4 text-xs"><PrazoCell prazo={c.prazo} status={c.status} /></td>
                   <td className="py-2.5 pr-4">
                     <Badge tone={COUNT_STATUS_TONE[c.status]}>{COUNT_STATUS_LABEL[c.status] ?? c.status}</Badge>
                   </td>
@@ -349,7 +354,7 @@ export function ContagemSemanalClient({
         </div>
       </Modal>
 
-      <Modal open={!!active} onClose={() => setActive(null)} title={`Contagem — ${active?.setor ?? ""}`} widthClass="max-w-4xl">
+      <Modal open={!!active} onClose={() => setActive(null)} title={`Contagem — ${active?.setor ?? "Todos os setores"}`} widthClass="max-w-4xl">
         {active && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-nord-gray">

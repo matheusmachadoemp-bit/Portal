@@ -14,7 +14,7 @@ import { generateStockCounts, processStockCountReminders } from "@/lib/estoque-s
  * `generateStockCounts` roda ANTES de `processStockCountReminders` — mesma ordem "gera primeiro,
  * notifica depois" de GET /api/checklist/escalations/run (generateChecklistOccurrences antes de
  * processChecklistEscalations). Não precisa de cron próprio: o de Estoque já roda a cada 15 min,
- * e `generateStockCounts` é idempotente por dia (upsert via `@@unique([scheduleId,
+ * e `generateStockCounts` é idempotente (reivindicação atômica `ultimaGeracaoData` + `@@unique([scheduleId,
  * dataContagem])`), então rodar de novo dentro do mesmo dia é seguro e barato.
  */
 export async function GET(req: Request) {
@@ -26,7 +26,12 @@ export async function GET(req: Request) {
   const empresas = await prisma.empresa.findMany({ where: { active: true }, select: { id: true } });
   const empresaIds = empresas.map((e) => e.id);
 
-  await generateStockCounts(empresaIds, spDateKey());
+  // Falha na geração (já isolada por agenda dentro da função) nunca pode derrubar os lembretes.
+  try {
+    await generateStockCounts(empresaIds, spDateKey());
+  } catch (err) {
+    console.error("[estoque] falha ao gerar contagens automáticas:", err);
+  }
 
   const result = await processStockCountReminders();
   return NextResponse.json({ ok: true, ...result });

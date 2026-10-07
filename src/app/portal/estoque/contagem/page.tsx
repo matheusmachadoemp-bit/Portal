@@ -67,6 +67,7 @@ export default async function ContagemEstoquePage() {
             horaInicio: c.horaInicio,
             horaFim: c.horaFim,
             status: c.status,
+            prazo: c.prazo ? c.prazo.toISOString() : null,
             totalItens: c.items.length,
             conferidos: c.items.filter((i) => i.quantidadeContada !== null).length,
             // `createdBy` é opcional — contagens geradas automaticamente por uma
@@ -82,6 +83,7 @@ export default async function ContagemEstoquePage() {
             dataContagem: c.dataContagem.toISOString(),
             responsavel: c.responsavel,
             status: c.status,
+            prazo: c.prazo ? c.prazo.toISOString() : null,
             checklistJson: c.checklistJson,
             aprovadoPor: c.aprovadoPor,
             aprovadoEm: c.aprovadoEm ? c.aprovadoEm.toISOString() : null,

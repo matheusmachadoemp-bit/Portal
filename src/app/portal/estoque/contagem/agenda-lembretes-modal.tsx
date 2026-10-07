@@ -233,6 +233,11 @@ export function AgendaLembretesModal({
               </div>
               <div>
                 <span className="block text-xs text-nord-gray mb-2">Dias da semana</span>
+                <p className="text-[11px] text-nord-gray mb-2">
+                  {type === "MENSAL"
+                    ? "A contagem do mês é criada sozinha uma vez por mês, no primeiro dia marcado a partir do horário abaixo, e o responsável é avisado."
+                    : "A contagem do dia é criada sozinha nos dias marcados, a partir do horário abaixo, e o responsável é avisado."}
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {WEEKDAY_FIELDS.map((d) => (
                     <label

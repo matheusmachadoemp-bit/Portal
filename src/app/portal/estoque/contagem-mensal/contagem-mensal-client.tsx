@@ -8,6 +8,7 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST, ingredientCostPerUnit } from "@/lib/estoque";
 import { AgendaLembretesModal } from "../contagem/agenda-lembretes-modal";
+import { PrazoCell } from "../contagem/prazo-cell";
 import { IniciarOpcoesCampos, INICIAR_OPCOES_VAZIAS, prazoParaApi, type IniciarOpcoes } from "../contagem/iniciar-opcoes";
 
 type CountRow = {
@@ -18,6 +19,7 @@ type CountRow = {
   dataContagem: string;
   responsavel: string | null;
   status: string;
+  prazo: string | null;
   checklistJson: string | null;
   aprovadoPor: string | null;
   aprovadoEm: string | null;
@@ -104,6 +106,7 @@ export function ContagemMensalClient({
         dataContagem: c.dataContagem,
         responsavel: c.responsavel,
         status: c.status,
+        prazo: (c.prazo as string | null) ?? null,
         checklistJson: c.checklistJson,
         aprovadoPor: c.aprovadoPor,
         aprovadoEm: c.aprovadoEm,
@@ -287,6 +290,7 @@ export function ContagemMensalClient({
                 <th className="py-2 pr-4">Setor</th>
                 <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4">Progresso</th>
+                <th className="py-2 pr-4">Prazo</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Aprovado por</th>
                 <th className="py-2 pr-4" />
@@ -304,6 +308,7 @@ export function ContagemMensalClient({
                       <span className="text-xs text-nord-gray whitespace-nowrap">{c.conferidos}/{c.totalItens}</span>
                     </div>
                   </td>
+                  <td className="py-2.5 pr-4 text-xs"><PrazoCell prazo={c.prazo} status={c.status} /></td>
                   <td className="py-2.5 pr-4">
                     <Badge tone={COUNT_STATUS_TONE[c.status]}>{COUNT_STATUS_LABEL[c.status] ?? c.status}</Badge>
                   </td>

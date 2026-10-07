@@ -7,7 +7,8 @@ ADD COLUMN     "scheduleId" TEXT,
 ALTER COLUMN "createdById" DROP NOT NULL;
 
 -- AlterTable
-ALTER TABLE "StockCountSchedule" ADD COLUMN     "horarioLimite" TEXT;
+ALTER TABLE "StockCountSchedule" ADD COLUMN     "horarioLimite" TEXT,
+ADD COLUMN     "ultimaGeracaoData" TEXT;
 
 -- CreateIndex
 CREATE UNIQUE INDEX "StockCount_scheduleId_dataContagem_key" ON "StockCount"("scheduleId", "dataContagem");

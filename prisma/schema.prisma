@@ -3572,6 +3572,10 @@ model StockCountSchedule {
   /// na geração (`generateStockCounts`, src/lib/estoque-server.ts) pra computar `StockCount.prazo`
   /// — `null` aqui significa "sem prazo", não "mesmo horário do lembrete".
   horarioLimite      String?
+  /// "YYYY-MM-DD" da última vez que esta agenda gerou uma contagem (reivindicação atômica,
+  /// mesmo padrão de `ultimoLembreteData`): impede geração duplicada por crons simultâneos e que
+  /// uma contagem gerada e excluída reapareça no tick seguinte.
+  ultimaGeracaoData  String?
   segunda            Boolean   @default(true)
   terca              Boolean   @default(true)
   quarta             Boolean   @default(true)

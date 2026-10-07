@@ -120,6 +120,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data.status = novoStatus;
   }
 
+  // Contagem gerada automaticamente nasce RASCUNHO; a primeira conferência salva é o que de fato
+  // a "inicia" (status + hora de início), igual à criação manual que já nasce EM_ANDAMENTO.
+  const conferiuAlgo =
+    Array.isArray(body.items) &&
+    (body.items as { quantidadeContada?: number | null }[]).some(
+      (upd) => upd.quantidadeContada !== undefined && upd.quantidadeContada !== null
+    );
+  if (existing.status === "RASCUNHO" && conferiuAlgo && !data.status) {
+    data.status = "EM_ANDAMENTO";
+    if (!existing.horaInicio) data.horaInicio = new Date().toTimeString().slice(0, 5);
+  }
+
   if (novoStatus === "APROVADA") {
     if (session.user.role !== "ADMINISTRADOR" && session.user.role !== "GESTOR" && session.user.role !== "GERENTE") {
       return NextResponse.json({ error: "Apenas gerentes, gestores ou administradores podem aprovar o fechamento." }, { status: 403 });

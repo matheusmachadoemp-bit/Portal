@@ -76,6 +76,12 @@ export async function POST(req: Request) {
   }
 
   const itemsData = await buildStockCountItemsData(empresa.id, setor, ingredientIds);
+  if (itemsData.length === 0) {
+    return NextResponse.json(
+      { error: "Nenhum item ativo para contar com esses filtros. Escolha outro setor ou selecione itens." },
+      { status: 400 }
+    );
+  }
 
   const count = await prisma.stockCount.create({
     data: {
