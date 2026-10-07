@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
+import { ensureDefaultModulePermissions, ensureDefaultSubcategoryPermissions } from "@/lib/authz";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -40,7 +41,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         })),
       },
     },
+    include: { subcategories: { select: { key: true } } },
   });
+
+  // A cópia tem `key` nova (fora de `MODULES`): sem estas linhas nem o Gestor veria a categoria
+  // duplicada, e as subcategorias herdariam acesso aberto — mesmo cuidado de `POST /api/menu`
+  // e `POST /api/menu/subcategories`.
+  await ensureDefaultModulePermissions(copy.key);
+  await Promise.all(copy.subcategories.map((s) => ensureDefaultSubcategoryPermissions(copy.key, s.key)));
 
   revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ category: copy });

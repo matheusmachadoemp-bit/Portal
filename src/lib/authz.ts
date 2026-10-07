@@ -197,3 +197,38 @@ export async function ensureDefaultModulePermissions(moduleKey: string): Promise
     )
   );
 }
+
+/**
+ * Subcategoria NOVA criada pela sidebar em cima de uma categoria que já existe (RH, Financeiro,
+ * Administrativo, ...): sem uma linha própria ela herdaria o `canView` (e o nível de edição) da
+ * categoria inteira — e o conteúdo genérico (src/lib/generic-content.ts, /api/generic-files) só
+ * confere `hasModulePermission`, sem os gates de cargo (`MANAGER_ROLES`, etc.) que cada módulo
+ * aplica por fora nas próprias páginas. Resultado: um Funcionário passaria a ver e baixar o que
+ * um Gestor enviasse numa subcategoria nova de RH/Financeiro. Por isso a subcategoria nasce com
+ * linha de chave composta (`categoria:subcategoria`) pra TODOS os perfis — Administrador e Gestor
+ * (quem pode criar) no nível padrão do cargo, os demais sem nenhum acesso (`NENHUM`). Uma linha
+ * composta encerra a herança em `hasModulePermission` e em `buildVisibilityResolver`; liberar
+ * pra outras pessoas passa a ser decisão explícita (override por usuário na tela de Usuários).
+ * `upsert` com `update: {}`: nunca sobrescreve uma linha já configurada.
+ */
+export async function ensureDefaultSubcategoryPermissions(categoryKey: string, subcategoryKey: string): Promise<void> {
+  const moduleKey = `${categoryKey}:${subcategoryKey}`;
+  const creatorProfileKeys = new Set([defaultProfileKeyForRole("ADMINISTRADOR"), defaultProfileKeyForRole("GESTOR")]);
+  const profiles = await prisma.permissionProfile.findMany({ select: { id: true, key: true } });
+
+  await Promise.all(
+    profiles.map((profile) =>
+      prisma.modulePermission.upsert({
+        where: { profileId_moduleKey: { profileId: profile.id, moduleKey } },
+        update: {},
+        create: {
+          profileId: profile.id,
+          moduleKey,
+          ...ACCESS_LEVEL_TO_MODULE_FLAGS[
+            creatorProfileKeys.has(profile.key) ? defaultLevelForProfileKey(profile.key) : "NENHUM"
+          ],
+        },
+      })
+    )
+  );
+}

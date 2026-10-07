@@ -39,7 +39,21 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name || name.length > 200) {
+    return NextResponse.json({ error: "Informe um nome válido (até 200 caracteres)." }, { status: 400 });
+  }
+  if (!body.isFolder && !body.fileUrl) {
+    return NextResponse.json({ error: "Informe o arquivo." }, { status: 400 });
+  }
+  if (body.isFolder && body.fileUrl) {
+    return NextResponse.json({ error: "Uma pasta não pode ter arquivo." }, { status: 400 });
+  }
+  if (body.sizeBytes !== undefined && body.sizeBytes !== null && !Number.isInteger(body.sizeBytes)) {
+    return NextResponse.json({ error: "Tamanho inválido." }, { status: 400 });
+  }
   const scope = await resolveGenericScope({ categoryId: body.categoryId, subcategoryId: body.subcategoryId });
   if (!scope) {
     return NextResponse.json({ error: "Categoria/subcategoria não encontrada." }, { status: 404 });
@@ -74,7 +88,7 @@ export async function POST(req: Request) {
 
   const file = await prisma.genericFileItem.create({
     data: {
-      name: body.name,
+      name,
       categoryId: scope.kind === "category" ? scope.id : null,
       subcategoryId: scope.kind === "subcategory" ? scope.id : null,
       parentId: body.parentId || null,

@@ -25,13 +25,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Sem permissão para editar este conteúdo." }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!name || name.length > 200) {
+    return NextResponse.json({ error: "Informe um nome válido (até 200 caracteres)." }, { status: 400 });
+  }
   // Só renomear (igual ao botão "Renomear" do gerenciador) — de propósito não aceita trocar
   // `parentId`/escopo por aqui, pro mesmo cuidado de não deixar um item pular de
   // categoria/subcategoria já descrito em `POST /api/generic-files`.
   const file = await prisma.genericFileItem.update({
     where: { id },
-    data: { ...(body.name !== undefined ? { name: body.name } : {}) },
+    data: { name },
   });
 
   return NextResponse.json({ file });
