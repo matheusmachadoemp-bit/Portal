@@ -83,12 +83,15 @@ export function ContasPagarClient({
   initialPayables,
   categorias,
   contas,
+  fornecedoresCadastrados,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
   initialPayables: PayableDTO[];
   categorias: { id: string; name: string; dreKey: string }[];
   contas: { id: string; name: string }[];
+  /** Cadastro de fornecedores (Estoque > Fornecedores) — só alimenta a sugestão do campo "Fornecedor", ver `fornecedorSugestoes`. */
+  fornecedoresCadastrados: { id: string; name: string }[];
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
@@ -122,6 +125,23 @@ export function ContasPagarClient({
     quantidadeMeses: "12",
     dataInicio: format(new Date(), "yyyy-MM-dd"),
   });
+
+  // Sugestões pro campo "Fornecedor" (autocomplete via <datalist>, sem travar o campo — ainda
+  // aceita digitar um nome novo): combina o cadastro formal de fornecedores (Estoque >
+  // Fornecedores) com os nomes já usados nos lançamentos existentes, pra sugerir recorrentes
+  // sem cadastro formal também (ex.: "sandro Proprietario").
+  const fornecedorSugestoes = useMemo(() => {
+    const nomes = new Set<string>();
+    for (const f of fornecedoresCadastrados) {
+      const nome = f.name.trim();
+      if (nome) nomes.add(nome);
+    }
+    for (const p of payables) {
+      const nome = p.fornecedor.trim();
+      if (nome) nomes.add(nome);
+    }
+    return Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [fornecedoresCadastrados, payables]);
 
   const filtered = useMemo(
     () =>
@@ -419,7 +439,19 @@ export function ContasPagarClient({
         <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Fornecedor">
-            <input required value={form.fornecedor} onChange={(e) => setForm({ ...form, fornecedor: e.target.value })} className="input" />
+            <input
+              required
+              list="fornecedor-sugestoes"
+              placeholder="Digite ou escolha um fornecedor já cadastrado"
+              value={form.fornecedor}
+              onChange={(e) => setForm({ ...form, fornecedor: e.target.value })}
+              className="input"
+            />
+            <datalist id="fornecedor-sugestoes">
+              {fornecedorSugestoes.map((nome) => (
+                <option key={nome} value={nome} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Descrição">
             <input required value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="input" />
@@ -522,7 +554,18 @@ export function ContasPagarClient({
             </Field>
           </div>
           <Field label="Fornecedor">
-            <input value={recurringForm.fornecedorCliente} onChange={(e) => setRecurringForm({ ...recurringForm, fornecedorCliente: e.target.value })} className="input" />
+            <input
+              list="fornecedor-recorrente-sugestoes"
+              placeholder="Digite ou escolha um fornecedor já cadastrado"
+              value={recurringForm.fornecedorCliente}
+              onChange={(e) => setRecurringForm({ ...recurringForm, fornecedorCliente: e.target.value })}
+              className="input"
+            />
+            <datalist id="fornecedor-recorrente-sugestoes">
+              {fornecedorSugestoes.map((nome) => (
+                <option key={nome} value={nome} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Categoria (DRE)">
             <select value={recurringForm.categoriaId} onChange={(e) => setRecurringForm({ ...recurringForm, categoriaId: e.target.value })} className="input">

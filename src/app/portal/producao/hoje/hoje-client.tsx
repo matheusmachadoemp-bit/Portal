@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, BookOpen, Clock, Play, Printer, Search } from "lucide-react";
+import { AlertTriangle, BookOpen, Clock, Play, Printer, RefreshCw, Search, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import {
@@ -33,11 +33,13 @@ export function HojeClient({
   categorias,
   setores,
   teamMembers,
+  canManage,
 }: {
   initialOrdens: ProductionOrderDTO[];
   categorias: CategoriaOption[];
   setores: SetorOption[];
   teamMembers: UserOption[];
+  canManage: boolean;
 }) {
   const [ordens, setOrdens] = useState(initialOrdens);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("TODOS");
@@ -49,11 +51,56 @@ export function HojeClient({
   const [finalizando, setFinalizando] = useState<ProductionOrderDTO | null>(null);
   const [imprimindo, setImprimindo] = useState<ProductionOrderDTO | null>(null);
   const [vendoModoPreparo, setVendoModoPreparo] = useState<ProductionOrderDTO | null>(null);
+  const [gerando, setGerando] = useState(false);
+  const [gerarFeedback, setGerarFeedback] = useState<{ tone: "success" | "error"; message: string; detail?: string } | null>(
+    null
+  );
 
   async function refresh() {
     const res = await fetch("/api/producao/ordens");
     const data = await res.json();
     setOrdens(data.ordens);
+  }
+
+  async function gerarPlanoHoje() {
+    setGerando(true);
+    setGerarFeedback(null);
+    try {
+      const res = await fetch("/api/producao/planejamento/gerar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: new Date().toISOString() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
+        await refresh();
+        if (data.totalItens === 0) {
+          setGerarFeedback({
+            tone: "success",
+            message:
+              "Nenhum produto de produção cadastrado ainda — cadastre os itens em Produção > Produtos antes de gerar o plano.",
+          });
+        } else {
+          setGerarFeedback({
+            tone: "success",
+            message: `Plano de hoje gerado: ${data.created} produção(ões) criada(s), ${data.updated} atualizada(s).`,
+            detail:
+              data.skipped > 0
+                ? `${data.skipped} produção(ões) já em andamento ou ajustada(s) manualmente — mantida(s) sem alteração.`
+                : undefined,
+          });
+        }
+      } else {
+        setGerarFeedback({ tone: "error", message: data?.error ?? "Não foi possível gerar o plano de hoje. Tente novamente." });
+      }
+    } catch {
+      setGerarFeedback({
+        tone: "error",
+        message: "Não foi possível gerar o plano de hoje. Verifique sua conexão e tente novamente.",
+      });
+    } finally {
+      setGerando(false);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -120,7 +167,29 @@ export function HojeClient({
             </option>
           ))}
         </select>
+        {canManage && (
+          <button
+            onClick={gerarPlanoHoje}
+            disabled={gerando}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium shrink-0"
+          >
+            {gerando ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />} Gerar plano de hoje
+          </button>
+        )}
       </div>
+
+      {gerarFeedback && (
+        <div
+          className={`text-xs rounded-lg px-3 py-2 border space-y-1 ${
+            gerarFeedback.tone === "success"
+              ? "bg-nord-success/10 border-nord-success/30 text-nord-success"
+              : "bg-nord-danger/10 border-nord-danger/30 text-nord-danger"
+          }`}
+        >
+          <p>{gerarFeedback.message}</p>
+          {gerarFeedback.detail && <p className="text-nord-gray">{gerarFeedback.detail}</p>}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {filtered.map((ordem) => {
@@ -207,9 +276,23 @@ export function HojeClient({
             </div>
           );
         })}
-        {filtered.length === 0 && (
-          <p className="col-span-full text-center text-sm text-nord-gray py-10">Nenhuma produção encontrada com esses filtros.</p>
-        )}
+        {filtered.length === 0 &&
+          (ordens.length === 0 ? (
+            <div className="col-span-full flex flex-col items-center gap-3 text-center py-10">
+              <p className="text-sm text-nord-gray">Nenhuma produção gerada para hoje ainda.</p>
+              {canManage && (
+                <button
+                  onClick={gerarPlanoHoje}
+                  disabled={gerando}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white font-medium"
+                >
+                  {gerando ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />} Gerar plano de hoje
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="col-span-full text-center text-sm text-nord-gray py-10">Nenhuma produção encontrada com esses filtros.</p>
+          ))}
       </div>
 
       {iniciando && (
