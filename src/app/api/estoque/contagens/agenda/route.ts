@@ -16,9 +16,9 @@ function isValidHorario(value: unknown): value is string {
 }
 
 /**
- * Agenda de lembretes de contagem (dias da semana + horário + responsável/setor) — não cria a
- * `StockCount` automaticamente, só agenda a notificação disparada por
- * GET /api/estoque/contagens/lembretes/run (ver cron em vercel.json, a cada 15 min via Vercel
+ * Agenda de contagem (dias da semana + horário + responsável/setor + horário-limite opcional) —
+ * a mesma recorrência gera a `StockCount` do dia (`generateStockCounts`) e agenda a notificação,
+ * ambas disparadas por GET /api/estoque/contagens/lembretes/run (ver cron em vercel.json, a cada 15 min via Vercel
  * Cron nativo). Configuração (gate `canEdit`), não dado operacional do dia a dia — por isso
  * todos os verbos usam `canEdit`.
  */
@@ -64,6 +64,9 @@ export async function POST(req: Request) {
   if (!isValidHorario(body.horario)) {
     return NextResponse.json({ error: "Informe um horário válido (HH:mm)." }, { status: 400 });
   }
+  if (body.horarioLimite !== undefined && body.horarioLimite !== null && body.horarioLimite !== "" && !isValidHorario(body.horarioLimite)) {
+    return NextResponse.json({ error: "Informe um horário-limite válido (HH:mm)." }, { status: 400 });
+  }
 
   if (body.responsavelId) {
     const responsavel = await prisma.user.findUnique({ where: { id: body.responsavelId }, select: { id: true } });
@@ -91,6 +94,7 @@ export async function POST(req: Request) {
       setor: body.setor || null,
       responsavelId: body.responsavelId || null,
       horario: body.horario,
+      horarioLimite: body.horarioLimite || null,
       active: body.active !== undefined ? !!body.active : true,
       ...weekdayData,
     },

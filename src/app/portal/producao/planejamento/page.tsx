@@ -25,7 +25,12 @@ export default async function ProducaoPlanejamentoPage() {
     where: { empresaId: { in: empresaIds }, date: { gte: amanha, lt: depoisDeAmanha } },
     orderBy: { prazo: "asc" },
     include: {
-      productionItem: { include: { category: { select: { id: true, name: true, color: true, icon: true } } } },
+      productionItem: {
+        include: {
+          category: { select: { id: true, name: true, color: true, icon: true } },
+          setor: { select: { id: true, name: true, color: true, icon: true } },
+        },
+      },
       responsavel: { select: { id: true, name: true } },
       ajustePor: { select: { id: true, name: true } },
     },

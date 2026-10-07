@@ -97,6 +97,7 @@ export const FILE_CATEGORY_OPTIONS = [
   "Campanhas",
   "Reels",
   "Stories",
+  "Post",
   "Identidade Visual",
 ];
 

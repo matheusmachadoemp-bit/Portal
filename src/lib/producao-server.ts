@@ -28,13 +28,40 @@ export async function notifyProducaoUsers(userIds: string[], type: string, title
   await Promise.all(userIds.map((userId) => notifyUser(userId, type, title, body, null)));
 }
 
-/** Inicia uma ordem: registra responsável/hora de início e avança o status. */
-export async function iniciarProductionOrder(orderId: string, userId: string) {
-  const order = await prisma.productionOrder.update({
-    where: { id: orderId },
-    data: { status: "EM_PRODUCAO", responsavelId: userId, horaInicio: new Date() },
+/** Inicia uma ordem: registra responsável/hora de início e avança o status.
+ * `responsavelId` é quem vai de fato produzir o item (ex.: o chef escolhe
+ * "foi a Jessie" no tablet) — se não vier, cai no comportamento antigo (usa
+ * `userId`, quem está logado/chamando a rota). `userId` continua sendo
+ * sempre quem de fato acionou "iniciar" (autor do registro no histórico),
+ * mesmo quando o responsável escolhido é outra pessoa — mesma distinção que
+ * `ajustar`/`reatribuir` já fazem entre "quem fez" e "pra quem é". Validar
+ * que `responsavelId` tem acesso à loja da ordem é responsabilidade de quem
+ * chama (ver PATCH /api/producao/ordens/[id], mesmo padrão já usado por
+ * "reatribuir"). Devolve `null` quando a ordem já não está pendente. */
+export async function iniciarProductionOrder(orderId: string, userId: string, responsavelId?: string | null) {
+  const resolvedResponsavelId = responsavelId || userId;
+  // Só inicia quem ainda não foi iniciada. O filtro de status no próprio UPDATE (e não um
+  // "ler e depois gravar") evita que dois tablets/cliques simultâneos reiniciem uma ordem que já
+  // está em produção ou concluída — o que trocaria o responsável e, ao finalizar de novo,
+  // duplicaria baixa de insumos, estoque pronto e pontos.
+  const { count } = await prisma.productionOrder.updateMany({
+    // ATRASADO também vale, mas só sem `horaInicio`: o cron das 17h grava ATRASADO tanto em ordem
+    // nunca iniciada quanto em ordem já em produção, e esta última não pode ser reiniciada.
+    where: { id: orderId, OR: [{ status: "PENDENTE" }, { status: "ATRASADO", horaInicio: null }] },
+    data: { status: "EM_PRODUCAO", responsavelId: resolvedResponsavelId, horaInicio: new Date() },
   });
-  await logProductionOrderHistory(orderId, userId, "INICIADO");
+  if (count === 0) return null;
+  const order = await prisma.productionOrder.findUniqueOrThrow({ where: { id: orderId } });
+
+  // Só busca o nome (pra deixar o histórico legível pra humano, em vez de um
+  // id cru) quando alguém de fato escolheu outra pessoa — no caso comum
+  // (responsavelId omitido, cai no próprio userId) não vale o round-trip extra.
+  let detail: string | null = null;
+  if (resolvedResponsavelId !== userId) {
+    const responsavel = await prisma.user.findUnique({ where: { id: resolvedResponsavelId }, select: { name: true } });
+    detail = `Responsável definido ao iniciar: ${responsavel?.name ?? resolvedResponsavelId}`;
+  }
+  await logProductionOrderHistory(orderId, userId, "INICIADO", detail);
   return order;
 }
 

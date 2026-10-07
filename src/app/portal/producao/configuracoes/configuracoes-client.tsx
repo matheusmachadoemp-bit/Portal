@@ -7,41 +7,48 @@ import { Modal, FormError } from "@/components/ui/modal";
 import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { WEEKDAY_LABEL } from "@/lib/producao";
+import { NovaCategoriaModal } from "../nova-categoria-modal";
 
 type CategoriaDTO = { id: string; key: string; name: string; color: string; icon: string; active: boolean };
+type SetorDTO = { id: string; key: string; name: string; color: string; icon: string; active: boolean };
 type WeightDTO = { id: string; weekday: number; percent: number };
 type SettingsDTO = { semanasParaMedia: number; toleranciaAlertaPct: number } | null;
 
+const EMPTY_SETOR_FORM = { name: "", color: "#2952E3", icon: "ChefHat" };
+
 export function ConfiguracoesClient({
   categorias: initialCategorias,
+  setores: initialSetores,
   settings,
   weights: initialWeights,
   canManage,
 }: {
   categorias: CategoriaDTO[];
+  setores: SetorDTO[];
   settings: SettingsDTO;
   weights: WeightDTO[];
   canManage: boolean;
 }) {
   const [categorias, setCategorias] = useState(initialCategorias);
+  const [setores, setSetores] = useState(initialSetores);
   const [weights, setWeights] = useState(
     Array.from({ length: 7 }, (_, weekday) => initialWeights.find((w) => w.weekday === weekday)?.percent ?? 0)
   );
   const [semanasParaMedia, setSemanasParaMedia] = useState(settings?.semanasParaMedia ?? 4);
   const [toleranciaAlertaPct, setToleranciaAlertaPct] = useState(settings?.toleranciaAlertaPct ?? 10);
   const [showCategoriaForm, setShowCategoriaForm] = useState(false);
-  const [novaCategoria, setNovaCategoria] = useState({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
+  const [showSetorForm, setShowSetorForm] = useState(false);
+  const [novoSetor, setNovoSetor] = useState(EMPTY_SETOR_FORM);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savingCategoria, setSavingCategoria] = useState(false);
-  // Conta uma "sessão" do modal de nova categoria, incrementada toda vez que
-  // ele é fechado. Serve pra uma resposta tardia do POST (chegando depois que
-  // o usuário já fechou — e talvez reaberto — o modal) saber se ainda faz
-  // sentido fechar/resetar o formulário atual, sem descartar a resposta
-  // inteira (se a criação deu certo no servidor, a categoria é real e precisa
-  // aparecer na lista de qualquer forma) nem atrapalhar uma tentativa nova
-  // que o usuário já tenha começado depois de reabrir.
-  const categoriaFormSessionRef = useRef(0);
+  const [setorError, setSetorError] = useState<string | null>(null);
+  const [savingSetor, setSavingSetor] = useState(false);
+  // Mesma proteção contra resposta tardia do POST usada pela criação de
+  // categoria (ver nova-categoria-modal.tsx) — conta uma "sessão" do modal
+  // de novo setor, incrementada toda vez que ele é fechado, pra uma
+  // resposta tardia saber se ainda faz sentido limpar/fechar o formulário
+  // atual sem descartar um sucesso nem atrapalhar uma tentativa nova.
+  const setorFormSessionRef = useRef(0);
 
   const somaPesos = weights.reduce((a, b) => a + b, 0);
 
@@ -68,56 +75,46 @@ export function ConfiguracoesClient({
     }
   }
 
-  async function criarCategoria() {
-    if (!novaCategoria.key || !novaCategoria.name) return;
-    setError(null);
-    setSavingCategoria(true);
-    const session = categoriaFormSessionRef.current;
+  async function criarSetor() {
+    if (!novoSetor.name) return;
+    setSetorError(null);
+    setSavingSetor(true);
+    const session = setorFormSessionRef.current;
     try {
-      const res = await fetch("/api/producao/categorias", {
+      const res = await fetch("/api/producao/setores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(novaCategoria),
+        body: JSON.stringify(novoSetor),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        // Só mostra o erro se ninguém fechou o modal desde que esse pedido
-        // começou — se o usuário já fechou (Esc/backdrop/X), não existe mais
-        // um lugar "certo" pra essa mensagem aparecer (era o achado original:
-        // ela vazava pra dentro de "Peso por dia da semana"), e também não
-        // queremos atrapalhar uma tentativa nova iniciada depois de reabrir.
-        if (categoriaFormSessionRef.current === session) {
-          setError(data.error ?? "Não foi possível criar a categoria.");
+        if (setorFormSessionRef.current === session) {
+          setSetorError(data.error ?? "Não foi possível criar o setor.");
         }
         return;
       }
       const data = await res.json();
-      // A categoria foi criada de verdade no servidor — isso precisa
-      // refletir na lista mesmo que o modal já tenha sido fechado nesse
-      // meio-tempo (diferente do erro, um sucesso tardio não pode ser
-      // descartado, senão a categoria existe no banco mas some da tela).
-      setCategorias((c) => [...c, data.categoria]);
-      if (categoriaFormSessionRef.current === session) {
-        setShowCategoriaForm(false);
-        setNovaCategoria({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
+      // Criado de verdade no servidor — precisa aparecer na lista mesmo que
+      // o modal já tenha sido fechado nesse meio-tempo.
+      setSetores((s) => [...s, data.setor]);
+      if (setorFormSessionRef.current === session) {
+        setShowSetorForm(false);
+        setNovoSetor(EMPTY_SETOR_FORM);
       }
     } catch {
-      if (categoriaFormSessionRef.current === session) {
-        setError("Não foi possível criar a categoria.");
+      if (setorFormSessionRef.current === session) {
+        setSetorError("Não foi possível criar o setor.");
       }
     } finally {
-      setSavingCategoria(false);
+      setSavingSetor(false);
     }
   }
 
-  function fecharCategoriaForm() {
-    categoriaFormSessionRef.current += 1;
-    setShowCategoriaForm(false);
-    setError(null);
-    // Limpa o rascunho também — senão o modal reabre pré-preenchido com os
-    // mesmos dados, o que convida a criar sem querer uma categoria duplicada
-    // (o servidor não bloqueia nome repetido, só gera outra "key").
-    setNovaCategoria({ key: "", name: "", color: "#2952E3", icon: "ChefHat" });
+  function fecharSetorForm() {
+    setorFormSessionRef.current += 1;
+    setShowSetorForm(false);
+    setSetorError(null);
+    setNovoSetor(EMPTY_SETOR_FORM);
   }
 
   return (
@@ -126,10 +123,7 @@ export function ConfiguracoesClient({
         title="Categorias de produção"
         action={
           <button
-            onClick={() => {
-              setError(null);
-              setShowCategoriaForm(true);
-            }}
+            onClick={() => setShowCategoriaForm(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
             <Plus size={13} /> Nova categoria
@@ -144,6 +138,37 @@ export function ConfiguracoesClient({
               </span>
             </Badge>
           ))}
+          {categorias.length === 0 && <p className="text-xs text-nord-gray">Nenhuma categoria cadastrada ainda.</p>}
+        </div>
+      </Section>
+
+      <Section
+        title="Setores de produção"
+        action={
+          <button
+            onClick={() => {
+              setSetorError(null);
+              setShowSetorForm(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
+          >
+            <Plus size={13} /> Novo setor
+          </button>
+        }
+      >
+        <p className="text-xs text-nord-gray mb-3">
+          Agrupamento por equipe/estação física (ex.: Cozinha Quente, Cozinha Fria) — diferente da categoria, que agrupa
+          por tipo de produto.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {setores.map((s) => (
+            <Badge key={s.id} tone="default">
+              <span className="flex items-center gap-1.5">
+                <DynamicIcon name={s.icon} size={12} style={{ color: s.color }} /> {s.name}
+              </span>
+            </Badge>
+          ))}
+          {setores.length === 0 && <p className="text-xs text-nord-gray">Nenhum setor cadastrado ainda.</p>}
         </div>
       </Section>
 
@@ -194,25 +219,32 @@ export function ConfiguracoesClient({
         </>
       )}
 
-      <Modal open={showCategoriaForm} onClose={fecharCategoriaForm} title="Nova categoria de produção">
+      <NovaCategoriaModal
+        open={showCategoriaForm}
+        onClose={() => setShowCategoriaForm(false)}
+        onCreated={(categoria) => setCategorias((c) => [...c, categoria])}
+      />
+
+      <Modal open={showSetorForm} onClose={fecharSetorForm} title="Novo setor de produção">
         <div className="space-y-3">
-          <FormError message={error} />
+          <FormError message={setorError} />
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Nome</span>
             <input
-              value={novaCategoria.name}
-              onChange={(e) => setNovaCategoria({ ...novaCategoria, name: e.target.value, key: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-") })}
+              value={novoSetor.name}
+              onChange={(e) => setNovoSetor({ ...novoSetor, name: e.target.value })}
               className="input"
+              placeholder="Ex.: Cozinha Quente"
             />
           </label>
-          <IconPicker value={novaCategoria.icon} onChange={(icon) => setNovaCategoria({ ...novaCategoria, icon })} />
-          <ColorPicker value={novaCategoria.color} onChange={(color) => setNovaCategoria({ ...novaCategoria, color })} />
+          <IconPicker value={novoSetor.icon} onChange={(icon) => setNovoSetor({ ...novoSetor, icon })} />
+          <ColorPicker value={novoSetor.color} onChange={(color) => setNovoSetor({ ...novoSetor, color })} />
           <button
-            onClick={criarCategoria}
-            disabled={savingCategoria}
+            onClick={criarSetor}
+            disabled={savingSetor}
             className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
           >
-            {savingCategoria ? "Criando..." : "Criar categoria"}
+            {savingSetor ? "Criando..." : "Criar setor"}
           </button>
         </div>
       </Modal>

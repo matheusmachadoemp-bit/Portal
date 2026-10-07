@@ -11,6 +11,7 @@ type ScheduleRow = {
   responsavelId: string | null;
   responsavelNome: string | null;
   horario: string;
+  horarioLimite: string | null;
   segunda: boolean;
   terca: boolean;
   quarta: boolean;
@@ -33,12 +34,13 @@ const WEEKDAY_FIELDS = [
 
 type WeekdayKey = (typeof WEEKDAY_FIELDS)[number]["key"];
 
-type FormState = { setor: string; responsavelId: string; horario: string } & Record<WeekdayKey, boolean>;
+type FormState = { setor: string; responsavelId: string; horario: string; horarioLimite: string } & Record<WeekdayKey, boolean>;
 
 const emptyForm: FormState = {
   setor: "",
   responsavelId: "",
   horario: "09:00",
+  horarioLimite: "",
   segunda: true,
   terca: true,
   quarta: true,
@@ -56,11 +58,13 @@ function diasResumo(s: ScheduleRow): string {
 }
 
 /**
- * Botão "Lembretes" + modal de configuração da agenda de notificação de contagem (dias da semana
- * + horário + setor/responsável opcionais) — usado tanto por `ContagemSemanalClient` quanto por
- * `ContagemMensalClient`, um pra cada `type` de StockCountSchedule (ver schema.prisma). Só agenda
- * a notificação (disparada pelo cron em GET /api/estoque/contagens/lembretes/run); não cria a
- * StockCount automaticamente.
+ * Botão "Lembretes" + modal de configuração da agenda/recorrência de contagem (dias da semana +
+ * horário + setor/responsável opcionais) — usado tanto por `ContagemSemanalClient` quanto por
+ * `ContagemMensalClient`, um pra cada `type` de StockCountSchedule (ver schema.prisma). Esta
+ * mesma recorrência tanto dispara a notificação de lembrete quanto gera a `StockCount` do dia
+ * automaticamente (`generateStockCounts`, src/lib/estoque-server.ts) — as duas coisas disparadas
+ * pelo mesmo cron, GET /api/estoque/contagens/lembretes/run. Este modal em si só edita os campos
+ * da recorrência (dias/horário/setor/responsável); não mexe em nenhuma `StockCount` diretamente.
  */
 export function AgendaLembretesModal({
   type,
@@ -101,6 +105,7 @@ export function AgendaLembretesModal({
             responsavelId: s.responsavelId as string | null,
             responsavelNome: (s.responsavel as { name: string } | null)?.name ?? null,
             horario: s.horario as string,
+            horarioLimite: (s.horarioLimite as string | null) ?? null,
             segunda: s.segunda as boolean,
             terca: s.terca as boolean,
             quarta: s.quarta as boolean,
@@ -213,9 +218,26 @@ export function AgendaLembretesModal({
                     onChange={(e) => setForm({ ...form, horario: e.target.value })}
                   />
                 </label>
+                <label className="block">
+                  <span className="block text-xs text-nord-gray mb-1">Horário-limite (opcional)</span>
+                  <input
+                    className="input"
+                    type="time"
+                    value={form.horarioLimite}
+                    onChange={(e) => setForm({ ...form, horarioLimite: e.target.value })}
+                  />
+                  <span className="block text-[11px] text-nord-gray mt-1">
+                    Prazo da contagem gerada no dia. Em branco = sem prazo.
+                  </span>
+                </label>
               </div>
               <div>
                 <span className="block text-xs text-nord-gray mb-2">Dias da semana</span>
+                <p className="text-[11px] text-nord-gray mb-2">
+                  {type === "MENSAL"
+                    ? "A contagem do mês é criada sozinha uma vez por mês, no primeiro dia marcado a partir do horário abaixo, e o responsável é avisado."
+                    : "A contagem do dia é criada sozinha nos dias marcados, a partir do horário abaixo, e o responsável é avisado."}
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {WEEKDAY_FIELDS.map((d) => (
                     <label
@@ -262,6 +284,7 @@ export function AgendaLembretesModal({
                     <div className="text-xs space-y-0.5">
                       <div className="text-white font-medium">
                         {s.setor ?? "Todos os setores"} — {s.horario}
+                        {s.horarioLimite ? ` (limite ${s.horarioLimite})` : ""}
                       </div>
                       <div className="text-nord-gray">
                         {diasResumo(s)} · {s.responsavelNome ?? "Sem responsável definido"}

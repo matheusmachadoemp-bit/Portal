@@ -8,6 +8,8 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { COUNT_ITEM_STATUS_LABEL, COUNT_ITEM_STATUS_TONE, COUNT_STATUS_LABEL, COUNT_STATUS_TONE, MONTHLY_COUNT_CHECKLIST, ingredientCostPerUnit } from "@/lib/estoque";
 import { AgendaLembretesModal } from "../contagem/agenda-lembretes-modal";
+import { PrazoCell } from "../contagem/prazo-cell";
+import { IniciarOpcoesCampos, INICIAR_OPCOES_VAZIAS, prazoParaApi, type IniciarOpcoes } from "../contagem/iniciar-opcoes";
 
 type CountRow = {
   id: string;
@@ -17,6 +19,7 @@ type CountRow = {
   dataContagem: string;
   responsavel: string | null;
   status: string;
+  prazo: string | null;
   checklistJson: string | null;
   aprovadoPor: string | null;
   aprovadoEm: string | null;
@@ -72,6 +75,7 @@ export function ContagemMensalClient({
   const [counts, setCounts] = useState(initialCounts);
   const [setor, setSetor] = useState<string>("");
   const [responsavel, setResponsavel] = useState("");
+  const [opcoes, setOpcoes] = useState<IniciarOpcoes>(INICIAR_OPCOES_VAZIAS);
   const [showNew, setShowNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,22 +106,36 @@ export function ContagemMensalClient({
         dataContagem: c.dataContagem,
         responsavel: c.responsavel,
         status: c.status,
+        prazo: (c.prazo as string | null) ?? null,
         checklistJson: c.checklistJson,
         aprovadoPor: c.aprovadoPor,
         aprovadoEm: c.aprovadoEm,
         totalItens: (c.items as unknown[]).length,
         conferidos: (c.items as { quantidadeContada: number | null }[]).filter((i) => i.quantidadeContada !== null).length,
-        createdByName: (c.createdBy as { name: string }).name,
+        // `createdBy` vem `null` quando a contagem foi gerada automaticamente por uma
+        // `StockCountSchedule` (sem usuário logado que a criou) — ver generateStockCounts em
+        // src/lib/estoque-server.ts.
+        createdByName: (c.createdBy as { name: string } | null)?.name ?? "—",
       }))
     );
   }
 
   async function iniciarContagem() {
     setError(null);
+    if (opcoes.ingredientIds && opcoes.ingredientIds.length === 0) {
+      setError("Selecione ao menos um item para contar, ou desmarque a escolha manual.");
+      return;
+    }
     const res = await fetch("/api/estoque/contagens", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "MENSAL", setor: setor || undefined, responsavel }),
+      body: JSON.stringify({
+        type: "MENSAL",
+        setor: setor || undefined,
+        responsavel,
+        ingredientIds: opcoes.ingredientIds,
+        prazo: prazoParaApi(opcoes.prazo),
+      }),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
@@ -125,6 +143,7 @@ export function ContagemMensalClient({
       return;
     }
     setShowNew(false);
+    setOpcoes(INICIAR_OPCOES_VAZIAS);
     await refreshList();
   }
 
@@ -253,7 +272,7 @@ export function ContagemMensalClient({
               canCreate={canCreateAgenda}
               canManage={canManageAgenda}
             />
-            <Toolbar onRefresh={refreshList} onAdd={canCreate ? () => { setError(null); setShowNew(true); } : undefined} addLabel="Iniciar fechamento" />
+            <Toolbar onRefresh={refreshList} onAdd={canCreate ? () => { setError(null); setOpcoes(INICIAR_OPCOES_VAZIAS); setShowNew(true); } : undefined} addLabel="Iniciar fechamento" />
           </div>
         }
       >
@@ -271,6 +290,7 @@ export function ContagemMensalClient({
                 <th className="py-2 pr-4">Setor</th>
                 <th className="py-2 pr-4">Responsável</th>
                 <th className="py-2 pr-4">Progresso</th>
+                <th className="py-2 pr-4">Prazo</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Aprovado por</th>
                 <th className="py-2 pr-4" />
@@ -288,6 +308,7 @@ export function ContagemMensalClient({
                       <span className="text-xs text-nord-gray whitespace-nowrap">{c.conferidos}/{c.totalItens}</span>
                     </div>
                   </td>
+                  <td className="py-2.5 pr-4 text-xs"><PrazoCell prazo={c.prazo} status={c.status} /></td>
                   <td className="py-2.5 pr-4">
                     <Badge tone={COUNT_STATUS_TONE[c.status]}>{COUNT_STATUS_LABEL[c.status] ?? c.status}</Badge>
                   </td>
@@ -349,6 +370,7 @@ export function ContagemMensalClient({
               ))}
             </select>
           </label>
+          <IniciarOpcoesCampos setor={setor} value={opcoes} onChange={setOpcoes} />
           {error && <p className="text-xs text-nord-danger">{error}</p>}
           <button onClick={iniciarContagem} className="btn-primary w-full py-2.5">
             Iniciar

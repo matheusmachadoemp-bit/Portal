@@ -32,6 +32,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.horario !== undefined && !isValidHorario(body.horario)) {
     return NextResponse.json({ error: "Informe um horário válido (HH:mm)." }, { status: 400 });
   }
+  if (body.horarioLimite !== undefined && body.horarioLimite !== null && body.horarioLimite !== "" && !isValidHorario(body.horarioLimite)) {
+    return NextResponse.json({ error: "Informe um horário-limite válido (HH:mm)." }, { status: 400 });
+  }
   if (body.responsavelId) {
     const responsavel = await prisma.user.findUnique({ where: { id: body.responsavelId }, select: { id: true } });
     if (!responsavel) return NextResponse.json({ error: "Responsável inválido." }, { status: 400 });
@@ -56,6 +59,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       setor: body.setor !== undefined ? body.setor || null : undefined,
       responsavelId: body.responsavelId !== undefined ? body.responsavelId || null : undefined,
       horario: body.horario ?? undefined,
+      horarioLimite: body.horarioLimite !== undefined ? body.horarioLimite || null : undefined,
       active: body.active !== undefined ? !!body.active : undefined,
       ...weekdayData,
     },
