@@ -45,7 +45,9 @@ export async function iniciarProductionOrder(orderId: string, userId: string, re
   // está em produção ou concluída — o que trocaria o responsável e, ao finalizar de novo,
   // duplicaria baixa de insumos, estoque pronto e pontos.
   const { count } = await prisma.productionOrder.updateMany({
-    where: { id: orderId, status: { in: ["PENDENTE", "ATRASADO"] } },
+    // ATRASADO também vale, mas só sem `horaInicio`: o cron das 17h grava ATRASADO tanto em ordem
+    // nunca iniciada quanto em ordem já em produção, e esta última não pode ser reiniciada.
+    where: { id: orderId, OR: [{ status: "PENDENTE" }, { status: "ATRASADO", horaInicio: null }] },
     data: { status: "EM_PRODUCAO", responsavelId: resolvedResponsavelId, horaInicio: new Date() },
   });
   if (count === 0) return null;

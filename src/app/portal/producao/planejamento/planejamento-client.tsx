@@ -58,7 +58,7 @@ export function PlanejamentoClient({
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-1.5 text-xs text-nord-gray cursor-pointer select-none">
                 <input type="checkbox" checked={semanaFeriado} onChange={(e) => setSemanaFeriado(e.target.checked)} />
-                Semana de feriado (margem de feriado, nunca menor que a do produto)
+                Dia de feriado (margem de feriado, nunca menor que a do produto)
               </label>
               <button
                 onClick={gerarPlano}

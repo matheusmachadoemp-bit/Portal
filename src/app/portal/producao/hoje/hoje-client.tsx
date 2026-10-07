@@ -256,7 +256,7 @@ export function HojeClient({
                 <BookOpen size={12} /> Modo de preparo
               </button>
 
-              {ordem.statusReal === "PENDENTE" && (
+              {(ordem.statusReal === "PENDENTE" || (ordem.statusReal === "ATRASADO" && !ordem.horaInicio)) && (
                 <button
                   onClick={() => setIniciando(ordem)}
                   className="w-full flex items-center justify-center gap-1.5 bg-nord-blue hover:bg-nord-blue-light text-white text-sm font-medium rounded-lg py-2.5"

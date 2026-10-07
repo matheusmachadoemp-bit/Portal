@@ -33,6 +33,8 @@ export function IniciarModal({
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.error ?? "Não foi possível iniciar a produção.");
+        // 409: outra pessoa já iniciou/concluiu — atualiza a lista pra tela refletir o status real.
+        if (res.status === 409) onDone();
         return;
       }
       onDone();
