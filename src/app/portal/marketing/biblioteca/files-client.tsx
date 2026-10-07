@@ -43,6 +43,7 @@ export function FilesClient({
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"todos" | "lancado" | "nao-lancado">("todos");
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadCategory, setUploadCategory] = useState(FILE_CATEGORY_OPTIONS[0]);
@@ -65,9 +66,18 @@ export function FilesClient({
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const f of files) map.set(f.category, (map.get(f.category) ?? 0) + 1);
+    for (const f of files) {
+      if (statusFilter === "lancado" && !f.lancado) continue;
+      if (statusFilter === "nao-lancado" && f.lancado) continue;
+      map.set(f.category, (map.get(f.category) ?? 0) + 1);
+    }
     return map;
-  }, [files]);
+  }, [files, statusFilter]);
+
+  const totalNoStatus = useMemo(
+    () => Array.from(counts.values()).reduce((a, b) => a + b, 0),
+    [counts]
+  );
 
   async function refresh() {
     const res = await fetch(`/api/marketing/files?space=${space}`);
@@ -105,8 +115,10 @@ export function FilesClient({
   }
 
   async function toggleLancado(f: FileDTO) {
+    if (pendingIds.has(f.id)) return;
     setToggleError(null);
     const next = !f.lancado;
+    setPendingIds((prev) => new Set(prev).add(f.id));
     // Atualiza na hora; se a API recusar, volta ao valor anterior.
     setFiles((prev) => prev.map((x) => (x.id === f.id ? { ...x, lancado: next } : x)));
     const result = await apiRequest(`/api/marketing/files/${f.id}`, "PATCH", { lancado: next });
@@ -114,6 +126,11 @@ export function FilesClient({
       setFiles((prev) => prev.map((x) => (x.id === f.id ? { ...x, lancado: f.lancado } : x)));
       setToggleError(result.error);
     }
+    setPendingIds((prev) => {
+      const copy = new Set(prev);
+      copy.delete(f.id);
+      return copy;
+    });
   }
 
   async function doDelete() {
@@ -169,7 +186,7 @@ export function FilesClient({
           onClick={() => setActiveCategory(null)}
           className={`px-2.5 py-1 rounded-lg text-xs font-medium ${!activeCategory ? "bg-nord-blue text-white" : "bg-nord-panel text-nord-gray hover:text-white"}`}
         >
-          Todos ({files.length})
+          Todas ({totalNoStatus})
         </button>
         {FILE_CATEGORY_OPTIONS.filter((c) => counts.has(c)).map((c) => (
           <button
@@ -219,8 +236,10 @@ export function FilesClient({
             {canEdit ? (
               <button
                 onClick={() => toggleLancado(f)}
+                disabled={pendingIds.has(f.id)}
+                aria-pressed={f.lancado}
                 title={f.lancado ? "Marcar como não lançado" : "Marcar como lançado"}
-                className={`mt-1.5 flex items-center gap-1 text-[10px] font-medium ${f.lancado ? "text-nord-success" : "text-nord-gray hover:text-white"}`}
+                className={`mt-1.5 flex items-center gap-1 text-[10px] font-medium disabled:opacity-50 ${f.lancado ? "text-nord-success" : "text-nord-gray hover:text-white"}`}
               >
                 {f.lancado ? <CheckCircle2 size={12} /> : <Circle size={12} />}
                 {f.lancado ? "Lançado" : "Não lançado"}

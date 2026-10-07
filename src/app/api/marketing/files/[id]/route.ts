@@ -20,16 +20,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const body = await req.json();
-  if (typeof body.lancado !== "boolean") {
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body.lancado !== "boolean") {
     return NextResponse.json({ error: "Campo 'lancado' é obrigatório e deve ser booleano." }, { status: 400 });
   }
+
+  // Nada a gravar (nem a registrar no histórico) se o status já é o pedido.
+  if (existing.lancado === body.lancado) return NextResponse.json({ file: existing });
 
   const file = await prisma.marketingFile.update({
     where: { id },
     data: { lancado: body.lancado },
   });
 
+  // `after` segue a convenção do módulo (nome da entidade → novo estado), que é o que o
+  // Resumo de Atividades do dashboard exibe: `atualizou "<after>"`.
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,
@@ -38,7 +43,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       entityType: "MarketingFile",
       entityId: file.id,
       before: existing.lancado ? "Lançado" : "Não lançado",
-      after: file.lancado ? "Lançado" : "Não lançado",
+      after: `${file.name} → ${file.lancado ? "Lançado" : "Não lançado"}`,
     },
   });
 
