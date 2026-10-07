@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const body = await req.json();
   // A `key` vira segmento de URL e parte da chave de permissão composta (`categoria:sub`) — só
   // letras minúsculas, números e hífen (a UI nunca envia `key`; isto protege chamadas diretas).
-  if (body.key !== undefined && !/^[a-z0-9-]+$/.test(String(body.key))) {
+  if (body.key !== undefined && body.key !== null && !/^[a-z0-9-]+$/.test(String(body.key))) {
     return NextResponse.json({ error: "Chave inválida (use apenas letras minúsculas, números e hífen)." }, { status: 400 });
   }
 
@@ -32,10 +32,16 @@ export async function POST(req: Request) {
     _max: { order: true },
   });
 
+  // Permissões restritas gravadas ANTES de criar a subcategoria: se algo falhar no meio, nunca fica
+  // uma subcategoria existente e aberta (herdando o acesso da categoria) — só linhas sobrando,
+  // inofensivas. Ver `ensureDefaultSubcategoryPermissions` (@/lib/authz).
+  const subKey: string = body.key ?? `sub-${Date.now()}`;
+  await ensureDefaultSubcategoryPermissions(category.key, subKey);
+
   const subcategory = await prisma.subcategory.create({
     data: {
       categoryId: body.categoryId,
-      key: body.key ?? `sub-${Date.now()}`,
+      key: subKey,
       name: body.name ?? "Nova subcategoria",
       icon: body.icon ?? "Folder",
       color: body.color ?? "#1464F4",
@@ -51,9 +57,6 @@ export async function POST(req: Request) {
   // categoria criada pela própria sidebar, cuja `key` nunca existiu em `MODULES`. Ver comentário
   // completo em `ensureDefaultModulePermissions` (@/lib/authz).
   await ensureDefaultModulePermissions(category.key);
-  // E a própria subcategoria nasce restrita (só Administrador/Gestor) em vez de herdar o acesso
-  // aberto da categoria — ver `ensureDefaultSubcategoryPermissions` (@/lib/authz).
-  await ensureDefaultSubcategoryPermissions(category.key, subcategory.key);
 
   revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ subcategory });

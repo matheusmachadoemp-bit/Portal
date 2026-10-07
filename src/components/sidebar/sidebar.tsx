@@ -503,8 +503,12 @@ function CategoryRow({
             if (hasSubs) {
               // Com o menu recolhido (só ícones) a lista de subcategorias não aparece: abre o menu
               // junto, senão o clique parecia não fazer nada.
-              if (collapsed) onExpandSidebar();
-              onToggleExpand();
+              if (collapsed) {
+                onExpandSidebar();
+                if (!expanded) onToggleExpand();
+              } else {
+                onToggleExpand();
+              }
             } else {
               router.push(`/portal/${cat.key}`);
             }

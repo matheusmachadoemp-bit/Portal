@@ -21,9 +21,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const maxOrder = await prisma.category.aggregate({ _max: { order: true } });
 
+  // Chaves calculadas antes, pra gravar as permissões restritas ANTES de criar a cópia (nunca fica
+  // uma cópia existente e aberta). A cópia tem `key` nova, fora de `MODULES`: sem estas linhas nem
+  // o Gestor a veria, e as subcategorias herdariam acesso aberto.
+  const stamp = Date.now();
+  const copyKey = `${original.key}-copy-${stamp}`;
+  const subKeyFor = (key: string) => `${key}-copy-${stamp}`;
+  await ensureDefaultModulePermissions(copyKey);
+  await Promise.all(original.subcategories.map((s) => ensureDefaultSubcategoryPermissions(copyKey, subKeyFor(s.key))));
+
   const copy = await prisma.category.create({
     data: {
-      key: `${original.key}-copy-${Date.now()}`,
+      key: copyKey,
       name: `${original.name} (cópia)`,
       icon: original.icon,
       color: original.color,
@@ -32,7 +41,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       isSystem: false,
       subcategories: {
         create: original.subcategories.map((s) => ({
-          key: `${s.key}-copy-${Date.now()}`,
+          key: subKeyFor(s.key),
           name: s.name,
           icon: s.icon,
           color: s.color,
@@ -41,14 +50,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         })),
       },
     },
-    include: { subcategories: { select: { key: true } } },
   });
-
-  // A cópia tem `key` nova (fora de `MODULES`): sem estas linhas nem o Gestor veria a categoria
-  // duplicada, e as subcategorias herdariam acesso aberto — mesmo cuidado de `POST /api/menu`
-  // e `POST /api/menu/subcategories`.
-  await ensureDefaultModulePermissions(copy.key);
-  await Promise.all(copy.subcategories.map((s) => ensureDefaultSubcategoryPermissions(copy.key, s.key)));
 
   revalidateTag(MENU_CATEGORIES_TAG, { expire: 0 });
   return NextResponse.json({ category: copy });

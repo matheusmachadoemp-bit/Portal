@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   if (body.isFolder && body.fileUrl) {
     return NextResponse.json({ error: "Uma pasta não pode ter arquivo." }, { status: 400 });
   }
-  if (body.sizeBytes !== undefined && body.sizeBytes !== null && !Number.isInteger(body.sizeBytes)) {
+  if (body.sizeBytes !== undefined && body.sizeBytes !== null && (!Number.isInteger(body.sizeBytes) || body.sizeBytes < 0 || body.sizeBytes > 2147483647)) {
     return NextResponse.json({ error: "Tamanho inválido." }, { status: 400 });
   }
   const scope = await resolveGenericScope({ categoryId: body.categoryId, subcategoryId: body.subcategoryId });

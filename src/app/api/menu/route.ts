@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  if (body.key !== undefined && !/^[a-z0-9-]+$/.test(String(body.key))) {
+  if (body.key !== undefined && body.key !== null && !/^[a-z0-9-]+$/.test(String(body.key))) {
     return NextResponse.json({ error: "Chave inválida (use apenas letras minúsculas, números e hífen)." }, { status: 400 });
   }
   const maxOrder = await prisma.category.aggregate({ _max: { order: true } });
