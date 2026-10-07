@@ -127,16 +127,19 @@ export async function generateStockCounts(
           data: { ultimaGeracaoData: schedule.ultimaGeracaoData },
         });
 
-      const items = await buildStockCountItemsData(schedule.empresaId, schedule.setor);
-      if (items.length === 0) {
-        // Setor sem insumos ativos (ou setor removido): não cria contagem vazia — e devolve a
-        // reivindicação pra tentar de novo se alguém cadastrar insumos depois, no mesmo dia.
-        await release();
-        continue;
-      }
-
-      const prazo = schedule.horarioLimite ? spDateTime(dateKey, schedule.horarioLimite) : null;
+      // Tudo depois da reivindicação fica no mesmo try: qualquer falha (banco, timeout) devolve a
+      // reivindicação pra próxima execução (15 min) tentar de novo — senão a contagem do dia (ou
+      // do mês, no mensal) nunca nasceria e ninguém seria avisado.
       try {
+        const items = await buildStockCountItemsData(schedule.empresaId, schedule.setor);
+        if (items.length === 0) {
+          // Setor sem insumos ativos (ou setor removido): não cria contagem vazia — e devolve a
+          // reivindicação pra tentar de novo se alguém cadastrar insumos depois, no mesmo dia.
+          await release();
+          continue;
+        }
+
+        const prazo = schedule.horarioLimite ? spDateTime(dateKey, schedule.horarioLimite) : null;
         await prisma.stockCount.create({
           data: {
             empresaId: schedule.empresaId,
@@ -162,12 +165,10 @@ export async function generateStockCounts(
         });
       } catch (err) {
         // P2002: outra execução já criou a contagem desse (agenda, dia) — o `@@unique` segura o
-        // duplicado e a reivindicação fica como está. Qualquer outro erro devolve a reivindicação
-        // pra a próxima execução (15 min) tentar de novo.
-        if ((err as { code?: string }).code !== "P2002") {
-          await release();
-          throw err;
-        }
+        // duplicado e a reivindicação fica como está. Qualquer outro erro devolve a reivindicação.
+        if ((err as { code?: string }).code === "P2002") continue;
+        await release().catch(() => {});
+        throw err;
       }
     } catch (err) {
       console.error(`[estoque] falha ao gerar contagem da agenda ${schedule.id}:`, err);
@@ -224,6 +225,22 @@ export async function processStockCountReminders(now: Date = new Date()): Promis
     // Ainda não chegou a hora (diff < 0) ou o horário já passou faz tempo demais (fora da
     // janela de tolerância) — nos dois casos não notifica agora.
     if (diff < 0 || diff >= REMINDER_WINDOW_MINUTES) continue;
+
+    // Só avisa "sua contagem está pronta" se a contagem desta agenda realmente existe e está
+    // aberta (hoje, no semanal; neste mês, no mensal) — não avisa quando a geração foi pulada
+    // (setor sem insumos), ainda não aconteceu, falhou, ou o mensal já foi gerado/aprovado.
+    // Não marca `ultimoLembreteData` nesse caso: se ela nascer ainda dentro da janela, avisa.
+    const aberta = await prisma.stockCount.findFirst({
+      where: {
+        scheduleId: schedule.id,
+        status: { in: ["RASCUNHO", "EM_ANDAMENTO", "REABERTA"] },
+        ...(schedule.type === "MENSAL"
+          ? { ano: Number(dateKey.slice(0, 4)), mes: Number(dateKey.slice(5, 7)) }
+          : { dataContagem: spStartOfDay(dateKey) }),
+      },
+      select: { id: true },
+    });
+    if (!aberta) continue;
 
     await createNotification({
       userId: schedule.responsavelId!,

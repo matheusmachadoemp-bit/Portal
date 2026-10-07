@@ -5,6 +5,7 @@ import { ingredientCostPerUnit } from "@/lib/estoque";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import { spHours, spMinutes } from "@/lib/checklist";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -122,14 +123,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   // Contagem gerada automaticamente nasce RASCUNHO; a primeira conferência salva é o que de fato
   // a "inicia" (status + hora de início), igual à criação manual que já nasce EM_ANDAMENTO.
+  // Feita como `updateMany` condicionado a RASCUNHO, à parte do update final: se outra requisição
+  // concluiu/aprovou a contagem nesse meio-tempo, não sobrescreve o status dela.
   const conferiuAlgo =
     Array.isArray(body.items) &&
     (body.items as { quantidadeContada?: number | null }[]).some(
       (upd) => upd.quantidadeContada !== undefined && upd.quantidadeContada !== null
     );
-  if (existing.status === "RASCUNHO" && conferiuAlgo && !data.status) {
-    data.status = "EM_ANDAMENTO";
-    if (!existing.horaInicio) data.horaInicio = new Date().toTimeString().slice(0, 5);
+  if (existing.status === "RASCUNHO" && conferiuAlgo && novoStatus === undefined) {
+    const agora = new Date();
+    await prisma.stockCount.updateMany({
+      where: { id, status: "RASCUNHO" },
+      data: {
+        status: "EM_ANDAMENTO",
+        horaInicio: existing.horaInicio ?? `${String(spHours(agora)).padStart(2, "0")}:${String(spMinutes(agora)).padStart(2, "0")}`,
+      },
+    });
   }
 
   if (novoStatus === "APROVADA") {
