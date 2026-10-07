@@ -14,7 +14,10 @@ export default async function ProducaoConfiguracoesPage() {
 
   const empresa = await requireActiveSingleEmpresa();
 
-  const categorias = await prisma.productionCategory.findMany({ orderBy: { order: "asc" } });
+  const [categorias, setores] = await Promise.all([
+    prisma.productionCategory.findMany({ orderBy: { order: "asc" } }),
+    prisma.productionSetor.findMany({ orderBy: { order: "asc" } }),
+  ]);
 
   let settings = null;
   let weights: { id: string; weekday: number; percent: number }[] = [];
@@ -27,7 +30,7 @@ export default async function ProducaoConfiguracoesPage() {
 
   return (
     <PageContainer title="Produção" subtitle="Configurações" backHref="/portal/producao" backLabel="Produção">
-      <ConfiguracoesClient categorias={categorias} settings={settings} weights={weights} canManage={!!empresa} />
+      <ConfiguracoesClient categorias={categorias} setores={setores} settings={settings} weights={weights} canManage={!!empresa} />
     </PageContainer>
   );
 }

@@ -17,17 +17,19 @@ export default async function ProducaoProdutosPage() {
   const canManageProducao = await hasModulePermission(session.user.id, "producao", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageProducao;
 
-  const [itens, categorias, ingredientOptions] = await Promise.all([
+  const [itens, categorias, setores, ingredientOptions] = await Promise.all([
     prisma.productionItem.findMany({
       where: { empresaId: { in: empresaIds }, active: true },
       orderBy: { name: "asc" },
       include: {
         category: { select: { id: true, name: true, color: true, icon: true } },
+        setor: { select: { id: true, name: true, color: true, icon: true } },
         ingredientes: { include: { ingredient: { select: { id: true, name: true, unidade: true } } }, orderBy: { order: "asc" } },
         stock: true,
       },
     }),
     prisma.productionCategory.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
+    prisma.productionSetor.findMany({ where: { active: true }, orderBy: { order: "asc" } }),
     prisma.ingredient.findMany({ where: { empresaId: { in: empresaIds } }, select: { id: true, name: true, unidade: true }, orderBy: { name: "asc" } }),
   ]);
 
@@ -36,6 +38,7 @@ export default async function ProducaoProdutosPage() {
       <ProdutosClient
         initialItens={itens as never}
         categorias={categorias}
+        setores={setores}
         ingredientOptions={ingredientOptions}
         canCreate={canCreate}
       />

@@ -1,4 +1,5 @@
 export type CategoriaOption = { id: string; name: string; color: string; icon: string };
+export type SetorOption = { id: string; name: string; color: string; icon: string };
 export type UserOption = { id: string; name: string };
 
 export type ProductionItemIngredienteDTO = {
@@ -15,6 +16,7 @@ export type ProductionItemDTO = {
   unidade: string;
   fotoUrl: string | null;
   descricao: string | null;
+  modoPreparo: string | null;
   tipo: "FIXO" | "VARIAVEL";
   quantidadeMinima: number;
   margemSeguranca: number;
@@ -25,6 +27,8 @@ export type ProductionItemDTO = {
   ingredientId: string | null;
   active: boolean;
   category: CategoriaOption;
+  setorId: string | null;
+  setor: SetorOption | null;
   ingredientes: ProductionItemIngredienteDTO[];
   stock: { saldoAtual: number } | null;
 };
@@ -57,5 +61,7 @@ export type ProductionOrderDTO = {
     name: string;
     unidade: string;
     category: CategoriaOption;
+    setor: SetorOption | null;
+    modoPreparo: string | null;
   };
 };
