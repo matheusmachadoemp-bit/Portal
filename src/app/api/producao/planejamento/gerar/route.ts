@@ -28,7 +28,11 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const targetDate = body.date ? new Date(body.date) : new Date();
+  // Semana de feriado (seção 5 do pedido): aplica a margem extra de feriado
+  // (ProductionSettings.margemFeriadoPercent) no lugar da margem individual
+  // de cada item, só para esta geração — ver generateProductionPlan.
+  const semanaFeriado = body.semanaFeriado === true;
 
-  const result = await generateProductionPlan(empresa.id, targetDate, session.user.id);
+  const result = await generateProductionPlan(empresa.id, targetDate, session.user.id, { semanaFeriado });
   return NextResponse.json({ ok: true, ...result });
 }

@@ -20,6 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     where: { id },
     include: {
       category: true,
+      setor: true,
       ingredientes: { include: { ingredient: { select: { id: true, name: true, unidade: true } } }, orderBy: { order: "asc" } },
       stock: true,
     },
@@ -65,10 +66,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where: { id },
       data: {
         categoryId: body.categoryId ?? undefined,
+        setorId: body.setorId !== undefined ? body.setorId || null : undefined,
         name: body.name ?? undefined,
         unidade: body.unidade ?? undefined,
         fotoUrl: body.fotoUrl ?? undefined,
         descricao: body.descricao ?? undefined,
+        modoPreparo: body.modoPreparo ?? undefined,
         tipo: body.tipo ?? undefined,
         quantidadeMinima: body.quantidadeMinima !== undefined ? Number(body.quantidadeMinima) : undefined,
         margemSeguranca: body.margemSeguranca !== undefined ? Number(body.margemSeguranca) : undefined,

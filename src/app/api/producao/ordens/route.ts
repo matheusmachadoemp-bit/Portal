@@ -44,7 +44,12 @@ export async function GET(req: Request) {
     where,
     orderBy: { prazo: "asc" },
     include: {
-      productionItem: { include: { category: { select: { id: true, name: true, color: true, icon: true } } } },
+      productionItem: {
+        include: {
+          category: { select: { id: true, name: true, color: true, icon: true } },
+          setor: { select: { id: true, name: true, color: true, icon: true } },
+        },
+      },
       responsavel: { select: { id: true, name: true } },
     },
   });

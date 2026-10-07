@@ -58,7 +58,10 @@ export default async function HistoricoContagensPage() {
               valorDiferenca,
               aprovadoPor: c.aprovadoPor,
               aprovadoEm: c.aprovadoEm ? c.aprovadoEm.toISOString() : null,
-              createdByName: c.createdBy.name,
+              // `createdBy` é opcional — contagens geradas automaticamente por uma
+              // `StockCountSchedule` (ver generateStockCounts em src/lib/estoque-server.ts) não
+              // têm um usuário logado que as criou.
+              createdByName: c.createdBy?.name ?? "—",
               items: c.items.map((it) => ({
                 nome: it.ingredient.name,
                 unidade: it.ingredient.unidade,

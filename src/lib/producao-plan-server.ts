@@ -26,6 +26,13 @@ function defaultPrazoFor(date: Date, horarioLimitePadrao: string | null): Date {
   return prazo;
 }
 
+export type GenerateProductionPlanOptions = {
+  /** Quando `true`, usa `ProductionSettings.margemFeriadoPercent` no lugar da
+   * `margemSeguranca` individual de CADA item só para esta geração — não
+   * sobrescreve o valor salvo no item (ver POST /api/producao/planejamento/gerar). */
+  semanaFeriado?: boolean;
+};
+
 /**
  * Gera (ou atualiza) o plano de produção de uma loja para uma data.
  * Idempotente: uma ordem já iniciada, finalizada ou ajustada manualmente
@@ -33,7 +40,13 @@ function defaultPrazoFor(date: Date, horarioLimitePadrao: string | null): Date {
  * recalculadas, permitindo rodar de novo com segurança (cron + botão manual
  * usam a mesma função).
  */
-export async function generateProductionPlan(empresaId: string, targetDate: Date, userId: string | null) {
+export async function generateProductionPlan(
+  empresaId: string,
+  targetDate: Date,
+  userId: string | null,
+  options: GenerateProductionPlanOptions = {}
+) {
+  const { semanaFeriado = false } = options;
   const { dayStart } = dayBounds(targetDate);
   const weekday = dayStart.getDay();
 
@@ -44,6 +57,10 @@ export async function generateProductionPlan(empresaId: string, targetDate: Date
     prisma.productionOrder.findMany({ where: { empresaId, date: dayStart } }),
   ]);
   const semanasParaMedia = settings?.semanasParaMedia ?? 4;
+  // Margem extra de feriado (seção "5" do pedido) — só entra na conta quando
+  // `semanaFeriado` é true; fora disso, cada item mantém a própria margem
+  // (`item.margemSeguranca`), igual já funcionava antes desta mudança.
+  const margemFeriadoPercent = settings?.margemFeriadoPercent ?? 20;
   const existingByItemId = new Map(existingOrders.map((o) => [o.productionItemId, o]));
 
   const ingredientIds = items.map((i) => i.ingredientId).filter((id): id is string => !!id);
@@ -106,7 +123,14 @@ export async function generateProductionPlan(empresaId: string, targetDate: Date
     items.map(async (item): Promise<"created" | "updated" | "skipped"> => {
       const necessidadePrevista = itemDemand.get(item.id) ?? 0;
       const estoqueProntoSnapshot = item.stock?.saldoAtual ?? 0;
-      const quantidadeSugerida = computeQuantidadeSugerida(necessidadePrevista, estoqueProntoSnapshot, item);
+      // Semana de feriado: usa a maior entre a margem de feriado e a do item, só para este
+      // cálculo (o que fica salvo em `ProductionItem.margemSeguranca` nunca é alterado) — assim o
+      // feriado nunca reduz a margem de um item que já tem uma maior.
+      const margemSeguranca = semanaFeriado ? Math.max(margemFeriadoPercent, item.margemSeguranca) : item.margemSeguranca;
+      const quantidadeSugerida = computeQuantidadeSugerida(necessidadePrevista, estoqueProntoSnapshot, {
+        ...item,
+        margemSeguranca,
+      });
 
       const existing = existingByItemId.get(item.id);
       if (existing && (existing.ajusteEm || existing.status !== "PENDENTE")) {
