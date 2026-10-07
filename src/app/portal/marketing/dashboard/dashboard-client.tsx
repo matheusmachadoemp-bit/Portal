@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { Plus, ChevronLeft, ChevronRight, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -286,9 +287,9 @@ export function DashboardClient({
             <p className="text-xs text-nord-gray py-4 text-center">Nenhuma tarefa para hoje ou amanhã.</p>
           )}
 
-          <a href="/portal/marketing/tarefas" className="flex items-center gap-1 text-xs text-nord-blue-light hover:text-white mt-2">
+          <Link href="/portal/marketing/tarefas" className="flex items-center gap-1 text-xs text-nord-blue-light hover:text-white mt-2">
             Ver todas as tarefas <ArrowRight size={12} />
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -296,7 +297,7 @@ export function DashboardClient({
         <div className="xl:col-span-2 nord-card p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-white font-medium text-sm">Biblioteca de Arquivos</h3>
-            <a href="/portal/marketing/biblioteca" className="text-xs text-nord-blue-light hover:text-white">Ver tudo</a>
+            <Link href="/portal/marketing/biblioteca" className="text-xs text-nord-blue-light hover:text-white">Ver tudo</Link>
           </div>
           {filesByCategory.size === 0 ? (
             <p className="text-xs text-nord-gray py-6 text-center">Nenhum arquivo enviado ainda.</p>
