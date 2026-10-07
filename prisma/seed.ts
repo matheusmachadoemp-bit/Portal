@@ -158,8 +158,9 @@ const CATEGORIES = [
       // As 6 subcategorias de tipo-de-prato da Zarki Sushi que existiam aqui (Entradas, Sashimis,
       // Sushis, Temakis, Uramakis, Hot Rolls) foram substituídas pelas 3 de modalidade de venda
       // mais abaixo (delivery/la-carte/rodizio) — ver
-      // prisma/migrations/20261005120000_ficha_tecnica_modalidade_sushi, que desativa (não
-      // exclui, mantém histórico) as linhas já existentes em banco já semeado. Esta lista `subs`
+      // prisma/migrations/20261005120000_ficha_tecnica_modalidade_sushi (desativa) e
+      // 20261007000000_ficha_tecnica_remove_subs_antigas_sushi (exclui), que tratam as linhas já
+      // existentes em banco já semeado. Esta lista `subs`
       // só cobre banco novo do zero (upsert) — por isso as 6 nem aparecem mais aqui.
       //
       // `empresaKey: "nord-pizza"` em "sobremesas" — antes era compartilhada entre as duas lojas
@@ -2249,7 +2250,7 @@ async function main() {
         empresaId: zarkiSushi.id,
         name: "Uramaki Cream Cheese 8 peças",
         code: "SK-002",
-        category: "URAMAKI",
+        category: "DELIVERY",
         rendimento: "8 peças",
         precoVenda: 34,
         tempoPreparo: 12,

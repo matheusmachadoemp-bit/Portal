@@ -152,7 +152,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   // FICHA_TECNICA_SUB_MAP que já define as abas do menu lateral (prisma/seed.ts) em vez de listar
   // o enum ProductCategory inteiro — assim o formulário nunca oferece categoria de uma loja
   // diferente da ativa (ex.: Zarki Sushi nunca vê "Burgers", só de Nord Pizza). `empresaKey ===
-  // undefined` = categoria compartilhada entre as duas lojas (Combos/Bebidas/Drinks/Sobremesas),
+  // undefined` = categoria compartilhada entre as duas lojas (Combos/Bebidas/Drinks),
   // sempre incluída junto com as específicas da loja ativa.
   const currentStoreKey = ctx?.mode === "single" ? ctx.empresa.key : undefined;
   const categoryOptions = Object.values(FICHA_TECNICA_SUB_MAP)
