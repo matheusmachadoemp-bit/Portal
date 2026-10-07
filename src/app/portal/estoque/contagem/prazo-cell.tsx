@@ -7,7 +7,7 @@ const PRAZO_FORMAT = new Intl.DateTimeFormat("pt-BR", {
   month: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
-  hour12: false,
+  hourCycle: "h23",
 });
 
 /** Prazo de uma contagem (ver `StockCount.prazo`) + selo "Atrasada" se já passou e a contagem
