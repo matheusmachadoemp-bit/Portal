@@ -36,6 +36,15 @@ export async function POST(req: Request) {
   // uma subcategoria existente e aberta (herdando o acesso da categoria) — só linhas sobrando,
   // inofensivas. Ver `ensureDefaultSubcategoryPermissions` (@/lib/authz).
   const subKey: string = body.key ?? `sub-${Date.now()}`;
+  // Chave já usada nesta categoria: recusa ANTES de gravar permissões (senão as linhas restritas
+  // da chave repetida esconderiam a subcategoria que já existe pros outros perfis).
+  const duplicateKey = await prisma.subcategory.findUnique({
+    where: { categoryId_key: { categoryId: body.categoryId, key: subKey } },
+    select: { id: true },
+  });
+  if (duplicateKey) {
+    return NextResponse.json({ error: "Já existe uma subcategoria com essa chave nesta categoria." }, { status: 409 });
+  }
   await ensureDefaultSubcategoryPermissions(category.key, subKey);
 
   const subcategory = await prisma.subcategory.create({
