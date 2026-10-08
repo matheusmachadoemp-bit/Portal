@@ -10,9 +10,10 @@
 -- na mesma transação em que ele foi criado (erro 55P04). Cada migration roda em transação própria.
 --
 -- Só toca produtos da Zarki (`Empresa.key = 'zarki-sushi'`); a Nord Pizza não é afetada. Muda
--- apenas a categoria — código, nome, preço e ficha técnica ficam intactos. Idempotente: depois da
+-- apenas a categoria — código, nome, preço e ficha técnica ficam intactos (`updatedAt` também não é
+-- alterado, pra não "zerar" o aviso de ficha desatualizada do painel de qualidade). Idempotente: depois da
 -- primeira execução não sobra nenhum produto da Zarki nas categorias antigas.
 UPDATE "Product"
-SET "category" = 'DELIVERY', "updatedAt" = CURRENT_TIMESTAMP
+SET "category" = 'DELIVERY'
 WHERE "empresaId" = (SELECT "id" FROM "Empresa" WHERE "key" = 'zarki-sushi')
   AND "category" IN ('SUSHI', 'SASHIMI', 'TEMAKI', 'URAMAKI', 'HOT_ROLL', 'ENTRADA', 'SOBREMESA');

@@ -31,8 +31,10 @@ export const PRODUCT_CATEGORY_LABEL: Record<string, string> = {
   // Reorganização do cardápio da Zarki Sushi por MODALIDADE de venda (substitui as 6 categorias
   // de tipo-de-prato acima nas abas/formulário — ver FICHA_TECNICA_SUB_MAP abaixo). Os valores
   // acima continuam com rótulo aqui de propósito: produtos já cadastrados com eles continuam
-  // existindo no banco (ver migration ficha_tecnica_modalidade_sushi) e ainda aparecem no
-  // gráfico de CMV por categoria, só sem nenhuma aba no menu lateral até serem reclassificados.
+  // existindo no enum/banco (ver migration ficha_tecnica_modalidade_sushi). Os produtos da Zarki
+  // que estavam nelas foram movidos para DELIVERY (migration 20261007000100_ficha_tecnica_zarki_
+  // pratos_antigos_para_delivery), então só aparecem no gráfico de CMV por categoria se sobrar
+  // algum produto com o valor antigo (ex.: criado por fora).
   DELIVERY: "Delivery",
   LA_CARTE: "À La Carte",
   RODIZIO: "Rodízio",
@@ -74,8 +76,9 @@ export const FICHA_TECNICA_SUB_MAP: Record<string, FichaTecnicaSubInfo> = {
   // ProductCategory em prisma/schema.prisma e migration ficha_tecnica_modalidade_sushi). A
   // pedido do Matheus: cada modalidade é um cadastro de produto SEPARADO (o mesmo prato pode ter
   // até 3 fichas técnicas diferentes — uma por modalidade — já que porção/embalagem mudam por
-  // canal). Os produtos já cadastrados nas 6 categorias antigas continuam no banco, só sem
-  // nenhuma aba que os mostre até serem reclassificados manualmente.
+  // canal). Os produtos que a Zarki já tinha nas categorias antigas foram movidos para Delivery
+  // pela migration 20261007000100_ficha_tecnica_zarki_pratos_antigos_para_delivery; o Matheus
+  // reclassifica cada um entre Delivery / À La Carte / Rodízio pela tela de produto.
   delivery: { category: "DELIVERY", label: "Delivery", empresaKey: "zarki-sushi" },
   "la-carte": { category: "LA_CARTE", label: "À La Carte", empresaKey: "zarki-sushi" },
   rodizio: { category: "RODIZIO", label: "Rodízio", empresaKey: "zarki-sushi" },

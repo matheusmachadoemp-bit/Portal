@@ -2675,8 +2675,10 @@ enum ProductCategory {
   // tipo de prato acima — ver FICHA_TECNICA_SUB_MAP em src/lib/ficha.ts): cada modalidade é um
   // cadastro de produto separado (o mesmo prato pode ter até 3 fichas técnicas, uma por
   // modalidade, já que porção/embalagem mudam por canal). Os 6 valores acima (SUSHI..ENTRADA)
-  // continuam existindo no enum por causa de produtos já cadastrados com eles — só pararam de
-  // ter uma aba/Subcategory ativa (ver migration ficha_tecnica_modalidade_sushi).
+  // continuam existindo no enum (Postgres não remove valor de enum) e por produtos antigos de
+  // outras origens, mas não têm mais aba/Subcategory; os produtos da Zarki que estavam neles
+  // foram movidos para DELIVERY (migration 20261007000100_ficha_tecnica_zarki_pratos_antigos_
+  // para_delivery) — a reclassificação entre as 3 modalidades é manual, pela tela de produto.
   DELIVERY
   LA_CARTE
   RODIZIO
