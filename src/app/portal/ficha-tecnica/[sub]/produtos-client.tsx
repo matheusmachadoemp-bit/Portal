@@ -219,10 +219,6 @@ export function ProdutosClient({
       setFormError("Informe o nome do produto.");
       return;
     }
-    if (!form.code.trim()) {
-      setFormError("Informe o código do produto.");
-      return;
-    }
     setSubmitting(true);
     setFormError(null);
     try {
@@ -372,7 +368,13 @@ export function ProdutosClient({
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
           </Field>
           <Field label="Código">
-            <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="input" />
+            <input
+              value={editing ? form.code : "Gerado automaticamente ao salvar"}
+              readOnly
+              disabled
+              title="O código identifica o produto e é gerado pelo sistema (não se repete e não muda)."
+              className="input opacity-70 cursor-not-allowed"
+            />
           </Field>
           <Field label="Categoria">
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input">
