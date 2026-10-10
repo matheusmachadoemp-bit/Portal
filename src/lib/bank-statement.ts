@@ -44,6 +44,8 @@ export type ParsedStatement = {
   detected: string;
   /** Conferência dos saldos que o próprio extrato imprime contra a soma dos lançamentos lidos (null = extrato sem coluna de saldo). */
   balanceCheck: { checked: number; matched: number } | null;
+  /** Conferência dos totais lidos contra a linha "TOTAL" que o próprio arquivo traz (null = arquivo sem linha de total). */
+  totalsCheck: { matched: boolean; credit: number; debit: number; reportedCredit: number; reportedDebit: number } | null;
 };
 
 /** Erro com mensagem pronta para mostrar ao usuário (formato não suportado / não entendido). */
@@ -417,8 +419,16 @@ export function parseDateCell(raw: Cell | undefined, order: DateOrder = "DMY"): 
     return p ? toDate(p.y, p.m, p.d) : null;
   }
 
-  const s = String(raw).trim();
+  let s = String(raw).trim();
   if (!s) return null;
+  // Bancos que escrevem a data por extenso colocam o dia da semana na frente ("Sexta, 31 de julho
+  // de 2026", "Sex, 31/07/2026", "segunda-feira 05/10/2026"): tira esse prefixo e lê o resto.
+  s = s
+    .replace(
+      /^(?:segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|domingo|seg|ter|qua|qui|sex|sab|sáb|dom)(?:-feira)?\.?\s*[,\-–]?\s*(?=\d)/i,
+      ""
+    )
+    .trim();
 
   let m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$/.exec(s);
   if (m) return toDate(Number(m[1]), Number(m[2]), Number(m[3]));
@@ -607,6 +617,7 @@ export function parseTable(rows: Cell[][]): {
   ignored: number;
   layoutDescription: string;
   balanceCheck: { checked: number; matched: number } | null;
+  totalsCheck: { matched: boolean; credit: number; debit: number; reportedCredit: number; reportedDebit: number } | null;
 } {
   if (rows.length === 0) throw new StatementFormatError("O arquivo está vazio.");
 
@@ -640,6 +651,8 @@ export function parseTable(rows: Cell[][]): {
   let runningCents = 0;
   let checked = 0;
   let matched = 0;
+  // Linha "TOTAL" do arquivo (créditos e débitos somados pelo banco), pra conferir com o que foi lido.
+  let reportedTotals = null as { credit: number; debit: number } | null;
   const compareBalance = (row: Cell[]) => {
     if (layout!.balance === null || openingCents === null) return;
     const bal = parseMoney(row[layout!.balance], decimal);
@@ -660,6 +673,11 @@ export function parseTable(rows: Cell[][]): {
 
     if (SALDO_LINE.test(description) || SALDO_LINE.test(cellText(row[layout!.date]))) {
       ignored++;
+      if (/^\s*(total|totais)\b/i.test(description) || /^\s*(total|totais)\b/i.test(cellText(row[layout!.date]))) {
+        const c = layout!.credit !== null ? parseMoney(row[layout!.credit], decimal) : null;
+        const d = layout!.debit !== null ? parseMoney(row[layout!.debit], decimal) : null;
+        if (c !== null && d !== null) reportedTotals = { credit: Math.abs(c), debit: Math.abs(d) };
+      }
       if (layout!.balance !== null) {
         const bal = parseMoney(row[layout!.balance], decimal);
         if (bal !== null) {
@@ -733,7 +751,26 @@ export function parseTable(rows: Cell[][]): {
     ignored,
     layoutDescription: [base, ...extras].join(" · "),
     balanceCheck: layout.balance !== null && openingCents !== null && checked > 0 ? { checked, matched } : null,
+    totalsCheck: (() => {
+      if (!reportedTotals) return null;
+      const credit = transactions.filter((t) => t.direction === "ENTRADA").reduce((a, t) => a + Math.round(t.valor * 100), 0);
+      const debit = transactions.filter((t) => t.direction === "SAIDA").reduce((a, t) => a + Math.round(t.valor * 100), 0);
+      return {
+        matched: credit === Math.round(reportedTotals.credit * 100) && debit === Math.round(reportedTotals.debit * 100),
+        credit: credit / 100,
+        debit: debit / 100,
+        reportedCredit: reportedTotals.credit,
+        reportedDebit: reportedTotals.debit,
+      };
+    })(),
   };
+}
+
+export function describeTotalsCheck(check: ParsedStatement["totalsCheck"]): string {
+  if (!check) return "";
+  const fmt = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  if (check.matched) return " · conferência de totais: créditos e débitos lidos batem com a linha TOTAL do arquivo";
+  return ` · ATENÇÃO conferência de totais: lido ${fmt(check.credit)} de crédito e ${fmt(check.debit)} de débito, mas a linha TOTAL do arquivo diz ${fmt(check.reportedCredit)} e ${fmt(check.reportedDebit)} — confira se o arquivo foi lido corretamente`;
 }
 
 export function describeBalanceCheck(check: { checked: number; matched: number } | null): string {
@@ -828,7 +865,8 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         errors: parsed.errors,
         ignored: parsed.ignored,
         balanceCheck: parsed.balanceCheck,
-        detected: `PDF de extrato (texto) · ${table.note} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}`,
+        totalsCheck: parsed.totalsCheck,
+        detected: `PDF de extrato (texto) · ${table.note} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}${describeTotalsCheck(parsed.totalsCheck)}`,
       };
     }
     case "XLS":
@@ -851,6 +889,7 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         errors,
         ignored: 0,
         balanceCheck: null,
+        totalsCheck: null,
         detected: "OFX (extrato bancário padrão), lido automaticamente",
       };
     }
@@ -868,7 +907,8 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         errors: parsed.errors,
         ignored: parsed.ignored,
         balanceCheck: parsed.balanceCheck,
-        detected: `Planilha Excel (.xlsx) · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}`,
+        totalsCheck: parsed.totalsCheck,
+        detected: `Planilha Excel (.xlsx) · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}${describeTotalsCheck(parsed.totalsCheck)}`,
       };
     }
     default: {
@@ -884,7 +924,8 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         errors: parsed.errors,
         ignored: parsed.ignored,
         balanceCheck: parsed.balanceCheck,
-        detected: `Texto/CSV · separador ${delimiterName} · acentuação ${encoding} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}`,
+        totalsCheck: parsed.totalsCheck,
+        detected: `Texto/CSV · separador ${delimiterName} · acentuação ${encoding} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}${describeTotalsCheck(parsed.totalsCheck)}`,
       };
     }
   }

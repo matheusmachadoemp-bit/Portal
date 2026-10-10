@@ -91,6 +91,7 @@ export async function POST(req: Request) {
     detected: statement.detected,
     ignored: statement.ignored,
     balanceCheck: statement.balanceCheck,
+    totalsCheck: statement.totalsCheck,
     totalEntradas,
     totalSaidas,
   });

@@ -57,6 +57,10 @@ test("parseDateCell entende os estilos de data", () => {
   assert.equal(k("05 out 2026"), "2026-10-05");
   assert.equal(k("10/05/2026", "MDY"), "2026-10-05");
   assert.equal(k(46300), "2026-10-05"); // número de série do Excel
+  assert.equal(k("Sexta, 31 de julho de 2026"), "2026-07-31"); // dia da semana na frente (Santander, planilha)
+  assert.equal(k("Quarta, 01 de julho de 2026"), "2026-07-01");
+  assert.equal(k("Sex, 31/07/2026"), "2026-07-31");
+  assert.equal(k("segunda-feira 05/10/2026"), "2026-10-05");
   assert.equal(k("31/02/2026"), null);
   assert.equal(k("Total"), null);
   assert.equal(k("1500,00"), null);
@@ -366,4 +370,36 @@ test("PDF sem texto (escaneado) e PDF inválido dão mensagem clara", async () =
     () => parseBankStatement(Buffer.from(other.output("arraybuffer"))),
     (e: unknown) => e instanceof StatementFormatError && /tabela de movimentações/.test(e.message)
   );
+});
+
+test("XLSX com data por extenso + dia da semana e linha TOTAL: lê tudo e confere os totais", async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Extrato");
+  ws.addRow(["EXTRATO DE CONTA CORRENTE"]);
+  ws.addRow([]);
+  ws.addRow(["LOJA TESTE LTDA", "", "Conta: 123-4"]);
+  ws.addRow([]);
+  ws.addRow(["Tipo de lançamento: Todos", "", "Extrato de 01/07/2026 a 31/07/2026"]);
+  ws.addRow(["Data", "Descrição", "Crédito (R$)", "Débito (R$)"]);
+  ws.addRow(["Sexta, 31 de julho de 2026", "APLICACAO", 0, 80.5]);
+  ws.addRow(["Sexta, 31 de julho de 2026", "PIX RECEBIDO", 122.65, 0]);
+  ws.addRow(["Quarta, 01 de julho de 2026", "TARIFA PIX", 0, 4.63]);
+  ws.addRow([null, "TOTAL", 122.65, 85.13]);
+  const r = await parseBankStatement(Buffer.from(await wb.xlsx.writeBuffer()));
+  assert.deepEqual(r.transactions.map(brief), [
+    "2026-07-31|SAIDA|80.5|APLICACAO",
+    "2026-07-31|ENTRADA|122.65|PIX RECEBIDO",
+    "2026-07-01|SAIDA|4.63|TARIFA PIX",
+  ]);
+  assert.equal(r.errors.length, 0);
+  assert.equal(r.ignored, 1);
+  assert.equal(r.totalsCheck?.matched, true);
+  assert.match(r.detected, /batem com a linha TOTAL/);
+});
+
+test("conferência de totais avisa quando a soma lida não bate com a linha TOTAL", async () => {
+  const text = ["Data;Descrição;Crédito;Débito", "01/07/2026;A;10,00;", "02/07/2026;B;;3,00", "TOTAL;;10,00;99,00"].join("\n");
+  const r = await parseBankStatement(utf8(text));
+  assert.equal(r.totalsCheck?.matched, false);
+  assert.match(r.detected, /ATENÇÃO conferência de totais/);
 });
