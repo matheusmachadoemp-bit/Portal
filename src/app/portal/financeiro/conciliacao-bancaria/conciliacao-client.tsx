@@ -51,7 +51,14 @@ export function ConciliacaoClient({
   const [importAccountId, setImportAccountId] = useState(accounts[0]?.id ?? "");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    errors: string[];
+    detected: string | null;
+    ignored: number;
+    totalEntradas: number;
+    totalSaidas: number;
+  } | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [matching, setMatching] = useState(false);
   const [matchInfo, setMatchInfo] = useState<string | null>(null);
@@ -152,7 +159,14 @@ export function ConciliacaoClient({
       if (!res.ok) {
         setImportError(data?.error ?? "Erro ao importar o extrato.");
       } else {
-        setImportResult({ imported: data.imported, errors: data.errors ?? [] });
+        setImportResult({
+          imported: data.imported,
+          errors: data.errors ?? [],
+          detected: data.detected ?? null,
+          ignored: data.ignored ?? 0,
+          totalEntradas: data.totalEntradas ?? 0,
+          totalSaidas: data.totalSaidas ?? 0,
+        });
         refresh();
       }
     } catch {
@@ -336,6 +350,16 @@ export function ConciliacaoClient({
         {importResult && (
           <div className="mb-3 p-3 rounded-lg bg-nord-success/10 border border-nord-success/30">
             <p className="text-xs text-nord-success">{importResult.imported} lançamento(s) importado(s) com sucesso.</p>
+            <p className="mt-1 text-xs text-nord-gray">
+              Entradas: <strong className="text-white">{formatCurrency(importResult.totalEntradas)}</strong> · Saídas:{" "}
+              <strong className="text-white">{formatCurrency(importResult.totalSaidas)}</strong>
+              {importResult.ignored > 0 && <> · {importResult.ignored} linha(s) de saldo/total ignorada(s)</>}
+            </p>
+            {importResult.detected && (
+              <p className="mt-1 text-xs text-nord-gray">
+                Formato reconhecido: <span className="text-white">{importResult.detected}</span>. Confira se bate com o seu extrato.
+              </p>
+            )}
             {importResult.errors.length > 0 && (
               <ul className="mt-2 text-xs text-nord-warning list-disc pl-4 space-y-0.5">
                 {importResult.errors.slice(0, 10).map((e, i) => (
@@ -357,21 +381,22 @@ export function ConciliacaoClient({
           </select>
         </label>
         <label className="block mb-1">
-          <span className="block text-xs text-nord-gray mb-1">Arquivo do extrato (CSV, XLSX ou OFX)</span>
+          <span className="block text-xs text-nord-gray mb-1">Arquivo do extrato (OFX, CSV ou Excel)</span>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.txt,.xlsx,.ofx"
+            accept=".ofx,.qfx,.csv,.tsv,.txt,.xlsx"
             onChange={handleFileChange}
             disabled={importing}
             className="input"
           />
         </label>
         <p className="text-xs text-nord-gray mt-2">
-          Em <strong>CSV/XLSX</strong>, o arquivo deve conter colunas de <strong>data</strong>,{" "}
-          <strong>descrição</strong> e <strong>valor</strong> (valores negativos são lançados como saída) — ou
-          colunas separadas de <strong>entrada</strong> / <strong>saída</strong>. Em <strong>OFX</strong> (formato
-          exportado pelo banco), as transações do extrato já são reconhecidas automaticamente.
+          O sistema <strong>reconhece sozinho o formato</strong> do arquivo (não precisa ajustar nada): <strong>OFX</strong>{" "}
+          (recomendado, é o formato que o banco gera pronto), <strong>CSV</strong> (qualquer separador e acentuação) e{" "}
+          <strong>Excel (.xlsx)</strong>. Em CSV/Excel ele acha o cabeçalho mesmo que venha depois de dados da conta,
+          entende colunas de data, descrição/histórico e valor (ou crédito e débito separados, ou indicador D/C) e ignora
+          linhas de saldo e total. PDF e Excel antigo (.xls) não são lidos.
         </p>
         {importing && (
           <p className="mt-3 text-xs text-nord-blue-light flex items-center gap-1.5">

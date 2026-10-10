@@ -3,157 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
-import { spStartOfDay } from "@/lib/timezone";
-import { Extractor, Reader, type NormalizedTransaction } from "ofx-data-extractor";
+import { parseBankStatement, StatementFormatError, type ParsedStatement } from "@/lib/bank-statement";
 
-const HEADER_ALIASES: Record<string, string> = {
-  data: "data",
-  dia: "data",
-  descricao: "descricao",
-  historico: "descricao",
-  lancamento: "descricao",
-  valor: "valor",
-  entrada: "entrada",
-  saida: "saida",
-  credito: "entrada",
-  debito: "saida",
-};
-
-function normalizeHeader(h: string): string {
-  return h
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-// A tela de conciliação (conciliacao-client.tsx) formata esta data com `format(new Date(t.date),
-// "dd/MM/yyyy")` do date-fns, que lê o instante no fuso LOCAL DO NAVEGADOR — America/Sao_Paulo pra
-// quem usa o Portal no Brasil. Por isso ancora em meia-noite de SÃO PAULO, não em meia-noite UTC
-// (Date.UTC direto) — mesma causa raiz e mesmo remédio já aplicados na importação de colaboradores/
-// ponto do RH (ver rh/employees/import/route.ts e rh/time-entries/import/route.ts): `new
-// Date(Date.UTC(y, m-1, d))` fica 3h ANTES da meia-noite de SP do mesmo dia, o que faz o navegador
-// exibir o dia anterior ao formatar com hora local.
-//
-// `validOrNull` existe porque `spStartOfDay` remonta a string e reparsa via `new
-// Date("YYYY-MM-DDT00:00:00-03:00")` — diferente de `Date.UTC` com números (que sempre normaliza,
-// nunca dá Date inválido), mês/dia fora do intervalo sintático (ex. mês "13") faz essa string virar
-// `Invalid Date` — e um `Invalid Date` é truthy em JS, então sem essa checagem explícita uma data
-// malformada passaria pelo `if (!date)` abaixo, chegaria inválida no Prisma e estouraria um erro não
-// tratado (achado do Teulis na correção original do RH, ver rh/employees/import/route.ts).
-function validOrNull(d: Date): Date | null {
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function parseDateFlexible(raw: string | number): Date | null {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  if (typeof raw === "number") {
-    const parsed = parseExcelDateCode(raw);
-    if (!parsed) return null;
-    return validOrNull(spStartOfDay(`${parsed.y}-${pad(parsed.m)}-${pad(parsed.d)}`));
-  }
-  const s = String(raw).trim();
-  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
-  if (br) {
-    const year = br[3].length === 2 ? Number(`20${br[3]}`) : Number(br[3]);
-    return validOrNull(spStartOfDay(`${year}-${pad(Number(br[2]))}-${pad(Number(br[1]))}`));
-  }
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-  if (iso) return validOrNull(spStartOfDay(`${iso[1]}-${pad(Number(iso[2]))}-${pad(Number(iso[3]))}`));
-  return null;
-}
-
-function parseValor(raw: string): number {
-  const cleaned = String(raw).trim().replace(/[^\d,.-]/g, "");
-  if (!cleaned) return NaN;
-  const normalized =
-    cleaned.includes(",") && cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")
-      ? cleaned.replace(/\./g, "").replace(",", ".")
-      : cleaned.replace(/,/g, "");
-  return Number(normalized);
-}
-
-function rowsFromCsvText(text: string): string[][] {
-  const delimiter = text.includes(";") ? ";" : ",";
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => line.split(delimiter).map((cell) => cell.trim().replace(/^"|"$/g, "")));
-}
-
-// Bancos brasileiros costumam exportar OFX 1.x (SGML) em CP1252/ISO-8859-1 — o
-// campo CHARSET:1252 no cabeçalho é o indicativo disso, mas alguns arquivos
-// trazem ENCODING:USASCII mesmo contendo acentuação fora da faixa ASCII. Em vez
-// de confiar cegamente no cabeçalho, tenta UTF-8 primeiro e, se aparecer o
-// caractere de substituição (indicando bytes inválidos em UTF-8), refaz como
-// latin1 — que cobre tanto ISO-8859-1 quanto a maior parte de CP1252 usada em
-// texto de extrato bancário (letras acentuadas, ç, etc.).
-function decodeOfxBuffer(buffer: Buffer): string {
-  const utf8Text = buffer.toString("utf-8");
-  return utf8Text.includes("�") ? buffer.toString("latin1") : utf8Text;
-}
-
-// Detecta OFX pela extensão do arquivo e, de forma complementar, pelo conteúdo
-// (todo OFX começa com "OFXHEADER:" no formato 1.x/SGML ou contém a tag <OFX>
-// logo no início no formato 2.x/XML) — cobre o caso de o usuário salvar o
-// extrato com outra extensão (ex.: .txt).
-function isOfxFile(fileName: string, buffer: Buffer): boolean {
-  if (/\.ofx$/i.test(fileName)) return true;
-  const head = buffer.subarray(0, 100).toString("latin1").toUpperCase();
-  return head.includes("OFXHEADER") || head.includes("<OFX>");
-}
-
-type ParsedTransactionRow = { date: Date; descricao: string; direction: "ENTRADA" | "SAIDA"; valor: number };
-
-// Parseia um extrato em OFX (1.x/SGML ou 2.x/XML) usando a biblioteca
-// ofx-data-extractor, que já normaliza a árvore SGML->XML (inclusive tags sem
-// fechamento, comuns em exportações de banco) e sempre devolve uma lista de
-// transações (mesmo com uma única <STMTTRN> no arquivo). Cada <STMTTRN> vira
-// um item com `postedAt` (de DTPOSTED), `amount` (de TRNAMT, negativo =
-// saída/débito, positivo = entrada/crédito) e `description` (MEMO, com
-// fallback pra NAME quando MEMO não vem preenchido). O modo "lenient" evita
-// que uma transação malformada quebre o arquivo inteiro: o campo problemático
-// vem como null e é reportado como erro daquela transação, sem descartar as
-// demais.
-function parseOfxTransactions(buffer: Buffer): { parsedRows: ParsedTransactionRow[]; errors: string[] } {
-  const errors: string[] = [];
-  const parsedRows: ParsedTransactionRow[] = [];
-
-  let transactions: NormalizedTransaction[];
-  try {
-    const text = decodeOfxBuffer(buffer);
-    const extractor = new Extractor().data(new Reader(text)).config({ parserMode: "lenient" });
-    transactions = extractor.toNormalized({ amountMode: "number", dateMode: "date" }).transactions;
-  } catch (err) {
-    errors.push(
-      `Não foi possível interpretar o arquivo OFX (${err instanceof Error ? err.message : "erro desconhecido"}).`
-    );
-    return { parsedRows, errors };
-  }
-
-  transactions.forEach((t, idx) => {
-    const label = `Transação ${idx + 1}`;
-
-    const date = t.postedAt instanceof Date ? t.postedAt : null;
-    if (!date || Number.isNaN(date.getTime())) {
-      errors.push(`${label}: data inválida ("${String(t.raw?.DTPOSTED ?? "")}").`);
-      return;
-    }
-
-    const valor = typeof t.amount === "number" ? t.amount : NaN;
-    if (Number.isNaN(valor) || valor === 0) {
-      errors.push(`${label}: valor inválido ("${String(t.raw?.TRNAMT ?? "")}").`);
-      return;
-    }
-
-    const descricao = (t.description ?? "").trim() || "Sem descrição";
-    const direction: "ENTRADA" | "SAIDA" = valor >= 0 ? "ENTRADA" : "SAIDA";
-    parsedRows.push({ date, descricao, direction, valor: Math.abs(valor) });
-  });
-
-  return { parsedRows, errors };
-}
+// A leitura do arquivo (descobrir o formato, a codificação, o separador, a linha do cabeçalho, o
+// papel de cada coluna, datas e valores) vive em `@/lib/bank-statement` — aqui só autoriza, valida
+// a conta bancária e grava. Datas ficam ancoradas em meia-noite de SÃO PAULO (ver `parseDateCell`
+// e o comentário histórico em rh/employees/import/route.ts): a tela de conciliação formata com
+// `format(new Date(t.date), "dd/MM/yyyy")` no fuso local do navegador.
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -185,95 +41,21 @@ export async function POST(req: Request) {
   if (!bankAccount) return NextResponse.json({ error: "Conta bancária inválida." }, { status: 400 });
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const isSpreadsheet = /\.xlsx$/i.test(file.name);
-  const isOfx = !isSpreadsheet && isOfxFile(file.name, buffer);
 
-  const errors: string[] = [];
-  const parsedRows: ParsedTransactionRow[] = [];
-
-  if (isOfx) {
-    const ofxResult = parseOfxTransactions(buffer);
-    parsedRows.push(...ofxResult.parsedRows);
-    errors.push(...ofxResult.errors);
-  } else {
-    let rows: (string | number)[][];
-    if (isSpreadsheet) {
-      rows = await readWorkbookRows(buffer);
-    } else {
-      rows = rowsFromCsvText(buffer.toString("utf-8"));
-    }
-
-    if (rows.length < 2) {
-      return NextResponse.json({ error: "Arquivo vazio ou sem linhas de dados." }, { status: 400 });
-    }
-
-    const headerRow = rows[0].map((h) => normalizeHeader(String(h)));
-    const columnMap: Record<string, number> = {};
-    headerRow.forEach((h, idx) => {
-      const mapped = HEADER_ALIASES[h];
-      if (mapped) columnMap[mapped] = idx;
-    });
-
-    if (columnMap.data === undefined || (columnMap.valor === undefined && columnMap.entrada === undefined && columnMap.saida === undefined)) {
-      return NextResponse.json(
-        {
-          error:
-            'Cabeçalho inválido. Esperado: data, descrição e valor (ou colunas separadas "entrada"/"saida").',
-        },
-        { status: 400 }
-      );
-    }
-
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.every((c) => String(c).trim() === "")) continue;
-
-      const get = (key: string) => (columnMap[key] !== undefined ? String(row[columnMap[key]] ?? "").trim() : "");
-
-      const rawDate = columnMap.data !== undefined ? row[columnMap.data] : "";
-      const date = parseDateFlexible(rawDate);
-      if (!date) {
-        errors.push(`Linha ${i + 1}: data inválida ("${rawDate}").`);
-        continue;
-      }
-
-      const descricao = get("descricao") || "Sem descrição";
-
-      let direction: "ENTRADA" | "SAIDA";
-      let valor: number;
-      if (columnMap.valor !== undefined) {
-        valor = parseValor(get("valor"));
-        if (Number.isNaN(valor) || valor === 0) {
-          errors.push(`Linha ${i + 1}: valor inválido.`);
-          continue;
-        }
-        direction = valor >= 0 ? "ENTRADA" : "SAIDA";
-        valor = Math.abs(valor);
-      } else {
-        const entradaRaw = get("entrada");
-        const saidaRaw = get("saida");
-        if (entradaRaw) {
-          valor = Math.abs(parseValor(entradaRaw));
-          direction = "ENTRADA";
-        } else if (saidaRaw) {
-          valor = Math.abs(parseValor(saidaRaw));
-          direction = "SAIDA";
-        } else {
-          errors.push(`Linha ${i + 1}: nenhum valor de entrada ou saída informado.`);
-          continue;
-        }
-        if (Number.isNaN(valor) || valor === 0) {
-          errors.push(`Linha ${i + 1}: valor inválido.`);
-          continue;
-        }
-      }
-
-      parsedRows.push({ date, descricao, direction, valor });
-    }
+  let statement: ParsedStatement;
+  try {
+    statement = await parseBankStatement(buffer);
+  } catch (err) {
+    if (err instanceof StatementFormatError) return NextResponse.json({ error: err.message }, { status: 400 });
+    return NextResponse.json({ error: "Não foi possível ler este arquivo." }, { status: 400 });
   }
 
+  const { transactions: parsedRows, errors } = statement;
   if (parsedRows.length === 0) {
-    return NextResponse.json({ error: "Nenhuma linha válida encontrada no arquivo.", errors }, { status: 400 });
+    return NextResponse.json(
+      { error: "Nenhuma linha válida encontrada no arquivo.", errors, detected: statement.detected },
+      { status: 400 }
+    );
   }
 
   const totalEntradas = parsedRows.filter((r) => r.direction === "ENTRADA").reduce((s, r) => s + r.valor, 0);
@@ -301,5 +83,14 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({ import: result, imported: parsedRows.length, errors });
+  return NextResponse.json({
+    import: result,
+    imported: parsedRows.length,
+    errors,
+    format: statement.format,
+    detected: statement.detected,
+    ignored: statement.ignored,
+    totalEntradas,
+    totalSaidas,
+  });
 }
