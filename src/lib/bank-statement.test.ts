@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
+import { jsPDF } from "jspdf";
 import { detectDelimiter, detectKind, parseBankStatement, parseDateCell, parseMoney, StatementFormatError } from "@/lib/bank-statement";
 
 /**
@@ -260,4 +261,109 @@ test("formatos que não lê dão mensagem clara em português", async () => {
     (e: unknown) => e instanceof StatementFormatError && /\.xls/.test(e.message)
   );
   await assert.rejects(() => parseBankStatement(utf8("nada a ver\ncom extrato\n")), (e: unknown) => e instanceof StatementFormatError && /colunas/.test(e.message));
+});
+
+/**
+ * PDF no estilo "Extrato Consolidado" de banco: cabeçalho de dois níveis (Movimentos > Créditos |
+ * Débitos), data só na 1ª linha do dia e sem ano, nome que quebra em 2 linhas, débito com sinal no
+ * fim ("100,00-"), saldo impresso na última linha do dia, rodapé de página e uma segunda página
+ * ("Continuação") com as colunas em outras posições. Dados sintéticos.
+ */
+function buildStatementPdf(): Buffer {
+  const doc = new jsPDF({ unit: "pt", format: [900, 1000] }); // larga o bastante para as colunas da direita ficarem dentro da página
+  doc.setFontSize(8);
+  const T = (text: string, x: number, y: number, align: "left" | "right" | "center" = "left") => doc.text(text, x, y, { align });
+
+  T("EXTRATO CONSOLIDADO", 500, 30);
+  T("setembro/2026", 560, 40);
+  T("Resumo - setembro/2026", 47, 90);
+  T("Conta Corrente", 47, 150);
+
+  // Página 1
+  T("Data", 47, 200);
+  T("Descrição", 90, 200);
+  T("Nº Documento", 407, 200);
+  T("Movimentos (R$)", 551, 200, "center");
+  T("Saldo (R$)", 752, 200, "right");
+  T("Créditos", 570, 210, "right");
+  T("Débitos", 637, 210, "right");
+
+  let y = 222;
+  const step = 9.4;
+  const row = (o: { date?: string; desc: string; doc?: string; credit?: string; debit?: string; balance?: string }) => {
+    if (o.date) T(o.date, 47, y);
+    T(o.desc, 90, y);
+    if (o.doc) T(o.doc, 440, y, "right");
+    if (o.credit) T(o.credit, 563, y, "right");
+    if (o.debit) T(o.debit, 633, y, "right");
+    if (o.balance) T(o.balance, 752, y, "right");
+    y += step;
+  };
+  row({ desc: "SALDO EM 31/08", balance: "500,00-" });
+  row({ date: "01/09", desc: "TARIFA AVULSA ENVIO PIX", doc: "-", debit: "100,00-" });
+  row({ desc: "PAGAMENTO CARTAO DE DEBITO", doc: "291321", credit: "1.000,00" });
+  row({ desc: "GETNET-VISA ELECTR" });
+  row({ desc: "PIX ENVIADO", doc: "-", debit: "150,00-", balance: "250,00" });
+  row({ desc: "FULANO DE TAL" });
+  row({ date: "02/09", desc: "PIX RECEBIDO 12345678000199", doc: "-", credit: "50,00", balance: "300,00" });
+  T("Extrato_PJ_A4_Basico - 2/4/2024", 34, 800);
+  T("Pagina: 1/2", 700, 815);
+
+  // Página 2: mesmas colunas, em outras posições
+  doc.addPage();
+  T("Continuação 1", 47, 90);
+  T("Data", 34, 150);
+  T("Descrição", 70, 150);
+  T("Nº Documento", 300, 150);
+  T("Movimentos (R$)", 420, 150, "center");
+  T("Saldo (R$)", 600, 150, "right");
+  T("Créditos", 440, 160, "right");
+  T("Débitos", 500, 160, "right");
+  y = 172;
+  const row2 = (o: { date?: string; desc: string; doc?: string; credit?: string; debit?: string; balance?: string }) => {
+    if (o.date) T(o.date, 34, y);
+    T(o.desc, 70, y);
+    if (o.doc) T(o.doc, 330, y, "right");
+    if (o.credit) T(o.credit, 436, y, "right");
+    if (o.debit) T(o.debit, 496, y, "right");
+    if (o.balance) T(o.balance, 600, y, "right");
+    y += step;
+  };
+  row2({ date: "03/09", desc: "PIX ENVIADO", doc: "-", debit: "20,00-", balance: "280,00" });
+  row2({ desc: "SALDO EM 30/09", balance: "280,00" });
+  T("Extrato_PJ_A4_Basico - 2/4/2024", 34, 800);
+  T("Pagina: 2/2", 540, 815);
+
+  return Buffer.from(doc.output("arraybuffer"));
+}
+
+test("PDF de extrato: tabela reconstruída pela posição, data completada, descrição de 2 linhas, saldo conferido", async () => {
+  const pdf = buildStatementPdf();
+  assert.equal(detectKind(pdf), "PDF");
+  const r = await parseBankStatement(pdf);
+  assert.equal(r.format, "PDF");
+  assert.deepEqual(r.transactions.map(brief), [
+    "2026-09-01|SAIDA|100|TARIFA AVULSA ENVIO PIX",
+    "2026-09-01|ENTRADA|1000|PAGAMENTO CARTAO DE DEBITO GETNET-VISA ELECTR",
+    "2026-09-01|SAIDA|150|PIX ENVIADO FULANO DE TAL",
+    "2026-09-02|ENTRADA|50|PIX RECEBIDO 12345678000199",
+    "2026-09-03|SAIDA|20|PIX ENVIADO",
+  ]);
+  assert.equal(r.errors.length, 0);
+  assert.equal(r.ignored, 2); // "SALDO EM 31/08" e "SALDO EM 30/09"
+  assert.deepEqual(r.balanceCheck, { checked: 4, matched: 4 }); // saldo inicial -500 + lançamentos bate com cada saldo impresso
+  assert.ok(!r.transactions.some((t) => /Extrato_|Pagina/.test(t.descricao)), "rodapé não pode virar descrição");
+  assert.match(r.detected, /período 09\/2026/);
+});
+
+test("PDF sem texto (escaneado) e PDF inválido dão mensagem clara", async () => {
+  const blank = new jsPDF({ unit: "pt", format: "a4" });
+  const blankBuf = Buffer.from(blank.output("arraybuffer"));
+  await assert.rejects(() => parseBankStatement(blankBuf), (e: unknown) => e instanceof StatementFormatError && /não tem texto/.test(e.message));
+  const other = new jsPDF({ unit: "pt", format: "a4" });
+  other.text("Relatório qualquer sem tabela de extrato", 50, 50);
+  await assert.rejects(
+    () => parseBankStatement(Buffer.from(other.output("arraybuffer"))),
+    (e: unknown) => e instanceof StatementFormatError && /tabela de movimentações/.test(e.message)
+  );
 });

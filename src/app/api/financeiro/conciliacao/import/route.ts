@@ -90,6 +90,7 @@ export async function POST(req: Request) {
     format: statement.format,
     detected: statement.detected,
     ignored: statement.ignored,
+    balanceCheck: statement.balanceCheck,
     totalEntradas,
     totalSaidas,
   });

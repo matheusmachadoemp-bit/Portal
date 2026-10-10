@@ -1,15 +1,16 @@
 import { Extractor, Reader, type NormalizedTransaction } from "ofx-data-extractor";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 import { spStartOfDay } from "@/lib/timezone";
+import { pdfPagesToTable, readPdfPages } from "@/lib/bank-statement-pdf";
 
 /**
  * Leitura de extrato bancário para a Conciliação Bancária (Financeiro).
  *
  * Em vez de depender da extensão do arquivo e de um único layout de colunas, o sistema descobre
  * sozinho o que recebeu:
- *  1. Formato pelo CONTEÚDO do arquivo (assinatura dos primeiros bytes): OFX, planilha Excel
- *     (.xlsx), texto delimitado (CSV/TSV/TXT) — e reconhece, para explicar com clareza, os que não
- *     lê: PDF, Excel antigo (.xls), CNAB e imagens.
+ *  1. Formato pelo CONTEÚDO do arquivo (assinatura dos primeiros bytes): OFX, PDF (com texto),
+ *     planilha Excel (.xlsx), texto delimitado (CSV/TSV/TXT) — e reconhece, para explicar com
+ *     clareza, os que não lê: Excel antigo (.xls), CNAB, PDF escaneado e imagens.
  *  2. Em texto: codificação (UTF-8, UTF-16 ou Windows-1252, comum em banco brasileiro), separador
  *     (; , tab |), a LINHA do cabeçalho (muitos bancos colocam dados da conta antes) e o papel de
  *     cada coluna (data, descrição, valor, crédito/débito, indicador D/C, saldo) — pelo nome da
@@ -30,7 +31,7 @@ export type StatementTransaction = {
   valor: number;
 };
 
-export type StatementFormat = "OFX" | "XLSX" | "CSV";
+export type StatementFormat = "OFX" | "XLSX" | "CSV" | "PDF";
 
 export type ParsedStatement = {
   format: StatementFormat;
@@ -41,6 +42,8 @@ export type ParsedStatement = {
   ignored: number;
   /** Descrição legível do que foi reconhecido (formato, separador, colunas...). */
   detected: string;
+  /** Conferência dos saldos que o próprio extrato imprime contra a soma dos lançamentos lidos (null = extrato sem coluna de saldo). */
+  balanceCheck: { checked: number; matched: number } | null;
 };
 
 /** Erro com mensagem pronta para mostrar ao usuário (formato não suportado / não entendido). */
@@ -603,6 +606,7 @@ export function parseTable(rows: Cell[][]): {
   errors: string[];
   ignored: number;
   layoutDescription: string;
+  balanceCheck: { checked: number; matched: number } | null;
 } {
   if (rows.length === 0) throw new StatementFormatError("O arquivo está vazio.");
 
@@ -628,6 +632,21 @@ export function parseTable(rows: Cell[][]): {
   const transactions: StatementTransaction[] = [];
   const errors: string[] = [];
   let ignored = 0;
+  // Conferência de saldo (só se o arquivo tem coluna de saldo): parte do saldo inicial impresso no
+  // extrato ("SALDO ANTERIOR"/"SALDO EM 31/08"), soma os lançamentos e compara com cada saldo que o
+  // banco imprime. Em centavos inteiros pra não acumular erro de ponto flutuante.
+  const toCents = (n: number) => Math.round(n * 100);
+  let openingCents: number | null = null;
+  let runningCents = 0;
+  let checked = 0;
+  let matched = 0;
+  const compareBalance = (row: Cell[]) => {
+    if (layout!.balance === null || openingCents === null) return;
+    const bal = parseMoney(row[layout!.balance], decimal);
+    if (bal === null) return;
+    checked++;
+    if (toCents(bal) === openingCents + runningCents) matched++;
+  };
   const firstRowNumber = layout.headerRow === null ? 1 : layout.headerRow + 2;
 
   dataRows.forEach((row, idx) => {
@@ -641,6 +660,13 @@ export function parseTable(rows: Cell[][]): {
 
     if (SALDO_LINE.test(description) || SALDO_LINE.test(cellText(row[layout!.date]))) {
       ignored++;
+      if (layout!.balance !== null) {
+        const bal = parseMoney(row[layout!.balance], decimal);
+        if (bal !== null) {
+          if (openingCents === null && transactions.length === 0) openingCents = toCents(bal);
+          else compareBalance(row);
+        }
+      }
       return;
     }
 
@@ -693,6 +719,8 @@ export function parseTable(rows: Cell[][]): {
       direction: signed >= 0 ? "ENTRADA" : "SAIDA",
       valor: Math.abs(Math.round(signed * 100) / 100),
     });
+    runningCents += toCents(signed);
+    compareBalance(row);
   });
 
   const base = describeLayout(layout);
@@ -704,7 +732,16 @@ export function parseTable(rows: Cell[][]): {
     errors,
     ignored,
     layoutDescription: [base, ...extras].join(" · "),
+    balanceCheck: layout.balance !== null && openingCents !== null && checked > 0 ? { checked, matched } : null,
   };
+}
+
+export function describeBalanceCheck(check: { checked: number; matched: number } | null): string {
+  if (!check) return "";
+  if (check.matched === check.checked) {
+    return ` · conferência de saldo: ${check.matched} de ${check.checked} saldos do extrato batem com a soma dos lançamentos`;
+  }
+  return ` · ATENÇÃO conferência de saldo: só ${check.matched} de ${check.checked} saldos do extrato batem com a soma dos lançamentos — confira se o arquivo foi lido corretamente`;
 }
 
 // ---------------------------------------------------------------------------
@@ -764,10 +801,36 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
   const kind = detectKind(buffer);
 
   switch (kind) {
-    case "PDF":
-      throw new StatementFormatError(
-        "Este arquivo é um PDF. PDF de extrato não é lido porque cada banco monta de um jeito. No site ou app do banco, baixe o extrato em OFX (melhor opção), CSV ou Excel (.xlsx)."
-      );
+    case "PDF": {
+      let pages;
+      try {
+        pages = await readPdfPages(buffer);
+      } catch {
+        throw new StatementFormatError(
+          "Não consegui abrir este PDF (pode estar protegido por senha ou corrompido). Baixe o extrato do banco novamente, de preferência em OFX."
+        );
+      }
+      if (pages.every((p) => p.length === 0)) {
+        throw new StatementFormatError(
+          "Este PDF não tem texto (parece escaneado ou uma foto), então não consigo ler. Baixe o extrato digital do banco, de preferência em OFX."
+        );
+      }
+      const table = pdfPagesToTable(pages, (t) => roleOfHeader(t));
+      if (!table) {
+        throw new StatementFormatError(
+          "Não encontrei a tabela de movimentações neste PDF (colunas de data, descrição e valor, ou crédito e débito). Se for um extrato, baixe-o em OFX, que é lido direto."
+        );
+      }
+      const parsed = parseTable(table.rows);
+      return {
+        format: "PDF",
+        transactions: parsed.transactions,
+        errors: parsed.errors,
+        ignored: parsed.ignored,
+        balanceCheck: parsed.balanceCheck,
+        detected: `PDF de extrato (texto) · ${table.note} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}`,
+      };
+    }
     case "XLS":
       throw new StatementFormatError(
         "Este é um Excel antigo (.xls). Abra no Excel e use Salvar como > Pasta de Trabalho do Excel (.xlsx), ou baixe o extrato do banco em OFX ou CSV."
@@ -782,7 +845,14 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
       );
     case "OFX": {
       const { transactions, errors } = parseOfx(buffer);
-      return { format: "OFX", transactions, errors, ignored: 0, detected: "OFX (extrato bancário padrão), lido automaticamente" };
+      return {
+        format: "OFX",
+        transactions,
+        errors,
+        ignored: 0,
+        balanceCheck: null,
+        detected: "OFX (extrato bancário padrão), lido automaticamente",
+      };
     }
     case "XLSX": {
       let rows: Cell[][];
@@ -797,7 +867,8 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         transactions: parsed.transactions,
         errors: parsed.errors,
         ignored: parsed.ignored,
-        detected: `Planilha Excel (.xlsx) · ${parsed.layoutDescription}`,
+        balanceCheck: parsed.balanceCheck,
+        detected: `Planilha Excel (.xlsx) · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}`,
       };
     }
     default: {
@@ -812,7 +883,8 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         transactions: parsed.transactions,
         errors: parsed.errors,
         ignored: parsed.ignored,
-        detected: `Texto/CSV · separador ${delimiterName} · acentuação ${encoding} · ${parsed.layoutDescription}`,
+        balanceCheck: parsed.balanceCheck,
+        detected: `Texto/CSV · separador ${delimiterName} · acentuação ${encoding} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}`,
       };
     }
   }

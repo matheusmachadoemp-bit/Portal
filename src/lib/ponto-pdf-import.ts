@@ -296,7 +296,7 @@ function mapTresMarcacoesSemSobraDeMadrugada(a: string, b: string, c: string): {
 }
 
 /** Caminho local dos fontes padrão do pdfjs-dist, pra evitar o aviso/erro "Ensure that the standardFontDataUrl API parameter is provided" ao processar PDFs que referenciam fontes não embutidas (não afeta a extração de texto em si, só silencia o log). */
-function standardFontDataUrl(): string {
+export function standardFontDataUrl(): string {
   return path.join(process.cwd(), "node_modules/pdfjs-dist/standard_fonts") + "/";
 }
 
@@ -314,7 +314,7 @@ function standardFontDataUrl(): string {
  * curta, não uma UI que precisa manter a thread principal livre.
  */
 let workerReadyPromise: Promise<void> | null = null;
-function ensureFakeWorkerGlobal(): Promise<void> {
+export function ensureFakeWorkerGlobal(): Promise<void> {
   if (!workerReadyPromise) {
     workerReadyPromise = import("pdfjs-dist/legacy/build/pdf.worker.mjs").then((pdfjsWorker) => {
       (globalThis as unknown as { pdfjsWorker?: unknown }).pdfjsWorker = pdfjsWorker;

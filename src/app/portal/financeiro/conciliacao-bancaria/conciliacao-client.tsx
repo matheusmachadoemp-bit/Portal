@@ -381,22 +381,25 @@ export function ConciliacaoClient({
           </select>
         </label>
         <label className="block mb-1">
-          <span className="block text-xs text-nord-gray mb-1">Arquivo do extrato (OFX, CSV ou Excel)</span>
+          <span className="block text-xs text-nord-gray mb-1">Arquivo do extrato (PDF, OFX, Excel ou CSV)</span>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".ofx,.qfx,.csv,.tsv,.txt,.xlsx"
+            accept=".pdf,.ofx,.qfx,.xlsx,.csv,.tsv,.txt"
             onChange={handleFileChange}
             disabled={importing}
             className="input"
           />
         </label>
         <p className="text-xs text-nord-gray mt-2">
-          O sistema <strong>reconhece sozinho o formato</strong> do arquivo (não precisa ajustar nada): <strong>OFX</strong>{" "}
-          (recomendado, é o formato que o banco gera pronto), <strong>CSV</strong> (qualquer separador e acentuação) e{" "}
-          <strong>Excel (.xlsx)</strong>. Em CSV/Excel ele acha o cabeçalho mesmo que venha depois de dados da conta,
-          entende colunas de data, descrição/histórico e valor (ou crédito e débito separados, ou indicador D/C) e ignora
-          linhas de saldo e total. PDF e Excel antigo (.xls) não são lidos.
+          O sistema <strong>reconhece sozinho o formato</strong> do arquivo (não precisa ajustar nada):{" "}
+          <strong>PDF</strong> do extrato (com texto, como o que o banco baixa no internet banking),{" "}
+          <strong>OFX</strong> (o formato mais seguro, gerado pelo banco), <strong>Excel (.xlsx)</strong> e{" "}
+          <strong>CSV</strong> (qualquer separador e acentuação). Ele acha a tabela mesmo que venha depois de dados da
+          conta, entende data, descrição e valor (ou crédito e débito separados, ou indicador D/C), completa datas que
+          o banco escreve só uma vez por dia e ignora linhas de saldo e total. Depois de importar, mostra o que foi
+          reconhecido e, quando o extrato traz saldos, confere se a soma dos lançamentos bate com eles. Não lê PDF
+          escaneado (foto) nem Excel antigo (.xls).
         </p>
         {importing && (
           <p className="mt-3 text-xs text-nord-blue-light flex items-center gap-1.5">
