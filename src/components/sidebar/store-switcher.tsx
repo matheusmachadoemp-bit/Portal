@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ChevronsUpDown, Check, Building2, Layers } from "lucide-react";
 import { GRUPO_SENTINEL } from "@/lib/empresa-constants";
 
@@ -23,7 +22,7 @@ export function StoreSwitcher({
 }) {
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
 
   const isGrupo = activeEmpresaId === GRUPO_SENTINEL;
   const active = empresas.find((e) => e.id === activeEmpresaId);
@@ -36,31 +35,37 @@ export function StoreSwitcher({
       return;
     }
     setSwitching(true);
-    await fetch("/api/empresa-context", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ empresaId }),
-    });
-    setOpen(false);
-    setSwitching(false);
-    // Depois de trocar a loja ativa, manda sempre pra Início em vez de só
-    // atualizar a página atual: várias telas do Portal guardam o dado vindo
-    // do servidor num useState(initialProps) que só é lido na primeira
-    // montagem — router.refresh() sozinho reaproveita o componente cliente já
-    // montado (preserva state/scroll de propósito, é assim que o Next
-    // documenta), então essas telas continuariam mostrando o dado da loja
-    // ANTERIOR até o usuário navegar pra outro lugar e voltar. Navegar pra
-    // Início força a troca de página de verdade (desmonta a tela atual,
-    // monta a Início do zero), o que já resolve isso sem precisar auditar
-    // tela por tela. router.refresh() continua antes: invalida o cache de
-    // rota do Next inteiro, então se o usuário já tiver visitado a Início
-    // nesta sessão, o push abaixo não serve uma versão em cache de antes da
-    // troca. Mesmo caminho serve pra troca de loja normal e pra troca pro
-    // "Grupo Nord" (ambas chamam switchTo). Se o usuário já estiver na
-    // Início, o push pra mesma rota não desmonta nada (confirmado testando
-    // ao vivo) — é inofensivo, só rola a página pro topo.
-    router.refresh();
-    router.push("/portal/inicio");
+    setError(null);
+    try {
+      const res = await fetch("/api/empresa-context", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ empresaId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "Não foi possível trocar de loja. Tente novamente.");
+        setSwitching(false);
+        return;
+      }
+    } catch {
+      setError("Falha de conexão ao trocar de loja. Tente novamente.");
+      setSwitching(false);
+      return;
+    }
+    // Recarrega a página INTEIRA já na Início (equivale a um F5 automático), em vez de
+    // `router.refresh()` + `router.push()`. A loja ativa aparece em vários pontos que o Next só
+    // refaz num carregamento completo: o layout do Portal (menu lateral filtrado por loja, nome da
+    // loja ativa) NÃO é re-renderizado numa navegação normal entre páginas — e quando o
+    // `router.refresh()` e o `router.push()` são disparados juntos, a navegação cancela a
+    // atualização do layout, deixando o menu mostrando a loja ANTERIOR até o usuário apertar F5
+    // (reproduzido numa build de produção: o endereço ia pra /portal/inicio, mas o menu seguia
+    // com a loja antiga). Além disso, várias telas guardam o dado do servidor num
+    // `useState(initialProps)` lido só na primeira montagem. Mesmo caminho serve pra troca de loja
+    // normal e pra troca pro "Grupo Nord" (ambas chamam switchTo). Nada a preservar na tela atual
+    // ao trocar de loja, então o recarregamento completo não perde nada.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- recarga completa é intencional (ver comentário acima)
+    window.location.assign("/portal/inicio");
   }
 
   if (empresas.length <= 1 && !canViewGrupoNord) {
@@ -138,6 +143,7 @@ export function StoreSwitcher({
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full mt-1 z-50 w-64 nord-card bg-nord-card shadow-xl py-1.5">
             <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-nord-gray/70">Lojas</p>
+            {error && <p className="px-3 py-1 text-xs text-nord-danger">{error}</p>}
             {empresas.map((e) => (
               <button
                 key={e.id}
