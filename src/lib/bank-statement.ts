@@ -317,6 +317,8 @@ type Layout = {
   credit: number | null;
   debit: number | null;
   indicator: number | null;
+  /** "Tipo"/"Tipo de lançamento": pode ser a modalidade do cartão (Débito/Crédito), não a direção do dinheiro. */
+  indicatorAmbiguous: boolean;
   balance: number | null;
   labels: Record<string, string>;
 };
@@ -361,6 +363,7 @@ function findHeaderLayout(rows: Cell[][]): Layout | null {
       credit: credit >= 0 ? credit : null,
       debit: debit >= 0 ? debit : null,
       indicator: indicator >= 0 ? indicator : null,
+      indicatorAmbiguous: indicator >= 0 && normalizeHeader(cellText(row[indicator])).startsWith("tipo"),
       balance: balance >= 0 ? balance : null,
       labels,
     };
@@ -606,6 +609,7 @@ function inferLayoutFromContent(rows: Cell[][]): Layout | null {
     credit: null,
     debit: null,
     indicator: null,
+    indicatorAmbiguous: false,
     balance: null,
     labels: {},
   };
@@ -658,11 +662,13 @@ export function parseTable(rows: Cell[][]): {
   const col = (k: number | null) => (k === null ? [] : dataRows.map((r) => r[k]));
   const order = detectDateOrder(col(layout.date));
   const decimal = detectDecimal([...col(layout.value), ...col(layout.credit), ...col(layout.debit)]);
-  // Se a coluna de valor já traz sinal (algum negativo), o sinal manda e o indicador D/C é ignorado:
-  // em extrato de adquirente/cartão, "Tipo = Débito" costuma ser a modalidade do cartão, não a
-  // direção do dinheiro.
+  // Coluna de indicador com nome AMBÍGUO ("Tipo"): se a coluna de valor já traz sinal (algum
+  // negativo), o sinal manda e o indicador é ignorado — em extrato de adquirente/cartão, "Tipo =
+  // Débito" costuma ser a modalidade do cartão, não a direção do dinheiro. Já um cabeçalho explícito
+  // de débito/crédito (D/C, Natureza, Deb/Cred...) vale sempre para valores positivos; valor
+  // NEGATIVO é sempre saída (o sinal manda, linha a linha).
   const valueHasSigns = layout.value !== null && col(layout.value).some((c) => (parseMoney(c, decimal) ?? 0) < 0);
-  const useIndicator = layout.indicator !== null && !valueHasSigns;
+  const useIndicator = layout.indicator !== null && !(layout.indicatorAmbiguous && valueHasSigns);
 
   const transactions: StatementTransaction[] = [];
   const errors: string[] = [];
@@ -754,7 +760,7 @@ export function parseTable(rows: Cell[][]): {
         signed = v;
         if (useIndicator) {
           const dir = indicatorDirection(cellText(row[layout!.indicator!]));
-          if (dir) signed = dir === "SAIDA" ? -Math.abs(v) : Math.abs(v);
+          if (dir && v > 0) signed = dir === "SAIDA" ? -v : v; // valor negativo: o sinal manda
         }
       }
     }

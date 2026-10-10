@@ -93,6 +93,7 @@ export function ConciliacaoClient({
   const [matching, setMatching] = useState(false);
   const [matchInfo, setMatchInfo] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const refreshSeq = useRef(0);
 
   const filtered = useMemo(
     () =>
@@ -122,14 +123,21 @@ export function ConciliacaoClient({
     const direction = overrides.direction ?? filterDirection;
     const from = overrides.from ?? dateFrom;
     const to = overrides.to ?? dateTo;
+    // Conta e status são filtrados na própria tela (sem nova busca); o servidor recebe só período e
+    // direção. Se a busca também filtrasse conta/status, trocar esses filtros depois deixaria a lista
+    // e os totais presos no subconjunto antigo.
     const params = new URLSearchParams();
-    if (filterAccount) params.set("bankAccountId", filterAccount);
-    if (filterStatus) params.set("status", filterStatus);
     if (direction) params.set("direction", direction);
     if (from) params.set("from", from);
     if (to) params.set("to", to);
+    const seq = ++refreshSeq.current;
     const res = await fetch(`/api/financeiro/conciliacao?${params.toString()}`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (seq !== refreshSeq.current) return; // chegou uma busca mais nova (filtros mudados em sequência)
+    if (!res.ok) {
+      setRowError(data?.error ?? "Não foi possível atualizar o extrato. Tente novamente.");
+      return; // mantém a lista atual em vez de esvaziar a tela
+    }
     setTransactions(
       (data.transactions ?? []).map((t: { id: string; date: string; descricao: string; direction: string; valor: number; status: string; observacoes: string | null; bankAccount: { name: string }; import: { fileName: string }; matchedLabel: string | null }) => ({
         id: t.id,

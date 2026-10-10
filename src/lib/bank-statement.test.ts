@@ -519,3 +519,16 @@ test("entradas hostis não travam o servidor (tempo limitado)", async () => {
   assert.equal(parseDateCell("seg" + " ".repeat(40000) + "x"), null);
   assert.ok(Date.now() - t0 < 3000, `demorou ${Date.now() - t0}ms`);
 });
+
+test("cabeçalho D/C explícito vale sempre para valores positivos, mesmo com um estorno negativo no arquivo", async () => {
+  const text = [
+    "Data;Histórico;Valor;D/C",
+    "01/10/2026;TARIFA;12,00;D",
+    "02/10/2026;DEPOSITO;300,00;C",
+    "03/10/2026;PAGTO FORNECEDOR;500,00;D",
+    "04/10/2026;ESTORNO TARIFA;-12,00;D",
+    "05/10/2026;PAGTO LUZ;80,00;D",
+  ].join("\n");
+  const r = await parseBankStatement(utf8(text));
+  assert.deepEqual(r.transactions.map((t) => `${t.direction}${t.valor}`), ["SAIDA12", "ENTRADA300", "SAIDA500", "SAIDA12", "SAIDA80"]);
+});
