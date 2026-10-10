@@ -48,10 +48,11 @@ export function learnPrefix(category: string, existingCodesOfCategory: string[])
     const m = /^([A-Za-z]{1,6})-\d+$/.exec(code.trim());
     if (m) counts.set(m[1].toUpperCase(), (counts.get(m[1].toUpperCase()) ?? 0) + 1);
   }
+  // Empate: ordem alfabética (determinístico, igual ao backfill SQL dos produtos antigos).
   let best: string | null = null;
   let bestCount = 0;
   for (const [prefix, count] of counts) {
-    if (count > bestCount) {
+    if (count > bestCount || (count === bestCount && best !== null && prefix < best)) {
       best = prefix;
       bestCount = count;
     }
@@ -63,17 +64,23 @@ export function formatProductCode(prefix: string, n: number): string {
   return `${prefix}-${String(n).padStart(3, "0")}`;
 }
 
+/** Maior número que ainda conta como "a sequência" do prefixo. */
+export const MAX_SEQUENCE_NUMBER = 999_999;
+
 /**
  * Próximo número livre do prefixo, olhando só os códigos no padrão `PREFIXO-NNN` (maior + 1).
- * Só conta números de até 6 dígitos: um código digitado à mão como "PZ-20261010123" não pode
- * empurrar a sequência inteira para números absurdos.
+ * Só conta números até 999999: um código digitado à mão como "PZ-20261010123" não pode empurrar a
+ * sequência inteira para números absurdos (o backfill SQL dos produtos antigos usa a mesma regra).
  */
 export function nextCodeNumber(prefix: string, existingCodes: string[]): number {
-  const re = new RegExp(`^${prefix}-(\\d{1,6})$`, "i");
+  const re = new RegExp(`^${prefix}-(\\d+)$`, "i");
   let max = 0;
   for (const code of existingCodes) {
     const m = re.exec(code.trim());
-    if (m) max = Math.max(max, Number(m[1]));
+    if (m) {
+      const n = Number(m[1]);
+      if (n <= MAX_SEQUENCE_NUMBER) max = Math.max(max, n);
+    }
   }
   return max + 1;
 }

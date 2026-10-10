@@ -27,6 +27,7 @@ test("nextCodeNumber pega o maior número do prefixo + 1 e ignora códigos fora 
   assert.equal(nextCodeNumber("SK", ["SK-001", "SK-002"]), 3);
   assert.equal(nextCodeNumber("PZ", ["PZ-001", "PZ-20261010123", "PZ-0099999999999999999999"]), 2); // número gigante digitado à mão não vira a sequência
   assert.equal(nextCodeNumber("PZ", ["PZ-999999"]), 1000000);
+  assert.equal(nextCodeNumber("PZ", ["PZ-0000007"]), 8); // zeros à esquerda não mudam o valor (7)
 });
 
 test("learnPrefix segue o prefixo que a categoria já usa; sem histórico usa o padrão", () => {
@@ -34,6 +35,8 @@ test("learnPrefix segue o prefixo que a categoria já usa; sem histórico usa o 
   assert.equal(learnPrefix("COMBO", ["CO-001", "CO-002", "CB-001"]), "CO"); // série existente mais comum
   assert.equal(learnPrefix("ESFIHA_DOCE", ["codigo livre", "xyz"]), "EF"); // nada no padrão → padrão
   assert.equal(learnPrefix("BURGER", ["bg-004", "BG-005"]), "BG"); // maiúscula/minúscula
+  assert.equal(learnPrefix("COMBO", ["CO-001", "CB-001"]), "CB"); // empate: ordem alfabética, não depende da ordem das linhas
+  assert.equal(learnPrefix("COMBO", ["CB-001", "CO-001"]), "CB");
 });
 
 test("isProductCategory só aceita valores do enum", () => {

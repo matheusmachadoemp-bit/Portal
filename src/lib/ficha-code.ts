@@ -29,7 +29,6 @@ export async function generateProductCode(category: string, skip = 0): Promise<s
   const sameCategory = await prisma.product.findMany({
     where: { category: category as never },
     select: { code: true },
-    take: 500,
   });
   const prefix = learnPrefix(category, sameCategory.map((p) => p.code));
   const existing = await prisma.product.findMany({
