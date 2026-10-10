@@ -25,6 +25,8 @@ test("nextCodeNumber pega o maior número do prefixo + 1 e ignora códigos fora 
   assert.equal(nextCodeNumber("PZ", ["pz-010", "PZ-3"]), 11); // minúsculas e sem zeros também contam
   assert.equal(nextCodeNumber("PZ", ["BG-050", "PZ-ESPECIAL", "XPZ-099", "PZ-001-B"]), 1); // outro prefixo/texto livre não interfere
   assert.equal(nextCodeNumber("SK", ["SK-001", "SK-002"]), 3);
+  assert.equal(nextCodeNumber("PZ", ["PZ-001", "PZ-20261010123", "PZ-0099999999999999999999"]), 2); // número gigante digitado à mão não vira a sequência
+  assert.equal(nextCodeNumber("PZ", ["PZ-999999"]), 1000000);
 });
 
 test("learnPrefix segue o prefixo que a categoria já usa; sem histórico usa o padrão", () => {

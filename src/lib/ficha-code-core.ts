@@ -63,9 +63,13 @@ export function formatProductCode(prefix: string, n: number): string {
   return `${prefix}-${String(n).padStart(3, "0")}`;
 }
 
-/** Próximo número livre do prefixo, olhando só os códigos no padrão `PREFIXO-NNN` (maior + 1). */
+/**
+ * Próximo número livre do prefixo, olhando só os códigos no padrão `PREFIXO-NNN` (maior + 1).
+ * Só conta números de até 6 dígitos: um código digitado à mão como "PZ-20261010123" não pode
+ * empurrar a sequência inteira para números absurdos.
+ */
 export function nextCodeNumber(prefix: string, existingCodes: string[]): number {
-  const re = new RegExp(`^${prefix}-(\\d+)$`, "i");
+  const re = new RegExp(`^${prefix}-(\\d{1,6})$`, "i");
   let max = 0;
   for (const code of existingCodes) {
     const m = re.exec(code.trim());
