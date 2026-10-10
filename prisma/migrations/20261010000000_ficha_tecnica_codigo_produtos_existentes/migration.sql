@@ -49,9 +49,9 @@ BEGIN
       p."category"::text AS categoria,
       p."createdAt",
       p."code",
-      btrim(p."code", E' \t\r\n ') AS limpo,
-      upper((regexp_match(btrim(p."code", E' \t\r\n '), '^([A-Za-z]{1,6})-([0-9]+)$'))[1]) AS prefixo,
-      ((regexp_match(btrim(p."code", E' \t\r\n '), '^([A-Za-z]{1,6})-([0-9]+)$'))[2])::numeric AS numero
+      btrim(p."code", E' \t\r\n\u00a0') AS limpo,
+      upper((regexp_match(btrim(p."code", E' \t\r\n\u00a0'), '^([A-Za-z]{1,6})-([0-9]+)$'))[1]) AS prefixo,
+      ((regexp_match(btrim(p."code", E' \t\r\n\u00a0'), '^([A-Za-z]{1,6})-([0-9]+)$'))[2])::numeric AS numero
     FROM "Product" p;
 
   -- Maior número já usado por prefixo (só a sequência: até 6 dígitos).
@@ -153,10 +153,10 @@ BEGIN
       EXIT WHEN NOT EXISTS (
         SELECT 1
         FROM "Product" x
-        WHERE lower(btrim(x."code", E' \t\r\n ')) = lower(v_new_code)
+        WHERE lower(btrim(x."code", E' \t\r\n\u00a0')) = lower(v_new_code)
            OR (
-             btrim(x."code", E' \t\r\n ') ~* ('^' || v_prefix || '-[0-9]+$')
-             AND (regexp_match(btrim(x."code", E' \t\r\n '), '-([0-9]+)$'))[1]::numeric = v_next
+             btrim(x."code", E' \t\r\n\u00a0') ~* ('^' || v_prefix || '-[0-9]+$')
+             AND (regexp_match(btrim(x."code", E' \t\r\n\u00a0'), '-([0-9]+)$'))[1]::numeric = v_next
            )
       );
       v_next := v_next + 1;
