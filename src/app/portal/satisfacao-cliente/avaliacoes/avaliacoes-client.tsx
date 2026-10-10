@@ -115,10 +115,10 @@ export function AvaliacoesClient({
   // de unidade abaixo é escolha do usuário, não deve resetar sozinho enquanto o Grupo Nord
   // continuar ativo), ou o id da própria loja no modo loja única (nesse modo `empresas` sempre vem
   // com 1 item só: a loja ativa — ver o `page.tsx` desta tela). Serve de dependência pro efeito
-  // abaixo: o StoreSwitcher da sidebar (store-switcher.tsx) troca a loja ativa com
-  // `router.refresh()`, que só atualiza props (isGrupoNordMode/empresas/garcons) — NÃO remonta
-  // este client component, então o useState local dos filtros sobreviveria à troca (continuando a
-  // filtrar pela loja anterior) se não fosse resetado explicitamente aqui.
+  // abaixo: o StoreSwitcher da sidebar (store-switcher.tsx) troca a loja ativa e recarrega a
+  // página inteira (hoje isso já remonta este componente e zera os filtros); o efeito abaixo continua
+  // como proteção caso a troca de loja volte a ser uma navegação sem recarga — aí as props mudariam
+  // sem remontar o componente, e o useState local dos filtros seguiria filtrando pela loja anterior.
   const activeStoreKey = isGrupoNordMode ? "grupo-nord" : (empresas[0]?.id ?? "");
 
   // Filtros vinculados à loja ativa (unidade/mesa/garçom) + lista de mesas do dropdown "Mesa":

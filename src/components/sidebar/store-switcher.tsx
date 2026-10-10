@@ -42,9 +42,13 @@ export function StoreSwitcher({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ empresaId }),
       });
+      if (res.status === 401) {
+        window.location.assign("/login"); // sessão expirada
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error ?? "Não foi possível trocar de loja. Tente novamente.");
+        setError(typeof data?.error === "string" ? data.error : "Não foi possível trocar de loja. Tente novamente.");
         setSwitching(false);
         return;
       }
@@ -94,7 +98,10 @@ export function StoreSwitcher({
   return (
     <div className={compact ? "relative" : "relative mx-2 mb-2"}>
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setError(null);
+          setOpen((v) => !v);
+        }}
         disabled={switching}
         aria-label={collapsed && !compact ? `Loja atual: ${label}. Trocar de loja` : undefined}
         className={
@@ -143,12 +150,17 @@ export function StoreSwitcher({
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full mt-1 z-50 w-64 nord-card bg-nord-card shadow-xl py-1.5">
             <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-nord-gray/70">Lojas</p>
-            {error && <p className="px-3 py-1 text-xs text-nord-danger">{error}</p>}
+            {error && (
+              <p role="alert" className="px-3 py-1 text-xs text-nord-danger">
+                {error}
+              </p>
+            )}
             {empresas.map((e) => (
               <button
                 key={e.id}
                 onClick={() => switchTo(e.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/5"
+                disabled={switching}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-60"
               >
                 <div
                   className="w-5 h-5 rounded flex items-center justify-center shrink-0"
@@ -165,7 +177,8 @@ export function StoreSwitcher({
                 <div className="my-1 border-t border-nord-border" />
                 <button
                   onClick={() => switchTo(GRUPO_SENTINEL)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/5"
+                  disabled={switching}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-60"
                 >
                   <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-nord-blue/20">
                     <Layers size={11} className="text-nord-blue-light" />
