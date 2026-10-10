@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatProductCode, nextCodeNumber, productCodePrefix } from "@/lib/ficha-code";
+import { formatProductCode, isProductCategory, learnPrefix, nextCodeNumber, productCodePrefix } from "@/lib/ficha-code-core";
 
 test("prefixo por categoria segue o padrão dos produtos já cadastrados (PZ, BG, SK)", () => {
   assert.equal(productCodePrefix("PIZZA_SALGADA"), "PZ");
@@ -25,4 +25,18 @@ test("nextCodeNumber pega o maior número do prefixo + 1 e ignora códigos fora 
   assert.equal(nextCodeNumber("PZ", ["pz-010", "PZ-3"]), 11); // minúsculas e sem zeros também contam
   assert.equal(nextCodeNumber("PZ", ["BG-050", "PZ-ESPECIAL", "XPZ-099", "PZ-001-B"]), 1); // outro prefixo/texto livre não interfere
   assert.equal(nextCodeNumber("SK", ["SK-001", "SK-002"]), 3);
+});
+
+test("learnPrefix segue o prefixo que a categoria já usa; sem histórico usa o padrão", () => {
+  assert.equal(learnPrefix("COMBO", []), "CB");
+  assert.equal(learnPrefix("COMBO", ["CO-001", "CO-002", "CB-001"]), "CO"); // série existente mais comum
+  assert.equal(learnPrefix("ESFIHA_DOCE", ["codigo livre", "xyz"]), "EF"); // nada no padrão → padrão
+  assert.equal(learnPrefix("BURGER", ["bg-004", "BG-005"]), "BG"); // maiúscula/minúscula
+});
+
+test("isProductCategory só aceita valores do enum", () => {
+  assert.equal(isProductCategory("BURGER"), true);
+  assert.equal(isProductCategory("burger"), false);
+  assert.equal(isProductCategory(undefined), false);
+  assert.equal(isProductCategory("toString"), false);
 });

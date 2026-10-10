@@ -5,6 +5,7 @@ import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpre
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { createWithAutoCode } from "@/lib/ficha-code";
+import { isProductCategory } from "@/lib/ficha-code-core";
 
 // Checagem de cargo (MANAGER_ROLES) — sem ela, qualquer COLABORADOR com o Perfil de Permissão
 // padrão "Funcionário" (ficha-tecnica:canView=true de fábrica) conseguia ver o custo/fornecedor
@@ -95,7 +96,10 @@ export async function POST(req: Request) {
     }
   }
 
-  const category = typeof body.category === "string" ? body.category : "";
+  if (!isProductCategory(body.category)) {
+    return NextResponse.json({ error: "Selecione uma categoria válida para o produto." }, { status: 400 });
+  }
+  const category: string = body.category;
   const product = await createWithAutoCode(category, (code) =>
     prisma.product.create({
       data: {

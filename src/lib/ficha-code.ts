@@ -1,6 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
+import { formatProductCode, learnPrefix, nextCodeNumber } from "@/lib/ficha-code-core";
+
+export { formatProductCode, nextCodeNumber, productCodePrefix } from "@/lib/ficha-code-core";
 
 /**
  * Código de identificação do produto da Ficha Técnica, gerado pelo sistema (ninguém digita).
@@ -17,63 +20,27 @@ import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
  *     recusa a segunda gravação — e o sistema gera outro código e tenta de novo, sozinho.
  */
 
-const PREFIX_BY_CATEGORY: Record<string, string> = {
-  PIZZA_SALGADA: "PZ",
-  PIZZA_DOCE: "PZ",
-  COMBO: "CB",
-  ESFIHA_SALGADA: "EF",
-  ESFIHA_DOCE: "EF",
-  ACOMPANHAMENTO: "AC",
-  BURGER: "BG",
-  BEBIDA: "BB",
-  DRINK: "DR",
-  SOBREMESA: "SB",
-  // Cardápio da Zarki Sushi (tipo de prato e modalidade de venda) compartilham o prefixo "SK",
-  // o mesmo dos produtos SK-001/SK-002 que já existem.
-  SUSHI: "SK",
-  SASHIMI: "SK",
-  TEMAKI: "SK",
-  URAMAKI: "SK",
-  HOT_ROLL: "SK",
-  ENTRADA: "SK",
-  DELIVERY: "SK",
-  LA_CARTE: "SK",
-  RODIZIO: "SK",
-};
-
-export function productCodePrefix(category: string): string {
-  return PREFIX_BY_CATEGORY[category] ?? "PR";
-}
-
-export function formatProductCode(prefix: string, n: number): string {
-  return `${prefix}-${String(n).padStart(3, "0")}`;
-}
-
-/** Próximo número livre do prefixo, olhando só os códigos no padrão `PREFIXO-NNN` (maior + 1). */
-export function nextCodeNumber(prefix: string, existingCodes: string[]): number {
-  const re = new RegExp(`^${prefix}-(\\d+)$`, "i");
-  let max = 0;
-  for (const code of existingCodes) {
-    const m = re.exec(code.trim());
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return max + 1;
-}
-
 /**
  * Gera um código livre para a categoria. Confere no banco se o candidato já existe e, se existir,
  * tenta o seguinte. `skip` (usado só na nova tentativa após conflito) pula números já recusados.
  */
 export async function generateProductCode(category: string, skip = 0): Promise<string> {
-  const prefix = productCodePrefix(category);
+  // Prefixo: o que os produtos da mesma categoria já usam (se seguirem `LETRAS-NÚMERO`) ou o padrão.
+  const sameCategory = await prisma.product.findMany({
+    where: { category: category as never },
+    select: { code: true },
+    take: 500,
+  });
+  const prefix = learnPrefix(category, sameCategory.map((p) => p.code));
   const existing = await prisma.product.findMany({
     where: { code: { startsWith: `${prefix}-`, mode: "insensitive" } },
     select: { code: true },
   });
-  let n = nextCodeNumber(
-    prefix,
-    existing.map((p) => p.code)
-  ) + skip;
+  let n =
+    nextCodeNumber(
+      prefix,
+      existing.map((p) => p.code)
+    ) + skip;
 
   for (let guard = 0; guard < 200; guard++, n++) {
     const code = formatProductCode(prefix, n);
@@ -90,7 +57,7 @@ function isCodeConflict(e: unknown): boolean {
   return (
     e instanceof Prisma.PrismaClientKnownRequestError &&
     e.code === "P2002" &&
-    (p2002ConstraintIncludes(e, "code") ?? true)
+    (p2002ConstraintIncludes(e, "code_key") ?? true)
   );
 }
 

@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import { isProductCategory } from "@/lib/ficha-code-core";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -31,6 +32,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   // O código de identificação é gerado pelo sistema na criação e NÃO muda por edição (serve pra
   // localizar o produto): `body.code` é ignorado de propósito.
+  if (body.category !== undefined && !isProductCategory(body.category)) {
+    return NextResponse.json({ error: "Categoria inválida." }, { status: 400 });
+  }
   if (body.photoUrl && !isValidBlobUrl(body.photoUrl)) {
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }

@@ -225,7 +225,10 @@ export function ProdutosClient({
       // `form.category` já viaja dentro do spread abaixo (o campo "Categoria" do formulário —
       // ver <select> mais abaixo) — não force de volta a categoria da aba atual aqui, senão a
       // troca de categoria nunca seria salva.
-      const payload = { ...form, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
+      // O código é gerado pelo servidor e não muda: não vai no payload.
+      const { code: _code, ...formWithoutCode } = form;
+      void _code;
+      const payload = { ...formWithoutCode, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
       const res = editing
         ? await fetch(`/api/ficha-tecnica/produtos/${editing.id}`, {
             method: "PATCH",
