@@ -57,6 +57,7 @@ const PAYMENT_METHODS = [
   "DOC",
   "TRANSFERENCIA",
   "CHEQUE",
+  "BOLETO",
   "OUTRO",
 ];
 

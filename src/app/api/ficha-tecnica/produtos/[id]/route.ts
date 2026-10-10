@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
-import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
-
-/** `Product.code` é `@unique` no schema inteiro (não por loja) — ver comentário em `PATCH`. */
-function isProductCodeConflict(e: unknown): boolean {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "code") ?? true);
-}
+import { isProductCategory } from "@/lib/ficha-code-core";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -36,12 +30,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
     }
   }
-  let code: string | undefined;
-  if (body.code !== undefined) {
-    code = typeof body.code === "string" ? body.code.trim() : "";
-    if (!code) {
-      return NextResponse.json({ error: "Informe o código do produto." }, { status: 400 });
-    }
+  // O código de identificação é gerado pelo sistema na criação e NÃO muda por edição (serve pra
+  // localizar o produto): `body.code` é ignorado de propósito.
+  if (body.category !== undefined && !isProductCategory(body.category)) {
+    return NextResponse.json({ error: "Categoria inválida." }, { status: 400 });
   }
   if (body.photoUrl && !isValidBlobUrl(body.photoUrl)) {
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
@@ -61,32 +53,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  try {
-    await prisma.product.update({
-      where: { id },
-      data: {
-        name: name ?? undefined,
-        code: code ?? undefined,
-        category: body.category ?? undefined,
-        photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
-        taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
-        description: body.description ?? undefined,
-        rendimento: body.rendimento ?? undefined,
-        tamanho: body.tamanho ?? undefined,
-        pesoFinal: body.pesoFinal !== undefined ? Number(body.pesoFinal) : undefined,
-        precoVenda: body.precoVenda !== undefined ? Number(body.precoVenda) : undefined,
-        modoPreparo: body.modoPreparo ?? undefined,
-        tempoPreparo: body.tempoPreparo !== undefined ? Number(body.tempoPreparo) : undefined,
-        validade: body.validade ?? undefined,
-        responsavel: body.responsavel ?? undefined,
-      },
-    });
-  } catch (e) {
-    if (isProductCodeConflict(e)) {
-      return NextResponse.json({ error: "Este código já está em uso." }, { status: 409 });
-    }
-    throw e;
-  }
+  await prisma.product.update({
+    where: { id },
+    data: {
+      name: name ?? undefined,
+      category: body.category ?? undefined,
+      photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
+      taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
+      description: body.description ?? undefined,
+      rendimento: body.rendimento ?? undefined,
+      tamanho: body.tamanho ?? undefined,
+      pesoFinal: body.pesoFinal !== undefined ? Number(body.pesoFinal) : undefined,
+      precoVenda: body.precoVenda !== undefined ? Number(body.precoVenda) : undefined,
+      modoPreparo: body.modoPreparo ?? undefined,
+      tempoPreparo: body.tempoPreparo !== undefined ? Number(body.tempoPreparo) : undefined,
+      validade: body.validade ?? undefined,
+      responsavel: body.responsavel ?? undefined,
+    },
+  });
 
   if (body.ingredients) {
     await prisma.productIngredient.deleteMany({ where: { productId: id } });

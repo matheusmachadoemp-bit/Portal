@@ -219,17 +219,16 @@ export function ProdutosClient({
       setFormError("Informe o nome do produto.");
       return;
     }
-    if (!form.code.trim()) {
-      setFormError("Informe o código do produto.");
-      return;
-    }
     setSubmitting(true);
     setFormError(null);
     try {
       // `form.category` já viaja dentro do spread abaixo (o campo "Categoria" do formulário —
       // ver <select> mais abaixo) — não force de volta a categoria da aba atual aqui, senão a
       // troca de categoria nunca seria salva.
-      const payload = { ...form, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
+      // O código é gerado pelo servidor e não muda: não vai no payload.
+      const { code: _code, ...formWithoutCode } = form;
+      void _code;
+      const payload = { ...formWithoutCode, ingredients: lines.filter((l) => l.ingredientId && l.quantidadeUsada) };
       const res = editing
         ? await fetch(`/api/ficha-tecnica/produtos/${editing.id}`, {
             method: "PATCH",
@@ -372,7 +371,13 @@ export function ProdutosClient({
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
           </Field>
           <Field label="Código">
-            <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="input" />
+            <input
+              value={editing ? form.code : "Gerado automaticamente ao salvar"}
+              readOnly
+              disabled
+              title="O código identifica o produto e é gerado pelo sistema (não se repete e não muda)."
+              className="input opacity-70 cursor-not-allowed"
+            />
           </Field>
           <Field label="Categoria">
             <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input">

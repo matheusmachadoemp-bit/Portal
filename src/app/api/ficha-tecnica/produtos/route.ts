@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
-import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
-
-/** `Product.code` é `@unique` no schema inteiro (não por loja) — ver comentário em `POST`. */
-function isProductCodeConflict(e: unknown): boolean {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "code") ?? true);
-}
+import { createWithAutoCode } from "@/lib/ficha-code";
+import { isProductCategory } from "@/lib/ficha-code-core";
 
 // Checagem de cargo (MANAGER_ROLES) — sem ela, qualquer COLABORADOR com o Perfil de Permissão
 // padrão "Funcionário" (ficha-tecnica:canView=true de fábrica) conseguia ver o custo/fornecedor
@@ -85,10 +80,8 @@ export async function POST(req: Request) {
   if (!name) {
     return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
   }
-  const code = typeof body.code === "string" ? body.code.trim() : "";
-  if (!code) {
-    return NextResponse.json({ error: "Informe o código do produto." }, { status: 400 });
-  }
+  // O código de identificação é sempre gerado pelo sistema (ver `createWithAutoCode`): um `code`
+  // vindo no corpo da requisição é ignorado, pra nunca haver código digitado à mão nem repetido.
   if (body.photoUrl && !isValidBlobUrl(body.photoUrl)) {
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
@@ -103,9 +96,12 @@ export async function POST(req: Request) {
     }
   }
 
-  let product;
-  try {
-    product = await prisma.product.create({
+  if (!isProductCategory(body.category)) {
+    return NextResponse.json({ error: "Selecione uma categoria válida para o produto." }, { status: 400 });
+  }
+  const category: string = body.category;
+  const product = await createWithAutoCode(category, (code) =>
+    prisma.product.create({
       data: {
         empresaId: empresa.id,
         name,
@@ -135,16 +131,8 @@ export async function POST(req: Request) {
         },
       },
       include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
-    });
-  } catch (e) {
-    // `Product.code` é @unique no schema inteiro (não por loja) — o primeiro produto salvo com
-    // código em branco já bloqueava esse caminho antes da validação acima, mas dois produtos
-    // (de categorias/lojas diferentes) ainda podem colidir com o mesmo código digitado à mão.
-    if (isProductCodeConflict(e)) {
-      return NextResponse.json({ error: "Este código já está em uso." }, { status: 409 });
-    }
-    throw e;
-  }
+    })
+  );
 
   return NextResponse.json({ product });
 }
