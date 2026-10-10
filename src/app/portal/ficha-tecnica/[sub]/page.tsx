@@ -186,8 +186,8 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   return (
     <PageContainer title="Ficha Técnica" subtitle={info.label} backHref="/portal/ficha-tecnica" backLabel="Ficha Técnica">
       <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{cmvMedioCard}</div>
         <QualidadePanel
+          cmvMedioCard={cmvMedioCard}
           products={serializedProducts}
           category={info.category}
           initialConfig={{

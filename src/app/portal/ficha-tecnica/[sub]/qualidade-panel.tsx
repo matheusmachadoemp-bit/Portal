@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Settings2 } from "lucide-react";
 import { Section, StatCard, Badge } from "@/components/ui/stat-card";
 import { SortableCardGrid } from "@/components/ui/sortable-stat-cards";
@@ -13,7 +13,6 @@ type ProductForQuality = {
   id: string;
   name: string;
   precoVenda: number;
-  description: string | null;
   updatedAt: string;
   ingredients: { quantidadeUsada: number; percentualPerda: number; ingredient: { precoAtual: number; quantidadeEmbalagem: number } }[];
 };
@@ -23,16 +22,19 @@ export function QualidadePanel({
   category,
   initialConfig,
   canEdit,
+  cmvMedioCard,
 }: {
   products: ProductForQuality[];
   category: string;
   initialConfig: { cmvMaximoPercent: number; diasDesatualizada: number };
   canEdit: boolean;
+  /** Card "CMV médio — <categoria>", exibido como primeiro card do painel (no lugar do antigo "Fichas incompletas"). */
+  cmvMedioCard: ReactNode;
 }) {
   const [config, setConfig] = useState(initialConfig);
   const [showConfig, setShowConfig] = useState(false);
   const [form, setForm] = useState({ cmvMaximoPercent: String(initialConfig.cmvMaximoPercent), diasDesatualizada: String(initialConfig.diasDesatualizada) });
-  const [openBucket, setOpenBucket] = useState<"incompletas" | "cmvAlto" | "ok" | null>(null);
+  const [openBucket, setOpenBucket] = useState<"cmvAlto" | "ok" | null>(null);
 
   const evaluated = useMemo(() => {
     const now = new Date();
@@ -41,16 +43,14 @@ export function QualidadePanel({
       const cmv = cmvPercent(totalCost, p.precoVenda);
       const daysSinceUpdate = differenceInCalendarDays(now, new Date(p.updatedAt));
       const desatualizada = daysSinceUpdate > config.diasDesatualizada;
-      const incompleta = p.ingredients.length === 0 || p.precoVenda <= 0 || !p.description;
       const cmvAlto = cmv > config.cmvMaximoPercent;
-      return { ...p, cmv, desatualizada, incompleta, cmvAlto, daysSinceUpdate };
+      return { ...p, cmv, desatualizada, cmvAlto, daysSinceUpdate };
     });
   }, [products, config]);
 
   const buckets = {
-    incompletas: evaluated.filter((p) => p.incompleta),
     cmvAlto: evaluated.filter((p) => p.cmvAlto),
-    ok: evaluated.filter((p) => !p.desatualizada && !p.incompleta && !p.cmvAlto),
+    ok: evaluated.filter((p) => !p.desatualizada && !p.cmvAlto),
   };
 
   const total = products.length;
@@ -67,7 +67,8 @@ export function QualidadePanel({
     }
   }
 
-  if (total === 0) return null;
+  // Sem produtos não há o que avaliar: só o card de CMV médio (que fica zerado), sem o painel.
+  if (total === 0) return <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{cmvMedioCard}</div>;
 
   return (
     <Section
@@ -84,14 +85,7 @@ export function QualidadePanel({
         storageKey="ficha-tecnica-qualidade-kpi-order"
         className="grid grid-cols-1 md:grid-cols-3 gap-4"
         items={[
-          {
-            key: "fichas-incompletas",
-            content: (
-              <button onClick={() => setOpenBucket("incompletas")} className="text-left w-full">
-                <StatCard label="Fichas incompletas" value={`${buckets.incompletas.length} de ${total}`} icon="AlertTriangle" color="#f59e0b" />
-              </button>
-            ),
-          },
+          { key: "cmv-medio", content: cmvMedioCard },
           {
             key: "cmv-alto",
             content: (
@@ -120,11 +114,7 @@ export function QualidadePanel({
         open={!!openBucket}
         onClose={() => setOpenBucket(null)}
         title={
-          openBucket === "incompletas"
-            ? "Fichas incompletas"
-            : openBucket === "cmvAlto"
-              ? "CMV acima do padrão"
-              : "Fichas OK"
+          openBucket === "cmvAlto" ? "CMV acima do padrão" : "Fichas OK"
         }
         widthClass="max-w-lg"
       >
@@ -136,7 +126,6 @@ export function QualidadePanel({
                 <div className="flex items-center gap-2">
                   <Badge tone={p.cmvAlto ? "danger" : "default"}>CMV {formatPercent(p.cmv)}</Badge>
                   {p.desatualizada && <Badge tone="warning">{p.daysSinceUpdate}d sem atualizar</Badge>}
-                  {p.incompleta && <Badge tone="warning">Incompleta</Badge>}
                 </div>
               </div>
             ))}
