@@ -403,3 +403,119 @@ test("conferência de totais avisa quando a soma lida não bate com a linha TOTA
   assert.equal(r.totalsCheck?.matched, false);
   assert.match(r.detected, /ATENÇÃO conferência de totais/);
 });
+
+// ---------------------------------------------------------------------------
+// Achados da revisão (Teulis): regressões e casos de dinheiro real
+// ---------------------------------------------------------------------------
+
+const OFX2_XML = (lineBreaks: boolean) => {
+  const nl = lineBreaks ? "\n" : "";
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
+    '<?OFX OFXHEADER="200" VERSION="211" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>',
+    "<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><DTSERVER>20261031120000</DTSERVER><LANGUAGE>POR</LANGUAGE></SONRS></SIGNONMSGSRSV1>",
+    "<BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>BRL</CURDEF>",
+    "<BANKACCTFROM><BANKID>001</BANKID><ACCTID>123</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>",
+    "<BANKTRANLIST><DTSTART>20261001</DTSTART><DTEND>20261031</DTEND>",
+    "<STMTTRN><TRNTYPE>CREDIT</TRNTYPE><DTPOSTED>20261002120000</DTPOSTED><TRNAMT>250.00</TRNAMT><FITID>1</FITID><MEMO>PIX RECEBIDO</MEMO></STMTTRN>",
+    "<STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20261003</DTPOSTED><TRNAMT>-120.50</TRNAMT><FITID>2</FITID><MEMO>BOLETO ENERGIA</MEMO></STMTTRN>",
+    "</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>",
+  ].join(nl);
+};
+
+test("OFX 2.x (XML) continua sendo lido, formatado ou numa linha só, e a data fica no dia certo", async () => {
+  for (const lineBreaks of [true, false]) {
+    const r = await parseBankStatement(utf8(OFX2_XML(lineBreaks)));
+    assert.equal(r.format, "OFX");
+    assert.deepEqual(r.transactions.map(brief), [
+      "2026-10-02|ENTRADA|250|PIX RECEBIDO",
+      "2026-10-03|SAIDA|120.5|BOLETO ENERGIA",
+    ]);
+  }
+});
+
+test("OFX 1.x numa linha só: a data também fica no dia certo (sem voltar um dia)", async () => {
+  const sgml = ["OFXHEADER:100", "DATA:OFXSGML", "VERSION:102", "SECURITY:NONE", "ENCODING:USASCII", "CHARSET:1252", "COMPRESSION:NONE", "OLDFILEUID:NONE", "NEWFILEUID:NONE", "",
+    "<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKTRANLIST><STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261001<TRNAMT>10.00<FITID>1<MEMO>X</STMTTRN></BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"].join("\n");
+  const r = await parseBankStatement(latin1(sgml));
+  assert.deepEqual(r.transactions.map(brief), ["2026-10-01|ENTRADA|10|X"]);
+});
+
+test("indicador 'Déb.'/'Créd.' (com ponto e acento) define a direção", async () => {
+  const text = ["Data;Histórico;Valor;Tipo", "01/10/2026;TARIFA;12,00;Déb.", "02/10/2026;DEPOSITO;300,00;Créd.", "03/10/2026;PAGAMENTO;50,00;Déb."].join("\n");
+  const r = await parseBankStatement(latin1(text));
+  assert.deepEqual(r.transactions.map((t) => `${t.direction}${t.valor}`), ["SAIDA12", "ENTRADA300", "SAIDA50"]);
+  assert.ok(!r.transactions[0].descricao.includes("Déb"), "a coluna Tipo não vira descrição quando é indicador");
+});
+
+test("quando o valor já tem sinal, o sinal manda e 'Tipo = Débito' (modalidade do cartão) não inverte a direção", async () => {
+  const text = ["Data;Descrição;Valor;Tipo", "01/10/2026;Venda cartão;150,00;Débito", "02/10/2026;Estorno;-20,00;Débito", "03/10/2026;Venda cartão;80,00;Crédito"].join("\n");
+  const r = await parseBankStatement(utf8(text));
+  assert.deepEqual(r.transactions.map((t) => `${t.direction}${t.valor}`), ["ENTRADA150", "SAIDA20", "ENTRADA80"]);
+});
+
+test("descrição que só COMEÇA com Total/Saldo/Resumo é lançamento legítimo; saldo e total de verdade são ignorados", async () => {
+  const text = [
+    "data;descricao;valor",
+    "01/10/2026;SALDO ANTERIOR;",
+    "02/10/2026;Total Express frete;-120,00",
+    "03/10/2026;Saldo devedor cartao;-50,00",
+    "04/10/2026;TOTAL PASS academia;-89,90",
+    "05/10/2026;Resumo vendas Saipos;1500,00",
+    "06/10/2026;Venda normal;10,00",
+    "TOTAL;;",
+  ].join("\n");
+  const r = await parseBankStatement(utf8(text));
+  assert.deepEqual(r.transactions.map((t) => t.descricao), [
+    "Total Express frete",
+    "Saldo devedor cartao",
+    "TOTAL PASS academia",
+    "Resumo vendas Saipos",
+    "Venda normal",
+  ]);
+  assert.equal(r.ignored, 2);
+  assert.deepEqual(r.ignoredSamples, ["SALDO ANTERIOR", "TOTAL"]);
+});
+
+test("crédito e débito '0,00' nas duas colunas é linha sem movimento (ignorada, não erro)", async () => {
+  const r = await parseBankStatement(utf8(["Data;Descrição;Crédito;Débito", "01/10/2026;AJUSTE;0,00;0,00", "02/10/2026;PIX;10,00;"].join("\n")));
+  assert.equal(r.transactions.length, 1);
+  assert.equal(r.errors.length, 0);
+  assert.equal(r.ignored, 1);
+});
+
+test("PDF com coluna D/C separada: valor sem sinal usa o indicador (tarifa 'D' é saída)", async () => {
+  const doc = new jsPDF({ unit: "pt", format: [900, 600] });
+  doc.setFontSize(8);
+  const T = (text: string, x: number, y: number, align: "left" | "right" = "left") => doc.text(text, x, y, { align });
+  T("Extrato outubro/2026", 47, 40);
+  T("Data", 47, 100);
+  T("Histórico", 100, 100);
+  T("Valor", 520, 100, "right");
+  T("D/C", 560, 100);
+  const rows: [string, string, string, string][] = [
+    ["01/10", "TARIFA PACOTE", "12,00", "D"],
+    ["02/10", "DEPOSITO", "300,00", "C"],
+    ["03/10", "PAGAMENTO FORNECEDOR", "1.250,75", "D"],
+  ];
+  rows.forEach(([d, h, v, dc], i) => {
+    const y = 120 + i * 10;
+    T(d, 47, y);
+    T(h, 100, y);
+    T(v, 520, y, "right");
+    T(dc, 560, y);
+  });
+  const r = await parseBankStatement(Buffer.from(doc.output("arraybuffer")));
+  assert.deepEqual(r.transactions.map((t) => `${t.direction}${t.valor}`), ["SAIDA12", "ENTRADA300", "SAIDA1250.75"]);
+  assert.equal(r.errors.length, 0);
+});
+
+test("entradas hostis não travam o servidor (tempo limitado)", async () => {
+  const t0 = Date.now();
+  // O que importa aqui é terminar rápido (antes levava de dezenas de segundos a minutos); o resultado
+  // (erro de formato ou nenhum lançamento) não importa.
+  await parseBankStatement(utf8('a"'.repeat(150000))).catch(() => null);
+  await parseBankStatement(utf8(`Data;${"(".repeat(120000)};Valor\n01/10/2026;x;1,00\n`)).catch(() => null);
+  assert.equal(parseDateCell("seg" + " ".repeat(40000) + "x"), null);
+  assert.ok(Date.now() - t0 < 3000, `demorou ${Date.now() - t0}ms`);
+});

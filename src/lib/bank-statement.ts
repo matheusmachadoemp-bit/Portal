@@ -1,7 +1,7 @@
 import { Extractor, Reader, type NormalizedTransaction } from "ofx-data-extractor";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 import { spStartOfDay } from "@/lib/timezone";
-import { pdfPagesToTable, readPdfPages } from "@/lib/bank-statement-pdf";
+import { PdfTooLargeError, pdfPagesToTable, readPdfPages } from "@/lib/bank-statement-pdf";
 
 /**
  * Leitura de extrato bancário para a Conciliação Bancária (Financeiro).
@@ -40,6 +40,8 @@ export type ParsedStatement = {
   errors: string[];
   /** Linhas de saldo, total, rodapé ou valor zero, deliberadamente não importadas. */
   ignored: number;
+  /** Amostra (até 5) das descrições ignoradas, pra o usuário conferir o que ficou de fora. */
+  ignoredSamples: string[];
   /** Descrição legível do que foi reconhecido (formato, separador, colunas...). */
   detected: string;
   /** Conferência dos saldos que o próprio extrato imprime contra a soma dos lançamentos lidos (null = extrato sem coluna de saldo). */
@@ -118,6 +120,7 @@ export function parseDelimited(text: string, delimiter: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
+  let fieldBlank = true; // campo só com espaços até agora (evita field.trim() a cada caractere)
   let inQuotes = false;
 
   for (let i = 0; i < text.length; i++) {
@@ -135,20 +138,24 @@ export function parseDelimited(text: string, delimiter: string): string[][] {
       }
       continue;
     }
-    if (ch === '"' && field.trim() === "") {
+    if (ch === '"' && fieldBlank) {
       inQuotes = true;
       field = "";
+      fieldBlank = false;
     } else if (ch === delimiter) {
       row.push(field.trim());
       field = "";
+      fieldBlank = true;
     } else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && text[i + 1] === "\n") i++;
       row.push(field.trim());
       field = "";
+      fieldBlank = true;
       rows.push(row);
       row = [];
     } else {
       field += ch;
+      if (fieldBlank && ch.trim() !== "") fieldBlank = false;
     }
   }
   row.push(field.trim());
@@ -193,6 +200,7 @@ type ColumnRole = "date" | "description" | "value" | "credit" | "debit" | "indic
 
 export function normalizeHeader(h: string): string {
   return h
+    .slice(0, 100) // cabeçalho real é curto; evita trabalho quadrático em célula gigante
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
@@ -289,11 +297,7 @@ function roleOfHeader(cell: string): ColumnRole {
   return ROLE_ALIASES[normalizeHeader(cell)] ?? "ignore";
 }
 
-const INDICATOR_WORDS = new Set([
-  "d", "c", "db", "cr", "deb", "cred", "debito", "credito", "entrada", "saida", "e", "s", "+", "-",
-]);
-
-function indicatorDirection(raw: string): "ENTRADA" | "SAIDA" | null {
+export function indicatorDirection(raw: string): "ENTRADA" | "SAIDA" | null {
   const w = raw
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -372,7 +376,7 @@ function findHeaderLayout(rows: Cell[][]): Layout | null {
       .slice(best.index + 1, best.index + 60)
       .map((r) => cellText(r[layout.indicator!]).toLowerCase())
       .filter((c) => c !== "");
-    const ok = cells.length > 0 && cells.filter((c) => INDICATOR_WORDS.has(c.normalize("NFD").replace(/[̀-ͯ]/g, ""))).length / cells.length >= 0.8;
+    const ok = cells.length > 0 && cells.filter((c) => indicatorDirection(c) !== null).length / cells.length >= 0.8;
     if (!ok) {
       layout.descriptions.push(layout.indicator);
       layout.descriptions.sort((a, b) => a - b);
@@ -425,7 +429,7 @@ export function parseDateCell(raw: Cell | undefined, order: DateOrder = "DMY"): 
   // de 2026", "Sex, 31/07/2026", "segunda-feira 05/10/2026"): tira esse prefixo e lê o resto.
   s = s
     .replace(
-      /^(?:segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|domingo|seg|ter|qua|qui|sex|sab|sáb|dom)(?:-feira)?\.?\s*[,\-–]?\s*(?=\d)/i,
+      /^(?:segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|domingo|seg|ter|qua|qui|sex|sab|sáb|dom)(?:-feira)?\.?[\s,\-–]*(?=\d)/i,
       ""
     )
     .trim();
@@ -553,7 +557,13 @@ export function parseMoney(raw: Cell | undefined, decimal: "," | "." = ","): num
 // Leitura da tabela (CSV ou planilha)
 // ---------------------------------------------------------------------------
 
+// Linha que COMEÇA como saldo/total/resumo (candidata a ser ignorada)...
 const SALDO_LINE = /^\s*(s\s*a\s*l\s*d\s*o\b|saldo\b|total\b|totais\b|resumo\b)/i;
+// ...e quando é inequivocamente saldo ou total ("SALDO ANTERIOR", "SALDO EM 31/08", "S A L D O", "TOTAL",
+// "TOTAL DO PERÍODO"). Descrição que só começa com a palavra ("Total Express frete", "Saldo devedor
+// cartão", "TOTAL PASS academia") é lançamento legítimo se tem data e valor de movimento.
+const SALDO_SPECIFIC =
+  /^\s*(?:s\s*a\s*l\s*d\s*o(?:\s+(?:anterior|inicial|final|atual|parcial|dispon[ií]vel|do\s+dia|bloqueado|em\s+\d{1,2}\/\d{1,2}.*))?|(?:total|totais)(?:\s+(?:do\s+|de\s+|dos\s+)?(?:per[ií]odo|geral|dia|m[eê]s|lan[cç]amentos|cr[eé]ditos|d[eé]bitos|entradas|sa[ií]das))?)\s*[:\-]?\s*$/i;
 
 function inferLayoutFromContent(rows: Cell[][]): Layout | null {
   const sample = rows.slice(0, 200);
@@ -611,15 +621,24 @@ function describeLayout(layout: Layout): string {
   return `cabeçalho na linha ${layout.headerRow + 1} (${parts.join(", ")})`;
 }
 
+/** Teto de linhas de uma planilha/texto de extrato (um mês grande tem poucos milhares). */
+export const MAX_STATEMENT_ROWS = 50000;
+
 export function parseTable(rows: Cell[][]): {
   transactions: StatementTransaction[];
   errors: string[];
   ignored: number;
+  ignoredSamples: string[];
   layoutDescription: string;
   balanceCheck: { checked: number; matched: number } | null;
   totalsCheck: { matched: boolean; credit: number; debit: number; reportedCredit: number; reportedDebit: number } | null;
 } {
   if (rows.length === 0) throw new StatementFormatError("O arquivo está vazio.");
+  if (rows.length > MAX_STATEMENT_ROWS) {
+    throw new StatementFormatError(
+      `O arquivo tem linhas demais (mais de ${MAX_STATEMENT_ROWS.toLocaleString("pt-BR")}). Importe um período menor.`
+    );
+  }
 
   let layout = findHeaderLayout(rows);
   if (!layout) layout = inferLayoutFromContent(rows);
@@ -639,10 +658,16 @@ export function parseTable(rows: Cell[][]): {
   const col = (k: number | null) => (k === null ? [] : dataRows.map((r) => r[k]));
   const order = detectDateOrder(col(layout.date));
   const decimal = detectDecimal([...col(layout.value), ...col(layout.credit), ...col(layout.debit)]);
+  // Se a coluna de valor já traz sinal (algum negativo), o sinal manda e o indicador D/C é ignorado:
+  // em extrato de adquirente/cartão, "Tipo = Débito" costuma ser a modalidade do cartão, não a
+  // direção do dinheiro.
+  const valueHasSigns = layout.value !== null && col(layout.value).some((c) => (parseMoney(c, decimal) ?? 0) < 0);
+  const useIndicator = layout.indicator !== null && !valueHasSigns;
 
   const transactions: StatementTransaction[] = [];
   const errors: string[] = [];
   let ignored = 0;
+  const ignoredSamples: string[] = [];
   // Conferência de saldo (só se o arquivo tem coluna de saldo): parte do saldo inicial impresso no
   // extrato ("SALDO ANTERIOR"/"SALDO EM 31/08"), soma os lançamentos e compara com cada saldo que o
   // banco imprime. Em centavos inteiros pra não acumular erro de ponto flutuante.
@@ -671,9 +696,20 @@ export function parseTable(rows: Cell[][]): {
       .filter((t, i, arr) => t && arr.indexOf(t) === i)
       .join(" - ");
 
-    if (SALDO_LINE.test(description) || SALDO_LINE.test(cellText(row[layout!.date]))) {
+    const dateCellText = cellText(row[layout!.date]);
+    const startsLikeBalance = SALDO_LINE.test(description) || SALDO_LINE.test(dateCellText);
+    const hasMovement = [layout!.value, layout!.credit, layout!.debit].some((k) => {
+      if (k === null) return false;
+      const v = parseMoney(row[k], decimal);
+      return v !== null && v !== 0;
+    });
+    const isBalanceLine =
+      startsLikeBalance &&
+      (SALDO_SPECIFIC.test(description) || SALDO_SPECIFIC.test(dateCellText) || !parseDateCell(row[layout!.date], order) || !hasMovement);
+    if (isBalanceLine) {
       ignored++;
-      if (/^\s*(total|totais)\b/i.test(description) || /^\s*(total|totais)\b/i.test(cellText(row[layout!.date]))) {
+      if (ignoredSamples.length < 5 && !ignoredSamples.includes(description || dateCellText)) ignoredSamples.push(description || dateCellText);
+      if (/^\s*(total|totais)\b/i.test(description) || /^\s*(total|totais)\b/i.test(dateCellText)) {
         const c = layout!.credit !== null ? parseMoney(row[layout!.credit], decimal) : null;
         const d = layout!.debit !== null ? parseMoney(row[layout!.debit], decimal) : null;
         if (c !== null && d !== null) reportedTotals = { credit: Math.abs(c), debit: Math.abs(d) };
@@ -710,13 +746,14 @@ export function parseTable(rows: Cell[][]): {
       }
       if (credit) signed = Math.abs(credit);
       else if (debit) signed = -Math.abs(debit);
+      else if (credit === 0 || debit === 0) signed = 0; // "0,00" nas duas colunas: sem movimento
     }
     if (signed === null && layout!.value !== null) {
       const v = parseMoney(row[layout!.value], decimal);
       if (v !== null) {
         signed = v;
-        if (layout!.indicator !== null) {
-          const dir = indicatorDirection(cellText(row[layout!.indicator]));
+        if (useIndicator) {
+          const dir = indicatorDirection(cellText(row[layout!.indicator!]));
           if (dir) signed = dir === "SAIDA" ? -Math.abs(v) : Math.abs(v);
         }
       }
@@ -749,6 +786,7 @@ export function parseTable(rows: Cell[][]): {
     transactions,
     errors,
     ignored,
+    ignoredSamples,
     layoutDescription: [base, ...extras].join(" · "),
     balanceCheck: layout.balance !== null && openingCents !== null && checked > 0 ? { checked, matched } : null,
     totalsCheck: (() => {
@@ -788,10 +826,13 @@ export function describeBalanceCheck(check: { checked: number; matched: number }
 function decodeOfxBuffer(buffer: Buffer): string {
   const utf8Text = buffer.toString("utf-8");
   const text = utf8Text.includes("�") ? buffer.toString("latin1") : utf8Text;
-  // Alguns bancos exportam o OFX inteiro (ou blocos grandes) numa linha só, sem quebra entre as
+  // Alguns bancos exportam o OFX 1.x inteiro (ou blocos grandes) numa linha só, sem quebra entre as
   // tags. A biblioteca lê bem "um campo por linha", então garante uma quebra antes de cada tag
   // (valores de OFX nunca contêm "<", então é seguro).
-  return text.replace(/[ \t]*<(?=\/?[A-Za-z?])/g, "\n<");
+  // Só no OFX 1.x (SGML, que começa com "OFXHEADER:"): no OFX 2.x (XML) a biblioteca lê o texto
+  // como está, e quebrar linha antes de cada tag (inclusive </MEMO>, <?xml) faz ele não achar nada.
+  if (/OFXHEADER\s*:/i.test(text.slice(0, 500))) return text.replace(/[ \t]*<(?=\/?[A-Za-z?])/g, "\n<");
+  return text;
 }
 
 function parseOfx(buffer: Buffer): { transactions: StatementTransaction[]; errors: string[] } {
@@ -810,11 +851,17 @@ function parseOfx(buffer: Buffer): { transactions: StatementTransaction[]; error
 
   list.forEach((t, idx) => {
     const label = `Transação ${idx + 1}`;
-    const date = t.postedAt instanceof Date ? t.postedAt : null;
-    if (!date || Number.isNaN(date.getTime())) {
+    const posted = t.postedAt instanceof Date && !Number.isNaN(t.postedAt.getTime()) ? t.postedAt : null;
+    if (!posted) {
       errors.push(`${label}: data inválida ("${String(t.raw?.DTPOSTED ?? "")}").`);
       return;
     }
+    // A biblioteca devolve o dia do OFX como meia-noite UTC; a tela formata no fuso do navegador
+    // (São Paulo), o que mostraria o dia ANTERIOR. Reancora o mesmo dia do calendário em meia-noite
+    // de São Paulo, igual CSV/Excel/PDF.
+    const date = spStartOfDay(
+      `${posted.getUTCFullYear()}-${String(posted.getUTCMonth() + 1).padStart(2, "0")}-${String(posted.getUTCDate()).padStart(2, "0")}`
+    );
     const valor = typeof t.amount === "number" ? t.amount : NaN;
     if (Number.isNaN(valor) || valor === 0) {
       errors.push(`${label}: valor inválido ("${String(t.raw?.TRNAMT ?? "")}").`);
@@ -842,7 +889,12 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
       let pages;
       try {
         pages = await readPdfPages(buffer);
-      } catch {
+      } catch (err) {
+        if (err instanceof PdfTooLargeError) {
+          throw new StatementFormatError(
+            "Este PDF é grande demais para importar de uma vez. Baixe o extrato de um período menor (por exemplo, um mês) ou, melhor, em OFX."
+          );
+        }
         throw new StatementFormatError(
           "Não consegui abrir este PDF (pode estar protegido por senha ou corrompido). Baixe o extrato do banco novamente, de preferência em OFX."
         );
@@ -864,6 +916,7 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         transactions: parsed.transactions,
         errors: parsed.errors,
         ignored: parsed.ignored,
+        ignoredSamples: parsed.ignoredSamples,
         balanceCheck: parsed.balanceCheck,
         totalsCheck: parsed.totalsCheck,
         detected: `PDF de extrato (texto) · ${table.note} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}${describeTotalsCheck(parsed.totalsCheck)}`,
@@ -888,6 +941,7 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         transactions,
         errors,
         ignored: 0,
+        ignoredSamples: [],
         balanceCheck: null,
         totalsCheck: null,
         detected: "OFX (extrato bancário padrão), lido automaticamente",
@@ -906,6 +960,7 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         transactions: parsed.transactions,
         errors: parsed.errors,
         ignored: parsed.ignored,
+        ignoredSamples: parsed.ignoredSamples,
         balanceCheck: parsed.balanceCheck,
         totalsCheck: parsed.totalsCheck,
         detected: `Planilha Excel (.xlsx) · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}${describeTotalsCheck(parsed.totalsCheck)}`,
@@ -923,6 +978,7 @@ export async function parseBankStatement(buffer: Buffer): Promise<ParsedStatemen
         transactions: parsed.transactions,
         errors: parsed.errors,
         ignored: parsed.ignored,
+        ignoredSamples: parsed.ignoredSamples,
         balanceCheck: parsed.balanceCheck,
         totalsCheck: parsed.totalsCheck,
         detected: `Texto/CSV · separador ${delimiterName} · acentuação ${encoding} · ${parsed.layoutDescription}${describeBalanceCheck(parsed.balanceCheck)}${describeTotalsCheck(parsed.totalsCheck)}`,

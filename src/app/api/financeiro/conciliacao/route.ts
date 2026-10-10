@@ -4,6 +4,9 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { resolveMatchLabels } from "@/lib/bank-reconciliation";
 import { hasModulePermission } from "@/lib/authz";
+import { spEndOfDay, spStartOfDay } from "@/lib/timezone";
+
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -21,14 +24,25 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const bankAccountId = searchParams.get("bankAccountId");
   const status = searchParams.get("status");
+  const direction = searchParams.get("direction");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+
+  // Período em DIAS de São Paulo ("YYYY-MM-DD"), inclusive nas duas pontas: os lançamentos ficam
+  // gravados em meia-noite de SP, então "até 31/07" precisa ir até o fim desse dia (e não até a
+  // meia-noite UTC de 31/07, que cortava o último dia). Aceita só início, só fim, ou os dois.
+  const validFrom = from && DATE_KEY.test(from) ? spStartOfDay(from) : null;
+  const validTo = to && DATE_KEY.test(to) ? spEndOfDay(to) : null;
+  if ((validFrom && Number.isNaN(validFrom.getTime())) || (validTo && Number.isNaN(validTo.getTime()))) {
+    return NextResponse.json({ error: "Período inválido." }, { status: 400 });
+  }
 
   const where = {
     empresaId: { in: empresaIdsForContext(ctx) },
     ...(bankAccountId ? { bankAccountId } : {}),
     ...(status ? { status: status as never } : {}),
-    ...(from && to ? { date: { gte: new Date(from), lte: new Date(to) } } : {}),
+    ...(direction === "ENTRADA" || direction === "SAIDA" ? { direction: direction as "ENTRADA" | "SAIDA" } : {}),
+    ...(validFrom || validTo ? { date: { ...(validFrom ? { gte: validFrom } : {}), ...(validTo ? { lte: validTo } : {}) } } : {}),
   };
 
   const [transactions, totals] = await Promise.all([

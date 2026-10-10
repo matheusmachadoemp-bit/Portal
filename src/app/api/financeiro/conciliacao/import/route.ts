@@ -11,6 +11,10 @@ import { parseBankStatement, StatementFormatError, type ParsedStatement } from "
 // e o comentário histórico em rh/employees/import/route.ts): a tela de conciliação formata com
 // `format(new Date(t.date), "dd/MM/yyyy")` no fuso local do navegador.
 
+// Teto de tamanho do arquivo (um extrato mensal, mesmo em PDF, tem poucos MB) e de tempo da rota.
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,10 +33,24 @@ export async function POST(req: Request) {
     );
   }
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch {
+    return NextResponse.json(
+      { error: "Não foi possível receber o arquivo (talvez seja grande demais). Tente um arquivo menor." },
+      { status: 400 }
+    );
+  }
+  const file = formData.get("file");
   const bankAccountId = formData.get("bankAccountId") as string | null;
-  if (!file) return NextResponse.json({ error: "Arquivo não informado." }, { status: 400 });
+  if (!(file instanceof File)) return NextResponse.json({ error: "Arquivo não informado." }, { status: 400 });
+  if (file.size > MAX_FILE_BYTES) {
+    return NextResponse.json(
+      { error: "Arquivo grande demais (máximo 8 MB). Importe um período menor ou baixe o extrato em OFX." },
+      { status: 413 }
+    );
+  }
   if (!bankAccountId) return NextResponse.json({ error: "Selecione a conta bancária do extrato." }, { status: 400 });
 
   const bankAccount = await prisma.bankAccount.findFirst({
@@ -47,7 +65,8 @@ export async function POST(req: Request) {
     statement = await parseBankStatement(buffer);
   } catch (err) {
     if (err instanceof StatementFormatError) return NextResponse.json({ error: err.message }, { status: 400 });
-    return NextResponse.json({ error: "Não foi possível ler este arquivo." }, { status: 400 });
+    console.error("[conciliacao/import] erro inesperado ao ler o extrato:", err);
+    return NextResponse.json({ error: "Não foi possível ler este arquivo." }, { status: 500 });
   }
 
   const { transactions: parsedRows, errors } = statement;
@@ -90,6 +109,7 @@ export async function POST(req: Request) {
     format: statement.format,
     detected: statement.detected,
     ignored: statement.ignored,
+    ignoredSamples: statement.ignoredSamples,
     balanceCheck: statement.balanceCheck,
     totalsCheck: statement.totalsCheck,
     totalEntradas,

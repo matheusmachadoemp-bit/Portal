@@ -25,7 +25,7 @@ export default async function ConciliacaoBancariaPage() {
       where: { empresaId: { in: empresaIds } },
       orderBy: { date: "desc" },
       include: { bankAccount: true, import: { select: { fileName: true } } },
-      take: 200,
+      take: 5000, // teto de segurança; com o período/direção selecionados a tela busca só o necessário
     }),
   ]);
 

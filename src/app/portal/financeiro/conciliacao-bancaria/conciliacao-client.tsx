@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { spDateKey } from "@/lib/timezone";
 import { format } from "date-fns";
 import { CheckCircle2, Circle, EyeOff, Upload, ArrowDownCircle, ArrowUpCircle, Wand2, Link2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
@@ -35,6 +36,28 @@ const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" |
   IGNORADO: "default",
 };
 
+type PeriodPreset = "all" | "thisMonth" | "lastMonth" | "last30" | "custom";
+
+/** Início e fim ("YYYY-MM-DD", dias de São Paulo) de cada atalho de período; "" = sem limite. */
+function presetRange(preset: PeriodPreset): { from: string; to: string } {
+  const today = spDateKey();
+  const [y, m] = today.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const lastDay = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 0)).getUTCDate(); // mm 1-12 → último dia do mês mm
+  if (preset === "thisMonth") return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay(y, m))}` };
+  if (preset === "lastMonth") {
+    const py = m === 1 ? y - 1 : y;
+    const pm = m === 1 ? 12 : m - 1;
+    return { from: `${py}-${pad(pm)}-01`, to: `${py}-${pad(pm)}-${pad(lastDay(py, pm))}` };
+  }
+  if (preset === "last30") {
+    const d = new Date(`${today}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 29);
+    return { from: d.toISOString().slice(0, 10), to: today };
+  }
+  return { from: "", to: "" };
+}
+
 export function ConciliacaoClient({
   accounts,
   initialTransactions,
@@ -47,6 +70,10 @@ export function ConciliacaoClient({
   const [transactions, setTransactions] = useState(initialTransactions);
   const [filterAccount, setFilterAccount] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterDirection, setFilterDirection] = useState("");
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importAccountId, setImportAccountId] = useState(accounts[0]?.id ?? "");
   const [importing, setImporting] = useState(false);
@@ -56,8 +83,11 @@ export function ConciliacaoClient({
     errors: string[];
     detected: string | null;
     ignored: number;
+    ignoredSamples: string[];
     totalEntradas: number;
     totalSaidas: number;
+    /** Conferência de saldos/totais que NÃO bateu (texto de aviso), ou null se tudo certo/sem conferência. */
+    checkWarning: string | null;
   } | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [matching, setMatching] = useState(false);
@@ -69,9 +99,15 @@ export function ConciliacaoClient({
       transactions.filter((t) => {
         if (filterAccount && t.bankAccountName !== accounts.find((a) => a.id === filterAccount)?.name) return false;
         if (filterStatus && t.status !== filterStatus) return false;
+        if (filterDirection && t.direction !== filterDirection) return false;
+        if (dateFrom || dateTo) {
+          const day = spDateKey(new Date(t.date)); // dia no fuso de São Paulo, igual ao que a tela mostra
+          if (dateFrom && day < dateFrom) return false;
+          if (dateTo && day > dateTo) return false;
+        }
         return true;
       }),
-    [transactions, filterAccount, filterStatus, accounts]
+    [transactions, filterAccount, filterStatus, filterDirection, dateFrom, dateTo, accounts]
   );
 
   const summary = useMemo(() => {
@@ -81,10 +117,17 @@ export function ConciliacaoClient({
     return { totalEntradas, totalSaidas, saldo: totalEntradas - totalSaidas, pendentes };
   }, [filtered]);
 
-  async function refresh() {
+  /** Busca no servidor com os filtros atuais (ou com `overrides`, quando um filtro acabou de mudar e o estado ainda não atualizou). */
+  async function refresh(overrides: { direction?: string; from?: string; to?: string } = {}) {
+    const direction = overrides.direction ?? filterDirection;
+    const from = overrides.from ?? dateFrom;
+    const to = overrides.to ?? dateTo;
     const params = new URLSearchParams();
     if (filterAccount) params.set("bankAccountId", filterAccount);
     if (filterStatus) params.set("status", filterStatus);
+    if (direction) params.set("direction", direction);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
     const res = await fetch(`/api/financeiro/conciliacao?${params.toString()}`);
     const data = await res.json();
     setTransactions(
@@ -157,13 +200,26 @@ export function ConciliacaoClient({
       const res = await fetch("/api/financeiro/conciliacao/import", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {
-        setImportError(data?.error ?? "Erro ao importar o extrato.");
+        setImportError(
+          [data?.error ?? "Erro ao importar o extrato.", data?.detected ? `Formato reconhecido: ${data.detected}.` : null]
+            .filter(Boolean)
+            .join(" ")
+        );
+        if (Array.isArray(data?.errors) && data.errors.length > 0) {
+          setImportResult({ imported: 0, errors: data.errors, detected: null, ignored: 0, ignoredSamples: [], totalEntradas: 0, totalSaidas: 0, checkWarning: null });
+        }
       } else {
         setImportResult({
           imported: data.imported,
           errors: data.errors ?? [],
           detected: data.detected ?? null,
           ignored: data.ignored ?? 0,
+          ignoredSamples: data.ignoredSamples ?? [],
+          checkWarning:
+            (data.balanceCheck && data.balanceCheck.matched < data.balanceCheck.checked) ||
+            (data.totalsCheck && data.totalsCheck.matched === false)
+              ? "A conferência automática de saldos/totais NÃO bateu. Confira os lançamentos importados com o seu extrato antes de conciliar."
+              : null,
           totalEntradas: data.totalEntradas ?? 0,
           totalSaidas: data.totalSaidas ?? 0,
         });
@@ -218,6 +274,69 @@ export function ConciliacaoClient({
                   <option value="CONCILIADO">Conciliado</option>
                   <option value="IGNORADO">Ignorado</option>
                 </select>
+                <select
+                  value={filterDirection}
+                  onChange={(e) => {
+                    setFilterDirection(e.target.value);
+                    refresh({ direction: e.target.value });
+                  }}
+                  className="input !w-auto"
+                  aria-label="Filtrar por entrada ou saída"
+                >
+                  <option value="">Entradas e saídas</option>
+                  <option value="ENTRADA">Só entradas</option>
+                  <option value="SAIDA">Só saídas</option>
+                </select>
+                <select
+                  value={periodPreset}
+                  onChange={(e) => {
+                    const preset = e.target.value as PeriodPreset;
+                    setPeriodPreset(preset);
+                    if (preset === "custom") return; // espera o usuário escolher as datas
+                    const range = presetRange(preset);
+                    setDateFrom(range.from);
+                    setDateTo(range.to);
+                    refresh({ from: range.from, to: range.to });
+                  }}
+                  className="input !w-auto"
+                  aria-label="Filtrar por período"
+                >
+                  <option value="all">Todo o período</option>
+                  <option value="thisMonth">Este mês</option>
+                  <option value="lastMonth">Mês passado</option>
+                  <option value="last30">Últimos 30 dias</option>
+                  <option value="custom">Período personalizado</option>
+                </select>
+                {periodPreset === "custom" && (
+                  <>
+                    <label className="flex items-center gap-1.5 text-xs text-nord-gray">
+                      De
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        max={dateTo || undefined}
+                        onChange={(e) => {
+                          setDateFrom(e.target.value);
+                          refresh({ from: e.target.value });
+                        }}
+                        className="input !w-auto"
+                      />
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-nord-gray">
+                      até
+                      <input
+                        type="date"
+                        value={dateTo}
+                        min={dateFrom || undefined}
+                        onChange={(e) => {
+                          setDateTo(e.target.value);
+                          refresh({ to: e.target.value });
+                        }}
+                        className="input !w-auto"
+                      />
+                    </label>
+                  </>
+                )}
                 {canImport && (
                   <button onClick={autoMatch} disabled={matching} className="btn-outline">
                     <Wand2 size={13} /> {matching ? "Conciliando..." : "Conciliar automaticamente"}
@@ -238,7 +357,7 @@ export function ConciliacaoClient({
                 Vínculo: t.matchedLabel ?? "",
               }))
             }
-            onRefresh={refresh}
+            onRefresh={() => refresh()}
             onAdd={canImport ? openImport : undefined}
             addLabel="Importar extrato"
           />
@@ -348,13 +467,31 @@ export function ConciliacaoClient({
       <Modal open={showImport} onClose={() => setShowImport(false)} title="Importar extrato bancário">
         <FormError message={importError} />
         {importResult && (
-          <div className="mb-3 p-3 rounded-lg bg-nord-success/10 border border-nord-success/30">
-            <p className="text-xs text-nord-success">{importResult.imported} lançamento(s) importado(s) com sucesso.</p>
+          <div
+            className={`mb-3 p-3 rounded-lg border ${
+              importResult.imported > 0 ? "bg-nord-success/10 border-nord-success/30" : "bg-nord-warning/10 border-nord-warning/30"
+            }`}
+          >
+            {importResult.imported > 0 && (
+              <p className="text-xs text-nord-success">{importResult.imported} lançamento(s) importado(s) com sucesso.</p>
+            )}
+            {importResult.imported === 0 && <p className="text-xs text-nord-warning">Nenhum lançamento foi importado. Problemas encontrados:</p>}
+            {importResult.imported > 0 && (
             <p className="mt-1 text-xs text-nord-gray">
               Entradas: <strong className="text-white">{formatCurrency(importResult.totalEntradas)}</strong> · Saídas:{" "}
               <strong className="text-white">{formatCurrency(importResult.totalSaidas)}</strong>
-              {importResult.ignored > 0 && <> · {importResult.ignored} linha(s) de saldo/total ignorada(s)</>}
+              {importResult.ignored > 0 && (
+                <>
+                  {" "}
+                  · {importResult.ignored} linha(s) ignorada(s) (saldo, total ou valor zero
+                  {importResult.ignoredSamples.length > 0 && <>: {importResult.ignoredSamples.join("; ")}</>})
+                </>
+              )}
             </p>
+            )}
+            {importResult.checkWarning && (
+              <p className="mt-2 text-xs font-medium text-nord-warning">⚠ {importResult.checkWarning}</p>
+            )}
             {importResult.detected && (
               <p className="mt-1 text-xs text-nord-gray">
                 Formato reconhecido: <span className="text-white">{importResult.detected}</span>. Confira se bate com o seu extrato.

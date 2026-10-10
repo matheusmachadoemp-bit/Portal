@@ -50,7 +50,9 @@ export function QualidadePanel({
 
   const buckets = {
     cmvAlto: evaluated.filter((p) => p.cmvAlto),
-    ok: evaluated.filter((p) => !p.desatualizada && !p.cmvAlto),
+    // "OK" = ficha com ingredientes e preço de venda, atualizada e com CMV dentro do padrão (ficha sem
+    // ingredientes/preço tem CMV 0% e não deve contar como "OK" só por isso).
+    ok: evaluated.filter((p) => !p.desatualizada && !p.cmvAlto && p.ingredients.length > 0 && p.precoVenda > 0),
   };
 
   const total = products.length;

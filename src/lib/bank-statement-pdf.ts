@@ -25,22 +25,39 @@ export type PdfPage = PdfToken[];
 type Cell = string | number;
 type RoleOf = (headerText: string) => string;
 
+/** Limites contra PDF gigante/malicioso (um extrato mensal real tem dezenas de páginas). */
+export const MAX_PDF_PAGES = 300;
+export const MAX_PDF_TOKENS_PER_PAGE = 30000;
+
+export class PdfTooLargeError extends Error {}
+
 export async function readPdfPages(buffer: Buffer): Promise<PdfPage[]> {
   await ensureFakeWorkerGlobal();
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const doc = await pdfjsLib.getDocument({
+  const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
     disableFontFace: true,
     standardFontDataUrl: standardFontDataUrl(),
-  }).promise;
+  });
+  try {
+    return await readPages(await loadingTask.promise);
+  } finally {
+    // Libera a memória do documento (sem isto, cada leitura deixava ~250 KB retidos).
+    await loadingTask.destroy().catch(() => {});
+  }
+}
 
+async function readPages(doc: { numPages: number; getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: unknown[] }> }> }): Promise<PdfPage[]> {
+  if (doc.numPages > MAX_PDF_PAGES) throw new PdfTooLargeError(`PDF com páginas demais (${doc.numPages}).`);
   const pages: PdfPage[] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const content = await page.getTextContent();
+    if (content.items.length > MAX_PDF_TOKENS_PER_PAGE) throw new PdfTooLargeError(`Página ${p} com texto demais.`);
     const tokens: PdfToken[] = [];
-    for (const it of content.items) {
-      if (!("str" in it)) continue;
+    for (const raw of content.items) {
+      const it = raw as { str?: string; transform?: number[]; width?: number; height?: number };
+      if (typeof it.str !== "string" || !it.transform) continue;
       if (it.str.trim() === "") continue;
       const x0 = it.transform[4];
       tokens.push({
@@ -64,8 +81,9 @@ function buildLines(tokens: PdfToken[]): Line[] {
   const sorted = [...tokens].sort((a, b) => b.y - a.y || a.x0 - b.x0);
   const groups: { y: number; items: PdfToken[] }[] = [];
   for (const t of sorted) {
-    const g = groups.find((x) => Math.abs(x.y - t.y) < 2.5);
-    if (g) g.items.push(t);
+    // Ordenado por y decrescente: um trecho da mesma linha só pode cair no ÚLTIMO grupo criado.
+    const g = groups[groups.length - 1];
+    if (g && Math.abs(g.y - t.y) < 2.5) g.items.push(t);
     else groups.push({ y: t.y, items: [t] });
   }
   groups.sort((a, b) => b.y - a.y);
@@ -102,6 +120,7 @@ type Header = {
   description: HeaderCol | null;
   descRight: number;
   amounts: HeaderCol[]; // credit / debit / value / balance
+  indicator: HeaderCol | null; // coluna D/C (Débito/Crédito) com texto curto
 };
 
 const AMOUNT_ROLES = new Set(["credit", "debit", "value", "balance"]);
@@ -137,7 +156,8 @@ function detectHeader(lines: Line[], from: number, roleOf: RoleOf): Header | nul
     block.forEach((l, k) => {
       if (l.cells.some((c) => roleOf(c.text) !== "ignore") || k === 0) lastLineIndex = i + k;
     });
-    return { lineIndex: i, lastLineIndex, date, description, descRight, amounts };
+    const indicator = cols.find((c) => c.role === "indicator") ?? null;
+    return { lineIndex: i, lastLineIndex, date, description, descRight, amounts, indicator };
   }
   return null;
 }
@@ -194,7 +214,8 @@ export function pdfPagesToTable(pages: PdfPage[], roleOf: RoleOf): PdfTable | nu
   let hasDebit = false;
   let hasValue = false;
   let hasBalance = false;
-  type Raw = { date: string; desc: string; credit: string; debit: string; value: string; balance: string };
+  let hasIndicator = false;
+  type Raw = { date: string; desc: string; credit: string; debit: string; value: string; balance: string; indicator: string };
   const out: Raw[] = [];
   let currentDate = "";
   let last: Raw | null = null;
@@ -211,6 +232,7 @@ export function pdfPagesToTable(pages: PdfPage[], roleOf: RoleOf): PdfTable | nu
       hasDebit ||= header.amounts.some((c) => c.role === "debit");
       hasValue ||= header.amounts.some((c) => c.role === "value");
       hasBalance ||= header.amounts.some((c) => c.role === "balance");
+      hasIndicator ||= header.indicator !== null;
 
       const body = lines.slice(header.lastLineIndex + 1);
       // Fim da tabela: espaço vertical muito maior que o espaçamento normal entre linhas.
@@ -230,7 +252,7 @@ export function pdfPagesToTable(pages: PdfPage[], roleOf: RoleOf): PdfTable | nu
         prevY = line.y;
         consumed++;
 
-        const raw: Raw = { date: "", desc: "", credit: "", debit: "", value: "", balance: "" };
+        const raw: Raw = { date: "", desc: "", credit: "", debit: "", value: "", balance: "", indicator: "" };
         const descParts: string[] = [];
         for (const c of line.cells) {
           const descRight = header.descRight;
@@ -247,6 +269,8 @@ export function pdfPagesToTable(pages: PdfPage[], roleOf: RoleOf): PdfTable | nu
             else if (nearest.role === "debit") raw.debit = c.text;
             else if (nearest.role === "value") raw.value = c.text;
             else raw.balance = c.text;
+          } else if (header.indicator && c.text.length <= 12 && Math.abs((c.x0 + c.x1) / 2 - header.indicator.center) <= 40) {
+            raw.indicator = c.text; // coluna D/C (Débito/Crédito)
           }
           // demais textos (nº de documento, "-") são ignorados
         }
@@ -280,12 +304,14 @@ export function pdfPagesToTable(pages: PdfPage[], roleOf: RoleOf): PdfTable | nu
   const headerRow: Cell[] = ["Data", "Descrição"];
   if (hasCredit || hasDebit) headerRow.push("Crédito", "Débito");
   if (hasValue) headerRow.push("Valor");
+  if (hasIndicator) headerRow.push("D/C");
   if (hasBalance) headerRow.push("Saldo");
   const rows: Cell[][] = [headerRow];
   for (const r of out) {
     const row: Cell[] = [r.date, r.desc];
     if (hasCredit || hasDebit) row.push(r.credit, r.debit);
     if (hasValue) row.push(r.value);
+    if (hasIndicator) row.push(r.indicator);
     if (hasBalance) row.push(r.balance);
     rows.push(row);
   }
