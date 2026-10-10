@@ -3710,6 +3710,7 @@ enum PaymentMethod {
   DOC
   TRANSFERENCIA
   CHEQUE
+  BOLETO
   PAGO_ONLINE
   FIADO
   OUTRO

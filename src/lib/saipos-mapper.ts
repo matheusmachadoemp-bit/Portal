@@ -25,6 +25,7 @@ const PAYMENT_KEYWORDS: [string, PaymentMethod][] = [
   ["vr", "VOUCHER"],
   ["transferencia", "TRANSFERENCIA"],
   ["cheque", "CHEQUE"],
+  ["boleto", "BOLETO"],
   ["fiado", "FIADO"],
   ["online", "PAGO_ONLINE"],
 ];

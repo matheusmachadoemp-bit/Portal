@@ -68,7 +68,7 @@ const EMPTY_EDIT_FORM: EditForm = {
 // Mesma lista usada em Financeiro > Contas a Pagar (contas-pagar-client.tsx) para "pagar um
 // fornecedor" — diferente de SALE_PAYMENT_METHODS (como o CLIENTE pagou a loja), que traz
 // Voucher/Pago Online/Fiado, sem sentido para pagamento a fornecedor.
-const PURCHASE_PAYMENT_METHODS = ["PIX", "DINHEIRO", "CARTAO_DEBITO", "CARTAO_CREDITO", "TED", "DOC", "TRANSFERENCIA", "CHEQUE", "OUTRO"] as const;
+const PURCHASE_PAYMENT_METHODS = ["PIX", "DINHEIRO", "CARTAO_DEBITO", "CARTAO_CREDITO", "TED", "DOC", "TRANSFERENCIA", "CHEQUE", "BOLETO", "OUTRO"] as const;
 
 export function ComprasClient({
   initialPurchases,
