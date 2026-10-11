@@ -58,5 +58,5 @@ export function duplicateProductNameMessage(
   categoryLabel?: string
 ): string {
   const onde = categoryLabel ? `na categoria ${categoryLabel}` : "nesta categoria";
-  return `Já existe um produto com esse nome ${onde}: "${existing.name}" (código ${existing.code}). Use um nome diferente. (O mesmo prato pode existir em outra categoria, como Delivery e Rodízio.)`;
+  return `Já existe um produto com esse nome ${onde}: "${existing.name}" (código ${existing.code}). Use um nome diferente (o mesmo prato pode existir em outra categoria).`;
 }

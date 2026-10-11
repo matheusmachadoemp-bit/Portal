@@ -58,9 +58,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  const targetCategory: string = body.category ?? existing.category;
+  const categoryChanged = targetCategory !== existing.category;
+
   const data = {
     name: name ?? undefined,
-    category: body.category ?? undefined,
+    // Só grava a categoria quando ela MUDA (e aí passa pela trava abaixo): reenviar a mesma categoria
+    // num salvamento simples poderia desfazer, sem checagem, uma mudança feita ao mesmo tempo por outra pessoa.
+    category: categoryChanged ? body.category : undefined, // `body.category` já foi validado por isProductCategory
     photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
     taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
     description: body.description ?? undefined,
@@ -79,8 +84,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // ser gravado OU quando o produto muda de categoria (não pode cair numa categoria onde já existe
   // um com o mesmo nome). Produtos antigos já repetidos continuam editáveis (preço, ingredientes...)
   // até alguém renomear/mover um deles. A transação com trava por loja relê tudo na hora de gravar.
-  const targetCategory: string = body.category ?? existing.category;
-  const categoryChanged = targetCategory !== existing.category;
   try {
     if (name !== undefined || categoryChanged) {
       await withUniqueProductName(existing.empresaId, targetCategory, name ?? existing.name, id, (tx) =>
