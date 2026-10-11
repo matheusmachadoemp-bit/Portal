@@ -1,11 +1,12 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { duplicateProductNameMessage, findProductWithSameName } from "@/lib/ficha-nome";
+import { PRODUCT_CATEGORY_LABEL } from "@/lib/ficha";
 
-/** Já existe outro produto com esse nome na loja (a rota transforma em HTTP 409 com a mensagem). */
+/** Já existe outro produto com esse nome na loja e categoria (a rota transforma em HTTP 409 com a mensagem). */
 export class DuplicateProductNameError extends Error {
-  constructor(public readonly existing: { id: string; name: string; code: string }) {
-    super(duplicateProductNameMessage(existing));
+  constructor(public readonly existing: { id: string; name: string; code: string }, category?: string) {
+    super(duplicateProductNameMessage(existing, category ? PRODUCT_CATEGORY_LABEL[category] : undefined));
     this.name = "DuplicateProductNameError";
   }
 }
@@ -15,8 +16,8 @@ export class DuplicateProductNameError extends Error {
 const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
 
 /**
- * Executa `work` (cadastrar ou renomear um produto) garantindo que nenhum OUTRO produto da mesma
- * loja tenha o mesmo nome (sem diferenciar maiúscula/minúscula, acento ou espaço sobrando).
+ * Executa `work` (cadastrar, renomear ou mudar de categoria um produto) garantindo que nenhum OUTRO
+ * produto da mesma loja E categoria tenha o mesmo nome (sem diferenciar maiúscula/minúscula, acento ou espaço sobrando).
  *
  * "Conferir e depois gravar" sozinho não basta: dois salvamentos quase simultâneos (clique duplo,
  * duas pessoas) conferem ao mesmo tempo, ambos veem "livre" e ambos gravam. Por isso tudo roda numa
@@ -29,6 +30,7 @@ const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
  */
 export async function withUniqueProductName<T>(
   empresaId: string,
+  category: string,
   name: string,
   excludeProductId: string | null,
   work: (tx: Prisma.TransactionClient) => Promise<T>
@@ -36,12 +38,12 @@ export async function withUniqueProductName<T>(
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`ficha-produto-nome:${empresaId}`}, 0))`;
     const products = await tx.product.findMany({
-      where: { empresaId },
+      where: { empresaId, category: category as never },
       select: { id: true, name: true, code: true },
       orderBy: { createdAt: "asc" },
     });
     const clash = findProductWithSameName(products, name, excludeProductId);
-    if (clash) throw new DuplicateProductNameError(clash);
+    if (clash) throw new DuplicateProductNameError(clash, category);
     return work(tx);
   }, TX_OPTIONS);
 }

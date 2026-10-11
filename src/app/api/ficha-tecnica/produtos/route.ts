@@ -104,10 +104,10 @@ export async function POST(req: Request) {
   const category: string = body.category;
   let product;
   try {
-    // `withUniqueProductName` recusa nome igual ao de outro produto desta loja (409) e, por
+    // `withUniqueProductName` recusa nome igual ao de outro produto desta loja e categoria (409) e, por
     // rodar numa transação com trava por loja, também barra dois salvamentos simultâneos.
     product = await createWithAutoCode(category, (code) =>
-      withUniqueProductName(empresa.id, name, null, (tx) =>
+      withUniqueProductName(empresa.id, category, name, null, (tx) =>
         tx.product.create({
           data: {
             empresaId: empresa.id,

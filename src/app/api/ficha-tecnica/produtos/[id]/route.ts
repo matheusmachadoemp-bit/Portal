@@ -74,12 +74,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     responsavel: body.responsavel ?? undefined,
   };
 
-  // Só confere o nome quando ele vai ser gravado (a pessoa realmente mexeu nele): produtos antigos
-  // que já estavam com nome repetido continuam editáveis (preço, ingredientes...) até alguém
-  // renomear um deles. Reler o produto/nome fica por conta da transação com trava por loja.
+  // O nome é único por loja E categoria (a mesma aba): o mesmo prato pode existir em categorias
+  // diferentes (uma ficha por modalidade, prato e combo...). Por isso só confere quando o nome vai
+  // ser gravado OU quando o produto muda de categoria (não pode cair numa categoria onde já existe
+  // um com o mesmo nome). Produtos antigos já repetidos continuam editáveis (preço, ingredientes...)
+  // até alguém renomear/mover um deles. A transação com trava por loja relê tudo na hora de gravar.
+  const targetCategory: string = body.category ?? existing.category;
+  const categoryChanged = targetCategory !== existing.category;
   try {
-    if (name !== undefined) {
-      await withUniqueProductName(existing.empresaId, name, id, (tx) => tx.product.update({ where: { id }, data }));
+    if (name !== undefined || categoryChanged) {
+      await withUniqueProductName(existing.empresaId, targetCategory, name ?? existing.name, id, (tx) =>
+        tx.product.update({ where: { id }, data })
+      );
     } else {
       await prisma.product.update({ where: { id }, data });
     }

@@ -68,8 +68,10 @@ test("findProductWithSameName com cadastros antigos já repetidos devolve o prim
   assert.equal(findProductWithSameName(list, "Ceviche Branco", "a")?.id, "b"); // editando o 1º, ainda existe o 2º
 });
 
-test("mensagem de nome repetido cita o produto existente e o código", () => {
-  const msg = duplicateProductNameMessage({ name: "Ceviche Branco", code: "SK-045" });
+test("mensagem de nome repetido cita o produto existente, o código e a categoria", () => {
+  const msg = duplicateProductNameMessage({ name: "Ceviche Branco", code: "SK-045" }, "Rodízio");
   assert.match(msg, /Ceviche Branco/);
   assert.match(msg, /SK-045/);
+  assert.match(msg, /na categoria Rodízio/);
+  assert.match(duplicateProductNameMessage({ name: "X", code: "PZ-001" }), /nesta categoria/);
 });

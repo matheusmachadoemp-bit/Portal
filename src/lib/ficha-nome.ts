@@ -1,5 +1,7 @@
 /**
- * Regras PURAS (sem banco) para impedir dois produtos com o mesmo nome na mesma loja.
+ * Regras PURAS (sem banco) para impedir dois produtos com o mesmo nome na mesma loja E categoria
+ * (a mesma aba da Ficha Técnica). O mesmo prato pode existir em categorias diferentes — ex.: uma
+ * ficha por modalidade na Zarki (Delivery/À La Carte/Rodízio) ou o prato e o combo dele na Nord.
  * O acesso ao banco (trava contra cadastro simultâneo, transação) fica em `ficha-nome-server.ts`.
  */
 
@@ -51,6 +53,10 @@ export function findProductWithSameName<T extends NamedProduct>(
   return null;
 }
 
-export function duplicateProductNameMessage(existing: Pick<NamedProduct, "name" | "code">): string {
-  return `Já existe um produto com esse nome nesta loja: "${existing.name}" (código ${existing.code}). Use um nome diferente (por exemplo, acrescentando o tamanho ou a modalidade).`;
+export function duplicateProductNameMessage(
+  existing: Pick<NamedProduct, "name" | "code">,
+  categoryLabel?: string
+): string {
+  const onde = categoryLabel ? `na categoria ${categoryLabel}` : "nesta categoria";
+  return `Já existe um produto com esse nome ${onde}: "${existing.name}" (código ${existing.code}). Use um nome diferente. (O mesmo prato pode existir em outra categoria, como Delivery e Rodízio.)`;
 }
