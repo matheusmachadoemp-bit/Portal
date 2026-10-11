@@ -6,6 +6,8 @@ import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { createWithAutoCode } from "@/lib/ficha-code";
 import { isProductCategory } from "@/lib/ficha-code-core";
+import { cleanProductName } from "@/lib/ficha-nome";
+import { DuplicateProductNameError, withUniqueProductName } from "@/lib/ficha-nome-server";
 
 // Checagem de cargo (MANAGER_ROLES) — sem ela, qualquer COLABORADOR com o Perfil de Permissão
 // padrão "Funcionário" (ficha-tecnica:canView=true de fábrica) conseguia ver o custo/fornecedor
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const name = typeof body.name === "string" ? cleanProductName(body.name) : "";
   if (!name) {
     return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
   }
@@ -100,39 +102,51 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Selecione uma categoria válida para o produto." }, { status: 400 });
   }
   const category: string = body.category;
-  const product = await createWithAutoCode(category, (code) =>
-    prisma.product.create({
-      data: {
-        empresaId: empresa.id,
-        name,
-        code,
-        category: body.category,
-        photoUrl: body.photoUrl || null,
-        taxaIfood: body.taxaIfood !== undefined && body.taxaIfood !== "" ? Number(body.taxaIfood) : null,
-        description: body.description || null,
-        rendimento: body.rendimento || null,
-        tamanho: body.tamanho || null,
-        pesoFinal: body.pesoFinal ? Number(body.pesoFinal) : null,
-        precoVenda: Number(body.precoVenda) || 0,
-        modoPreparo: body.modoPreparo || null,
-        tempoPreparo: body.tempoPreparo ? Number(body.tempoPreparo) : null,
-        validade: body.validade || null,
-        responsavel: body.responsavel || null,
-        createdById: session.user.id,
-        ingredients: {
-          create: (body.ingredients || []).map(
-            (i: { ingredientId: string; quantidadeUsada: string; percentualPerda: string }, idx: number) => ({
-              ingredientId: i.ingredientId,
-              quantidadeUsada: Number(i.quantidadeUsada) || 0,
-              percentualPerda: Number(i.percentualPerda) || 0,
-              order: idx,
-            })
-          ),
-        },
-      },
-      include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
-    })
-  );
+  let product;
+  try {
+    // `withUniqueProductName` recusa nome igual ao de outro produto desta loja (409) e, por
+    // rodar numa transação com trava por loja, também barra dois salvamentos simultâneos.
+    product = await createWithAutoCode(category, (code) =>
+      withUniqueProductName(empresa.id, name, null, (tx) =>
+        tx.product.create({
+          data: {
+            empresaId: empresa.id,
+            name,
+            code,
+            category: body.category,
+            photoUrl: body.photoUrl || null,
+            taxaIfood: body.taxaIfood !== undefined && body.taxaIfood !== "" ? Number(body.taxaIfood) : null,
+            description: body.description || null,
+            rendimento: body.rendimento || null,
+            tamanho: body.tamanho || null,
+            pesoFinal: body.pesoFinal ? Number(body.pesoFinal) : null,
+            precoVenda: Number(body.precoVenda) || 0,
+            modoPreparo: body.modoPreparo || null,
+            tempoPreparo: body.tempoPreparo ? Number(body.tempoPreparo) : null,
+            validade: body.validade || null,
+            responsavel: body.responsavel || null,
+            createdById: session.user.id,
+            ingredients: {
+              create: (body.ingredients || []).map(
+                (i: { ingredientId: string; quantidadeUsada: string; percentualPerda: string }, idx: number) => ({
+                  ingredientId: i.ingredientId,
+                  quantidadeUsada: Number(i.quantidadeUsada) || 0,
+                  percentualPerda: Number(i.percentualPerda) || 0,
+                  order: idx,
+                })
+              ),
+            },
+          },
+          include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
+        })
+      )
+    );
+  } catch (e) {
+    if (e instanceof DuplicateProductNameError) {
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
+    throw e;
+  }
 
   return NextResponse.json({ product });
 }

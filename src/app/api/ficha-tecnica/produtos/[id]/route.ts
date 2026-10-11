@@ -5,6 +5,8 @@ import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { isProductCategory } from "@/lib/ficha-code-core";
+import { cleanProductName, normalizeProductName } from "@/lib/ficha-nome";
+import { DuplicateProductNameError, withUniqueProductName } from "@/lib/ficha-nome-server";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -25,7 +27,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   let name: string | undefined;
   if (body.name !== undefined) {
-    name = typeof body.name === "string" ? body.name.trim() : "";
+    name = typeof body.name === "string" ? cleanProductName(body.name) : "";
     if (!name) {
       return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
     }
@@ -53,24 +55,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  await prisma.product.update({
-    where: { id },
-    data: {
-      name: name ?? undefined,
-      category: body.category ?? undefined,
-      photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
-      taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
-      description: body.description ?? undefined,
-      rendimento: body.rendimento ?? undefined,
-      tamanho: body.tamanho ?? undefined,
-      pesoFinal: body.pesoFinal !== undefined ? Number(body.pesoFinal) : undefined,
-      precoVenda: body.precoVenda !== undefined ? Number(body.precoVenda) : undefined,
-      modoPreparo: body.modoPreparo ?? undefined,
-      tempoPreparo: body.tempoPreparo !== undefined ? Number(body.tempoPreparo) : undefined,
-      validade: body.validade ?? undefined,
-      responsavel: body.responsavel ?? undefined,
-    },
-  });
+  const data = {
+    name: name ?? undefined,
+    category: body.category ?? undefined,
+    photoUrl: body.photoUrl !== undefined ? body.photoUrl || null : undefined,
+    taxaIfood: body.taxaIfood !== undefined ? (body.taxaIfood === "" || body.taxaIfood === null ? null : Number(body.taxaIfood)) : undefined,
+    description: body.description ?? undefined,
+    rendimento: body.rendimento ?? undefined,
+    tamanho: body.tamanho ?? undefined,
+    pesoFinal: body.pesoFinal !== undefined ? Number(body.pesoFinal) : undefined,
+    precoVenda: body.precoVenda !== undefined ? Number(body.precoVenda) : undefined,
+    modoPreparo: body.modoPreparo ?? undefined,
+    tempoPreparo: body.tempoPreparo !== undefined ? Number(body.tempoPreparo) : undefined,
+    validade: body.validade ?? undefined,
+    responsavel: body.responsavel ?? undefined,
+  };
+
+  // Só confere o nome quando ele realmente mudou (ignorando maiúscula/acento/espaço): produtos
+  // antigos que já estavam com nome repetido continuam editáveis (preço, ingredientes...) até
+  // alguém renomear um deles.
+  const newName = name !== undefined && normalizeProductName(name) !== normalizeProductName(existing.name) ? name : null;
+  try {
+    if (newName !== null) {
+      await withUniqueProductName(existing.empresaId, newName, id, (tx) => tx.product.update({ where: { id }, data }));
+    } else {
+      await prisma.product.update({ where: { id }, data });
+    }
+  } catch (e) {
+    if (e instanceof DuplicateProductNameError) {
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
+    throw e;
+  }
 
   if (body.ingredients) {
     await prisma.productIngredient.deleteMany({ where: { productId: id } });
