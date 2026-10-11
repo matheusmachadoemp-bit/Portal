@@ -3,22 +3,31 @@
  * O acesso ao banco (trava contra cadastro simultâneo, transação) fica em `ficha-nome-server.ts`.
  */
 
+// Caracteres invisíveis que vêm de copiar e colar (espaço de largura zero, hífen suave, BOM...).
+const INVISIBLE = /[\u200b-\u200d\u2060\u00ad\ufeff]/g;
+
 /**
- * Forma "comparável" do nome: sem maiúscula/minúscula, sem acento e sem espaço sobrando.
- * "Ceviche  Branco", "ceviche branco " e "CEVICHÉ BRANCO" viram todos "ceviche branco".
+ * Forma "comparável" do nome: sem maiúscula/minúscula, sem acento, sem espaço sobrando e com
+ * hífen/travessão e aspas "curvas" tratados como os comuns (texto colado do Word/iFood costuma
+ * trazer "–" no lugar de "-"). "Ceviche  Branco", "ceviche branco " e "CEVICHÉ BRANCO" viram todos
+ * "ceviche branco"; "Combo 1 – 40 peças" e "Combo 1 - 40 peças" também são o mesmo nome.
  */
 export function normalizeProductName(name: string): string {
   return name
+    .replace(INVISIBLE, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(/[\u2018\u2019\u201b]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
     .replace(/\s+/g, " ")
     .trim();
 }
 
-/** Nome como é gravado: sem espaço nas pontas e com um único espaço entre as palavras. */
+/** Nome como é gravado: sem caractere invisível, sem espaço nas pontas e com um único espaço entre as palavras. */
 export function cleanProductName(name: string): string {
-  return name.replace(/\s+/g, " ").trim();
+  return name.replace(INVISIBLE, "").replace(/\s+/g, " ").trim();
 }
 
 export type NamedProduct = { id: string; name: string; code: string };

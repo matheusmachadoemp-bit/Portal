@@ -10,6 +10,10 @@ export class DuplicateProductNameError extends Error {
   }
 }
 
+// Folga para o banco "acordar" (Neon hiberna) e para quem estiver esperando a trava de outro
+// salvamento; o padrão do Prisma (2s de espera / 5s de duração) é apertado para isso.
+const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
+
 /**
  * Executa `work` (cadastrar ou renomear um produto) garantindo que nenhum OUTRO produto da mesma
  * loja tenha o mesmo nome (sem diferenciar maiúscula/minúscula, acento ou espaço sobrando).
@@ -39,5 +43,5 @@ export async function withUniqueProductName<T>(
     const clash = findProductWithSameName(products, name, excludeProductId);
     if (clash) throw new DuplicateProductNameError(clash);
     return work(tx);
-  });
+  }, TX_OPTIONS);
 }

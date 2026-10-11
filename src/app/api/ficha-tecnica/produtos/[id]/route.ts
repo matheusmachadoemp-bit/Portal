@@ -28,9 +28,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let name: string | undefined;
   if (body.name !== undefined) {
     name = typeof body.name === "string" ? cleanProductName(body.name) : "";
-    if (!name) {
+    if (!normalizeProductName(name)) {
       return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
     }
+    // O formulário reenvia o nome mesmo quando a pessoa só mexeu no preço: nesse caso NÃO regrava
+    // o nome (nem "limpa" espaços de um cadastro antigo — a importação de vendas casa por nome).
+    if (body.name === existing.name || body.name.trim() === existing.name) name = undefined;
   }
   // O código de identificação é gerado pelo sistema na criação e NÃO muda por edição (serve pra
   // localizar o produto): `body.code` é ignorado de propósito.
@@ -71,13 +74,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     responsavel: body.responsavel ?? undefined,
   };
 
-  // Só confere o nome quando ele realmente mudou (ignorando maiúscula/acento/espaço): produtos
-  // antigos que já estavam com nome repetido continuam editáveis (preço, ingredientes...) até
-  // alguém renomear um deles.
-  const newName = name !== undefined && normalizeProductName(name) !== normalizeProductName(existing.name) ? name : null;
+  // Só confere o nome quando ele vai ser gravado (a pessoa realmente mexeu nele): produtos antigos
+  // que já estavam com nome repetido continuam editáveis (preço, ingredientes...) até alguém
+  // renomear um deles. Reler o produto/nome fica por conta da transação com trava por loja.
   try {
-    if (newName !== null) {
-      await withUniqueProductName(existing.empresaId, newName, id, (tx) => tx.product.update({ where: { id }, data }));
+    if (name !== undefined) {
+      await withUniqueProductName(existing.empresaId, name, id, (tx) => tx.product.update({ where: { id }, data }));
     } else {
       await prisma.product.update({ where: { id }, data });
     }

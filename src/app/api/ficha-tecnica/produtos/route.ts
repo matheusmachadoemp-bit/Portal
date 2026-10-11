@@ -6,7 +6,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { createWithAutoCode } from "@/lib/ficha-code";
 import { isProductCategory } from "@/lib/ficha-code-core";
-import { cleanProductName } from "@/lib/ficha-nome";
+import { cleanProductName, normalizeProductName } from "@/lib/ficha-nome";
 import { DuplicateProductNameError, withUniqueProductName } from "@/lib/ficha-nome-server";
 
 // Checagem de cargo (MANAGER_ROLES) — sem ela, qualquer COLABORADOR com o Perfil de Permissão
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
   const body = await req.json();
 
   const name = typeof body.name === "string" ? cleanProductName(body.name) : "";
-  if (!name) {
+  if (!normalizeProductName(name)) {
     return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
   }
   // O código de identificação é sempre gerado pelo sistema (ver `createWithAutoCode`): um `code`
