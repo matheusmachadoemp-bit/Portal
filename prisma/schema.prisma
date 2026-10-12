@@ -3764,6 +3764,14 @@ model BankAccount {
   color        String   @default("#2952E3")
   icon         String   @default("Landmark")
   active       Boolean  @default(true)
+  // Conexão com o banco (Open Finance): id desta conta no provedor. Quando preenchido, a "ponte"
+  // (rotina do Claude ou outro alimentador) manda os lançamentos para POST
+  // /api/financeiro/conciliacao/sync usando este id para achar a conta. Único: uma conta do banco
+  // alimenta uma única conta do portal.
+  openFinanceAccountId String?   @unique
+  lastSyncAt           DateTime? // última vez que o banco entregou lançamentos (para avisar se parar)
+  bankBalance          Float? // saldo informado pelo banco na última atualização (só consulta)
+  bankBalanceAt        DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -3923,11 +3931,14 @@ model BankReconciliationImport {
   bankAccountId String
   bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
   fileName      String
+  // ARQUIVO (extrato enviado por uma pessoa) ou OPEN_FINANCE (lançamentos entregues pela conexão
+  // com o banco — um registro contínuo por conta, sem usuário logado, por isso createdById é opcional).
+  source        String      @default("ARQUIVO")
   totalEntradas Float       @default(0)
   totalSaidas   Float       @default(0)
   totalLinhas   Int         @default(0)
-  createdById   String
-  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdById   String?
+  createdBy     User?       @relation(fields: [createdById], references: [id])
   createdAt     DateTime    @default(now())
 
   transactions BankTransaction[]
@@ -3951,9 +3962,19 @@ model BankTransaction {
   matchedType   String? // PAYABLE | RECEIVABLE
   matchedId     String?
   observacoes   String?
+  // Lançamentos vindos do banco (Open Finance). `externalId` é o id do lançamento no banco: impede
+  // importar o mesmo lançamento duas vezes. Lançamentos de arquivo ficam sem `externalId`.
+  externalId    String?
+  source        String                   @default("ARQUIVO") // origem do cadastro: ARQUIVO | OPEN_FINANCE (ter externalId = confirmado pelo banco)
+  occurredAt    DateTime? // instante exato informado pelo banco (`date` guarda o DIA em São Paulo)
+  counterpart   String? // quem pagou/recebeu (nome informado pelo banco)
+  bankCategory  String? // categoria do banco (ex.: "Transfer - PIX")
+  paymentMethod String? // forma (PIX, TED, BOLETO...)
+  pendingAtBank Boolean                  @default(false) // ainda não compensado no banco
   createdAt     DateTime                 @default(now())
   updatedAt     DateTime                 @updatedAt
 
+  @@unique([bankAccountId, externalId])
   @@index([empresaId, bankAccountId, date])
   @@index([importId])
   @@index([matchedType, matchedId])

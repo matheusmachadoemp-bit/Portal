@@ -87,3 +87,71 @@ export async function resolveMatchLabels(
   for (const r of receivables) labels.set(`RECEIVABLE:${r.id}`, `${r.number} — ${r.cliente}`);
   return labels;
 }
+
+const OPEN_STATUSES = ["EM_ABERTO", "PARCIALMENTE_PAGO", "ATRASADO"] as const;
+
+/**
+ * Concilia sozinho os lançamentos PENDENTES da empresa (opcionalmente de uma conta) com contas a
+ * pagar/receber em aberto (mesmo valor, data mais próxima dentro da janela). Devolve quantos casaram.
+ * Lançamentos que o banco ainda não compensou (`pendingAtBank`) ficam de fora: podem mudar de valor/id.
+ * Usada pelo botão "Conciliar automaticamente" e pela sincronização com o banco.
+ */
+export async function autoMatchBankTransactions(empresaId: string, bankAccountId?: string): Promise<number> {
+  const [pendingTransactions, payables, receivables] = await Promise.all([
+    prisma.bankTransaction.findMany({
+      where: {
+        empresaId,
+        status: "PENDENTE",
+        pendingAtBank: false,
+        ...(bankAccountId ? { bankAccountId } : {}),
+      },
+    }),
+    prisma.payable.findMany({ where: { empresaId, status: { in: [...OPEN_STATUSES] } } }),
+    prisma.receivable.findMany({ where: { empresaId, status: { in: [...OPEN_STATUSES] } } }),
+  ]);
+  if (pendingTransactions.length === 0) return 0;
+
+  // Payables/receivables já vinculados a outra transação conciliada não entram no pool.
+  const alreadyMatched = await prisma.bankTransaction.findMany({
+    where: { empresaId, status: "CONCILIADO", matchedId: { not: null } },
+    select: { matchedType: true, matchedId: true },
+  });
+  const matchedPayableIds = new Set(alreadyMatched.filter((m) => m.matchedType === "PAYABLE").map((m) => m.matchedId));
+  const matchedReceivableIds = new Set(
+    alreadyMatched.filter((m) => m.matchedType === "RECEIVABLE").map((m) => m.matchedId)
+  );
+
+  const matches = matchTransactions(
+    pendingTransactions.map((t) => ({ id: t.id, direction: t.direction, valor: t.valor, date: t.date })),
+    payables
+      .filter((p) => !matchedPayableIds.has(p.id))
+      .map((p) => ({ id: p.id, valor: p.valor, date: p.dataPagamento ?? p.dataVencimento })),
+    receivables
+      .filter((r) => !matchedReceivableIds.has(r.id))
+      .map((r) => ({ id: r.id, valor: r.valor, date: r.dataRecebimento ?? r.dataVencimento }))
+  );
+
+  if (matches.size > 0) {
+    // Uma única query SQL (`UPDATE ... FROM UNNEST(...)`) em vez de um `update` por linha dentro de
+    // uma transação interativa com timeout de 5s: um extrato (ou uma carga do banco) pode ter
+    // centenas de lançamentos batendo de uma vez (mesmo bug já corrigido em `syncEmpresaSaiposSales`,
+    // ver `src/lib/saipos-sync.ts`).
+    const transactionIds = [...matches.keys()];
+    const types = [...matches.values()].map((m) => m.type);
+    const ids = [...matches.values()].map((m) => m.id);
+
+    await prisma.$executeRaw`
+      UPDATE "BankTransaction" AS bt
+      SET
+        "status" = 'CONCILIADO'::"BankTransactionStatus",
+        "matchedType" = v.matched_type,
+        "matchedId" = v.matched_id,
+        "updatedAt" = now()
+      FROM UNNEST(${transactionIds}::text[], ${types}::text[], ${ids}::text[])
+        AS v(transaction_id, matched_type, matched_id)
+      WHERE bt."id" = v.transaction_id
+    `;
+  }
+
+  return matches.size;
+}

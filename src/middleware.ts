@@ -15,6 +15,9 @@ const PUBLIC_PATHS = [
   "/api/estoque/recebimento/responder",
   "/avaliar",
   "/api/satisfacao-cliente/responder",
+  // Entrada dos lançamentos do banco (Open Finance): chamada por uma "ponte" sem sessão de usuário;
+  // a rota exige a senha de integração (BANK_SYNC_SECRET) e recusa tudo se ela não estiver definida.
+  "/api/financeiro/conciliacao/sync",
 ];
 
 export default auth((req) => {
