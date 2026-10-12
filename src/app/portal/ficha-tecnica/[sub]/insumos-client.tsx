@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, AlertTriangle, Tag, Settings2, Power, RotateCcw, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, Tag, Settings2, Power, RotateCcw, Eye, EyeOff, CheckCircle2, Search, X } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency } from "@/lib/calc";
+import { normalizeProductName } from "@/lib/ficha-nome";
 
 type CategoryDTO = { id: string; name: string; color: string; icon: string };
 
@@ -73,6 +74,9 @@ export function InsumosClient({
   // desativação direto no banner de erro, em vez de só apontar pra outra tela.
   const [deleteBlockedId, setDeleteBlockedId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  // Busca por nome, fornecedor ou categoria (ignora maiúscula, acento e espaço sobrando; várias
+  // palavras = todas precisam aparecer, em qualquer ordem).
+  const [search, setSearch] = useState("");
   // Insumos inativos ficam escondidos por padrão (mesmo padrão de Estoque >
   // Produtos) — este toggle reexibe eles.
   const [showInactive, setShowInactive] = useState(false);
@@ -299,9 +303,21 @@ export function InsumosClient({
   );
   const inactiveCount = useMemo(() => ingredients.filter((i) => !i.active).length, [ingredients]);
 
+  const searchWords = useMemo(() => normalizeProductName(search).split(" ").filter(Boolean), [search]);
+  const searching = searchWords.length > 0;
+  // Lista depois da busca: os contadores dos filtros, os grupos e o "selecionar todos os visíveis"
+  // partem dela, então tudo na tela fala do mesmo conjunto.
+  const searchedIngredients = useMemo(() => {
+    if (searchWords.length === 0) return scopedIngredients;
+    return scopedIngredients.filter((i) => {
+      const text = normalizeProductName([i.name, i.fornecedorNome ?? i.fornecedor ?? "", i.category?.name ?? ""].join(" "));
+      return searchWords.every((w) => text.includes(w));
+    });
+  }, [scopedIngredients, searchWords]);
+
   const groups = useMemo(() => {
     const byCategory = new Map<string, { category: CategoryDTO | null; items: IngredientDTO[] }>();
-    for (const i of scopedIngredients) {
+    for (const i of searchedIngredients) {
       const key = i.category?.id ?? SEM_CATEGORIA;
       if (!byCategory.has(key)) byCategory.set(key, { category: i.category, items: [] });
       byCategory.get(key)!.items.push(i);
@@ -312,7 +328,7 @@ export function InsumosClient({
     const semCategoria = byCategory.get(SEM_CATEGORIA);
     if (semCategoria) ordered.push({ category: null, items: semCategoria.items });
     return ordered;
-  }, [scopedIngredients, categories]);
+  }, [searchedIngredients, categories]);
 
   const visibleGroups = categoryFilter
     ? groups.filter((g) => (g.category?.id ?? SEM_CATEGORIA) === categoryFilter)
@@ -326,8 +342,8 @@ export function InsumosClient({
   // Técnica não usa todas as categorias globais do Estoque (ex.: "Insumos
   // Orientais", "Carnes"), então elas só poluiriam o filtro sem uso.
   const usedCategories = useMemo(
-    () => categories.filter((c) => scopedIngredients.some((i) => i.categoryId === c.id)),
-    [categories, scopedIngredients]
+    () => categories.filter((c) => searchedIngredients.some((i) => i.categoryId === c.id)),
+    [categories, searchedIngredients]
   );
 
   // Nome da categoria filtrada no momento (só relevante quando `visibleGroups` fica vazio com a
@@ -382,6 +398,37 @@ export function InsumosClient({
         </div>
       )}
 
+      {ingredients.length > 0 && (
+        <div className="mb-3 relative w-full sm:max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-nord-gray pointer-events-none" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              // A seleção em massa vale só para o que está na tela: mudar a busca esvazia a seleção,
+              // para "Desativar selecionados" nunca atingir insumos que ficaram escondidos.
+              setSelected(new Set());
+            }}
+            placeholder="Buscar insumo, fornecedor ou categoria..."
+            aria-label="Buscar insumo"
+            className="input !pl-9 !pr-9"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setSelected(new Set());
+              }}
+              aria-label="Limpar busca"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-nord-gray hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           onClick={() => setCategoryFilter("")}
@@ -389,10 +436,10 @@ export function InsumosClient({
             categoryFilter === "" ? "bg-nord-blue border-nord-blue" : "border-nord-border hover:border-white/30"
           }`}
         >
-          Todas ({scopedIngredients.length})
+          Todas ({searchedIngredients.length})
         </button>
         {usedCategories.map((c) => {
-          const count = scopedIngredients.filter((i) => i.categoryId === c.id).length;
+          const count = searchedIngredients.filter((i) => i.categoryId === c.id).length;
           return (
             <button
               key={c.id}
@@ -406,14 +453,14 @@ export function InsumosClient({
             </button>
           );
         })}
-        {scopedIngredients.some((i) => !i.categoryId) && (
+        {searchedIngredients.some((i) => !i.categoryId) && (
           <button
             onClick={() => setCategoryFilter(SEM_CATEGORIA)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border text-white ${
               categoryFilter === SEM_CATEGORIA ? "bg-nord-blue border-nord-blue" : "border-nord-border hover:border-white/30"
             }`}
           >
-            <Tag size={13} className="text-nord-blue-light" /> Sem categoria ({scopedIngredients.filter((i) => !i.categoryId).length})
+            <Tag size={13} className="text-nord-blue-light" /> Sem categoria ({searchedIngredients.filter((i) => !i.categoryId).length})
           </button>
         )}
         <button
@@ -482,6 +529,43 @@ export function InsumosClient({
           >
             <Eye size={13} /> Mostrar inativos
           </button>
+        </div>
+      ) : searching && visibleGroups.length === 0 ? (
+        <div className="nord-card p-8 text-center">
+          <Search size={28} className="text-nord-gray mx-auto mb-3" />
+          <p className="text-white text-sm font-medium mb-1">Nenhum insumo encontrado para “{search.trim()}”</p>
+          <p className="text-xs text-nord-gray mb-3">
+            {categoryFilter && filteredCategoryLabel
+              ? `Nada em "${filteredCategoryLabel}" com esse texto. Tente limpar o filtro de categoria ou a busca.`
+              : "Confira a grafia ou tente só uma parte do nome. Insumos inativos só aparecem se você clicar em Mostrar inativos."}
+          </p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => {
+                setSearch("");
+                setSelected(new Set());
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-blue hover:bg-nord-blue-light text-white"
+            >
+              Limpar busca
+            </button>
+            {categoryFilter && (
+              <button
+                onClick={() => setCategoryFilter("")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-nord-border text-nord-gray hover:text-white hover:border-white/30"
+              >
+                Ver todas as categorias
+              </button>
+            )}
+            {!showInactive && inactiveCount > 0 && (
+              <button
+                onClick={() => setShowInactive(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-nord-border text-nord-gray hover:text-white hover:border-white/30"
+              >
+                <Eye size={13} /> Mostrar inativos
+              </button>
+            )}
+          </div>
         </div>
       ) : visibleGroups.length === 0 ? (
         // Existe insumo ativo na loja, só não nesta categoria filtrada (ex.: desativou todos os
