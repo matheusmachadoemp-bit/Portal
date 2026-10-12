@@ -43,18 +43,9 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
   const canCreate = ctx?.mode === "single" && canManageFichaTecnica;
 
   if (sub === "insumos") {
-    // Card "CMV médio do cardápio": média do CMV% de TODOS os produtos com `precoVenda > 0`,
-    // não importa a categoria — faz sentido só aqui, porque "Insumos" não tem uma categoria de
-    // produto própria pra filtrar (é a lista de ingredientes, comum a qualquer categoria). Nas
-    // abas de categoria (ver ramo abaixo), o card mostra a média só daquela categoria — ver
-    // histórico da tarefa #476/#477 (Matheus relatou que o número "fixo" do card não batia com a
-    // conta manual dele: o problema não era a fórmula, era nunca filtrar por categoria, já que o
-    // MESMO card de cardápio inteiro aparecia em toda aba, inclusive dentro de "Pizzas Salgadas").
-    const [allProducts, ingredients, categories, suppliers] = await Promise.all([
-      prisma.product.findMany({
-        where: { empresaId: { in: empresaIds }, precoVenda: { gt: 0 } },
-        select: { precoVenda: true, ingredients: { include: { ingredient: true } } },
-      }),
+    // (O card "CMV médio do cardápio" saiu desta aba a pedido do Matheus: o CMV por categoria de
+    // produto continua nas abas de produto.)
+    const [ingredients, categories, suppliers] = await Promise.all([
       prisma.ingredient.findMany({
         where: { empresaId: { in: empresaIds } },
         orderBy: { name: "asc" },
@@ -67,12 +58,6 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
       prisma.stockCategory.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { order: "asc" } }),
       prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
     ]);
-    const cmvValues = allProducts.map((p) => cmvPercent(productTotalCost(p.ingredients), p.precoVenda));
-    const cmvMedioCardapio = cmvValues.length ? cmvValues.reduce((s, v) => s + v, 0) / cmvValues.length : 0;
-    const cmvMedioCard = (
-      <StatCard label="CMV médio do cardápio" value={formatPercent(cmvMedioCardapio)} icon="Calculator" />
-    );
-
     const serialized = ingredients.map((i) => ({
       ...i,
       lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.toISOString() : null,
@@ -84,7 +69,6 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
     return (
       <PageContainer title="Ficha Técnica" subtitle="Insumos">
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{cmvMedioCard}</div>
           <InsumosClient
             initialIngredients={serialized}
             categories={categories.map((c) => ({ id: c.id, name: c.name, color: c.color, icon: c.icon }))}
