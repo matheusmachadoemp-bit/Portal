@@ -60,6 +60,18 @@ type ProductDTO = {
 
 type IngredientLine = { key: string; ingredientId: string; quantidadeUsada: string; percentualPerda: string };
 
+/**
+ * Custo de UMA linha de ingrediente: quantidade na unidade do insumo × preço de 1 unidade × (1 + perda).
+ * Mesma fórmula do servidor (`productIngredientCost` em @/lib/ficha — `precoAtual` já é o preço de 1
+ * `unidade`, ver `ingredientCostPerUnit` em @/lib/estoque). A coluna "Custo" de cada linha e o
+ * "Custo total" usam esta função, então a soma da coluna sempre bate com o total.
+ */
+function lineCost(line: IngredientLine, ing: IngredientOption | undefined): number {
+  if (!ing) return 0;
+  const perda = 1 + (Number(line.percentualPerda) || 0) / 100;
+  return ingredientCostPerUnit(ing) * (Number(line.quantidadeUsada) || 0) * perda;
+}
+
 const emptyForm = {
   name: "",
   code: "",
@@ -197,15 +209,7 @@ export function ProdutosClient({
   const previewCost = useMemo(() => {
     return lines.reduce((acc, line) => {
       const ing = ingredientOptions.find((o) => o.id === line.ingredientId);
-      if (!ing) return acc;
-      // Mesma fórmula do servidor (productTotalCost/ingredientCostPerUnit em @/lib/ficha —
-      // precoAtual já é o preço de 1 `unidade`, não da embalagem inteira, ver comentário na
-      // definição em @/lib/estoque) — duplicada aqui só pro preview instantâneo ao editar, sem
-      // round-trip ao servidor. Divergia do cálculo salvo até a correção do achado de produção
-      // de 02/10/2026 (Combo Salmão 20 peças com custo deflacionado).
-      const costPerUnit = ingredientCostPerUnit(ing);
-      const perda = 1 + (Number(line.percentualPerda) || 0) / 100;
-      return acc + costPerUnit * (Number(line.quantidadeUsada) || 0) * perda;
+      return acc + lineCost(line, ing);
     }, 0);
   }, [lines, ingredientOptions]);
 
@@ -437,8 +441,9 @@ export function ProdutosClient({
               + adicionar ingrediente
             </button>
           </div>
-          {/* Cabeçalho das colunas (item #7b, achado de revisão 02/10/2026): "Qtd." e "% perda"
-              só apareciam como placeholder DENTRO do campo — some assim que a pessoa digita um
+          {/* Cabeçalho das colunas (item #7b, achado de revisão 02/10/2026): "Qtd." e "Custo"
+              (antes "% perda", trocada a pedido do Matheus: mostrar o custo de cada ingrediente) —
+              eram só placeholder DENTRO do campo — some assim que a pessoa digita um
               valor, e ninguém mais sabe o que aquele número representa. Este cabeçalho fica
               visível o tempo todo, alinhado com as mesmas colunas (grid-cols-12) de cada
               `IngredientRow` abaixo; os inputs também ganharam `aria-label` para quem usa leitor
@@ -448,7 +453,7 @@ export function ProdutosClient({
               <span className="col-span-1" />
               <span className="col-span-4 text-[11px] text-nord-gray">Insumo</span>
               <span className="col-span-3 text-[11px] text-nord-gray">Qtd.</span>
-              <span className="col-span-3 text-[11px] text-nord-gray">% perda</span>
+              <span className="col-span-3 text-[11px] text-nord-gray">Custo</span>
               <span className="col-span-1" />
             </div>
           )}
@@ -464,6 +469,7 @@ export function ProdutosClient({
                     key={line.key}
                     line={line}
                     ingredientOptions={ingredientOptions}
+                    custo={lineCost(line, ingredientOptions.find((o) => o.id === line.ingredientId))}
                     onUpdate={(patch) => updateLine(line.key, patch)}
                     onRemove={() => removeLine(line.key)}
                   />
@@ -517,16 +523,21 @@ export function ProdutosClient({
 function IngredientRow({
   line,
   ingredientOptions,
+  custo,
   onUpdate,
   onRemove,
 }: {
   line: IngredientLine;
   ingredientOptions: IngredientOption[];
+  custo: number;
   onUpdate: (patch: Partial<IngredientLine>) => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: line.key });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  const ing = ingredientOptions.find((o) => o.id === line.ingredientId);
+  const perda = Number(line.percentualPerda) || 0;
+  const temQtd = (Number(line.quantidadeUsada) || 0) > 0;
 
   return (
     <div ref={setNodeRef} style={style} className="grid grid-cols-12 gap-2 items-center">
@@ -552,14 +563,29 @@ function IngredientRow({
         onChange={(e) => onUpdate({ quantidadeUsada: e.target.value })}
         className="input col-span-3"
       />
-      <input
-        type="number"
-        aria-label="% perda"
-        placeholder="% perda"
-        value={line.percentualPerda}
-        onChange={(e) => onUpdate({ percentualPerda: e.target.value })}
-        className="input col-span-3"
-      />
+      {/* Custo da linha (só leitura): quantidade × preço de 1 unidade do insumo. Embaixo, o preço por
+          unidade em que o insumo é medido (ex.: "R$ 38,00/kg"), para deixar claro em que medida o
+          custo se baseia. A perda que já estava gravada continua entrando na conta e aparece aqui
+          ("+5% perda"); este campo não é mais editável nesta tela. */}
+      <div
+        className="input col-span-3 flex flex-col justify-center leading-tight py-[3px]"
+        title={
+          ing
+            ? `Custo = quantidade × ${formatCurrency(ingredientCostPerUnit(ing))} por ${ing.unidade}${perda > 0 ? ` + ${perda}% de perda` : ""}`
+            : undefined
+        }
+      >
+        <span className={temQtd ? "text-white" : "text-nord-gray"} aria-label="Custo do ingrediente">
+          {temQtd && ing ? formatCurrency(custo) : "—"}
+        </span>
+        {ing && (
+          <span className="text-[10px] text-nord-gray">
+            {formatCurrency(ingredientCostPerUnit(ing))}/{ing.unidade}
+            {/* No celular a coluna é estreita: o "+X% perda" some daqui (continua na conta e no tooltip). */}
+            {perda > 0 && <span className="hidden sm:inline">{` · +${perda}% perda`}</span>}
+          </span>
+        )}
+      </div>
       <button onClick={onRemove} className="col-span-1 text-nord-gray hover:text-nord-danger">
         <X size={14} />
       </button>
