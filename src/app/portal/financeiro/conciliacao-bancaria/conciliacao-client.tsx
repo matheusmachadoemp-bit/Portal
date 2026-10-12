@@ -81,6 +81,15 @@ function timeOfDay(occurredAt: string | null): string | null {
 
 const PAGE_SIZE = 300;
 
+/** "12/10 19:01" no fuso de São Paulo, igual no servidor e no navegador (evita diferença de hidratação). */
+function dayMonthTime(iso: string): string {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Sao_Paulo",
+  }).formatToParts(new Date(iso));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")}/${get("month")} ${get("hour")}:${get("minute")}`;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   PENDENTE: "Pendente",
   CONCILIADO: "Conciliado",
@@ -440,9 +449,9 @@ export function ConciliacaoClient({
                   <span className="text-nord-gray">
                     Última atualização:{" "}
                     <strong className="text-white">
-                      {a.lastSyncAt ? (now ? formatSince(a.lastSyncAt, now) : format(new Date(a.lastSyncAt), "dd/MM/yyyy HH:mm")) : "ainda não houve"}
+                      {a.lastSyncAt ? (now ? formatSince(a.lastSyncAt, now) : dayMonthTime(a.lastSyncAt)) : "ainda não houve"}
                     </strong>
-                    {a.lastSyncAt && now && <> ({format(new Date(a.lastSyncAt), "dd/MM HH:mm")})</>}
+                    {a.lastSyncAt && now && <> ({dayMonthTime(a.lastSyncAt)})</>}
                   </span>
                   {a.bankBalance !== null && (
                     <span className="text-nord-gray">
