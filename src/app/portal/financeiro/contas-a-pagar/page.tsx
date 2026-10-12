@@ -7,6 +7,7 @@ import { ContasPagarClient } from "./contas-pagar-client";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getActiveFinancialCategories } from "@/lib/financial-categories";
+import { INVOICE_SUMMARY_SELECT } from "@/lib/compra-itens-server";
 
 export default async function ContasAPagarPage() {
   const session = await auth();
@@ -19,11 +20,17 @@ export default async function ContasAPagarPage() {
   const canManageFinanceiro = await hasModulePermission(session.user.id, "financeiro", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageFinanceiro;
 
-  const [payables, categorias, contas, fornecedoresCadastrados] = await Promise.all([
+  const [payables, categorias, contas, fornecedoresCadastrados, ingredients, canCreateSupplier] = await Promise.all([
     prisma.payable.findMany({
       where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), 120) } },
       orderBy: { dataVencimento: "asc" },
-      include: { categoria: true, bankAccount: true, createdBy: { select: { name: true } }, empresa: true },
+      include: {
+        categoria: true,
+        bankAccount: { select: { name: true } },
+        createdBy: { select: { name: true } },
+        empresa: true,
+        invoice: { select: INVOICE_SUMMARY_SELECT },
+      },
     }),
     getActiveFinancialCategories(),
     prisma.bankAccount.findMany({
@@ -41,6 +48,16 @@ export default async function ContasAPagarPage() {
       orderBy: { razaoSocial: "asc" },
       select: { id: true, razaoSocial: true, nomeFantasia: true },
     }),
+    // Insumos do Estoque para “O que foi comprado” (só faz sentido numa loja específica: é onde se lança).
+    canCreate
+      ? prisma.ingredient.findMany({
+          where: { empresaId: { in: empresaIds }, active: true },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, unidade: true, unidadeCompra: true },
+        })
+      : Promise.resolve([]),
+    // Cadastrar fornecedor é uma ação do Estoque: só aparece o atalho para quem pode.
+    canCreate ? hasModulePermission(session.user.id, "estoque", "canCreate") : Promise.resolve(false),
   ]);
 
   const serialized = payables.map((p) => ({
@@ -58,6 +75,8 @@ export default async function ContasAPagarPage() {
           categorias={categorias}
           contas={contas}
           fornecedoresCadastrados={fornecedoresCadastrados.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
+          ingredients={ingredients}
+          canCreateSupplier={canCreateSupplier}
           canCreate={canCreate}
           isGrupoNordMode={ctx?.mode !== "single"}
         />

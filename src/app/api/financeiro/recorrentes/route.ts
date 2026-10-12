@@ -23,7 +23,7 @@ export async function GET() {
   const templates = await prisma.recurringTemplate.findMany({
     where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: { createdAt: "desc" },
-    include: { categoria: true, bankAccount: true },
+    include: { categoria: true, bankAccount: { select: { id: true, name: true } } },
   });
   return NextResponse.json({ templates });
 }

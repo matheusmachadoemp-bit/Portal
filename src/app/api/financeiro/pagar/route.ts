@@ -4,6 +4,13 @@ import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import {
+  CompraError,
+  INVOICE_SUMMARY_SELECT,
+  parseCompra,
+  saveCompraForPayable,
+  type ParsedCompra,
+} from "@/lib/compra-itens-server";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -34,6 +41,7 @@ export async function GET(req: Request) {
       categoria: { select: { name: true } },
       createdBy: { select: { name: true } },
       empresa: { select: { name: true } },
+      invoice: { select: INVOICE_SUMMARY_SELECT },
     },
   });
 
@@ -76,6 +84,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valor é obrigatório e deve ser maior que zero." }, { status: 400 });
   }
 
+  // "O que foi comprado" (opcional): validado ANTES de gravar qualquer coisa.
+  let compra: ParsedCompra | null = null;
+  if (body.compra !== undefined && body.compra !== null) {
+    const parsed = parseCompra(body.compra);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    compra = parsed.compra;
+  }
+
   const status = body.status || "EM_ABERTO";
 
   const preDelta = balanceDelta(-1, status, valor);
@@ -86,50 +102,70 @@ export async function POST(req: Request) {
     }
   }
 
-  const payable = await prisma.$transaction(async (tx) => {
-    // number vem do id sequencial autoincrementado pelo Postgres (sequence),
-    // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo
-    // número (condição de corrida real com o COUNT(*) anterior).
-    let created = await tx.payable.create({
-      data: {
-        number: body.number || "",
-        fornecedor: body.fornecedor,
-        descricao: body.descricao,
-        categoriaId: body.categoriaId,
-        centroCusto: body.centroCusto || null,
-        empresaId: empresa.id,
-        valor,
-        dataCompetencia: new Date(body.dataCompetencia),
-        dataVencimento: new Date(body.dataVencimento),
-        dataPagamento: body.dataPagamento ? new Date(body.dataPagamento) : null,
-        bankAccountId: body.bankAccountId || null,
-        formaPagamento: body.formaPagamento || null,
-        parcelado: !!body.parcelado,
-        quantidadeParcelas: body.quantidadeParcelas ? Number(body.quantidadeParcelas) : null,
-        parcelaAtual: body.parcelaAtual ? Number(body.parcelaAtual) : null,
-        observacoes: body.observacoes || null,
-        status,
-        createdById: session.user.id,
-      },
+  let payable;
+  try {
+    payable = await prisma.$transaction(async (tx) => {
+      // number vem do id sequencial autoincrementado pelo Postgres (sequence),
+      // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo
+      // número (condição de corrida real com o COUNT(*) anterior).
+      let created = await tx.payable.create({
+        data: {
+          number: body.number || "",
+          fornecedor: body.fornecedor,
+          descricao: body.descricao,
+          categoriaId: body.categoriaId,
+          centroCusto: body.centroCusto || null,
+          empresaId: empresa.id,
+          valor,
+          dataCompetencia: new Date(body.dataCompetencia),
+          dataVencimento: new Date(body.dataVencimento),
+          dataPagamento: body.dataPagamento ? new Date(body.dataPagamento) : null,
+          bankAccountId: body.bankAccountId || null,
+          formaPagamento: body.formaPagamento || null,
+          parcelado: !!body.parcelado,
+          quantidadeParcelas: body.quantidadeParcelas ? Number(body.quantidadeParcelas) : null,
+          parcelaAtual: body.parcelaAtual ? Number(body.parcelaAtual) : null,
+          observacoes: body.observacoes || null,
+          status,
+          createdById: session.user.id,
+        },
+      });
+
+      if (!body.number) {
+        created = await tx.payable.update({
+          where: { id: created.id },
+          data: { number: `CP-${String(created.sequence).padStart(5, "0")}` },
+        });
+      }
+
+      const delta = balanceDelta(-1, status, valor);
+      if (delta && created.bankAccountId) {
+        await tx.bankAccount.update({
+          where: { id: created.bankAccountId },
+          data: { saldoAtual: { increment: delta } },
+        });
+      }
+
+      if (compra) {
+        await saveCompraForPayable(tx, {
+          userId: session.user.id,
+          payable: {
+            id: created.id,
+            empresaId: created.empresaId,
+            fornecedor: created.fornecedor,
+            dataCompetencia: created.dataCompetencia,
+            invoiceId: null,
+          },
+          compra,
+        });
+      }
+
+      return created;
     });
-
-    if (!body.number) {
-      created = await tx.payable.update({
-        where: { id: created.id },
-        data: { number: `CP-${String(created.sequence).padStart(5, "0")}` },
-      });
-    }
-
-    const delta = balanceDelta(-1, status, valor);
-    if (delta && created.bankAccountId) {
-      await tx.bankAccount.update({
-        where: { id: created.bankAccountId },
-        data: { saldoAtual: { increment: delta } },
-      });
-    }
-
-    return created;
-  });
+  } catch (error) {
+    if (error instanceof CompraError) return NextResponse.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
 
   await prisma.auditLog.create({
     data: {

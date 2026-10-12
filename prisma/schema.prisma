@@ -97,6 +97,7 @@ model User {
   waiterSalesCreated                 WaiterSaleEntry[]                   @relation("WaiterSaleCreatedBy")
   stockMovementsCreated              StockMovement[]                     @relation("StockMovementCreatedBy")
   purchasesCreated                   Purchase[]                          @relation("PurchaseCreatedBy")
+  invoicesCreated                    SupplierInvoice[]                   @relation("SupplierInvoiceCreatedBy")
   purchasesResponsavelRecebimento    Purchase[]                          @relation("PurchaseResponsavelRecebimento")
   receivingItemsResolvidos           ReceivingItem[]                     @relation("ReceivingItemResolvidoPor")
   transfersCreated                   Transfer[]                          @relation("TransferCreatedBy")
@@ -290,6 +291,7 @@ model Empresa {
   userAccess                         UserEmpresaAccess[]
   suppliers                          Supplier[]
   purchases                          Purchase[]
+  supplierInvoices                   SupplierInvoice[]
   receivings                         Receiving[]
   transfersOrigem                    Transfer[]                          @relation("TransferOrigem")
   transfersDestino                   Transfer[]                          @relation("TransferDestino")
@@ -2729,6 +2731,7 @@ model Ingredient {
   productLinks      ProductIngredient[]
   movements         StockMovement[]
   purchaseItems     PurchaseItem[]
+  invoiceItems      SupplierInvoiceItem[]
   losses            Loss[]
   transferItems     TransferItem[]
   countItems        StockCountItem[]
@@ -2937,6 +2940,7 @@ model Supplier {
 
   ingredients Ingredient[]
   purchases   Purchase[]
+  invoices    SupplierInvoice[]
 }
 
 enum PurchaseStatus {
@@ -3751,19 +3755,19 @@ enum BankTransactionStatus {
 }
 
 model BankAccount {
-  id           String   @id @default(cuid())
-  empresaId    String
-  empresa      Empresa  @relation(fields: [empresaId], references: [id])
-  name         String
-  bank         String?
-  agencia      String?
-  conta        String?
-  tipo         String   @default("Conta Corrente")
-  saldoInicial Float    @default(0)
-  saldoAtual   Float    @default(0)
-  color        String   @default("#2952E3")
-  icon         String   @default("Landmark")
-  active       Boolean  @default(true)
+  id                   String    @id @default(cuid())
+  empresaId            String
+  empresa              Empresa   @relation(fields: [empresaId], references: [id])
+  name                 String
+  bank                 String?
+  agencia              String?
+  conta                String?
+  tipo                 String    @default("Conta Corrente")
+  saldoInicial         Float     @default(0)
+  saldoAtual           Float     @default(0)
+  color                String    @default("#2952E3")
+  icon                 String    @default("Landmark")
+  active               Boolean   @default(true)
   // Conexão com o banco (Open Finance): id desta conta no provedor. Quando preenchido, a "ponte"
   // (rotina do Claude ou outro alimentador) manda os lançamentos para POST
   // /api/financeiro/conciliacao/sync usando este id para achar a conta. Único: uma conta do banco
@@ -3772,8 +3776,8 @@ model BankAccount {
   lastSyncAt           DateTime? // última vez que o banco entregou lançamentos (para avisar se parar)
   bankBalance          Float? // saldo informado pelo banco na última atualização (só consulta)
   bankBalanceAt        DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   payables              Payable[]
   receivables           Receivable[]
@@ -3860,6 +3864,10 @@ model Payable {
   status              FinanceEntryStatus @default(EM_ABERTO)
   recurringTemplateId String?
   recurringTemplate   RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id])
+  /// "O que foi comprado" neste boleto (itens, preço combinado × cobrado). Vários boletos (parcelas) da
+  /// mesma nota apontam para a MESMA compra. Opcional: boletos sem itens continuam valendo.
+  invoiceId           String?
+  invoice             SupplierInvoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   createdById         String
   createdBy           User               @relation(fields: [createdById], references: [id])
   createdAt           DateTime           @default(now())
@@ -3867,6 +3875,7 @@ model Payable {
 
   @@index([empresaId, status, dataVencimento])
   @@index([empresaId, dataCompetencia])
+  @@index([invoiceId])
 }
 
 model Receivable {
@@ -3978,6 +3987,103 @@ model BankTransaction {
   @@index([empresaId, bankAccountId, date])
   @@index([importId])
   @@index([matchedType, matchedId])
+}
+
+// ---------------------------------------------------------------------------
+// CONTAS A PAGAR — "o que foi comprado" (itens da nota/boleto) e preço combinado × cobrado
+// ---------------------------------------------------------------------------
+
+enum SupplierInvoiceItemKind {
+  /// Produto do cadastro de Estoque (insumo).
+  INSUMO
+  /// Item que não está no cadastro (embalagem, limpeza, gás...), com um grupo livre.
+  OUTRO
+  /// Valor que não é produto: frete, desconto, juros/multa. Quantidade 1; o valor pode ser negativo (desconto).
+  AJUSTE
+}
+
+enum SupplierInvoicePriceSource {
+  /// Preço do pedido feito no Estoque.
+  PEDIDO_ESTOQUE
+  /// Tabela de preços combinados do fornecedor.
+  TABELA_FORNECEDOR
+  /// Último preço pago a este fornecedor por este produto (sugerido pelo sistema).
+  ULTIMO_PRECO
+  /// Digitado na hora.
+  MANUAL
+  /// Não havia preço combinado (ex.: frete): o combinado conta como R$ 0,00.
+  NAO_COMBINADO
+}
+
+enum SupplierInvoiceDivergenceStatus {
+  /// Cobrado bateu com o combinado (ou ficou abaixo) — nada a decidir.
+  SEM_DIVERGENCIA
+  /// Veio acima do combinado e está sendo cobrado do fornecedor.
+  EM_CONTESTACAO
+  /// Veio acima do combinado e foi aceito, com o motivo registrado.
+  ACEITA
+}
+
+/// Uma compra/nota de fornecedor registrada pelo Contas a Pagar: os itens ficam AQUI (e não em cada
+/// boleto), para que uma nota paga em várias parcelas conte uma vez só nos relatórios de gasto por produto.
+/// Não mexe no estoque: é só o registro financeiro de "o que foi comprado e por quanto".
+model SupplierInvoice {
+  id                        String                          @id @default(cuid())
+  empresaId                 String
+  empresa                   Empresa                         @relation(fields: [empresaId], references: [id])
+  supplierId                String?
+  supplier                  Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  /// Nome do fornecedor como estava no boleto (também vale quando o fornecedor não está cadastrado).
+  fornecedorNome            String
+  numeroNota                String?
+  /// Dia da compra (competência do boleto), ancorado em meia-noite de São Paulo.
+  dataCompra                DateTime
+  /// Soma de TODOS os itens e ajustes (o que foi cobrado).
+  totalCobrado              Float                           @default(0)
+  /// Soma, só dos itens que tinham preço combinado, de quantidade × preço combinado.
+  totalCombinado            Float                           @default(0)
+  /// Soma, dos MESMOS itens, de quantidade × preço cobrado (comparável com `totalCombinado`).
+  totalComparado            Float                           @default(0)
+  divergenciaStatus         SupplierInvoiceDivergenceStatus @default(SEM_DIVERGENCIA)
+  /// Motivo de aceitar a diferença (Reajuste do fornecedor, Frete não combinado, Quantidade diferente, Outro).
+  divergenciaMotivo         String?
+  divergenciaObservacao     String?
+  divergenciaResolvidaEm    DateTime?
+  divergenciaResolvidaPorId String?
+  createdById               String
+  createdBy                 User                            @relation("SupplierInvoiceCreatedBy", fields: [createdById], references: [id])
+  createdAt                 DateTime                        @default(now())
+  updatedAt                 DateTime                        @updatedAt
+
+  items    SupplierInvoiceItem[]
+  payables Payable[]
+
+  @@index([empresaId, dataCompra])
+  @@index([empresaId, supplierId, dataCompra])
+}
+
+model SupplierInvoiceItem {
+  id              String                      @id @default(cuid())
+  invoiceId       String
+  invoice         SupplierInvoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  ordem           Int                         @default(0)
+  kind            SupplierInvoiceItemKind
+  ingredientId    String?
+  ingredient      Ingredient?                 @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  /// Nome do produto como estava na compra (não muda se o cadastro for renomeado).
+  nome            String
+  /// Grupo livre dos itens "OUTRO" (Embalagem, Limpeza, Gás...).
+  grupo           String?
+  quantidade      Float
+  unidade         String
+  precoCombinado  Float?
+  origemCombinado SupplierInvoicePriceSource?
+  precoCobrado    Float
+  /// quantidade × precoCobrado, arredondado em centavos.
+  total           Float
+
+  @@index([invoiceId])
+  @@index([ingredientId])
 }
 
 // ---------------------------------------------------------------------------

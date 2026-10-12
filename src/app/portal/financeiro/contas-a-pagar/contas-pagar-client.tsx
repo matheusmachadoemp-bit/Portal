@@ -1,13 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Check, Download, Copy, Repeat } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
+import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
+import { detailPercent, isAboveAgreed, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
+import {
+  CompraItensEditor,
+  EMPTY_DECISION,
+  draftFromSaved,
+  draftsToPayload,
+  type DecisionState,
+  type DraftItem,
+  type IngredientOption,
+  type LastPurchase,
+  type SavedItem,
+} from "./compra-itens-editor";
 
 type PayableDTO = {
   id: string;
@@ -30,6 +43,18 @@ type PayableDTO = {
   parcelaAtual: number | null;
   observacoes: string | null;
   status: string;
+  /** Resumo da compra (“o que foi comprado”) ligada à conta, se houver. */
+  invoice: InvoiceSummary | null;
+};
+
+type InvoiceSummary = {
+  id: string;
+  numeroNota: string | null;
+  totalCobrado: number;
+  totalCombinado: number;
+  totalComparado: number;
+  divergenciaStatus: "SEM_DIVERGENCIA" | "EM_CONTESTACAO" | "ACEITA";
+  divergenciaMotivo: string | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -85,6 +110,8 @@ export function ContasPagarClient({
   categorias,
   contas,
   fornecedoresCadastrados,
+  ingredients = [],
+  canCreateSupplier = false,
   canCreate = true,
   isGrupoNordMode = true,
 }: {
@@ -93,11 +120,16 @@ export function ContasPagarClient({
   contas: { id: string; name: string }[];
   /** Cadastro de fornecedores (Estoque > Fornecedores) — só alimenta a sugestão do campo "Fornecedor", ver `fornecedorSugestoes`. */
   fornecedoresCadastrados: { id: string; name: string }[];
+  /** Insumos da loja (Estoque) para escolher em “O que foi comprado”. */
+  ingredients?: IngredientOption[];
+  /** O perfil pode cadastrar fornecedor (Estoque) — habilita “Cadastrar como novo fornecedor” no formulário. */
+  canCreateSupplier?: boolean;
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
 }) {
   const [payables, setPayables] = useState(initialPayables);
+  const [suppliers, setSuppliers] = useState(fornecedoresCadastrados);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<PayableDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -112,6 +144,26 @@ export function ContasPagarClient({
   const [filterVencimento, setFilterVencimento] = useState<DueDateFilterKey>("");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [quickFilter, setQuickFilter] = useState<"" | "SEM_ITENS" | "ACIMA" | "CONTESTACAO">("");
+  // “O que foi comprado” (itens da nota) do formulário aberto.
+  const [supplierId, setSupplierId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<DraftItem[]>([]);
+  const [numeroNota, setNumeroNota] = useState("");
+  const [decision, setDecision] = useState<DecisionState>(EMPTY_DECISION);
+  const [hadCompra, setHadCompra] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [loadingCompra, setLoadingCompra] = useState(false);
+  const [compraLoadFailed, setCompraLoadFailed] = useState(false);
+  const [hints, setHints] = useState<Record<string, PriceHint>>({});
+  const [lastPurchase, setLastPurchase] = useState<LastPurchase | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [newSupplierOpen, setNewSupplierOpen] = useState(false);
+  const [newSupplier, setNewSupplier] = useState({ razaoSocial: "", cnpj: "", telefone: "" });
+  const [newSupplierError, setNewSupplierError] = useState<string | null>(null);
+  const [savingSupplier, setSavingSupplier] = useState(false);
+  const historyKey = useRef("");
+  const historySeq = useRef(0);
   const [showRecurring, setShowRecurring] = useState(false);
   const [recurringForm, setRecurringForm] = useState({
     descricao: "",
@@ -133,7 +185,7 @@ export function ContasPagarClient({
   // sem cadastro formal também (ex.: "sandro Proprietario").
   const fornecedorSugestoes = useMemo(() => {
     const nomes = new Set<string>();
-    for (const f of fornecedoresCadastrados) {
+    for (const f of suppliers) {
       const nome = f.name.trim();
       if (nome) nomes.add(nome);
     }
@@ -142,7 +194,7 @@ export function ContasPagarClient({
       if (nome) nomes.add(nome);
     }
     return Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [fornecedoresCadastrados, payables]);
+  }, [suppliers, payables]);
 
   const filtered = useMemo(
     () =>
@@ -154,9 +206,61 @@ export function ContasPagarClient({
             !search ||
             p.fornecedor.toLowerCase().includes(search.toLowerCase()) ||
             p.descricao.toLowerCase().includes(search.toLowerCase())
-        ),
-    [payables, filterStatus, filterVencimento, customFrom, customTo, search]
+        )
+        .filter((p) => {
+          if (quickFilter === "SEM_ITENS") return !p.invoice;
+          if (quickFilter === "ACIMA") return !!p.invoice && isAboveAgreed({ diferenca: round2(p.invoice.totalComparado - p.invoice.totalCombinado) });
+          if (quickFilter === "CONTESTACAO") return p.invoice?.divergenciaStatus === "EM_CONTESTACAO";
+          return true;
+        }),
+    [payables, filterStatus, filterVencimento, customFrom, customTo, search, quickFilter]
   );
+
+  // Indicadores do topo (sobre as contas carregadas: de 120 dias atrás em diante).
+  const kpis = useMemo(() => {
+    const now = new Date();
+    const today = format(now, "yyyy-MM-dd");
+    const month = today.slice(0, 7);
+    const limit = new Date(now);
+    limit.setDate(limit.getDate() + 7);
+    const in7 = format(limit, "yyyy-MM-dd");
+    let monthTotal = 0;
+    let monthDetailed = 0;
+    let aboveValue = 0;
+    let aboveCount = 0;
+    let contestedValue = 0;
+    let contestedCount = 0;
+    let dueSoon = 0;
+    for (const p of payables) {
+      if (p.status === "CANCELADO") continue;
+      const inv = p.invoice;
+      if (format(new Date(p.dataCompetencia), "yyyy-MM-dd").startsWith(month)) {
+        monthTotal += p.valor;
+        if (inv) monthDetailed += Math.min(inv.totalCobrado, p.valor);
+        const diff = inv ? round2(inv.totalComparado - inv.totalCombinado) : 0;
+        if (inv && isAboveAgreed({ diferenca: diff })) {
+          aboveValue += diff;
+          aboveCount += 1;
+        }
+      }
+      if (inv?.divergenciaStatus === "EM_CONTESTACAO") {
+        contestedCount += 1;
+        contestedValue += Math.max(0, round2(inv.totalComparado - inv.totalCombinado));
+      }
+      if (p.status !== "PAGO") {
+        const due = format(new Date(p.dataVencimento), "yyyy-MM-dd");
+        if (due >= today && due <= in7) dueSoon += p.valor;
+      }
+    }
+    return {
+      detailedPct: monthTotal > 0 ? Math.round((monthDetailed / monthTotal) * 100) : 0,
+      aboveValue,
+      aboveCount,
+      contestedValue,
+      contestedCount,
+      dueSoon,
+    };
+  }, [payables]);
 
   const totalFiltrado = filtered.reduce((a, p) => a + p.valor, 0);
 
@@ -166,10 +270,144 @@ export function ContasPagarClient({
     setPayables(data.payables);
   }
 
+  function resetCompra() {
+    setSupplierId(null);
+    setDrafts([]);
+    setNumeroNota("");
+    setDecision(EMPTY_DECISION);
+    setHadCompra(false);
+    setDirty(false);
+    setLoadingCompra(false);
+    setCompraLoadFailed(false);
+    setHints({});
+    setLastPurchase(null);
+    setLoadingHistory(false);
+    setNewSupplierOpen(false);
+    setNewSupplierError(null);
+    historyKey.current = "";
+    historySeq.current += 1;
+  }
+
+  function findSupplier(name: string) {
+    const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+    const wanted = norm(name);
+    if (!wanted) return null;
+    return suppliers.find((f) => norm(f.name) === wanted) ?? null;
+  }
+
+  /** Compras anteriores deste fornecedor (última compra + último preço de cada produto). */
+  async function loadHistory(name: string, id: string | null) {
+    const clean = name.trim();
+    if (!clean) return;
+    const key = `${id ?? ""}|${clean.toLowerCase()}`;
+    if (historyKey.current === key) return;
+    historyKey.current = key;
+    const seq = ++historySeq.current;
+    setHints({});
+    setLastPurchase(null);
+    setLoadingHistory(true);
+    try {
+      const params = new URLSearchParams({ fornecedor: clean });
+      if (id) params.set("supplierId", id);
+      const res = await fetch(`/api/financeiro/pagar/historico?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (seq !== historySeq.current) return; // chegou uma busca mais nova
+      if (res.ok) {
+        setHints(data.hints ?? {});
+        setLastPurchase(data.ultimaCompra ?? null);
+      }
+    } catch {
+      // sem histórico: o formulário continua funcionando (só sem sugestões)
+    } finally {
+      if (seq === historySeq.current) setLoadingHistory(false);
+    }
+  }
+
+  function onFornecedorChange(value: string) {
+    setForm((f) => ({ ...f, fornecedor: value }));
+    const match = findSupplier(value);
+    setSupplierId(match?.id ?? null);
+    if (match) loadHistory(match.name, match.id);
+  }
+
+  function openNewSupplierPanel() {
+    setNewSupplier({ razaoSocial: form.fornecedor.trim(), cnpj: "", telefone: "" });
+    setNewSupplierError(null);
+    setNewSupplierOpen(true);
+  }
+
+  async function saveNewSupplier() {
+    if (savingSupplier) return;
+    if (!newSupplier.razaoSocial.trim()) {
+      setNewSupplierError("Informe o nome do fornecedor.");
+      return;
+    }
+    setSavingSupplier(true);
+    setNewSupplierError(null);
+    const result = await apiRequest<{ supplier: { id: string; razaoSocial: string; nomeFantasia: string | null } }>(
+      "/api/estoque/fornecedores",
+      "POST",
+      { razaoSocial: newSupplier.razaoSocial.trim(), cnpj: newSupplier.cnpj.trim(), telefone: newSupplier.telefone.trim() }
+    );
+    setSavingSupplier(false);
+    if (!result.ok) {
+      setNewSupplierError(result.error);
+      return;
+    }
+    const created = result.data.supplier;
+    const name = created.nomeFantasia ?? created.razaoSocial;
+    setSuppliers((list) => [...list, { id: created.id, name }].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")));
+    setForm((f) => ({ ...f, fornecedor: name }));
+    setSupplierId(created.id);
+    setNewSupplierOpen(false);
+    loadHistory(name, created.id);
+  }
+
   function openNew() {
     setEditing(null);
+    resetCompra();
+    setFormError(null);
     setForm({ ...emptyForm, categoriaId: categorias[0]?.id ?? "", bankAccountId: contas[0]?.id ?? "" });
     setShowForm(true);
+  }
+
+  function closeForm() {
+    if (dirty && drafts.length > 0 && !saving) setConfirmDiscard(true);
+    else setShowForm(false);
+  }
+
+  /** Abre a conta já com os itens gravados (buscados à parte, para a lista ficar leve). */
+  async function loadCompraOf(p: PayableDTO) {
+    setLoadingCompra(true);
+    setCompraLoadFailed(false);
+    try {
+      const res = await fetch(`/api/financeiro/pagar/${p.id}/compra`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.compra) throw new Error("falha");
+      const c = data.compra as {
+        supplierId: string | null;
+        numeroNota: string | null;
+        divergenciaStatus: "SEM_DIVERGENCIA" | "EM_CONTESTACAO" | "ACEITA";
+        divergenciaMotivo: string | null;
+        divergenciaObservacao: string | null;
+        itens: SavedItem[];
+      };
+      setDrafts(c.itens.map(draftFromSaved));
+      setNumeroNota(c.numeroNota ?? "");
+      setSupplierId(c.supplierId ?? findSupplier(p.fornecedor)?.id ?? null);
+      setDecision(
+        c.divergenciaStatus === "EM_CONTESTACAO"
+          ? { acao: "CONTESTAR", motivo: "", observacao: c.divergenciaObservacao ?? "" }
+          : c.divergenciaStatus === "ACEITA"
+            ? { acao: "ACEITAR", motivo: c.divergenciaMotivo ?? "", observacao: c.divergenciaObservacao ?? "" }
+            : EMPTY_DECISION
+      );
+      loadHistory(p.fornecedor, c.supplierId ?? findSupplier(p.fornecedor)?.id ?? null);
+    } catch {
+      setCompraLoadFailed(true);
+    } finally {
+      setLoadingCompra(false);
+    }
   }
 
   function openEdit(p: PayableDTO) {
@@ -192,7 +430,13 @@ export function ContasPagarClient({
       observacoes: p.observacoes ?? "",
       status: p.status,
     });
+    resetCompra();
+    setFormError(null);
+    setSupplierId(findSupplier(p.fornecedor)?.id ?? null);
+    setHadCompra(!!p.invoice);
     setShowForm(true);
+    if (p.invoice) loadCompraOf(p);
+    else loadHistory(p.fornecedor, findSupplier(p.fornecedor)?.id ?? null);
   }
 
   async function submit() {
@@ -213,9 +457,52 @@ export function ContasPagarClient({
       setFormError("Informe um valor maior que zero.");
       return;
     }
+    if (loadingCompra || compraLoadFailed) {
+      setFormError(
+        compraLoadFailed
+          ? "Não foi possível carregar os itens desta conta. Feche e abra de novo antes de salvar (assim nenhum item se perde)."
+          : "Aguarde os itens carregarem."
+      );
+      return;
+    }
+
+    // “O que foi comprado”: ausente = não mexe; vazio numa conta que tinha itens = remove; com itens = grava.
+    let compra: unknown = undefined;
+    if (drafts.length > 0) {
+      const itens = draftsToPayload(drafts);
+      const parsed = normalizeItems(itens);
+      if (!parsed.ok) {
+        setFormError(parsed.error);
+        return;
+      }
+      const above = isAboveAgreed(computeTotals(parsed.items));
+      if (above) {
+        if (!decision.acao) {
+          setFormError("Esta compra veio acima do combinado: escolha “Contestar com o fornecedor” ou “Aceitar e registrar o motivo”.");
+          return;
+        }
+        if (decision.acao === "ACEITAR" && !decision.motivo) {
+          setFormError("Escolha o motivo para aceitar a diferença.");
+          return;
+        }
+        if (decision.acao === "ACEITAR" && decision.motivo === "Outro" && decision.observacao.trim().length < 3) {
+          setFormError("Explique o motivo na observação (você escolheu “Outro”).");
+          return;
+        }
+      }
+      compra = {
+        supplierId,
+        numeroNota,
+        itens,
+        divergencia: above ? { acao: decision.acao, motivo: decision.motivo, observacao: decision.observacao } : undefined,
+      };
+    } else if (editing && hadCompra) {
+      compra = null;
+    }
+
     setFormError(null);
     setSaving(true);
-    const payload = { ...form, dataPagamento: form.dataPagamento || null };
+    const payload = { ...form, dataPagamento: form.dataPagamento || null, ...(compra !== undefined ? { compra } : {}) };
     const result = editing
       ? await apiRequest(`/api/financeiro/pagar/${editing.id}`, "PATCH", payload)
       : await apiRequest("/api/financeiro/pagar", "POST", payload);
@@ -225,6 +512,7 @@ export function ContasPagarClient({
       return;
     }
     setShowForm(false);
+    setDirty(false);
     refresh();
   }
 
@@ -320,6 +608,17 @@ export function ContasPagarClient({
   }
 
   return (
+    <>
+    <SortableStatCards
+      storageKey="financeiro-contas-pagar-kpi-order"
+      className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
+      cards={[
+        { key: "detalhado", label: "Detalhado nas contas do mês", value: `${kpis.detailedPct}%`, icon: "ListChecks", color: "#1464F4", hint: "do valor lançado neste mês já tem itens" },
+        { key: "acima", label: "Acima do combinado no mês", value: formatCurrency(kpis.aboveValue), icon: "TrendingUp", color: "#ef4444", hint: `em ${kpis.aboveCount} conta(s)` },
+        { key: "contestacao", label: "Em contestação", value: `${kpis.contestedCount} conta(s)`, icon: "MessageSquare", color: "#f59e0b", hint: `${formatCurrency(kpis.contestedValue)} cobrados a mais` },
+        { key: "proximos-7", label: "A pagar nos próximos 7 dias", value: formatCurrency(kpis.dueSoon), icon: "CalendarClock", color: "#1464F4", hint: "contas em aberto com vencimento até 7 dias" },
+      ]}
+    />
     <Section
       title="Contas a Pagar"
       action={
@@ -376,6 +675,28 @@ export function ContasPagarClient({
           <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input-sm" />
         </div>
       )}
+      <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Filtro rápido por itens">
+        {(
+          [
+            ["", "Todas"],
+            ["SEM_ITENS", "Sem itens"],
+            ["ACIMA", "Acima do combinado"],
+            ["CONTESTACAO", "Em contestação"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key || "todas"}
+            type="button"
+            aria-pressed={quickFilter === key}
+            onClick={() => setQuickFilter(key)}
+            className={`rounded-full border px-3 py-1 text-xs ${
+              quickFilter === key ? "border-nord-blue bg-nord-blue/20 text-white" : "border-nord-border text-nord-gray hover:text-white"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <p className="text-xs text-nord-gray mb-3">
         Total filtrado: <span className="text-white font-medium">{formatCurrency(totalFiltrado)}</span> ({filtered.length} lançamentos)
       </p>
@@ -390,6 +711,8 @@ export function ContasPagarClient({
               <th className="py-2 pr-4">Valor</th>
               <th className="py-2 pr-4">Vencimento</th>
               <th className="py-2 pr-4">Status</th>
+              <th className="py-2 pr-4">Itens</th>
+              <th className="py-2 pr-4">Combinado</th>
               <th className="py-2 pr-4"></th>
             </tr>
           </thead>
@@ -404,6 +727,28 @@ export function ContasPagarClient({
                 <td className="py-2 pr-4 text-nord-gray">{format(new Date(p.dataVencimento), "dd/MM/yyyy")}</td>
                 <td className="py-2 pr-4">
                   <Badge tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
+                </td>
+                <td className="py-2 pr-4 whitespace-nowrap">
+                  {p.invoice ? (
+                    <div className="min-w-[84px]">
+                      <span className="text-xs text-white">{detailPercent(p.invoice.totalCobrado, p.valor)}%</span>
+                      <div className="mt-1 h-1.5 rounded-full bg-nord-border overflow-hidden" aria-hidden="true">
+                        <div
+                          className={`h-full rounded-full ${detailPercent(p.invoice.totalCobrado, p.valor) >= 100 ? "bg-nord-blue" : "bg-nord-warning"}`}
+                          style={{ width: `${detailPercent(p.invoice.totalCobrado, p.valor)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : canCreate ? (
+                    <button type="button" onClick={() => openEdit(p)} className="text-xs text-nord-blue-light hover:underline">
+                      Sem itens · Detalhar
+                    </button>
+                  ) : (
+                    <span className="text-xs text-nord-gray">Sem itens</span>
+                  )}
+                </td>
+                <td className="py-2 pr-4 whitespace-nowrap">
+                  <CombinadoCell invoice={p.invoice} />
                 </td>
                 <td className="py-2 pr-4">
                   <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
@@ -427,7 +772,7 @@ export function ContasPagarClient({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-6 text-center text-nord-gray text-sm">
+                <td colSpan={10} className="py-6 text-center text-nord-gray text-sm">
                   Nenhuma conta encontrada.
                 </td>
               </tr>
@@ -436,24 +781,67 @@ export function ContasPagarClient({
         </table>
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar conta a pagar" : "Nova conta a pagar"} widthClass="max-w-2xl">
+      <Modal open={showForm} onClose={closeForm} title={editing ? "Editar conta a pagar" : "Nova conta a pagar"} widthClass="max-w-5xl">
         <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Fornecedor">
-            <input
-              required
-              list="fornecedor-sugestoes"
-              placeholder="Digite ou escolha um fornecedor já cadastrado"
-              value={form.fornecedor}
-              onChange={(e) => setForm({ ...form, fornecedor: e.target.value })}
-              className="input"
-            />
-            <datalist id="fornecedor-sugestoes">
-              {fornecedorSugestoes.map((nome) => (
-                <option key={nome} value={nome} />
-              ))}
-            </datalist>
-          </Field>
+          <div>
+            <Field label="Fornecedor">
+              <input
+                required
+                list="fornecedor-sugestoes"
+                placeholder="Digite ou escolha um fornecedor já cadastrado"
+                value={form.fornecedor}
+                onChange={(e) => onFornecedorChange(e.target.value)}
+                onBlur={() => loadHistory(form.fornecedor, supplierId)}
+                className="input"
+              />
+              <datalist id="fornecedor-sugestoes">
+                {fornecedorSugestoes.map((nome) => (
+                  <option key={nome} value={nome} />
+                ))}
+              </datalist>
+            </Field>
+            <div className="mt-1 text-[11px] min-h-4">
+              {supplierId ? (
+                <span className="inline-flex items-center gap-1 text-nord-success">
+                  <Check size={11} /> Cadastrado
+                </span>
+              ) : form.fornecedor.trim() ? (
+                canCreateSupplier ? (
+                  <button type="button" onClick={openNewSupplierPanel} className="text-nord-blue-light hover:underline">
+                    Cadastrar “{form.fornecedor.trim()}” como novo fornecedor
+                  </button>
+                ) : (
+                  <span className="text-nord-gray">Fora da lista de fornecedores (vale como texto)</span>
+                )
+              ) : null}
+            </div>
+          </div>
+          {newSupplierOpen && (
+            <div className="col-span-2 rounded-lg border border-nord-border bg-nord-panel/40 p-3 space-y-2">
+              <p className="text-xs text-white font-medium">Cadastrar novo fornecedor</p>
+              <FormError message={newSupplierError} />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Field label="Nome / razão social">
+                  <input value={newSupplier.razaoSocial} onChange={(e) => setNewSupplier({ ...newSupplier, razaoSocial: e.target.value })} className="input" />
+                </Field>
+                <Field label="CNPJ (opcional)">
+                  <input value={newSupplier.cnpj} onChange={(e) => setNewSupplier({ ...newSupplier, cnpj: e.target.value })} className="input" />
+                </Field>
+                <Field label="Telefone (opcional)">
+                  <input value={newSupplier.telefone} onChange={(e) => setNewSupplier({ ...newSupplier, telefone: e.target.value })} className="input" />
+                </Field>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={saveNewSupplier} disabled={savingSupplier} className="btn-primary !py-1.5 !text-xs">
+                  {savingSupplier ? "Cadastrando..." : "Cadastrar fornecedor"}
+                </button>
+                <button type="button" onClick={() => setNewSupplierOpen(false)} className="btn-outline !py-1.5 !text-xs">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
           <Field label="Descrição">
             <input required value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="input" />
           </Field>
@@ -478,7 +866,7 @@ export function ContasPagarClient({
           <Field label="Data de Vencimento">
             <input type="date" value={form.dataVencimento} onChange={(e) => setForm({ ...form, dataVencimento: e.target.value })} className="input" />
           </Field>
-          <Field label="Data de Pagamento">
+          <Field label="Data de Pagamento (quando foi paga)">
             <input type="date" value={form.dataPagamento} onChange={(e) => setForm({ ...form, dataPagamento: e.target.value })} className="input" />
           </Field>
           <Field label="Conta Bancária">
@@ -501,7 +889,15 @@ export function ContasPagarClient({
             </select>
           </Field>
           <Field label="Status">
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
+            <select
+              value={form.status}
+              onChange={(e) => {
+                const status = e.target.value;
+                // Marcou como pago e ainda não informou o dia do pagamento: sugere hoje (dá para trocar).
+                setForm({ ...form, status, dataPagamento: status === "PAGO" && !form.dataPagamento ? format(new Date(), "yyyy-MM-dd") : form.dataPagamento });
+              }}
+              className="input"
+            >
               {Object.entries(STATUS_LABEL).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v}
@@ -531,6 +927,36 @@ export function ContasPagarClient({
               </Field>
             </>
           )}
+          <CompraItensEditor
+            items={drafts}
+            onItemsChange={(next) => {
+              setDrafts(next);
+              setDirty(true);
+            }}
+            ingredients={ingredients}
+            hints={hints}
+            lastPurchase={lastPurchase}
+            loadingHistory={loadingHistory}
+            valorBoleto={Number(form.valor) > 0 ? Number(form.valor) : 0}
+            onUseTotal={(total) => setForm((f) => ({ ...f, valor: String(total) }))}
+            decision={decision}
+            onDecisionChange={(d) => {
+              setDecision(d);
+              setDirty(true);
+            }}
+            hadCompra={hadCompra}
+            numeroNota={numeroNota}
+            onNumeroNotaChange={(v) => {
+              setNumeroNota(v);
+              setDirty(true);
+            }}
+          />
+          {loadingCompra && <p className="col-span-2 text-xs text-nord-gray">Carregando os itens desta conta…</p>}
+          {compraLoadFailed && (
+            <p className="col-span-2 text-xs text-nord-danger">
+              Não foi possível carregar os itens desta conta. Feche e abra de novo antes de salvar, para nenhum item se perder.
+            </p>
+          )}
           <div className="col-span-2">
             <Field label="Observações">
               <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} className="input min-h-14" />
@@ -539,12 +965,26 @@ export function ContasPagarClient({
         </div>
         <button
           onClick={submit}
-          disabled={saving}
+          disabled={saving || loadingCompra || compraLoadFailed}
           className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
         >
-          {saving ? "Salvando..." : "Salvar"}
+          {saving ? "Salvando..." : drafts.length > 0 ? "Salvar com os itens" : "Salvar"}
         </button>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmDiscard}
+        title="Descartar o que foi digitado?"
+        message="Os itens que você adicionou ainda não foram salvos. Se fechar agora, eles se perdem."
+        onConfirm={() => {
+          setConfirmDiscard(false);
+          setShowForm(false);
+          setDirty(false);
+        }}
+        onCancel={() => setConfirmDiscard(false)}
+        confirmLabel="Descartar"
+        danger
+      />
 
       <Modal open={showRecurring} onClose={() => setShowRecurring(false)} title="Nova conta recorrente" widthClass="max-w-lg">
         <FormError message={recurringError} />
@@ -629,7 +1069,43 @@ export function ContasPagarClient({
       />
 
     </Section>
+    </>
   );
+}
+
+/** Situação da compra contra o combinado, para a coluna “Combinado” da lista. */
+function CombinadoCell({ invoice }: { invoice: InvoiceSummary | null }) {
+  if (!invoice) return <span className="text-xs text-nord-gray">—</span>;
+  if (invoice.totalCombinado <= 0 && invoice.totalComparado <= 0) return <Badge tone="default">Sem preço combinado</Badge>;
+  const diff = round2(invoice.totalComparado - invoice.totalCombinado);
+  const pct = invoice.totalCombinado > 0 ? (diff / invoice.totalCombinado) * 100 : null;
+  const sign = diff > 0 ? "+" : diff < 0 ? "-" : "";
+  const detail = `${sign}${formatCurrency(Math.abs(diff))}${pct !== null && Math.abs(diff) > 0.05 ? ` (${diff > 0 ? "+" : ""}${pct.toFixed(1).replace(".", ",")}%)` : ""}`;
+  if (invoice.divergenciaStatus === "EM_CONTESTACAO") {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Badge tone="warning">Em contestação</Badge>
+        <span className="text-[11px] text-nord-gray">{detail}</span>
+      </div>
+    );
+  }
+  if (invoice.divergenciaStatus === "ACEITA") {
+    return (
+      <div className="flex flex-col items-start gap-1" title={invoice.divergenciaMotivo ? `Aceito: ${invoice.divergenciaMotivo}` : "Diferença aceita"}>
+        <Badge tone="info">Aceito{invoice.divergenciaMotivo ? ` · ${invoice.divergenciaMotivo}` : ""}</Badge>
+        <span className="text-[11px] text-nord-gray">{detail}</span>
+      </div>
+    );
+  }
+  if (diff < -0.05) {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Badge tone="success">Abaixo do combinado</Badge>
+        <span className="text-[11px] text-nord-gray">{detail}</span>
+      </div>
+    );
+  }
+  return <Badge tone="success">Dentro do combinado</Badge>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

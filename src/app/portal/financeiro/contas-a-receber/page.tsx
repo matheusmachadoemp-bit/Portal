@@ -23,7 +23,7 @@ export default async function ContasAReceberPage() {
     prisma.receivable.findMany({
       where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), 120) } },
       orderBy: { dataVencimento: "asc" },
-      include: { categoria: true, bankAccount: true, createdBy: { select: { name: true } }, empresa: true },
+      include: { categoria: true, bankAccount: { select: { name: true } }, createdBy: { select: { name: true } }, empresa: true },
     }),
     getActiveFinancialCategories(),
     prisma.bankAccount.findMany({
