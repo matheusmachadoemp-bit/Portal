@@ -12,6 +12,7 @@ import { formatCurrency } from "@/lib/calc";
 import { apiRequest } from "@/lib/api-client";
 import { formatSince, isBankSyncStale } from "@/lib/relative-time";
 import { presetRange, type PeriodPreset } from "@/lib/period-presets";
+import { paymentMethodLabel } from "@/lib/bank-labels";
 
 type TransactionDTO = {
   id: string;
@@ -412,7 +413,7 @@ export function ConciliacaoClient({
                 Conta: t.bankAccountName,
                 Origem: t.externalId ? "Banco" : "Arquivo",
                 Contraparte: t.counterpart ?? "",
-                Forma: t.paymentMethod ?? "",
+                Forma: paymentMethodLabel(t.paymentMethod) ?? "",
                 Tipo: t.direction === "ENTRADA" ? "Entrada" : "Saída",
                 Valor: t.valor,
                 Status: STATUS_LABEL[t.status],
@@ -510,7 +511,7 @@ export function ConciliacaoClient({
                     <td className="py-2.5 pr-4 text-white">
                       <div>{t.descricao}</div>
                       {(t.counterpart || t.paymentMethod) && (
-                        <div className="text-[11px] text-nord-gray">{[t.counterpart, t.paymentMethod].filter(Boolean).join(" · ")}</div>
+                        <div className="text-[11px] text-nord-gray">{[t.counterpart, paymentMethodLabel(t.paymentMethod)].filter(Boolean).join(" · ")}</div>
                       )}
                     </td>
                     <td className="py-2.5 pr-4 text-nord-gray whitespace-nowrap">

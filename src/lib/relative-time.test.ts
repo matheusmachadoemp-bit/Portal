@@ -29,3 +29,14 @@ test("presetRange: este mês, mês passado, 30 dias (dias de São Paulo)", () =>
   assert.deepEqual(presetRange("last30", "2026-10-12"), { from: "2026-09-13", to: "2026-10-12" });
   assert.deepEqual(presetRange("all", "2026-10-12"), { from: "", to: "" });
 });
+
+import { paymentMethodLabel } from "@/lib/bank-labels";
+
+test("paymentMethodLabel: nomes legíveis para as formas do banco", () => {
+  assert.equal(paymentMethodLabel("PIX"), "PIX");
+  assert.equal(paymentMethodLabel("TRANSFERENCIA_MESMA_INSTITUICAO"), "Transferência (mesmo banco)");
+  assert.equal(paymentMethodLabel("RESGATE_APLIC_FINANCEIRA"), "Resgate de aplicação");
+  assert.equal(paymentMethodLabel("nova_forma_x"), "Nova forma x");
+  assert.equal(paymentMethodLabel(null), null);
+  assert.equal(paymentMethodLabel(""), null);
+});
