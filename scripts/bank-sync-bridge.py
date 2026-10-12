@@ -161,7 +161,10 @@ def to_portal(row):
 
 
 def load_tool_result(path):
-    raw = open(path, encoding="utf-8").read()
+    try:
+        raw = open(path, encoding="utf-8").read()
+    except OSError as e:
+        fail("Não consegui abrir o arquivo do resultado (%s): %s" % (type(e).__name__, path))
     i = raw.find("{")
     if i < 0:
         fail("O arquivo não tem JSON: %s" % path)
