@@ -50,6 +50,8 @@ export default async function CaixaDaEmpresaPage() {
     ...a,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),
+    lastSyncAt: a.lastSyncAt ? a.lastSyncAt.toISOString() : null,
+    bankBalanceAt: a.bankBalanceAt ? a.bankBalanceAt.toISOString() : null,
   }));
 
   return (

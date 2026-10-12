@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Link2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency } from "@/lib/calc";
 import { apiRequest } from "@/lib/api-client";
+import { formatSince, isBankSyncStale } from "@/lib/relative-time";
 
 export type AccountDTO = {
   id: string;
@@ -21,6 +22,11 @@ export type AccountDTO = {
   color: string;
   icon: string;
   active: boolean;
+  /** Id desta conta na conexão com o banco (Open Finance); preenchido = os lançamentos chegam sozinhos. */
+  openFinanceAccountId: string | null;
+  lastSyncAt: string | null;
+  bankBalance: number | null;
+  bankBalanceAt: string | null;
 };
 
 const emptyForm = {
@@ -32,6 +38,7 @@ const emptyForm = {
   saldoInicial: "0",
   color: "#2952E3",
   icon: "Landmark",
+  openFinanceAccountId: "",
 };
 
 export function ContasBancariasClient({
@@ -79,6 +86,7 @@ export function ContasBancariasClient({
       saldoInicial: String(a.saldoInicial),
       color: a.color,
       icon: a.icon,
+      openFinanceAccountId: a.openFinanceAccountId ?? "",
     });
     setShowForm(true);
   }
@@ -168,6 +176,15 @@ export function ContasBancariasClient({
             <p className="text-xs text-nord-gray">
               {a.bank} {a.agencia && `• Ag. ${a.agencia}`} {a.conta && `• Conta ${a.conta}`}
             </p>
+            {a.openFinanceAccountId && (
+              <p
+                className={`flex items-center gap-1.5 text-xs ${isBankSyncStale(a.lastSyncAt) ? "text-nord-warning" : "text-nord-blue-light"}`}
+                title="Os lançamentos desta conta chegam do banco automaticamente (Conciliação Bancária)."
+              >
+                <Link2 size={12} className="shrink-0" />
+                {a.lastSyncAt ? `Conectada ao banco · atualizada ${formatSince(a.lastSyncAt)}` : "Conectada ao banco · aguardando a primeira atualização"}
+              </p>
+            )}
             <div className={`flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1 ${!canCreate ? "hidden" : ""}`}>
               <button onClick={() => openEdit(a)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
                 <Pencil size={12} /> Editar
@@ -212,6 +229,21 @@ export function ContasBancariasClient({
             <label className="block col-span-2">
               <span className="block text-xs text-nord-gray mb-1">Saldo Inicial (R$)</span>
               <input type="number" value={form.saldoInicial} onChange={(e) => setForm({ ...form, saldoInicial: e.target.value })} className="input" />
+            </label>
+          )}
+          {editing && (
+            <label className="block col-span-2">
+              <span className="block text-xs text-nord-gray mb-1">ID da conta na conexão com o banco (opcional)</span>
+              <input
+                value={form.openFinanceAccountId}
+                onChange={(e) => setForm({ ...form, openFinanceAccountId: e.target.value })}
+                placeholder="Cole aqui o ID informado pelo suporte"
+                className="input font-mono text-xs"
+                autoComplete="off"
+              />
+              <span className="block text-[11px] text-nord-gray mt-1">
+                Quando preenchido, os lançamentos desta conta chegam do banco sozinhos na Conciliação Bancária. Só administrador ou gestor altera. Deixe vazio para não usar a conexão.
+              </span>
             </label>
           )}
           <div className="col-span-2">

@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { spDateKey } from "@/lib/timezone";
 import { format } from "date-fns";
-import { CheckCircle2, Circle, EyeOff, Upload, ArrowDownCircle, ArrowUpCircle, Wand2, Link2 } from "lucide-react";
+import { CheckCircle2, Circle, EyeOff, Upload, ArrowDownCircle, ArrowUpCircle, Wand2, Link2, Landmark, TriangleAlert } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, FormError } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency } from "@/lib/calc";
 import { apiRequest } from "@/lib/api-client";
+import { formatSince, isBankSyncStale } from "@/lib/relative-time";
+import { presetRange, type PeriodPreset } from "@/lib/period-presets";
 
 type TransactionDTO = {
   id: string;
@@ -21,8 +23,63 @@ type TransactionDTO = {
   observacoes: string | null;
   bankAccountName: string;
   importFileName: string;
+  /** Id do lançamento no banco: preenchido = veio (ou foi confirmado) pela conexão com o banco. */
+  externalId: string | null;
+  /** Instante exato informado pelo banco (a coluna Data mostra só o dia). */
+  occurredAt: string | null;
+  counterpart: string | null;
+  bankCategory: string | null;
+  paymentMethod: string | null;
+  /** O banco ainda não compensou este lançamento: não entra na conciliação automática. */
+  pendingAtBank: boolean;
   matchedLabel: string | null;
 };
+
+type AccountInfo = {
+  id: string;
+  name: string;
+  bank: string | null;
+  openFinance: boolean;
+  lastSyncAt: string | null;
+  bankBalance: number | null;
+  bankBalanceAt: string | null;
+};
+
+/** Resposta da API (`/api/financeiro/conciliacao`) → o formato usado pela tela. */
+function toDto(t: {
+  id: string; date: string; descricao: string; direction: "ENTRADA" | "SAIDA"; valor: number;
+  status: "PENDENTE" | "CONCILIADO" | "IGNORADO"; observacoes: string | null;
+  bankAccount: { name: string }; import: { fileName: string };
+  externalId?: string | null; occurredAt?: string | null; counterpart?: string | null; bankCategory?: string | null;
+  paymentMethod?: string | null; pendingAtBank?: boolean; matchedLabel: string | null;
+}): TransactionDTO {
+  return {
+    id: t.id,
+    date: t.date,
+    descricao: t.descricao,
+    direction: t.direction,
+    valor: t.valor,
+    status: t.status,
+    observacoes: t.observacoes,
+    bankAccountName: t.bankAccount.name,
+    importFileName: t.import.fileName,
+    externalId: t.externalId ?? null,
+    occurredAt: t.occurredAt ?? null,
+    counterpart: t.counterpart ?? null,
+    bankCategory: t.bankCategory ?? null,
+    paymentMethod: t.paymentMethod ?? null,
+    pendingAtBank: t.pendingAtBank ?? false,
+    matchedLabel: t.matchedLabel,
+  };
+}
+
+/** Hora do lançamento no fuso de São Paulo (ex.: "23:44"), ou null se o banco não informou. */
+function timeOfDay(occurredAt: string | null): string | null {
+  if (!occurredAt) return null;
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(occurredAt));
+}
+
+const PAGE_SIZE = 300;
 
 const STATUS_LABEL: Record<string, string> = {
   PENDENTE: "Pendente",
@@ -36,34 +93,12 @@ const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" |
   IGNORADO: "default",
 };
 
-type PeriodPreset = "all" | "thisMonth" | "lastMonth" | "last30" | "custom";
-
-/** Início e fim ("YYYY-MM-DD", dias de São Paulo) de cada atalho de período; "" = sem limite. */
-function presetRange(preset: PeriodPreset): { from: string; to: string } {
-  const today = spDateKey();
-  const [y, m] = today.split("-").map(Number);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const lastDay = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 0)).getUTCDate(); // mm 1-12 → último dia do mês mm
-  if (preset === "thisMonth") return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay(y, m))}` };
-  if (preset === "lastMonth") {
-    const py = m === 1 ? y - 1 : y;
-    const pm = m === 1 ? 12 : m - 1;
-    return { from: `${py}-${pad(pm)}-01`, to: `${py}-${pad(pm)}-${pad(lastDay(py, pm))}` };
-  }
-  if (preset === "last30") {
-    const d = new Date(`${today}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 29);
-    return { from: d.toISOString().slice(0, 10), to: today };
-  }
-  return { from: "", to: "" };
-}
-
 export function ConciliacaoClient({
   accounts,
   initialTransactions,
   canImport = true,
 }: {
-  accounts: { id: string; name: string; bank: string | null }[];
+  accounts: AccountInfo[];
   initialTransactions: TransactionDTO[];
   canImport?: boolean;
 }) {
@@ -71,9 +106,25 @@ export function ConciliacaoClient({
   const [filterAccount, setFilterAccount] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterDirection, setFilterDirection] = useState("");
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Abre em "Este mês" (a página já trouxe só esse mês do servidor).
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("thisMonth");
+  const [dateFrom, setDateFrom] = useState(() => presetRange("thisMonth").from);
+  const [dateTo, setDateTo] = useState(() => presetRange("thisMonth").to);
+  // Quantas linhas a tabela mostra; volta para PAGE_SIZE sempre que um filtro muda (a chave muda junto).
+  const filterKey = [filterAccount, filterStatus, filterDirection, dateFrom, dateTo].join("|");
+  const [shown, setShown] = useState({ key: "", count: PAGE_SIZE });
+  const visible = shown.key === filterKey ? shown.count : PAGE_SIZE;
+  const [truncated, setTruncated] = useState(false);
+  // "Agora" só depois de montar (evita diferença entre servidor e navegador no "há X min").
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    const first = setTimeout(() => setNow(new Date()), 0);
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, []);
   const [showImport, setShowImport] = useState(false);
   const [importAccountId, setImportAccountId] = useState(accounts[0]?.id ?? "");
   const [importing, setImporting] = useState(false);
@@ -111,6 +162,9 @@ export function ConciliacaoClient({
     [transactions, filterAccount, filterStatus, filterDirection, dateFrom, dateTo, accounts]
   );
 
+  // Contas ligadas à conexão com o banco (respeita o filtro de conta da tela).
+  const linkedAccounts = accounts.filter((a) => a.openFinance && (!filterAccount || a.id === filterAccount));
+
   const summary = useMemo(() => {
     const totalEntradas = filtered.filter((t) => t.direction === "ENTRADA").reduce((s, t) => s + t.valor, 0);
     const totalSaidas = filtered.filter((t) => t.direction === "SAIDA").reduce((s, t) => s + t.valor, 0);
@@ -138,20 +192,8 @@ export function ConciliacaoClient({
       setRowError(data?.error ?? "Não foi possível atualizar o extrato. Tente novamente.");
       return; // mantém a lista atual em vez de esvaziar a tela
     }
-    setTransactions(
-      (data.transactions ?? []).map((t: { id: string; date: string; descricao: string; direction: string; valor: number; status: string; observacoes: string | null; bankAccount: { name: string }; import: { fileName: string }; matchedLabel: string | null }) => ({
-        id: t.id,
-        date: t.date,
-        descricao: t.descricao,
-        direction: t.direction,
-        valor: t.valor,
-        status: t.status,
-        observacoes: t.observacoes,
-        bankAccountName: t.bankAccount.name,
-        importFileName: t.import.fileName,
-        matchedLabel: t.matchedLabel,
-      }))
-    );
+    setTruncated(!!data.truncated);
+    setTransactions((data.transactions ?? []).map(toDto));
   }
 
   async function setStatus(id: string, status: string) {
@@ -359,6 +401,9 @@ export function ConciliacaoClient({
                 Data: format(new Date(t.date), "dd/MM/yyyy"),
                 Descrição: t.descricao,
                 Conta: t.bankAccountName,
+                Origem: t.externalId ? "Banco" : "Arquivo",
+                Contraparte: t.counterpart ?? "",
+                Forma: t.paymentMethod ?? "",
                 Tipo: t.direction === "ENTRADA" ? "Entrada" : "Saída",
                 Valor: t.valor,
                 Status: STATUS_LABEL[t.status],
@@ -377,7 +422,51 @@ export function ConciliacaoClient({
             e conciliar o extrato bancário.
           </p>
         )}
+        {linkedAccounts.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {linkedAccounts.map((a) => {
+              const stale = now ? isBankSyncStale(a.lastSyncAt, now) : false;
+              return (
+                <div
+                  key={a.id}
+                  className={`flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-3 py-2 text-xs ${
+                    stale ? "border-nord-warning/30 bg-nord-warning/10" : "border-nord-blue/30 bg-nord-blue/10"
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1.5 font-medium text-white">
+                    <Landmark size={13} className={stale ? "text-nord-warning" : "text-nord-blue-light"} />
+                    {a.name}: conectada ao banco
+                  </span>
+                  <span className="text-nord-gray">
+                    Última atualização:{" "}
+                    <strong className="text-white">
+                      {a.lastSyncAt ? (now ? formatSince(a.lastSyncAt, now) : format(new Date(a.lastSyncAt), "dd/MM/yyyy HH:mm")) : "ainda não houve"}
+                    </strong>
+                    {a.lastSyncAt && now && <> ({format(new Date(a.lastSyncAt), "dd/MM HH:mm")})</>}
+                  </span>
+                  {a.bankBalance !== null && (
+                    <span className="text-nord-gray">
+                      Saldo no banco: <strong className="text-white">{formatCurrency(a.bankBalance)}</strong>
+                      {a.bankBalanceAt && now && <> ({formatSince(a.bankBalanceAt, now)})</>}
+                    </span>
+                  )}
+                  {stale && (
+                    <span className="inline-flex items-center gap-1 text-nord-warning">
+                      <TriangleAlert size={12} /> Sem atualização do banco há mais de 1 dia. Confira a conexão.
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
         <FormError message={rowError} />
+        {truncated && (
+          <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
+            O período escolhido tem lançamentos demais para listar de uma vez. A lista mostra os 20.000 mais recentes e os totais acima
+            continuam completos. Escolha um período menor para ver o restante.
+          </p>
+        )}
         {matchInfo && (
           <p className="mb-4 text-xs text-nord-blue-light bg-nord-blue/10 border border-nord-blue/30 rounded-lg px-3 py-2">
             {matchInfo}
@@ -403,11 +492,28 @@ export function ConciliacaoClient({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((t) => (
+                {filtered.slice(0, visible).map((t) => (
                   <tr key={t.id} className="border-b border-nord-border/60 last:border-0">
-                    <td className="py-2.5 pr-4 text-nord-gray whitespace-nowrap">{format(new Date(t.date), "dd/MM/yyyy")}</td>
-                    <td className="py-2.5 pr-4 text-white">{t.descricao}</td>
-                    <td className="py-2.5 pr-4 text-nord-gray whitespace-nowrap">{t.bankAccountName}</td>
+                    <td className="py-2.5 pr-4 text-nord-gray whitespace-nowrap">
+                      {format(new Date(t.date), "dd/MM/yyyy")}
+                      {timeOfDay(t.occurredAt) && <div className="text-[11px] text-nord-gray/70">{timeOfDay(t.occurredAt)}</div>}
+                    </td>
+                    <td className="py-2.5 pr-4 text-white">
+                      <div>{t.descricao}</div>
+                      {(t.counterpart || t.paymentMethod) && (
+                        <div className="text-[11px] text-nord-gray">{[t.counterpart, t.paymentMethod].filter(Boolean).join(" · ")}</div>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-4 text-nord-gray whitespace-nowrap">
+                      {t.bankAccountName}
+                      <div>
+                        {t.externalId ? (
+                          <span className="inline-block rounded px-1.5 py-px text-[10px] bg-nord-blue/15 text-nord-blue-light" title="Veio da conexão com o banco">Banco</span>
+                        ) : (
+                          <span className="inline-block rounded px-1.5 py-px text-[10px] bg-white/5 text-nord-gray" title={`Importado do arquivo ${t.importFileName}`}>Arquivo</span>
+                        )}
+                      </div>
+                    </td>
                     <td
                       className={`py-2.5 pr-4 text-right font-medium whitespace-nowrap ${
                         t.direction === "ENTRADA" ? "text-nord-success" : "text-nord-danger"
@@ -422,6 +528,7 @@ export function ConciliacaoClient({
                     </td>
                     <td className="py-2.5 pr-4">
                       <Badge tone={STATUS_TONE[t.status]}>{STATUS_LABEL[t.status]}</Badge>
+                      {t.pendingAtBank && <div className="mt-0.5 text-[10px] text-nord-warning">Não compensado no banco</div>}
                     </td>
                     <td className="py-2.5 pr-4 max-w-[220px]">
                       {t.matchedLabel ? (
@@ -468,6 +575,16 @@ export function ConciliacaoClient({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {filtered.length > visible && (
+          <div className="mt-3 flex items-center justify-center gap-3 text-xs text-nord-gray">
+            <span>
+              Mostrando {visible} de {filtered.length} lançamentos
+            </span>
+            <button onClick={() => setShown({ key: filterKey, count: visible + PAGE_SIZE })} className="btn-outline">
+              Mostrar mais {PAGE_SIZE}
+            </button>
           </div>
         )}
       </Section>

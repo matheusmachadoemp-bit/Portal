@@ -7,6 +7,8 @@ import { hasModulePermission } from "@/lib/authz";
 import { spEndOfDay, spStartOfDay } from "@/lib/timezone";
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+/** Teto de linhas por resposta (a conexão com o banco traz ~700 lançamentos por mês): os totais do resumo continuam exatos. */
+const MAX_ROWS = 20000;
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -48,8 +50,9 @@ export async function GET(req: Request) {
   const [transactions, totals] = await Promise.all([
     prisma.bankTransaction.findMany({
       where,
-      orderBy: { date: "desc" },
+      orderBy: [{ date: "desc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
       include: { bankAccount: { select: { name: true } }, import: { select: { fileName: true } } },
+      take: MAX_ROWS + 1, // +1 só para saber se passou do teto
     }),
     prisma.bankTransaction.groupBy({
       by: ["direction", "status"],
@@ -73,11 +76,13 @@ export async function GET(req: Request) {
     else if (t.status === "PENDENTE") summary.pendentes += t._count._all;
   }
 
-  const matchLabels = await resolveMatchLabels(transactions);
-  const withLabels = transactions.map((t) => ({
+  const truncated = transactions.length > MAX_ROWS;
+  const rows = truncated ? transactions.slice(0, MAX_ROWS) : transactions;
+  const matchLabels = await resolveMatchLabels(rows);
+  const withLabels = rows.map((t) => ({
     ...t,
     matchedLabel: t.matchedType && t.matchedId ? matchLabels.get(`${t.matchedType}:${t.matchedId}`) ?? null : null,
   }));
 
-  return NextResponse.json({ transactions: withLabels, summary });
+  return NextResponse.json({ transactions: withLabels, summary, truncated });
 }
