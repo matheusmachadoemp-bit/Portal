@@ -402,7 +402,9 @@ export function InsumosClient({
         <div className="mb-3 relative w-full sm:max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-nord-gray pointer-events-none" />
           <input
-            type="search"
+            type="text"
+            inputMode="search"
+            autoComplete="off"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
