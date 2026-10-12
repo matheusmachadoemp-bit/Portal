@@ -18,3 +18,17 @@ export function isBankSyncStale(lastSyncAt: Date | string | null | undefined, no
   if (!lastSyncAt) return true;
   return now.getTime() - new Date(lastSyncAt).getTime() > BANK_SYNC_STALE_MS;
 }
+
+/** "12/10 19:01" no fuso de São Paulo, igual no servidor e no navegador (evita diferença de hidratação). */
+export function dayMonthTime(iso: string | Date): string {
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "America/Sao_Paulo",
+  }).formatToParts(new Date(iso));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")}/${get("month")} ${get("hour")}:${get("minute")}`;
+}

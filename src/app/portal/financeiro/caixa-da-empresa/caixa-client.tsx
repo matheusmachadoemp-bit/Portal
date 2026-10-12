@@ -50,6 +50,7 @@ export function CaixaClient({
   initialMovements,
   initialAccounts,
   canCreate = true,
+  canLinkBank = false,
   isGrupoNordMode = true,
 }: {
   initialMovements: MovementDTO[];
@@ -58,6 +59,8 @@ export function CaixaClient({
    *  criar/editar/ativar-desativar/excluir uma conta reflita nos três lugares sem precisar de F5. */
   initialAccounts: AccountDTO[];
   canCreate?: boolean;
+  /** Administrador/gestor: pode ligar a conta à conexão com o banco (os outros cargos veem o campo só para leitura). */
+  canLinkBank?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
 }) {
@@ -178,6 +181,7 @@ export function CaixaClient({
         accounts={accounts}
         onAccountsChange={setAccounts}
         canCreate={canCreate}
+        canLinkBank={canLinkBank}
         isGrupoNordMode={isGrupoNordMode}
       />
 

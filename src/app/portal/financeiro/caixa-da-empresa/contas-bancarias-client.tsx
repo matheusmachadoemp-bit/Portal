@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Link2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
@@ -8,7 +8,7 @@ import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatCurrency } from "@/lib/calc";
 import { apiRequest } from "@/lib/api-client";
-import { formatSince, isBankSyncStale } from "@/lib/relative-time";
+import { dayMonthTime, formatSince, isBankSyncStale } from "@/lib/relative-time";
 
 export type AccountDTO = {
   id: string;
@@ -45,6 +45,7 @@ export function ContasBancariasClient({
   accounts,
   onAccountsChange,
   canCreate = true,
+  canLinkBank = false,
   isGrupoNordMode = true,
 }: {
   /** Lista completa (ativas e inativas) — dono do estado é o CaixaClient (página Caixa da Empresa), para manter os cards de saldo e o dropdown de "Nova movimentação" sincronizados com qualquer mudança feita aqui. */
@@ -52,6 +53,8 @@ export function ContasBancariasClient({
   /** Chamado com a lista atualizada (buscada de novo da API) após qualquer criação/edição/ativação/exclusão. */
   onAccountsChange: (accounts: AccountDTO[]) => void;
   canCreate?: boolean;
+  /** Só administrador/gestor liga a conta à conexão com o banco; os outros cargos veem o campo travado. */
+  canLinkBank?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
 }) {
@@ -62,6 +65,16 @@ export function ContasBancariasClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // "Agora" só depois de montar (evita diferença entre servidor e navegador no "atualizada há X").
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    const first = setTimeout(() => setNow(new Date()), 0);
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, []);
 
   async function refresh() {
     const res = await fetch("/api/financeiro/bank-accounts");
@@ -99,9 +112,13 @@ export function ContasBancariasClient({
     }
     setFormError(null);
     setSaving(true);
+    // O ID da conexão com o banco só vai junto se foi de fato alterado por quem pode (o servidor
+    // também confere o cargo): um formulário aberto há tempo não pode desligar/trocar a ligação sem querer.
+    const { openFinanceAccountId, ...rest } = form;
+    const linkChanged = !!editing && canLinkBank && openFinanceAccountId.trim() !== (editing.openFinanceAccountId ?? "");
     const result = editing
-      ? await apiRequest(`/api/financeiro/bank-accounts/${editing.id}`, "PATCH", form)
-      : await apiRequest("/api/financeiro/bank-accounts", "POST", form);
+      ? await apiRequest(`/api/financeiro/bank-accounts/${editing.id}`, "PATCH", linkChanged ? { ...rest, openFinanceAccountId } : rest)
+      : await apiRequest("/api/financeiro/bank-accounts", "POST", rest);
     setSaving(false);
     if (!result.ok) {
       setFormError(result.error);
@@ -178,11 +195,17 @@ export function ContasBancariasClient({
             </p>
             {a.openFinanceAccountId && (
               <p
-                className={`flex items-center gap-1.5 text-xs ${isBankSyncStale(a.lastSyncAt) ? "text-nord-warning" : "text-nord-blue-light"}`}
+                className={`flex items-center gap-1.5 text-xs ${
+                  !a.active ? "text-nord-gray" : now && isBankSyncStale(a.lastSyncAt, now) ? "text-nord-warning" : "text-nord-blue-light"
+                }`}
                 title="Os lançamentos desta conta chegam do banco automaticamente (Conciliação Bancária)."
               >
                 <Link2 size={12} className="shrink-0" />
-                {a.lastSyncAt ? `Conectada ao banco · atualizada ${formatSince(a.lastSyncAt)}` : "Conectada ao banco · aguardando a primeira atualização"}
+                {!a.active
+                  ? "Conexão pausada (conta inativa)"
+                  : a.lastSyncAt
+                    ? `Conectada ao banco · atualizada ${now ? formatSince(a.lastSyncAt, now) : `em ${dayMonthTime(a.lastSyncAt)}`}`
+                    : "Conectada ao banco · aguardando a primeira atualização"}
               </p>
             )}
             <div className={`flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1 ${!canCreate ? "hidden" : ""}`}>
@@ -238,11 +261,15 @@ export function ContasBancariasClient({
                 value={form.openFinanceAccountId}
                 onChange={(e) => setForm({ ...form, openFinanceAccountId: e.target.value })}
                 placeholder="Cole aqui o ID informado pelo suporte"
-                className="input font-mono text-xs"
+                className="input font-mono text-xs disabled:opacity-60"
                 autoComplete="off"
+                disabled={!canLinkBank}
               />
               <span className="block text-[11px] text-nord-gray mt-1">
-                Quando preenchido, os lançamentos desta conta chegam do banco sozinhos na Conciliação Bancária. Só administrador ou gestor altera. Deixe vazio para não usar a conexão.
+                Quando preenchido, os lançamentos desta conta chegam do banco sozinhos na Conciliação Bancária.{" "}
+                {canLinkBank
+                  ? "Deixe vazio para não usar a conexão."
+                  : "Só administrador ou gestor pode alterar este campo."}
               </span>
             </label>
           )}

@@ -29,6 +29,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // mudança (e só então exige o cargo) se for diferente do que já está gravado.
   let openFinanceAccountId: string | null | undefined;
   if (body.openFinanceAccountId !== undefined) {
+    if (body.openFinanceAccountId !== null && typeof body.openFinanceAccountId !== "string") {
+      return NextResponse.json({ error: "ID da conta no banco inválido." }, { status: 400 });
+    }
     const raw = typeof body.openFinanceAccountId === "string" ? body.openFinanceAccountId.trim() : "";
     const next = raw || null;
     if (next !== (existing.openFinanceAccountId ?? null)) {

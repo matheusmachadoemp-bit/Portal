@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { spDateKey } from "@/lib/timezone";
 import { format } from "date-fns";
 import { CheckCircle2, Circle, EyeOff, Upload, ArrowDownCircle, ArrowUpCircle, Wand2, Link2, Landmark, TriangleAlert } from "lucide-react";
@@ -10,7 +11,7 @@ import { Modal, FormError } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatCurrency } from "@/lib/calc";
 import { apiRequest } from "@/lib/api-client";
-import { formatSince, isBankSyncStale } from "@/lib/relative-time";
+import { dayMonthTime, formatSince, isBankSyncStale } from "@/lib/relative-time";
 import { presetRange, type PeriodPreset } from "@/lib/period-presets";
 import { paymentMethodLabel } from "@/lib/bank-labels";
 
@@ -22,6 +23,7 @@ type TransactionDTO = {
   valor: number;
   status: "PENDENTE" | "CONCILIADO" | "IGNORADO";
   observacoes: string | null;
+  bankAccountId: string;
   bankAccountName: string;
   importFileName: string;
   /** Id do lançamento no banco: preenchido = veio (ou foi confirmado) pela conexão com o banco. */
@@ -50,7 +52,7 @@ type AccountInfo = {
 function toDto(t: {
   id: string; date: string; descricao: string; direction: "ENTRADA" | "SAIDA"; valor: number;
   status: "PENDENTE" | "CONCILIADO" | "IGNORADO"; observacoes: string | null;
-  bankAccount: { name: string }; import: { fileName: string };
+  bankAccountId: string; bankAccount: { name: string }; import: { fileName: string };
   externalId?: string | null; occurredAt?: string | null; counterpart?: string | null; bankCategory?: string | null;
   paymentMethod?: string | null; pendingAtBank?: boolean; matchedLabel: string | null;
 }): TransactionDTO {
@@ -62,6 +64,7 @@ function toDto(t: {
     valor: t.valor,
     status: t.status,
     observacoes: t.observacoes,
+    bankAccountId: t.bankAccountId,
     bankAccountName: t.bankAccount.name,
     importFileName: t.import.fileName,
     externalId: t.externalId ?? null,
@@ -81,15 +84,6 @@ function timeOfDay(occurredAt: string | null): string | null {
 }
 
 const PAGE_SIZE = 300;
-
-/** "12/10 19:01" no fuso de São Paulo, igual no servidor e no navegador (evita diferença de hidratação). */
-function dayMonthTime(iso: string): string {
-  const parts = new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Sao_Paulo",
-  }).formatToParts(new Date(iso));
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("day")}/${get("month")} ${get("hour")}:${get("minute")}`;
-}
 
 const STATUS_LABEL: Record<string, string> = {
   PENDENTE: "Pendente",
@@ -125,6 +119,18 @@ export function ConciliacaoClient({
   const [shown, setShown] = useState({ key: "", count: PAGE_SIZE });
   const visible = shown.key === filterKey ? shown.count : PAGE_SIZE;
   const [truncated, setTruncated] = useState(false);
+  // Ao imprimir, a tabela mostra TODAS as linhas filtradas (não só a página atual) e some o "Mostrar mais".
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    const before = () => flushSync(() => setPrinting(true));
+    const after = () => setPrinting(false);
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
   // "Agora" só depois de montar (evita diferença entre servidor e navegador no "há X min").
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
@@ -147,6 +153,11 @@ export function ConciliacaoClient({
     ignoredSamples: string[];
     totalEntradas: number;
     totalSaidas: number;
+    /** Linhas do arquivo que o banco já trouxe (não foram importadas de novo, para não duplicar). */
+    skippedCovered: number;
+    /** Período do arquivo (dias, "YYYY-MM-DD"), ou null. */
+    firstDate: string | null;
+    lastDate: string | null;
     /** Conferência de saldos/totais que NÃO bateu (texto de aviso), ou null se tudo certo/sem conferência. */
     checkWarning: string | null;
   } | null>(null);
@@ -159,7 +170,7 @@ export function ConciliacaoClient({
   const filtered = useMemo(
     () =>
       transactions.filter((t) => {
-        if (filterAccount && t.bankAccountName !== accounts.find((a) => a.id === filterAccount)?.name) return false;
+        if (filterAccount && t.bankAccountId !== filterAccount) return false;
         if (filterStatus && t.status !== filterStatus) return false;
         if (filterDirection && t.direction !== filterDirection) return false;
         if (dateFrom || dateTo) {
@@ -169,7 +180,7 @@ export function ConciliacaoClient({
         }
         return true;
       }),
-    [transactions, filterAccount, filterStatus, filterDirection, dateFrom, dateTo, accounts]
+    [transactions, filterAccount, filterStatus, filterDirection, dateFrom, dateTo]
   );
 
   // Contas ligadas à conexão com o banco (respeita o filtro de conta da tela).
@@ -230,7 +241,7 @@ export function ConciliacaoClient({
     }
     setMatchInfo(
       result.data.matched > 0
-        ? `${result.data.matched} de ${result.data.pending} lançamento(s) pendente(s) foram conciliados automaticamente com contas a pagar/receber.`
+        ? `${result.data.matched} lançamento(s) foram conciliados automaticamente com contas a pagar/receber.`
         : "Nenhuma correspondência automática encontrada entre o extrato e as contas a pagar/receber em aberto."
     );
     refresh();
@@ -266,7 +277,7 @@ export function ConciliacaoClient({
             .join(" ")
         );
         if (Array.isArray(data?.errors) && data.errors.length > 0) {
-          setImportResult({ imported: 0, errors: data.errors, detected: null, ignored: 0, ignoredSamples: [], totalEntradas: 0, totalSaidas: 0, checkWarning: null });
+          setImportResult({ imported: 0, errors: data.errors, detected: null, ignored: 0, ignoredSamples: [], totalEntradas: 0, totalSaidas: 0, skippedCovered: 0, firstDate: null, lastDate: null, checkWarning: null });
         }
       } else {
         setImportResult({
@@ -282,8 +293,22 @@ export function ConciliacaoClient({
               : null,
           totalEntradas: data.totalEntradas ?? 0,
           totalSaidas: data.totalSaidas ?? 0,
+          skippedCovered: data.skippedCovered ?? 0,
+          firstDate: data.firstDate ?? null,
+          lastDate: data.lastDate ?? null,
         });
-        refresh();
+        // O filtro abre em "Este mês": se o arquivo é de outro período, mostra o período do arquivo
+        // (senão as linhas importadas "somem" e o usuário importa de novo, duplicando).
+        const first: string | undefined = data.firstDate ?? undefined;
+        const last: string | undefined = data.lastDate ?? undefined;
+        if (first && last && ((dateFrom && first < dateFrom) || (dateTo && last > dateTo))) {
+          setPeriodPreset("custom");
+          setDateFrom(first);
+          setDateTo(last);
+          refresh({ from: first, to: last });
+        } else {
+          refresh();
+        }
       }
     } catch {
       setImportError("Falha de conexão. Tente novamente.");
@@ -473,8 +498,8 @@ export function ConciliacaoClient({
         <FormError message={rowError} />
         {truncated && (
           <p className="mb-4 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-            O período escolhido tem lançamentos demais para listar de uma vez. A lista mostra os 20.000 mais recentes e os totais acima
-            continuam completos. Escolha um período menor para ver o restante.
+            O período escolhido tem lançamentos demais para listar de uma vez. A lista mostra os 5.000 mais recentes e os
+            totais acima somam só essas linhas. Escolha um período menor para ver tudo.
           </p>
         )}
         {matchInfo && (
@@ -485,7 +510,7 @@ export function ConciliacaoClient({
 
         {filtered.length === 0 ? (
           <p className="text-sm text-nord-gray py-8 text-center">
-            Nenhum lançamento encontrado. Importe um extrato bancário para começar a conciliação.
+            Nenhum lançamento encontrado neste período. {canImport && "Ajuste o período acima ou importe um extrato bancário."}
           </p>
         ) : (
           <div className="overflow-x-auto nord-scrollbar">
@@ -502,11 +527,11 @@ export function ConciliacaoClient({
                 </tr>
               </thead>
               <tbody>
-                {filtered.slice(0, visible).map((t) => (
+                {(printing ? filtered : filtered.slice(0, visible)).map((t) => (
                   <tr key={t.id} className="border-b border-nord-border/60 last:border-0">
                     <td className="py-2.5 pr-4 text-nord-gray whitespace-nowrap">
                       {format(new Date(t.date), "dd/MM/yyyy")}
-                      {timeOfDay(t.occurredAt) && <div className="text-[11px] text-nord-gray/70">{timeOfDay(t.occurredAt)}</div>}
+                      {timeOfDay(t.occurredAt) && <div className="text-[11px] text-nord-gray">{timeOfDay(t.occurredAt)}</div>}
                     </td>
                     <td className="py-2.5 pr-4 text-white">
                       <div>{t.descricao}</div>
@@ -518,9 +543,9 @@ export function ConciliacaoClient({
                       {t.bankAccountName}
                       <div>
                         {t.externalId ? (
-                          <span className="inline-block rounded px-1.5 py-px text-[10px] bg-nord-blue/15 text-nord-blue-light" title="Veio da conexão com o banco">Banco</span>
+                          <span className="inline-block rounded px-1.5 py-px text-[11px] bg-nord-blue/25 text-white" title="Veio da conexão com o banco">Banco</span>
                         ) : (
-                          <span className="inline-block rounded px-1.5 py-px text-[10px] bg-white/5 text-nord-gray" title={`Importado do arquivo ${t.importFileName}`}>Arquivo</span>
+                          <span className="inline-block rounded px-1.5 py-px text-[11px] bg-white/5 text-nord-gray" title={`Importado do arquivo ${t.importFileName}`}>Arquivo</span>
                         )}
                       </div>
                     </td>
@@ -538,7 +563,7 @@ export function ConciliacaoClient({
                     </td>
                     <td className="py-2.5 pr-4">
                       <Badge tone={STATUS_TONE[t.status]}>{STATUS_LABEL[t.status]}</Badge>
-                      {t.pendingAtBank && <div className="mt-0.5 text-[10px] text-nord-warning">Não compensado no banco</div>}
+                      {t.pendingAtBank && <div className="mt-0.5 text-[11px] text-nord-warning">Não compensado no banco</div>}
                     </td>
                     <td className="py-2.5 pr-4 max-w-[220px]">
                       {t.matchedLabel ? (
@@ -587,8 +612,8 @@ export function ConciliacaoClient({
             </table>
           </div>
         )}
-        {filtered.length > visible && (
-          <div className="mt-3 flex items-center justify-center gap-3 text-xs text-nord-gray">
+        {!printing && filtered.length > visible && (
+          <div className="mt-3 flex items-center justify-center gap-3 text-xs text-nord-gray print:hidden">
             <span>
               Mostrando {visible} de {filtered.length} lançamentos
             </span>
@@ -610,7 +635,19 @@ export function ConciliacaoClient({
             {importResult.imported > 0 && (
               <p className="text-xs text-nord-success">{importResult.imported} lançamento(s) importado(s) com sucesso.</p>
             )}
-            {importResult.imported === 0 && <p className="text-xs text-nord-warning">Nenhum lançamento foi importado. Problemas encontrados:</p>}
+            {importResult.imported === 0 && importResult.skippedCovered > 0 && (
+              <p className="text-xs text-nord-success">
+                Nenhum lançamento novo: as {importResult.skippedCovered} linha(s) do arquivo já estavam no extrato do banco.
+              </p>
+            )}
+            {importResult.imported === 0 && importResult.skippedCovered === 0 && (
+              <p className="text-xs text-nord-warning">Nenhum lançamento foi importado. Problemas encontrados:</p>
+            )}
+            {importResult.skippedCovered > 0 && importResult.imported > 0 && (
+              <p className="mt-1 text-xs text-nord-gray">
+                {importResult.skippedCovered} linha(s) do arquivo já estavam no extrato do banco e não foram importadas de novo.
+              </p>
+            )}
             {importResult.imported > 0 && (
             <p className="mt-1 text-xs text-nord-gray">
               Entradas: <strong className="text-white">{formatCurrency(importResult.totalEntradas)}</strong> · Saídas:{" "}
@@ -648,10 +685,17 @@ export function ConciliacaoClient({
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name} {a.bank ? `— ${a.bank}` : ""}
+                {a.openFinance ? " (conectada ao banco)" : ""}
               </option>
             ))}
           </select>
         </label>
+        {accounts.find((a) => a.id === importAccountId)?.openFinance && (
+          <p className="mb-3 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
+            Esta conta está <strong>conectada ao banco</strong>: os lançamentos já chegam sozinhos. Use o arquivo só para
+            períodos antigos, de antes da conexão. Linhas que o banco já trouxe são reconhecidas e não são importadas de novo.
+          </p>
+        )}
         <label className="block mb-1">
           <span className="block text-xs text-nord-gray mb-1">Arquivo do extrato (PDF, OFX, Excel ou CSV)</span>
           <input

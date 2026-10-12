@@ -7,8 +7,33 @@ import { hasModulePermission } from "@/lib/authz";
 import { spEndOfDay, spStartOfDay } from "@/lib/timezone";
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
-/** Teto de linhas por resposta (a conexão com o banco traz ~700 lançamentos por mês): os totais do resumo continuam exatos. */
-const MAX_ROWS = 20000;
+/**
+ * Teto de linhas por resposta (a conexão com o banco traz ~700 lançamentos por mês). 5.000 linhas
+ * ficam em ~2 MB de JSON, folgado para o limite de resposta das funções da Vercel (~4,5 MB). O
+ * `summary` abaixo continua exato mesmo quando a lista é cortada.
+ */
+const MAX_ROWS = 5000;
+
+const ROW_SELECT = {
+  id: true,
+  bankAccountId: true,
+  date: true,
+  descricao: true,
+  direction: true,
+  valor: true,
+  status: true,
+  matchedType: true,
+  matchedId: true,
+  observacoes: true,
+  externalId: true,
+  occurredAt: true,
+  counterpart: true,
+  bankCategory: true,
+  paymentMethod: true,
+  pendingAtBank: true,
+  bankAccount: { select: { name: true } },
+  import: { select: { fileName: true } },
+} as const;
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -50,8 +75,8 @@ export async function GET(req: Request) {
   const [transactions, totals] = await Promise.all([
     prisma.bankTransaction.findMany({
       where,
-      orderBy: [{ date: "desc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
-      include: { bankAccount: { select: { name: true } }, import: { select: { fileName: true } } },
+      orderBy: [{ date: "desc" }, { occurredAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+      select: ROW_SELECT,
       take: MAX_ROWS + 1, // +1 só para saber se passou do teto
     }),
     prisma.bankTransaction.groupBy({

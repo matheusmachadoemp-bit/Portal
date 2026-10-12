@@ -15,10 +15,13 @@ const PUBLIC_PATHS = [
   "/api/estoque/recebimento/responder",
   "/avaliar",
   "/api/satisfacao-cliente/responder",
-  // Entrada dos lançamentos do banco (Open Finance): chamada por uma "ponte" sem sessão de usuário;
-  // a rota exige a senha de integração (BANK_SYNC_SECRET) e recusa tudo se ela não estiver definida.
-  "/api/financeiro/conciliacao/sync",
 ];
+
+// Caminhos públicos liberados por IGUALDADE exata (não por prefixo): rota nova criada embaixo deles
+// não nasce pública. Entrada dos lançamentos do banco (Open Finance): chamada por uma "ponte" sem
+// sessão de usuário; a rota exige a senha de integração (BANK_SYNC_SECRET) e recusa tudo se ela não
+// estiver definida.
+const PUBLIC_EXACT_PATHS = ["/api/financeiro/conciliacao/sync"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -33,6 +36,7 @@ export default auth((req) => {
   const isPublic =
     isCronRequest ||
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
+    PUBLIC_EXACT_PATHS.includes(pathname) ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/logo") ||

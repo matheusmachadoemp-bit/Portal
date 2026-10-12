@@ -29,9 +29,28 @@ export default async function ConciliacaoBancariaPage() {
     }),
     prisma.bankTransaction.findMany({
       where: { empresaId: { in: empresaIds }, date: { gte: spStartOfDay(month.from), lte: spEndOfDay(month.to) } },
-      orderBy: [{ date: "desc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
-      include: { bankAccount: true, import: { select: { fileName: true } } },
-      take: 5000, // teto de segurança
+      orderBy: [{ date: "desc" }, { occurredAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        bankAccountId: true,
+        date: true,
+        descricao: true,
+        direction: true,
+        valor: true,
+        status: true,
+        matchedType: true,
+        matchedId: true,
+        observacoes: true,
+        externalId: true,
+        occurredAt: true,
+        counterpart: true,
+        bankCategory: true,
+        paymentMethod: true,
+        pendingAtBank: true,
+        bankAccount: { select: { name: true } },
+        import: { select: { fileName: true } },
+      },
+      take: 5000, // teto de segurança (mesmo da API)
     }),
   ]);
 
@@ -54,6 +73,7 @@ export default async function ConciliacaoBancariaPage() {
     valor: t.valor,
     status: t.status,
     observacoes: t.observacoes,
+    bankAccountId: t.bankAccountId,
     bankAccountName: t.bankAccount.name,
     importFileName: t.import.fileName,
     externalId: t.externalId,

@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { parseBankStatement, StatementFormatError, type ParsedStatement } from "@/lib/bank-statement";
+import { pairTransactions, toCents } from "@/lib/bank-sync";
+import { spDateKey } from "@/lib/timezone";
 
 // A leitura do arquivo (descobrir o formato, a codificação, o separador, a linha do cabeçalho, o
 // papel de cada coluna, datas e valores) vive em `@/lib/bank-statement` — aqui só autoriza, valida
@@ -77,8 +79,70 @@ export async function POST(req: Request) {
     );
   }
 
-  const totalEntradas = parsedRows.filter((r) => r.direction === "ENTRADA").reduce((s, r) => s + r.valor, 0);
-  const totalSaidas = parsedRows.filter((r) => r.direction === "SAIDA").reduce((s, r) => s + r.valor, 0);
+  // Faixa do arquivo (dias de São Paulo): a tela ajusta o filtro de período para mostrar o que entrou.
+  const dayKeys = parsedRows.map((r) => spDateKey(r.date)).sort();
+  const firstDate = dayKeys[0];
+  const lastDate = dayKeys[dayKeys.length - 1];
+
+  // Conta ligada à conexão com o banco: o que o banco já trouxe (mesmo dia, sentido e valor) não é
+  // importado de novo — senão a movimentação apareceria duas vezes e os totais dobrariam.
+  let rowsToImport = parsedRows;
+  let skippedCovered = 0;
+  if (bankAccount.openFinanceAccountId) {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const times = parsedRows.map((r) => r.date.getTime());
+    const bankRows = await prisma.bankTransaction.findMany({
+      where: {
+        bankAccountId,
+        externalId: { not: null },
+        date: { gte: new Date(Math.min(...times) - dayMs), lte: new Date(Math.max(...times) + dayMs) },
+      },
+      select: { date: true, direction: true, valor: true, descricao: true, counterpart: true },
+    });
+    if (bankRows.length > 0) {
+      const pairs = pairTransactions(
+        parsedRows.map((r, i) => ({
+          dateKey: spDateKey(r.date),
+          direction: r.direction,
+          cents: toCents(r.valor),
+          text: r.descricao,
+          order: i,
+        })),
+        bankRows.map((b, i) => ({
+          dateKey: spDateKey(b.date),
+          direction: b.direction,
+          cents: toCents(b.valor),
+          text: `${b.counterpart ?? ""} ${b.descricao}`,
+          order: i,
+        }))
+      );
+      const covered = new Set(pairs.map((p) => p.left));
+      skippedCovered = covered.size;
+      rowsToImport = parsedRows.filter((_, i) => !covered.has(i));
+    }
+  }
+
+  if (rowsToImport.length === 0) {
+    return NextResponse.json({
+      import: null,
+      imported: 0,
+      skippedCovered,
+      firstDate,
+      lastDate,
+      errors,
+      format: statement.format,
+      detected: statement.detected,
+      ignored: statement.ignored,
+      ignoredSamples: statement.ignoredSamples,
+      balanceCheck: statement.balanceCheck,
+      totalsCheck: statement.totalsCheck,
+      totalEntradas: 0,
+      totalSaidas: 0,
+    });
+  }
+
+  const totalEntradas = rowsToImport.filter((r) => r.direction === "ENTRADA").reduce((s, r) => s + r.valor, 0);
+  const totalSaidas = rowsToImport.filter((r) => r.direction === "SAIDA").reduce((s, r) => s + r.valor, 0);
 
   const result = await prisma.bankReconciliationImport.create({
     data: {
@@ -87,10 +151,10 @@ export async function POST(req: Request) {
       fileName: file.name,
       totalEntradas,
       totalSaidas,
-      totalLinhas: parsedRows.length,
+      totalLinhas: rowsToImport.length,
       createdById: session.user.id,
       transactions: {
-        create: parsedRows.map((r) => ({
+        create: rowsToImport.map((r) => ({
           empresaId: empresa.id,
           bankAccountId,
           date: r.date,
@@ -104,7 +168,10 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     import: result,
-    imported: parsedRows.length,
+    imported: rowsToImport.length,
+    skippedCovered,
+    firstDate,
+    lastDate,
     errors,
     format: statement.format,
     detected: statement.detected,

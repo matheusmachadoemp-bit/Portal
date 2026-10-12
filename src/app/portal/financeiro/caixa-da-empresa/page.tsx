@@ -61,6 +61,7 @@ export default async function CaixaDaEmpresaPage() {
           initialMovements={serializedMovements}
           initialAccounts={serializedAccounts}
           canCreate={canCreate}
+          canLinkBank={session.user.role === "ADMINISTRADOR" || session.user.role === "GESTOR"}
           isGrupoNordMode={ctx?.mode !== "single"}
         />
       </div>

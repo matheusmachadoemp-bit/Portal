@@ -26,7 +26,12 @@ export default async function ContasAReceberPage() {
       include: { categoria: true, bankAccount: true, createdBy: { select: { name: true } }, empresa: true },
     }),
     getActiveFinancialCategories(),
-    prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
+    prisma.bankAccount.findMany({
+      where: { active: true, empresaId: { in: empresaIds } },
+      orderBy: { name: "asc" },
+      // Só o que a tela usa: o registro inteiro levaria o ID da conexão com o banco e o saldo para o navegador.
+      select: { id: true, name: true },
+    }),
   ]);
 
   const serialized = receivables.map((r) => ({
