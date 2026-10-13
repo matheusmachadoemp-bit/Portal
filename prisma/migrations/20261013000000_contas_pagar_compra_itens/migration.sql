@@ -25,6 +25,7 @@ CREATE TABLE "SupplierInvoice" (
     "empresaId" TEXT NOT NULL,
     "supplierId" TEXT,
     "fornecedorNome" TEXT NOT NULL,
+    "fornecedorChave" TEXT NOT NULL,
     "numeroNota" TEXT,
     "dataCompra" TIMESTAMP(3) NOT NULL,
     "totalCobrado" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -33,6 +34,7 @@ CREATE TABLE "SupplierInvoice" (
     "divergenciaStatus" "SupplierInvoiceDivergenceStatus" NOT NULL DEFAULT 'SEM_DIVERGENCIA',
     "divergenciaMotivo" TEXT,
     "divergenciaObservacao" TEXT,
+    "divergenciaValor" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "divergenciaResolvidaEm" TIMESTAMP(3),
     "divergenciaResolvidaPorId" TEXT,
     "createdById" TEXT NOT NULL,
@@ -66,6 +68,9 @@ CREATE INDEX "SupplierInvoice_empresaId_dataCompra_idx" ON "SupplierInvoice"("em
 
 -- CreateIndex
 CREATE INDEX "SupplierInvoice_empresaId_supplierId_dataCompra_idx" ON "SupplierInvoice"("empresaId", "supplierId", "dataCompra");
+
+-- CreateIndex
+CREATE INDEX "SupplierInvoice_empresaId_fornecedorChave_dataCompra_idx" ON "SupplierInvoice"("empresaId", "fornecedorChave", "dataCompra");
 
 -- CreateIndex
 CREATE INDEX "SupplierInvoiceItem_invoiceId_idx" ON "SupplierInvoiceItem"("invoiceId");

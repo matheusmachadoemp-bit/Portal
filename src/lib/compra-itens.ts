@@ -32,6 +32,8 @@ export const MAX_GROUP = 40;
 export const MAX_UNIT = 12;
 export const MAX_NOTE = 500;
 const MAX_VALUE = 10_000_000;
+/** Teto do total de UM item (quantidade × preço): acima disso é quase certo erro de digitação. */
+const MAX_ITEM_TOTAL = 1_000_000_000;
 
 export const ITEM_GROUPS = ["Embalagem", "Descartáveis", "Limpeza", "Gás", "Bebidas", "Manutenção", "Utensílios", "Outros"] as const;
 export const UNIT_SUGGESTIONS = ["kg", "g", "l", "ml", "un", "cx", "pct", "saco", "fardo", "dz", "pç"] as const;
@@ -74,17 +76,32 @@ function cleanString(value: unknown, max: number): string {
   return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+/** Número digitado: "12", "12,5" ou "12.5" (sem notação científica, hexadecimal nem separador de milhar). */
+const PLAIN_NUMBER = /^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)$/;
+
 /** Aceita número ou texto ("12,5"); devolve null se vazio e NaN se inválido. */
 function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : Number.NaN;
   if (typeof value === "string") {
-    const text = value.trim().replace(",", ".");
+    const text = value.trim();
     if (!text) return null;
-    const n = Number(text);
+    if (!PLAIN_NUMBER.test(text)) return Number.NaN;
+    const n = Number(text.replace(",", "."));
     return Number.isFinite(n) ? n : Number.NaN;
   }
   return Number.NaN;
+}
+
+/** Chave estável do nome de um fornecedor: sem acento, minúsculas, espaços juntados. */
+export function normalizeSupplierKey(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
 }
 
 /** Valida e converte a lista de itens. Nunca lança: devolve o motivo em português. */
@@ -150,6 +167,10 @@ export function normalizeItems(raw: unknown): { ok: true; items: NormalizedItem[
           : "MANUAL";
     }
 
+    if (Math.abs(quantidade * cobrado) > MAX_ITEM_TOTAL) {
+      return { ok: false, error: `${label} (${nome}): valor total do item grande demais. Confira quantidade e preço.` };
+    }
+
     items.push({
       ordem: i,
       kind,
@@ -170,7 +191,7 @@ export function normalizeItems(raw: unknown): { ok: true; items: NormalizedItem[
 export type InvoiceTotals = {
   /** Soma de tudo que foi cobrado (itens + ajustes). */
   totalCobrado: number;
-  /** Soma de quantidade × combinado, só dos itens que tinham combinado. */
+  /** Soma, só dos itens que tinham preço combinado, de quantidade × preço combinado (cada item em centavos). */
   totalCombinado: number;
   /** Soma do cobrado dos MESMOS itens (comparável com `totalCombinado`). */
   totalComparado: number;
@@ -180,16 +201,30 @@ export type InvoiceTotals = {
   diferencaPct: number | null;
 };
 
-export function computeTotals(
-  items: { quantidade: number; precoCombinado: number | null; precoCobrado: number; total: number }[]
-): InvoiceTotals {
+type TotalsItem = { kind?: ItemKind; quantidade: number; precoCombinado: number | null; precoCobrado: number; total: number };
+
+/** O combinado de um item em centavos, igual ao `total` cobrado (os dois lados arredondam do mesmo jeito). */
+function combinedTotal(it: { quantidade: number; precoCombinado: number | null }): number {
+  return round2(it.quantidade * (it.precoCombinado ?? 0));
+}
+
+/**
+ * Só dá para comparar com o combinado se pelo menos um PRODUTO tinha preço combinado. Frete/desconto
+ * sozinhos (primeira compra de um fornecedor, sem nada combinado) não geram "acima do combinado".
+ */
+function hasComparableProduct(items: { kind?: ItemKind; precoCombinado: number | null }[]): boolean {
+  return items.some((it) => it.kind !== "AJUSTE" && it.precoCombinado !== null);
+}
+
+export function computeTotals(items: TotalsItem[]): InvoiceTotals {
   let cobrado = 0;
+  for (const it of items) cobrado += it.total;
   let combinado = 0;
   let comparado = 0;
-  for (const it of items) {
-    cobrado += it.total;
-    if (it.precoCombinado !== null) {
-      combinado += it.quantidade * it.precoCombinado;
+  if (hasComparableProduct(items)) {
+    for (const it of items) {
+      if (it.precoCombinado === null) continue;
+      combinado += combinedTotal(it);
       comparado += it.total;
     }
   }
@@ -216,19 +251,20 @@ export type DiffBreakdown = {
   precoAcima: number;
   /** Preço unitário abaixo do combinado (valor positivo = economia). */
   precoAbaixo: number;
-  /** Frete/juros/desconto: cobrado − combinado dos ajustes. */
+  /** Frete/juros/desconto: cobrado − combinado dos ajustes (negativo = desconto acima do combinado). */
   ajustes: number;
 };
 
 export function diffBreakdown(
   items: { kind: ItemKind; quantidade: number; precoCombinado: number | null; total: number }[]
 ): DiffBreakdown {
+  if (!hasComparableProduct(items)) return { precoAcima: 0, precoAbaixo: 0, ajustes: 0 };
   let acima = 0;
   let abaixo = 0;
   let ajustes = 0;
   for (const it of items) {
     if (it.precoCombinado === null) continue;
-    const diff = it.total - it.quantidade * it.precoCombinado;
+    const diff = round2(it.total - combinedTotal(it));
     if (it.kind === "AJUSTE") ajustes += diff;
     else if (diff > 0) acima += diff;
     else abaixo += -diff;
@@ -239,7 +275,10 @@ export function diffBreakdown(
 /** Quanto do boleto está explicado pelos itens (0–100). */
 export function detailPercent(totalCobrado: number, valorBoleto: number): number {
   if (!(valorBoleto > 0) || !(totalCobrado > 0)) return 0;
-  return Math.min(100, Math.round((totalCobrado / valorBoleto) * 100));
+  // 100% só quando fecha de verdade: R$ 1.992 num boleto de R$ 2.000 mostra 99%, não 100%.
+  const ratio = totalCobrado / valorBoleto;
+  if (ratio >= 1 || closesWithBoleto(totalCobrado, valorBoleto)) return 100;
+  return Math.min(99, Math.floor(ratio * 100));
 }
 
 /** Os itens fecham com o valor do boleto (até 5 centavos de diferença)? */
@@ -257,24 +296,28 @@ export type DivergenceDecision = {
   status: DivergenceStatus;
   motivo: string | null;
   observacao: string | null;
+  /** Diferença (R$ acima do combinado) no momento da escolha. */
+  valor: number;
 };
 
 /**
  * Resolve o estado da diferença a gravar. Sem diferença acima do combinado não há o que decidir.
- * Acima do combinado, quem registra precisa escolher: contestar com o fornecedor ou aceitar com o motivo
- * (se a escolha não vier, mantém a que já estava gravada na compra, quando houver).
+ * Acima do combinado, quem registra precisa escolher: contestar com o fornecedor ou aceitar com o motivo.
+ * Se a escolha não vier, mantém a que já estava gravada na compra — mas só enquanto a diferença não
+ * tiver crescido desde então (aceitar R$ 35 não vale para R$ 620).
  */
 export function resolveDivergence(
   above: boolean,
   choice: DivergenceChoice | null | undefined,
-  current: { status: DivergenceStatus; motivo: string | null; observacao: string | null } | null
+  current: { status: DivergenceStatus; motivo: string | null; observacao: string | null; valor: number } | null,
+  diferenca: number
 ): { ok: true; decision: DivergenceDecision } | { ok: false; error: string } {
-  if (!above) return { ok: true, decision: { status: "SEM_DIVERGENCIA", motivo: null, observacao: null } };
+  if (!above) return { ok: true, decision: { status: "SEM_DIVERGENCIA", motivo: null, observacao: null, valor: 0 } };
 
   const acao = typeof choice?.acao === "string" ? choice.acao : null;
   const observacao = cleanString(choice?.observacao, MAX_NOTE) || null;
   if (acao === "CONTESTAR") {
-    return { ok: true, decision: { status: "EM_CONTESTACAO", motivo: null, observacao } };
+    return { ok: true, decision: { status: "EM_CONTESTACAO", motivo: null, observacao, valor: diferenca } };
   }
   if (acao === "ACEITAR") {
     const motivo = typeof choice?.motivo === "string" ? choice.motivo : "";
@@ -284,10 +327,16 @@ export function resolveDivergence(
     if (motivo === "Outro" && (observacao ?? "").length < 3) {
       return { ok: false, error: "Explique o motivo na observação (escolheu “Outro”)." };
     }
-    return { ok: true, decision: { status: "ACEITA", motivo, observacao } };
+    return { ok: true, decision: { status: "ACEITA", motivo, observacao, valor: diferenca } };
   }
   if (current && current.status !== "SEM_DIVERGENCIA") {
-    return { ok: true, decision: { status: current.status, motivo: current.motivo, observacao: current.observacao } };
+    if (diferenca > current.valor + DIVERGENCE_TOLERANCE) {
+      return {
+        ok: false,
+        error: `A diferença aumentou (de R$ ${current.valor.toFixed(2).replace(".", ",")} para R$ ${diferenca.toFixed(2).replace(".", ",")}) desde a última escolha. Escolha de novo: contestar ou aceitar.`,
+      };
+    }
+    return { ok: true, decision: { status: current.status, motivo: current.motivo, observacao: current.observacao, valor: current.valor } };
   }
   return { ok: false, error: "Esta compra veio acima do combinado: escolha “Contestar com o fornecedor” ou “Aceitar e registrar o motivo”." };
 }
@@ -298,7 +347,8 @@ export function resolveDivergence(
 
 /** Chave estável de um produto dentro das compras de um fornecedor. */
 export function itemKey(item: { kind: string; ingredientId: string | null; nome: string; unidade: string }): string {
-  if (item.kind === "INSUMO" && item.ingredientId) return `i:${item.ingredientId}`;
+  // O insumo vale por id E unidade: o preço por kg não serve de referência para a caixa.
+  if (item.kind === "INSUMO" && item.ingredientId) return `i:${item.ingredientId}|${item.unidade.trim().toLowerCase()}`;
   const nome = item.nome
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -337,6 +387,8 @@ export function buildPriceHints(invoices: HistoryInvoice[]): Record<string, Pric
   for (const inv of invoices) {
     for (const it of inv.items) {
       if (it.kind === "AJUSTE") continue;
+      // Item de preço zero (bonificação/brinde) não serve de referência: segue para a compra anterior.
+      if (it.precoCobrado <= 0 && !(inv.divergenciaStatus === "EM_CONTESTACAO" && (it.precoCombinado ?? 0) > 0)) continue;
       const key = itemKey(it);
       if (hints[key]) continue;
       const contested = inv.divergenciaStatus === "EM_CONTESTACAO" && it.precoCombinado !== null;

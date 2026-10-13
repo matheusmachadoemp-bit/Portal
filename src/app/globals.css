@@ -150,6 +150,9 @@ select option {
   font-size: 12px;
   outline: none;
 }
+.input-sm:focus {
+  border-color: var(--nord-blue);
+}
 
 .btn-primary {
   display: inline-flex;

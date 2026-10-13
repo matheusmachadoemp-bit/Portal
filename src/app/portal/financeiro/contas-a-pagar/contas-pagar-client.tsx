@@ -9,12 +9,13 @@ import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
 import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
-import { detailPercent, isAboveAgreed, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
+import { detailPercent, isAboveAgreed, itemKey, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
 import {
   CompraItensEditor,
   EMPTY_DECISION,
   draftFromSaved,
   draftsToPayload,
+  summarize,
   type DecisionState,
   type DraftItem,
   type IngredientOption,
@@ -148,6 +149,8 @@ export function ContasPagarClient({
   // “O que foi comprado” (itens da nota) do formulário aberto.
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
+  // Espelho de `drafts` para as respostas assíncronas (histórico) enxergarem os itens de agora, não os de quando a busca começou.
+  const draftsRef = useRef<DraftItem[]>([]);
   const [numeroNota, setNumeroNota] = useState("");
   const [decision, setDecision] = useState<DecisionState>(EMPTY_DECISION);
   const [hadCompra, setHadCompra] = useState(false);
@@ -162,8 +165,15 @@ export function ContasPagarClient({
   const [newSupplier, setNewSupplier] = useState({ razaoSocial: "", cnpj: "", telefone: "" });
   const [newSupplierError, setNewSupplierError] = useState<string | null>(null);
   const [savingSupplier, setSavingSupplier] = useState(false);
+  const [decidedDiff, setDecidedDiff] = useState(0);
+  const [autoPagamento, setAutoPagamento] = useState(false);
+  const [repriceNote, setRepriceNote] = useState<string | null>(null);
   const historyKey = useRef("");
   const historySeq = useRef(0);
+  const historyExtras = useRef<{ exclude: string | null; until: string | null }>({ exclude: null, until: null });
+  const compraSeq = useRef(0);
+  const initialDates = useRef({ dataCompetencia: "", dataVencimento: "", dataPagamento: "" });
+  const errorRef = useRef<HTMLDivElement>(null);
   const [showRecurring, setShowRecurring] = useState(false);
   const [recurringForm, setRecurringForm] = useState({
     descricao: "",
@@ -222,7 +232,7 @@ export function ContasPagarClient({
     const today = format(now, "yyyy-MM-dd");
     const month = today.slice(0, 7);
     const limit = new Date(now);
-    limit.setDate(limit.getDate() + 7);
+    limit.setDate(limit.getDate() + 6); // hoje + 6 dias = 7 dias contando hoje
     const in7 = format(limit, "yyyy-MM-dd");
     let monthTotal = 0;
     let monthDetailed = 0;
@@ -272,7 +282,7 @@ export function ContasPagarClient({
 
   function resetCompra() {
     setSupplierId(null);
-    setDrafts([]);
+    putDrafts([]);
     setNumeroNota("");
     setDecision(EMPTY_DECISION);
     setHadCompra(false);
@@ -284,8 +294,24 @@ export function ContasPagarClient({
     setLoadingHistory(false);
     setNewSupplierOpen(false);
     setNewSupplierError(null);
+    setDecidedDiff(0);
+    setAutoPagamento(false);
+    setRepriceNote(null);
     historyKey.current = "";
     historySeq.current += 1;
+    compraSeq.current += 1;
+    historyExtras.current = { exclude: null, until: null };
+  }
+
+  function putDrafts(next: DraftItem[]) {
+    draftsRef.current = next;
+    setDrafts(next);
+  }
+
+  /** Mostra o erro do formulário junto ao botão Salvar (o formulário é alto) e garante que fique à vista. */
+  function fail(message: string) {
+    setFormError(message);
+    requestAnimationFrame(() => errorRef.current?.scrollIntoView({ block: "nearest" }));
   }
 
   function findSupplier(name: string) {
@@ -295,8 +321,12 @@ export function ContasPagarClient({
     return suppliers.find((f) => norm(f.name) === wanted) ?? null;
   }
 
-  /** Compras anteriores deste fornecedor (última compra + último preço de cada produto). */
-  async function loadHistory(name: string, id: string | null) {
+  /**
+   * Compras anteriores deste fornecedor (última compra + último preço de cada produto).
+   * `recompute`: o usuário TROCOU o fornecedor — os itens com “último preço pago” do fornecedor anterior
+   * passam para o preço do novo (ou ficam sem combinado, se o novo não tem histórico do produto).
+   */
+  async function loadHistory(name: string, id: string | null, recompute = false) {
     const clean = name.trim();
     if (!clean) return;
     const key = `${id ?? ""}|${clean.toLowerCase()}`;
@@ -309,12 +339,26 @@ export function ContasPagarClient({
     try {
       const params = new URLSearchParams({ fornecedor: clean });
       if (id) params.set("supplierId", id);
+      if (historyExtras.current.exclude) params.set("excludeInvoiceId", historyExtras.current.exclude);
+      if (historyExtras.current.until) params.set("ate", historyExtras.current.until);
       const res = await fetch(`/api/financeiro/pagar/historico?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
       if (seq !== historySeq.current) return; // chegou uma busca mais nova
+      const newHints: Record<string, PriceHint> = res.ok ? data.hints ?? {} : {};
       if (res.ok) {
-        setHints(data.hints ?? {});
+        setHints(newHints);
         setLastPurchase(data.ultimaCompra ?? null);
+      }
+      if (recompute) {
+        const prev = draftsRef.current;
+        const next = prev.map((d) => {
+          if (d.kind === "AJUSTE" || d.origemCombinado !== "ULTIMO_PRECO") return d;
+          const hint = newHints[itemKey({ kind: d.kind, ingredientId: d.ingredientId, nome: d.nome, unidade: d.unidade })];
+          return hint ? { ...d, precoCombinado: String(hint.preco) } : { ...d, precoCombinado: "", origemCombinado: null };
+        });
+        const changed = next.some((d, i) => d !== prev[i]);
+        if (changed) putDrafts(next);
+        setRepriceNote(changed ? "Você trocou o fornecedor: os preços combinados que vinham do “último preço pago” foram atualizados para o novo fornecedor." : null);
       }
     } catch {
       // sem histórico: o formulário continua funcionando (só sem sugestões)
@@ -327,7 +371,15 @@ export function ContasPagarClient({
     setForm((f) => ({ ...f, fornecedor: value }));
     const match = findSupplier(value);
     setSupplierId(match?.id ?? null);
-    if (match) loadHistory(match.name, match.id);
+    if (match) loadHistory(match.name, match.id, true);
+    else if (value.trim() === "") {
+      // campo esvaziado: as sugestões do fornecedor anterior não valem mais
+      historyKey.current = "";
+      historySeq.current += 1;
+      setHints({});
+      setLastPurchase(null);
+      setLoadingHistory(false);
+    }
   }
 
   function openNewSupplierPanel() {
@@ -360,7 +412,7 @@ export function ContasPagarClient({
     setForm((f) => ({ ...f, fornecedor: name }));
     setSupplierId(created.id);
     setNewSupplierOpen(false);
-    loadHistory(name, created.id);
+    loadHistory(name, created.id, true);
   }
 
   function openNew() {
@@ -372,29 +424,53 @@ export function ContasPagarClient({
   }
 
   function closeForm() {
-    if (dirty && drafts.length > 0 && !saving) setConfirmDiscard(true);
+    if (saving) return; // fechar no meio do salvamento esconderia um erro e passaria a ideia de que salvou
+    if (dirty && drafts.length > 0) setConfirmDiscard(true);
     else setShowForm(false);
+  }
+
+  /** Mexeu nos itens: se a diferença passou do que já tinha sido contestado/aceito, a escolha antiga não vale mais. */
+  function changeDrafts(next: DraftItem[]) {
+    putDrafts(next);
+    setDirty(true);
+    if (decision.acao && summarize(next).totals.diferenca > decidedDiff + 0.05) setDecision(EMPTY_DECISION);
+  }
+
+  function changeDecision(d: DecisionState) {
+    setDecision(d);
+    setDirty(true);
+    if (d.acao && d.acao !== decision.acao) setDecidedDiff(summarize(drafts).totals.diferenca);
   }
 
   /** Abre a conta já com os itens gravados (buscados à parte, para a lista ficar leve). */
   async function loadCompraOf(p: PayableDTO) {
+    const mine = ++compraSeq.current;
     setLoadingCompra(true);
     setCompraLoadFailed(false);
     try {
       const res = await fetch(`/api/financeiro/pagar/${p.id}/compra`);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.compra) throw new Error("falha");
+      if (mine !== compraSeq.current) return; // outra conta foi aberta nesse meio-tempo
+      if (!res.ok) throw new Error("falha");
+      if (!data.compra) {
+        // a compra deixou de existir (apagada por outra pessoa): a conta fica sem itens
+        setHadCompra(false);
+        return;
+      }
       const c = data.compra as {
         supplierId: string | null;
         numeroNota: string | null;
         divergenciaStatus: "SEM_DIVERGENCIA" | "EM_CONTESTACAO" | "ACEITA";
         divergenciaMotivo: string | null;
         divergenciaObservacao: string | null;
+        divergenciaValor: number;
         itens: SavedItem[];
       };
-      setDrafts(c.itens.map(draftFromSaved));
+      const supplier = c.supplierId ?? findSupplier(p.fornecedor)?.id ?? null;
+      putDrafts(c.itens.map(draftFromSaved));
       setNumeroNota(c.numeroNota ?? "");
-      setSupplierId(c.supplierId ?? findSupplier(p.fornecedor)?.id ?? null);
+      setSupplierId(supplier);
+      setDecidedDiff(c.divergenciaValor ?? 0);
       setDecision(
         c.divergenciaStatus === "EM_CONTESTACAO"
           ? { acao: "CONTESTAR", motivo: "", observacao: c.divergenciaObservacao ?? "" }
@@ -402,11 +478,11 @@ export function ContasPagarClient({
             ? { acao: "ACEITAR", motivo: c.divergenciaMotivo ?? "", observacao: c.divergenciaObservacao ?? "" }
             : EMPTY_DECISION
       );
-      loadHistory(p.fornecedor, c.supplierId ?? findSupplier(p.fornecedor)?.id ?? null);
+      loadHistory(p.fornecedor, supplier);
     } catch {
-      setCompraLoadFailed(true);
+      if (mine === compraSeq.current) setCompraLoadFailed(true);
     } finally {
-      setLoadingCompra(false);
+      if (mine === compraSeq.current) setLoadingCompra(false);
     }
   }
 
@@ -434,6 +510,13 @@ export function ContasPagarClient({
     setFormError(null);
     setSupplierId(findSupplier(p.fornecedor)?.id ?? null);
     setHadCompra(!!p.invoice);
+    initialDates.current = {
+      dataCompetencia: format(new Date(p.dataCompetencia), "yyyy-MM-dd"),
+      dataVencimento: format(new Date(p.dataVencimento), "yyyy-MM-dd"),
+      dataPagamento: p.dataPagamento ? format(new Date(p.dataPagamento), "yyyy-MM-dd") : "",
+    };
+    // Ao editar uma conta antiga: o histórico não inclui a própria compra nem o que veio depois dela.
+    historyExtras.current = { exclude: p.invoice?.id ?? null, until: initialDates.current.dataCompetencia };
     setShowForm(true);
     if (p.invoice) loadCompraOf(p);
     else loadHistory(p.fornecedor, findSupplier(p.fornecedor)?.id ?? null);
@@ -442,23 +525,23 @@ export function ContasPagarClient({
   async function submit() {
     if (saving) return;
     if (!form.fornecedor.trim()) {
-      setFormError("Informe o fornecedor.");
+      fail("Informe o fornecedor.");
       return;
     }
     if (!form.descricao.trim()) {
-      setFormError("Informe a descrição.");
+      fail("Informe a descrição.");
       return;
     }
     if (!form.categoriaId) {
-      setFormError("Selecione uma categoria financeira antes de salvar.");
+      fail("Selecione uma categoria financeira antes de salvar.");
       return;
     }
     if (!form.valor || Number(form.valor) <= 0) {
-      setFormError("Informe um valor maior que zero.");
+      fail("Informe um valor maior que zero.");
       return;
     }
     if (loadingCompra || compraLoadFailed) {
-      setFormError(
+      fail(
         compraLoadFailed
           ? "Não foi possível carregar os itens desta conta. Feche e abra de novo antes de salvar (assim nenhum item se perde)."
           : "Aguarde os itens carregarem."
@@ -472,21 +555,21 @@ export function ContasPagarClient({
       const itens = draftsToPayload(drafts);
       const parsed = normalizeItems(itens);
       if (!parsed.ok) {
-        setFormError(parsed.error);
+        fail(parsed.error);
         return;
       }
       const above = isAboveAgreed(computeTotals(parsed.items));
       if (above) {
         if (!decision.acao) {
-          setFormError("Esta compra veio acima do combinado: escolha “Contestar com o fornecedor” ou “Aceitar e registrar o motivo”.");
+          fail("Esta compra veio acima do combinado: escolha “Contestar com o fornecedor” ou “Aceitar e registrar o motivo”.");
           return;
         }
         if (decision.acao === "ACEITAR" && !decision.motivo) {
-          setFormError("Escolha o motivo para aceitar a diferença.");
+          fail("Escolha o motivo para aceitar a diferença.");
           return;
         }
         if (decision.acao === "ACEITAR" && decision.motivo === "Outro" && decision.observacao.trim().length < 3) {
-          setFormError("Explique o motivo na observação (você escolheu “Outro”).");
+          fail("Explique o motivo na observação (você escolheu “Outro”).");
           return;
         }
       }
@@ -502,13 +585,19 @@ export function ContasPagarClient({
 
     setFormError(null);
     setSaving(true);
-    const payload = { ...form, dataPagamento: form.dataPagamento || null, ...(compra !== undefined ? { compra } : {}) };
+    const payload: Record<string, unknown> = { ...form, dataPagamento: form.dataPagamento || null, ...(compra !== undefined ? { compra } : {}) };
+    if (editing) {
+      // Datas que ninguém mexeu não são reenviadas: assim abrir e salvar a conta não desloca a data.
+      for (const key of ["dataCompetencia", "dataVencimento", "dataPagamento"] as const) {
+        if (form[key] === initialDates.current[key]) delete payload[key];
+      }
+    }
     const result = editing
       ? await apiRequest(`/api/financeiro/pagar/${editing.id}`, "PATCH", payload)
       : await apiRequest("/api/financeiro/pagar", "POST", payload);
     setSaving(false);
     if (!result.ok) {
-      setFormError(result.error);
+      fail(result.error);
       return;
     }
     setShowForm(false);
@@ -563,7 +652,7 @@ export function ContasPagarClient({
   }
 
   function exportCsv() {
-    const header = ["Número", "Fornecedor", "Descrição", "Categoria", "Empresa", "Valor", "Vencimento", "Status"];
+    const header = ["Número", "Fornecedor", "Descrição", "Categoria", "Empresa", "Valor", "Vencimento", "Status", "Itens detalhados (%)", "Situação do combinado"];
     const rows = filtered.map((p) => [
       p.number,
       p.fornecedor,
@@ -573,6 +662,8 @@ export function ContasPagarClient({
       p.valor,
       format(new Date(p.dataVencimento), "dd/MM/yyyy"),
       STATUS_LABEL[p.status],
+      p.invoice ? detailPercent(p.invoice.totalCobrado, p.valor) : 0,
+      combinadoLabel(p.invoice),
     ]);
     const csv = [header, ...rows].map((r) => r.join(";")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
@@ -614,9 +705,9 @@ export function ContasPagarClient({
       className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
       cards={[
         { key: "detalhado", label: "Detalhado nas contas do mês", value: `${kpis.detailedPct}%`, icon: "ListChecks", color: "#1464F4", hint: "do valor lançado neste mês já tem itens" },
-        { key: "acima", label: "Acima do combinado no mês", value: formatCurrency(kpis.aboveValue), icon: "TrendingUp", color: "#ef4444", hint: `em ${kpis.aboveCount} conta(s)` },
-        { key: "contestacao", label: "Em contestação", value: `${kpis.contestedCount} conta(s)`, icon: "MessageSquare", color: "#f59e0b", hint: `${formatCurrency(kpis.contestedValue)} cobrados a mais` },
-        { key: "proximos-7", label: "A pagar nos próximos 7 dias", value: formatCurrency(kpis.dueSoon), icon: "CalendarClock", color: "#1464F4", hint: "contas em aberto com vencimento até 7 dias" },
+        { key: "acima", label: "Acima do combinado no mês", value: formatCurrency(kpis.aboveValue), icon: "TrendingUp", color: "#ef4444", hint: `em ${kpis.aboveCount} ${kpis.aboveCount === 1 ? "conta" : "contas"}` },
+        { key: "contestacao", label: "Em contestação", value: `${kpis.contestedCount} ${kpis.contestedCount === 1 ? "conta" : "contas"}`, icon: "MessageSquare", color: "#f59e0b", hint: `${formatCurrency(kpis.contestedValue)} cobrados a mais` },
+        { key: "proximos-7", label: "A pagar nos próximos 7 dias", value: formatCurrency(kpis.dueSoon), icon: "CalendarClock", color: "#1464F4", hint: "contas em aberto que vencem em até 7 dias (hoje incluído)" },
       ]}
     />
     <Section
@@ -738,7 +829,14 @@ export function ContasPagarClient({
                           style={{ width: `${detailPercent(p.invoice.totalCobrado, p.valor)}%` }}
                         />
                       </div>
+                      {canCreate && detailPercent(p.invoice.totalCobrado, p.valor) < 100 && (
+                        <button type="button" onClick={() => openEdit(p)} className="mt-0.5 text-[11px] text-nord-blue-light hover:underline">
+                          Completar
+                        </button>
+                      )}
                     </div>
+                  ) : p.status === "CANCELADO" ? (
+                    <span className="text-xs text-nord-gray">—</span>
                   ) : canCreate ? (
                     <button type="button" onClick={() => openEdit(p)} className="text-xs text-nord-blue-light hover:underline">
                       Sem itens · Detalhar
@@ -782,7 +880,6 @@ export function ContasPagarClient({
       </div>
 
       <Modal open={showForm} onClose={closeForm} title={editing ? "Editar conta a pagar" : "Nova conta a pagar"} widthClass="max-w-5xl">
-        <FormError message={formError} />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Field label="Fornecedor">
@@ -812,7 +909,7 @@ export function ContasPagarClient({
                     Cadastrar “{form.fornecedor.trim()}” como novo fornecedor
                   </button>
                 ) : (
-                  <span className="text-nord-gray">Fora da lista de fornecedores (vale como texto)</span>
+                  <span className="text-nord-gray">Fornecedor não cadastrado (será salvo só como nome)</span>
                 )
               ) : null}
             </div>
@@ -867,7 +964,15 @@ export function ContasPagarClient({
             <input type="date" value={form.dataVencimento} onChange={(e) => setForm({ ...form, dataVencimento: e.target.value })} className="input" />
           </Field>
           <Field label="Data de Pagamento (quando foi paga)">
-            <input type="date" value={form.dataPagamento} onChange={(e) => setForm({ ...form, dataPagamento: e.target.value })} className="input" />
+            <input
+              type="date"
+              value={form.dataPagamento}
+              onChange={(e) => {
+                setAutoPagamento(false);
+                setForm({ ...form, dataPagamento: e.target.value });
+              }}
+              className="input"
+            />
           </Field>
           <Field label="Conta Bancária">
             <select value={form.bankAccountId} onChange={(e) => setForm({ ...form, bankAccountId: e.target.value })} className="input">
@@ -893,8 +998,17 @@ export function ContasPagarClient({
               value={form.status}
               onChange={(e) => {
                 const status = e.target.value;
-                // Marcou como pago e ainda não informou o dia do pagamento: sugere hoje (dá para trocar).
-                setForm({ ...form, status, dataPagamento: status === "PAGO" && !form.dataPagamento ? format(new Date(), "yyyy-MM-dd") : form.dataPagamento });
+                if (status === "PAGO" && !form.dataPagamento) {
+                  // Marcou como pago e ainda não informou o dia do pagamento: sugere hoje (dá para trocar).
+                  setForm({ ...form, status, dataPagamento: format(new Date(), "yyyy-MM-dd") });
+                  setAutoPagamento(true);
+                } else if (autoPagamento && status !== "PAGO" && status !== "PARCIALMENTE_PAGO") {
+                  // Voltou para “em aberto”: a data sugerida automaticamente não fica gravada.
+                  setForm({ ...form, status, dataPagamento: "" });
+                  setAutoPagamento(false);
+                } else {
+                  setForm({ ...form, status });
+                }
               }}
               className="input"
             >
@@ -929,10 +1043,7 @@ export function ContasPagarClient({
           )}
           <CompraItensEditor
             items={drafts}
-            onItemsChange={(next) => {
-              setDrafts(next);
-              setDirty(true);
-            }}
+            onItemsChange={changeDrafts}
             ingredients={ingredients}
             hints={hints}
             lastPurchase={lastPurchase}
@@ -940,33 +1051,31 @@ export function ContasPagarClient({
             valorBoleto={Number(form.valor) > 0 ? Number(form.valor) : 0}
             onUseTotal={(total) => setForm((f) => ({ ...f, valor: String(total) }))}
             decision={decision}
-            onDecisionChange={(d) => {
-              setDecision(d);
-              setDirty(true);
-            }}
+            onDecisionChange={changeDecision}
             hadCompra={hadCompra}
             numeroNota={numeroNota}
             onNumeroNotaChange={(v) => {
               setNumeroNota(v);
               setDirty(true);
             }}
+            loadingItems={loadingCompra}
+            loadFailed={compraLoadFailed}
+            onRetryLoad={() => editing && loadCompraOf(editing)}
           />
-          {loadingCompra && <p className="col-span-2 text-xs text-nord-gray">Carregando os itens desta conta…</p>}
-          {compraLoadFailed && (
-            <p className="col-span-2 text-xs text-nord-danger">
-              Não foi possível carregar os itens desta conta. Feche e abra de novo antes de salvar, para nenhum item se perder.
-            </p>
-          )}
+          {repriceNote && <p className="col-span-2 text-xs text-nord-warning">{repriceNote}</p>}
           <div className="col-span-2">
             <Field label="Observações">
               <textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} className="input min-h-14" />
             </Field>
           </div>
         </div>
+        <div ref={errorRef} className="mt-4">
+          <FormError message={formError} />
+        </div>
         <button
           onClick={submit}
           disabled={saving || loadingCompra || compraLoadFailed}
-          className="w-full mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
+          className="w-full mt-2 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
         >
           {saving ? "Salvando..." : drafts.length > 0 ? "Salvar com os itens" : "Salvar"}
         </button>
@@ -975,7 +1084,7 @@ export function ContasPagarClient({
       <ConfirmDialog
         open={confirmDiscard}
         title="Descartar o que foi digitado?"
-        message="Os itens que você adicionou ainda não foram salvos. Se fechar agora, eles se perdem."
+        message="O que você digitou nesta conta ainda não foi salvo. Se fechar agora, tudo se perde."
         onConfirm={() => {
           setConfirmDiscard(false);
           setShowForm(false);
@@ -1073,6 +1182,16 @@ export function ContasPagarClient({
   );
 }
 
+/** Texto curto da situação do combinado (para a exportação). */
+function combinadoLabel(invoice: InvoiceSummary | null): string {
+  if (!invoice) return "Sem itens";
+  if (invoice.totalCombinado <= 0 && invoice.totalComparado <= 0) return "Sem preço combinado";
+  if (invoice.divergenciaStatus === "EM_CONTESTACAO") return "Em contestação";
+  if (invoice.divergenciaStatus === "ACEITA") return `Aceito${invoice.divergenciaMotivo ? ` (${invoice.divergenciaMotivo})` : ""}`;
+  const diff = round2(invoice.totalComparado - invoice.totalCombinado);
+  return diff < -0.05 ? "Abaixo do combinado" : "Dentro do combinado";
+}
+
 /** Situação da compra contra o combinado, para a coluna “Combinado” da lista. */
 function CombinadoCell({ invoice }: { invoice: InvoiceSummary | null }) {
   if (!invoice) return <span className="text-xs text-nord-gray">—</span>;
@@ -1085,7 +1204,7 @@ function CombinadoCell({ invoice }: { invoice: InvoiceSummary | null }) {
     return (
       <div className="flex flex-col items-start gap-1">
         <Badge tone="warning">Em contestação</Badge>
-        <span className="text-[11px] text-nord-gray">{detail}</span>
+        <span className="text-[11px] text-nord-danger">{detail}</span>
       </div>
     );
   }
@@ -1093,7 +1212,7 @@ function CombinadoCell({ invoice }: { invoice: InvoiceSummary | null }) {
     return (
       <div className="flex flex-col items-start gap-1" title={invoice.divergenciaMotivo ? `Aceito: ${invoice.divergenciaMotivo}` : "Diferença aceita"}>
         <Badge tone="info">Aceito{invoice.divergenciaMotivo ? ` · ${invoice.divergenciaMotivo}` : ""}</Badge>
-        <span className="text-[11px] text-nord-gray">{detail}</span>
+        <span className="text-[11px] text-nord-danger">{detail}</span>
       </div>
     );
   }

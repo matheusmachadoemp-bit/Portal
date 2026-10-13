@@ -4035,8 +4035,11 @@ model SupplierInvoice {
   supplier                  Supplier?                       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   /// Nome do fornecedor como estava no boleto (também vale quando o fornecedor não está cadastrado).
   fornecedorNome            String
+  /// `fornecedorNome` sem acento, em minúsculas e sem espaços sobrando: chave para achar as compras
+  /// anteriores de um fornecedor que não está cadastrado (comparação exata, sem curinga).
+  fornecedorChave           String
   numeroNota                String?
-  /// Dia da compra (competência do boleto), ancorado em meia-noite de São Paulo.
+  /// Dia da compra: copia a competência do boleto, no mesmo formato em que ela está gravada.
   dataCompra                DateTime
   /// Soma de TODOS os itens e ajustes (o que foi cobrado).
   totalCobrado              Float                           @default(0)
@@ -4048,6 +4051,9 @@ model SupplierInvoice {
   /// Motivo de aceitar a diferença (Reajuste do fornecedor, Frete não combinado, Quantidade diferente, Outro).
   divergenciaMotivo         String?
   divergenciaObservacao     String?
+  /// Diferença (R$ acima do combinado) quando alguém escolheu contestar/aceitar. Se depois ela crescer,
+  /// a escolha antiga não vale mais e é preciso decidir de novo.
+  divergenciaValor          Float                           @default(0)
   divergenciaResolvidaEm    DateTime?
   divergenciaResolvidaPorId String?
   createdById               String
@@ -4060,6 +4066,7 @@ model SupplierInvoice {
 
   @@index([empresaId, dataCompra])
   @@index([empresaId, supplierId, dataCompra])
+  @@index([empresaId, fornecedorChave, dataCompra])
 }
 
 model SupplierInvoiceItem {

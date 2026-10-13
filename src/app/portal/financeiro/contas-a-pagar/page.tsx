@@ -28,7 +28,8 @@ export default async function ContasAPagarPage() {
         categoria: true,
         bankAccount: { select: { name: true } },
         createdBy: { select: { name: true } },
-        empresa: true,
+        // Só o que a tela usa: o registro inteiro da loja leva códigos de integração ao navegador.
+        empresa: { select: { id: true, name: true, color: true } },
         invoice: { select: INVOICE_SUMMARY_SELECT },
       },
     }),
@@ -48,8 +49,9 @@ export default async function ContasAPagarPage() {
       orderBy: { razaoSocial: "asc" },
       select: { id: true, razaoSocial: true, nomeFantasia: true },
     }),
-    // Insumos do Estoque para “O que foi comprado” (só faz sentido numa loja específica: é onde se lança).
-    canCreate
+    // Insumos do Estoque para “O que foi comprado” (só numa loja específica, que é onde se lança, e para
+    // quem pode ver o Estoque).
+    canCreate && (await hasModulePermission(session.user.id, "estoque", "canView"))
       ? prisma.ingredient.findMany({
           where: { empresaId: { in: empresaIds }, active: true },
           orderBy: { name: "asc" },

@@ -32,6 +32,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       divergenciaStatus: invoice.divergenciaStatus,
       divergenciaMotivo: invoice.divergenciaMotivo,
       divergenciaObservacao: invoice.divergenciaObservacao,
+      divergenciaValor: invoice.divergenciaValor,
       divergenciaResolvidaEm: invoice.divergenciaResolvidaEm,
       itens: invoice.items.map((it) => ({
         kind: it.kind,

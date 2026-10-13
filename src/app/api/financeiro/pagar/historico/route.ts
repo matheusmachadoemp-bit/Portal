@@ -24,6 +24,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
   }
 
-  const history = await loadSupplierHistory(empresa.id, { supplierId: supplierId || null, fornecedor });
+  // Ao editar uma conta antiga: tira a própria compra e só considera o que veio até a competência dela.
+  const excludeInvoiceId = searchParams.get("excludeInvoiceId");
+  const untilText = searchParams.get("ate");
+  if ((excludeInvoiceId && excludeInvoiceId.length > 100) || (untilText && !/^\d{4}-\d{2}-\d{2}$/.test(untilText))) {
+    return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
+  }
+  const until = untilText ? new Date(`${untilText}T23:59:59.999Z`) : null;
+
+  const history = await loadSupplierHistory(empresa.id, {
+    supplierId: supplierId || null,
+    fornecedor,
+    excludeInvoiceId: excludeInvoiceId || null,
+    until: until && !Number.isNaN(until.getTime()) ? until : null,
+  });
   return NextResponse.json(history);
 }

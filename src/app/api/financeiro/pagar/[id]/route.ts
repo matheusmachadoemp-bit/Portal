@@ -5,6 +5,7 @@ import { balanceDelta } from "@/lib/finance";
 import type { FinanceEntryStatus } from "@prisma/client";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { normalizeSupplierKey } from "@/lib/compra-itens";
 import {
   CompraError,
   deleteInvoiceIfOrphan,
@@ -31,7 +32,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 403 }
     );
   }
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Corpo da requisição inválido (esperado JSON)." }, { status: 400 });
+  }
 
   // "O que foi comprado": ausente = não mexe; null = tira os itens; objeto = grava (substitui os itens).
   let compra: ParsedCompra | null | undefined;
@@ -127,23 +131,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             empresaId: before.empresaId,
             fornecedor: entry.fornecedor,
             dataCompetencia: entry.dataCompetencia,
-            invoiceId: before.invoiceId,
           },
           compra,
         });
       } else if (compra === null) {
         await detachCompraFromPayable(tx, {
           userId: session.user.id,
-          payable: { id, empresaId: before.empresaId, invoiceId: before.invoiceId },
+          payable: { id, empresaId: before.empresaId },
         });
       } else if (
-        before.invoiceId &&
+        entry.invoiceId &&
         (entry.fornecedor !== before.fornecedor || entry.dataCompetencia.getTime() !== before.dataCompetencia.getTime())
       ) {
-        // Mudou o fornecedor ou a competência do boleto: a compra acompanha.
+        // Mudou o fornecedor ou a competência do boleto: a compra acompanha. Sem a tela reenviando a compra,
+        // não dá para saber se o novo nome é um fornecedor cadastrado: o vínculo por id é solto e a busca
+        // passa a valer pelo nome.
         await tx.supplierInvoice.updateMany({
-          where: { id: before.invoiceId, empresaId: before.empresaId },
-          data: { fornecedorNome: entry.fornecedor.slice(0, 200), dataCompra: entry.dataCompetencia },
+          where: { id: entry.invoiceId, empresaId: before.empresaId },
+          data: {
+            fornecedorNome: entry.fornecedor.slice(0, 200),
+            fornecedorChave: normalizeSupplierKey(entry.fornecedor),
+            dataCompra: entry.dataCompetencia,
+            ...(entry.fornecedor !== before.fornecedor ? { supplierId: null } : {}),
+          },
         });
       }
 
