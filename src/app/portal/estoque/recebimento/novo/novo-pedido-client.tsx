@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, CheckCircle2, Copy, CheckCheck } from "lucide-react";
 import { formatCurrency } from "@/lib/calc";
+import { spDateKey } from "@/lib/timezone";
 
 type NewItem = { ingredientId: string; quantidade: string; unidade: string; valorUnitario: string };
 
@@ -20,7 +21,7 @@ export function NovoPedidoClient({
 }) {
   const router = useRouter();
   const [supplierId, setSupplierId] = useState("");
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(spDateKey());
   const [previsaoEntrega, setPrevisaoEntrega] = useState("");
   const [responsavelRecebimentoId, setResponsavelRecebimentoId] = useState("");
   const [numeroNota, setNumeroNota] = useState("");

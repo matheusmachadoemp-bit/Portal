@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { addMonths, setDate } from "date-fns";
+import { parseDayInput } from "@/lib/timezone";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -59,7 +60,12 @@ export async function POST(req: Request) {
   const tipo: "PAGAR" | "RECEBER" = body.tipo;
   const valor = valorInput;
   const diaVencimento = Number(body.diaVencimento) || 1;
-  const dataInicio = new Date(body.dataInicio);
+  // Meia-noite de São Paulo (03:00Z): addMonths/setDate abaixo preservam a hora, então toda competência e
+  // vencimento gerado também nasce em 03:00Z (testado com o processo em UTC, America/Sao_Paulo e Asia/Tokyo).
+  const dataInicio = parseDayInput(body.dataInicio);
+  if (!dataInicio) {
+    return NextResponse.json({ error: "Data de início inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
+  }
   const meses = body.infinita ? MAX_INFINITE_MONTHS : Number(body.quantidadeMeses) || 1;
 
   const template = await prisma.recurringTemplate.create({

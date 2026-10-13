@@ -9,6 +9,7 @@ import {
   requireActiveSingleEmpresa,
 } from "@/lib/empresa";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
+import { parseDayInput, spDateKey, spStartOfDay } from "@/lib/timezone";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 import { hasModulePermission } from "@/lib/authz";
 import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
@@ -145,18 +146,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Esse fornecedor não pertence a esta loja." }, { status: 400 });
   }
 
+  // Dias gravados à meia-noite de São Paulo (03:00Z). Sem data no corpo (nenhuma tela faz isso): hoje em SP.
+  const dataCompra = body.data ? parseDayInput(body.data) : spStartOfDay(spDateKey());
+  const previsaoEntrega = body.previsaoEntrega ? parseDayInput(body.previsaoEntrega) : null;
+  const dataVencimento = body.dataVencimento ? parseDayInput(body.dataVencimento) : null;
+  if (!dataCompra || (body.previsaoEntrega && !previsaoEntrega) || (body.dataVencimento && !dataVencimento)) {
+    return NextResponse.json({ error: "Data inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
+  }
+
   const purchase = await prisma.purchase.create({
     data: {
       empresaId: empresa.id,
       supplierId: body.supplierId,
       numeroNota: body.numeroNota || null,
-      data: body.data ? new Date(body.data) : new Date(),
-      previsaoEntrega: body.previsaoEntrega ? new Date(body.previsaoEntrega) : null,
+      data: dataCompra,
+      previsaoEntrega,
       responsavelRecebimentoId: body.responsavelRecebimentoId || null,
       recebimentoToken: body.enviarParaRecebimento ? randomBytes(16).toString("hex") : null,
       compradorResponsavel: body.compradorResponsavel || session.user.name || null,
       formaPagamento: body.formaPagamento || null,
-      dataVencimento: body.dataVencimento ? new Date(body.dataVencimento) : null,
+      dataVencimento,
       desconto: Number(body.desconto) || 0,
       frete: Number(body.frete) || 0,
       status: body.status || (body.enviarParaRecebimento ? "AGUARDANDO_ENTREGA" : "PEDIDO_REALIZADO"),

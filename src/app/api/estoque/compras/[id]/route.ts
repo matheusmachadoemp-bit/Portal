@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
+import { parseDayInput } from "@/lib/timezone";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
@@ -184,10 +185,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!body.data) {
       return NextResponse.json({ error: "Data da compra é obrigatória." }, { status: 400 });
     }
-    parsedData = new Date(body.data);
-    if (Number.isNaN(parsedData.getTime())) {
+    const parsed = parseDayInput(body.data);
+    if (!parsed) {
       return NextResponse.json({ error: "Data da compra inválida." }, { status: 400 });
     }
+    parsedData = parsed;
   }
 
   let parsedPrevisao: Date | null | undefined;
@@ -195,8 +197,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!body.previsaoEntrega) {
       parsedPrevisao = null;
     } else {
-      parsedPrevisao = new Date(body.previsaoEntrega);
-      if (Number.isNaN(parsedPrevisao.getTime())) {
+      parsedPrevisao = parseDayInput(body.previsaoEntrega);
+      if (!parsedPrevisao) {
         return NextResponse.json({ error: "Previsão de entrega inválida." }, { status: 400 });
       }
     }
@@ -207,8 +209,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!body.dataVencimento) {
       parsedVencimento = null;
     } else {
-      parsedVencimento = new Date(body.dataVencimento);
-      if (Number.isNaN(parsedVencimento.getTime())) {
+      parsedVencimento = parseDayInput(body.dataVencimento);
+      if (!parsedVencimento) {
         return NextResponse.json({ error: "Data de vencimento inválida." }, { status: 400 });
       }
     }

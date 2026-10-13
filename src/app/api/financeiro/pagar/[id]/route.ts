@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parseDayInput } from "@/lib/timezone";
 import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
 import type { FinanceEntryStatus } from "@prisma/client";
@@ -35,6 +36,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Corpo da requisição inválido (esperado JSON)." }, { status: 400 });
+  }
+
+  // Datas: ausente = não mexe; dataPagamento null = limpa. Gravadas à meia-noite de São Paulo (03:00Z).
+  const dataCompetencia = body.dataCompetencia ? parseDayInput(body.dataCompetencia) : undefined;
+  const dataVencimento = body.dataVencimento ? parseDayInput(body.dataVencimento) : undefined;
+  const dataPagamento = body.dataPagamento
+    ? parseDayInput(body.dataPagamento)
+    : body.dataPagamento === null
+    ? null
+    : undefined;
+  if (dataCompetencia === null || dataVencimento === null || (body.dataPagamento && dataPagamento === null)) {
+    return NextResponse.json({ error: "Data inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
   }
 
   // "O que foi comprado": ausente = não mexe; null = tira os itens; objeto = grava (substitui os itens).
@@ -93,13 +106,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           categoriaId: body.categoriaId ?? undefined,
           centroCusto: body.centroCusto ?? undefined,
           valor: body.valor !== undefined ? nextValor : undefined,
-          dataCompetencia: body.dataCompetencia ? new Date(body.dataCompetencia) : undefined,
-          dataVencimento: body.dataVencimento ? new Date(body.dataVencimento) : undefined,
-          dataPagamento: body.dataPagamento
-            ? new Date(body.dataPagamento)
-            : body.dataPagamento === null
-            ? null
-            : undefined,
+          dataCompetencia,
+          dataVencimento,
+          dataPagamento,
           bankAccountId: body.bankAccountId !== undefined ? body.bankAccountId || null : undefined,
           formaPagamento: body.formaPagamento ?? undefined,
           parcelado: body.parcelado ?? undefined,

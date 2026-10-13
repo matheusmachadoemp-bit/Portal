@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseDayInput } from "@/lib/timezone";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
@@ -65,6 +66,13 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  // Dias gravados à meia-noite de São Paulo (03:00Z), como no resto do Portal. Ver `parseDayInput`.
+  const dataCompetencia = parseDayInput(body.dataCompetencia);
+  const dataVencimento = parseDayInput(body.dataVencimento);
+  const dataRecebimento = body.dataRecebimento ? parseDayInput(body.dataRecebimento) : null;
+  if (!dataCompetencia || !dataVencimento || (body.dataRecebimento && !dataRecebimento)) {
+    return NextResponse.json({ error: "Data inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
+  }
   if (!body.cliente || !String(body.cliente).trim()) {
     return NextResponse.json({ error: "Cliente é obrigatório." }, { status: 400 });
   }
@@ -99,9 +107,9 @@ export async function POST(req: Request) {
         centroCusto: body.centroCusto || null,
         empresaId: empresa.id,
         valor,
-        dataCompetencia: new Date(body.dataCompetencia),
-        dataVencimento: new Date(body.dataVencimento),
-        dataRecebimento: body.dataRecebimento ? new Date(body.dataRecebimento) : null,
+        dataCompetencia,
+        dataVencimento,
+        dataRecebimento,
         bankAccountId: body.bankAccountId || null,
         formaRecebimento: body.formaRecebimento || null,
         parcelado: !!body.parcelado,

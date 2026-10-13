@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Check, Download, Copy } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
+import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
 
@@ -97,6 +98,9 @@ export function ContasReceberClient({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<ReceivableDTO | null>(null);
   const [form, setForm] = useState(emptyForm);
+  // Datas como estavam ao abrir a conta: as que ninguém mexeu não são reenviadas (senão salvar sem mexer
+  // deslocava a data a cada salvamento).
+  const initialDates = useRef({ dataCompetencia: "", dataVencimento: "", dataRecebimento: "" });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
@@ -155,6 +159,11 @@ export function ContasReceberClient({
       observacoes: p.observacoes ?? "",
       status: p.status,
     });
+    initialDates.current = {
+      dataCompetencia: format(new Date(p.dataCompetencia), "yyyy-MM-dd"),
+      dataVencimento: format(new Date(p.dataVencimento), "yyyy-MM-dd"),
+      dataRecebimento: p.dataRecebimento ? format(new Date(p.dataRecebimento), "yyyy-MM-dd") : "",
+    };
     setShowForm(true);
   }
 
@@ -178,7 +187,12 @@ export function ContasReceberClient({
     }
     setFormError(null);
     setSaving(true);
-    const payload = { ...form, dataRecebimento: form.dataRecebimento || null };
+    const payload: Record<string, unknown> = { ...form, dataRecebimento: form.dataRecebimento || null };
+    if (editing) {
+      for (const key of ["dataCompetencia", "dataVencimento", "dataRecebimento"] as const) {
+        if (form[key] === initialDates.current[key]) delete payload[key];
+      }
+    }
     const result = editing
       ? await apiRequest(`/api/financeiro/receber/${editing.id}`, "PATCH", payload)
       : await apiRequest("/api/financeiro/receber", "POST", payload);
@@ -195,7 +209,7 @@ export function ContasReceberClient({
     setRowError(null);
     const result = await apiRequest(`/api/financeiro/receber/${p.id}`, "PATCH", {
       status: "PAGO",
-      dataRecebimento: format(new Date(), "yyyy-MM-dd"),
+      dataRecebimento: spDateKey(),
     });
     if (!result.ok) {
       setRowError(result.error);
@@ -212,8 +226,8 @@ export function ContasReceberClient({
       categoriaId: p.categoriaId,
       centroCusto: p.centroCusto,
       valor: p.valor,
-      dataCompetencia: p.dataCompetencia,
-      dataVencimento: p.dataVencimento,
+      dataCompetencia: storedDayKey(p.dataCompetencia),
+      dataVencimento: storedDayKey(p.dataVencimento),
       bankAccountId: p.bankAccountId,
       formaRecebimento: p.formaRecebimento,
       status: "EM_ABERTO",

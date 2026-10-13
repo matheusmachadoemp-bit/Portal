@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseDayInput } from "@/lib/timezone";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
@@ -24,6 +25,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
   const body = await req.json();
+
+  // Datas: ausente = não mexe; dataRecebimento null = limpa. Gravadas à meia-noite de São Paulo (03:00Z).
+  const dataCompetencia = body.dataCompetencia ? parseDayInput(body.dataCompetencia) : undefined;
+  const dataVencimento = body.dataVencimento ? parseDayInput(body.dataVencimento) : undefined;
+  const dataRecebimento = body.dataRecebimento
+    ? parseDayInput(body.dataRecebimento)
+    : body.dataRecebimento === null
+    ? null
+    : undefined;
+  if (dataCompetencia === null || dataVencimento === null || (body.dataRecebimento && dataRecebimento === null)) {
+    return NextResponse.json({ error: "Data inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
+  }
 
   const nextStatusCheck: FinanceEntryStatus = body.status ?? existingCheck.status;
   const nextValorCheck = body.valor !== undefined ? Number(body.valor) : existingCheck.valor;
@@ -69,13 +82,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         categoriaId: body.categoriaId ?? undefined,
         centroCusto: body.centroCusto ?? undefined,
         valor: body.valor !== undefined ? nextValor : undefined,
-        dataCompetencia: body.dataCompetencia ? new Date(body.dataCompetencia) : undefined,
-        dataVencimento: body.dataVencimento ? new Date(body.dataVencimento) : undefined,
-        dataRecebimento: body.dataRecebimento
-          ? new Date(body.dataRecebimento)
-          : body.dataRecebimento === null
-          ? null
-          : undefined,
+        dataCompetencia,
+        dataVencimento,
+        dataRecebimento,
         bankAccountId: body.bankAccountId !== undefined ? body.bankAccountId || null : undefined,
         formaRecebimento: body.formaRecebimento ?? undefined,
         parcelado: body.parcelado ?? undefined,

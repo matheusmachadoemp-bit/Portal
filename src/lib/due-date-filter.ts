@@ -1,4 +1,5 @@
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { parseDateKey, spEndOfDay, spStartOfDay } from "@/lib/timezone";
 
 /**
  * Filtro de vencimento para telas que olham pra frente (contas a pagar/receber) — diferente
@@ -39,9 +40,14 @@ export function matchesDueDateFilter(
       return dataVencimento >= startOfWeek(now, { weekStartsOn: 1 }) && dataVencimento <= endOfWeek(now, { weekStartsOn: 1 });
     case "mes":
       return dataVencimento >= startOfMonth(now) && dataVencimento <= endOfMonth(now);
-    case "personalizado":
-      if (!custom.from || !custom.to) return true;
-      return dataVencimento >= startOfDay(new Date(custom.from)) && dataVencimento <= endOfDay(new Date(custom.to));
+    case "personalizado": {
+      // O vencimento é gravado à meia-noite de São Paulo (03:00Z). "AAAA-MM-DD" do campo de data NÃO pode virar
+      // new Date(...) (meia-noite UTC = 21h do dia anterior em SP): o intervalo 25 a 25 não achava o dia 25.
+      const from = parseDateKey(custom.from);
+      const to = parseDateKey(custom.to);
+      if (!from || !to) return true;
+      return dataVencimento >= spStartOfDay(from) && dataVencimento <= spEndOfDay(to);
+    }
     default:
       return true;
   }

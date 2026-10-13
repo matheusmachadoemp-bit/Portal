@@ -9,6 +9,7 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
+import { spDateKey } from "@/lib/timezone";
 import { PURCHASE_STATUS, PURCHASE_STATUS_LABEL, PURCHASE_STATUS_TONE } from "@/lib/estoque";
 import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 import { type RollingPeriodKey } from "@/lib/periods";
@@ -105,7 +106,7 @@ export function ComprasClient({
 
   const [supplierId, setSupplierId] = useState("");
   const [numeroNota, setNumeroNota] = useState("");
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(spDateKey());
   const [frete, setFrete] = useState("0");
   const [desconto, setDesconto] = useState("0");
   const [itens, setItens] = useState<NewItem[]>([{ ingredientId: "", quantidade: "", unidade: "", valorUnitario: "" }]);

@@ -7,6 +7,7 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
+import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
 import { detailPercent, isAboveAgreed, itemKey, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
@@ -609,7 +610,7 @@ export function ContasPagarClient({
     setRowError(null);
     const result = await apiRequest(`/api/financeiro/pagar/${p.id}`, "PATCH", {
       status: "PAGO",
-      dataPagamento: format(new Date(), "yyyy-MM-dd"),
+      dataPagamento: spDateKey(),
     });
     if (!result.ok) {
       setRowError(result.error);
@@ -626,8 +627,8 @@ export function ContasPagarClient({
         categoriaId: p.categoriaId,
         centroCusto: p.centroCusto,
         valor: p.valor,
-        dataCompetencia: p.dataCompetencia,
-        dataVencimento: p.dataVencimento,
+        dataCompetencia: storedDayKey(p.dataCompetencia),
+        dataVencimento: storedDayKey(p.dataVencimento),
         bankAccountId: p.bankAccountId,
         formaPagamento: p.formaPagamento,
         status: "EM_ABERTO",
@@ -1000,7 +1001,7 @@ export function ContasPagarClient({
                 const status = e.target.value;
                 if (status === "PAGO" && !form.dataPagamento) {
                   // Marcou como pago e ainda não informou o dia do pagamento: sugere hoje (dá para trocar).
-                  setForm({ ...form, status, dataPagamento: format(new Date(), "yyyy-MM-dd") });
+                  setForm({ ...form, status, dataPagamento: spDateKey() });
                   setAutoPagamento(true);
                 } else if (autoPagamento && status !== "PAGO" && status !== "PARCIALMENTE_PAGO") {
                   // Voltou para “em aberto”: a data sugerida automaticamente não fica gravada.

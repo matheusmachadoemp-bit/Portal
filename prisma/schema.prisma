@@ -2960,9 +2960,9 @@ model Purchase {
   supplierId               String
   supplier                 Supplier       @relation(fields: [supplierId], references: [id])
   numeroNota               String?
-  data                     DateTime       @default(now())
+  data                     DateTime       @default(now()) // DIA: meia-noite America/Sao_Paulo (a rota normaliza; o default so vale p/ insert direto)
   /// Data prevista de entrega do fornecedor — separada de `data` (data do pedido), usada para calcular atraso.
-  previsaoEntrega          DateTime?
+  previsaoEntrega          DateTime? // DIA (idem)
   compradorResponsavel     String?
   /// Colaborador designado para conferir a mercadoria no recebimento (dono do link de recebimento).
   responsavelRecebimentoId String?
@@ -2970,7 +2970,7 @@ model Purchase {
   /// Token único do link público de recebimento (/recebimento/[token]), gerado ao enviar o pedido.
   recebimentoToken         String?        @unique
   formaPagamento           PaymentMethod?
-  dataVencimento           DateTime?
+  dataVencimento           DateTime? // DIA (idem)
   notaFiscalUrl            String?
   desconto                 Float          @default(0)
   frete                    Float          @default(0)
@@ -3828,7 +3828,7 @@ model RecurringTemplate {
   formaPagamento    PaymentMethod     @default(PIX)
   infinita          Boolean           @default(false)
   quantidadeMeses   Int?
-  dataInicio        DateTime
+  dataInicio        DateTime // DIA: meia-noite America/Sao_Paulo (spStartOfDay = 03:00Z); gravar via parseDayInput
   active            Boolean           @default(true)
   createdById       String
   createdBy         User              @relation(fields: [createdById], references: [id])
@@ -3851,9 +3851,9 @@ model Payable {
   empresaId           String
   empresa             Empresa            @relation(fields: [empresaId], references: [id])
   valor               Float
-  dataCompetencia     DateTime
-  dataVencimento      DateTime
-  dataPagamento       DateTime?
+  dataCompetencia     DateTime // DIA: meia-noite America/Sao_Paulo (spStartOfDay = 03:00Z); gravar via parseDayInput
+  dataVencimento      DateTime // DIA (idem)
+  dataPagamento       DateTime? // DIA (idem)
   bankAccountId       String?
   bankAccount         BankAccount?       @relation(fields: [bankAccountId], references: [id])
   formaPagamento      PaymentMethod?
@@ -3890,9 +3890,9 @@ model Receivable {
   empresaId           String
   empresa             Empresa            @relation(fields: [empresaId], references: [id])
   valor               Float
-  dataCompetencia     DateTime
-  dataVencimento      DateTime
-  dataRecebimento     DateTime?
+  dataCompetencia     DateTime // DIA: meia-noite America/Sao_Paulo (spStartOfDay = 03:00Z); gravar via parseDayInput
+  dataVencimento      DateTime // DIA (idem)
+  dataRecebimento     DateTime? // DIA (idem)
   bankAccountId       String?
   bankAccount         BankAccount?       @relation(fields: [bankAccountId], references: [id])
   formaRecebimento    PaymentMethod?
@@ -4040,7 +4040,7 @@ model SupplierInvoice {
   fornecedorChave           String
   numeroNota                String?
   /// Dia da compra: copia a competência do boleto, no mesmo formato em que ela está gravada.
-  dataCompra                DateTime
+  dataCompra                DateTime // DIA: copia da dataCompetencia do boleto (meia-noite America/Sao_Paulo)
   /// Soma de TODOS os itens e ajustes (o que foi cobrado).
   totalCobrado              Float                           @default(0)
   /// Soma, só dos itens que tinham preço combinado, de quantidade × preço combinado.
