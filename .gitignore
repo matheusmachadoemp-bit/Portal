@@ -45,4 +45,5 @@ next-env.d.ts
 !/public/uploads/.gitkeep
 
 # local agent tooling
-/.claude/
+/.claude/*
+!/.claude/agents/
