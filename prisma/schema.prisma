@@ -3868,6 +3868,13 @@ model Payable {
   /// mesma nota apontam para a MESMA compra. Opcional: boletos sem itens continuam valendo.
   invoiceId           String?
   invoice             SupplierInvoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  /// Código de barras do boleto (dígitos, sem máscara) ou "Pix copia e cola" (BR Code), lido pela câmera
+  /// ou digitado manualmente ao cadastrar a conta — guarda o código certo, sem erro de digitação, para
+  /// copiar depois e pagar de qualquer lugar. Opcional (nem todo lançamento vem de um boleto escaneado).
+  /// Único GLOBALMENTE (não por empresa, de propósito): um código de barras de boleto ou Pix identifica
+  /// UMA obrigação de pagamento no mundo real — cadastrar o mesmo código em duas lojas seria o mesmo
+  /// boleto lançado (e com risco de ser pago) duas vezes, não um dado legítimo de lojas diferentes.
+  codigoBarras        String?            @unique
   createdById         String
   createdBy           User               @relation(fields: [createdById], references: [id])
   createdAt           DateTime           @default(now())

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, Check, Download, Copy, Repeat } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, Download, Copy, Repeat, ScanBarcode, AlertTriangle } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
@@ -11,6 +11,8 @@ import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
 import { detailPercent, isAboveAgreed, itemKey, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
+import { normalizeScannedCode, extractBoletoFields } from "@/lib/boleto-barcode";
+import { BoletoScannerModal } from "./boleto-scanner-modal";
 import {
   CompraItensEditor,
   EMPTY_DECISION,
@@ -23,6 +25,21 @@ import {
   type LastPurchase,
   type SavedItem,
 } from "./compra-itens-editor";
+
+/** Mesmo formato de `PayableDuplicateInfo` (ver `src/lib/boleto-barcode-server.ts`), devolvido
+ *  pela checagem de duplicidade de código de barras/Pix. */
+type CodigoBarrasDuplicate =
+  | {
+      visible: true;
+      id: string;
+      number: string;
+      fornecedor: string;
+      valor: number;
+      dataVencimento: string;
+      status: string;
+      empresa: string;
+    }
+  | { visible: false };
 
 type PayableDTO = {
   id: string;
@@ -45,6 +62,8 @@ type PayableDTO = {
   parcelaAtual: number | null;
   observacoes: string | null;
   status: string;
+  /** Código de barras do boleto (ou Pix "copia e cola") lido pela câmera ou digitado ao cadastrar — ver boleto-barcode.ts. */
+  codigoBarras: string | null;
   /** Resumo da compra (“o que foi comprado”) ligada à conta, se houver. */
   invoice: InvoiceSummary | null;
 };
@@ -105,6 +124,7 @@ const emptyForm = {
   parcelaAtual: "",
   observacoes: "",
   status: "EM_ABERTO",
+  codigoBarras: "",
 };
 
 export function ContasPagarClient({
@@ -169,6 +189,13 @@ export function ContasPagarClient({
   const [decidedDiff, setDecidedDiff] = useState(0);
   const [autoPagamento, setAutoPagamento] = useState(false);
   const [repriceNote, setRepriceNote] = useState<string | null>(null);
+  // Código de barras do boleto / Pix lido pela câmera ou digitado (ver boleto-barcode.ts).
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [codigoBarrasDuplicate, setCodigoBarrasDuplicate] = useState<CodigoBarrasDuplicate | null>(null);
+  const [checkingCodigo, setCheckingCodigo] = useState(false);
+  const [codigoBarrasNote, setCodigoBarrasNote] = useState<string | null>(null);
+  const [copiedCodigoId, setCopiedCodigoId] = useState<string | null>(null);
+  const codigoCheckSeq = useRef(0);
   const historyKey = useRef("");
   const historySeq = useRef(0);
   const historyExtras = useRef<{ exclude: string | null; until: string | null }>({ exclude: null, until: null });
@@ -304,6 +331,63 @@ export function ContasPagarClient({
     historyExtras.current = { exclude: null, until: null };
   }
 
+  function resetCodigoBarras() {
+    setCodigoBarrasDuplicate(null);
+    setCheckingCodigo(false);
+    setCodigoBarrasNote(null);
+    codigoCheckSeq.current += 1;
+  }
+
+  /** Checa se o código já está cadastrado em outro lançamento — ver `/api/financeiro/pagar/codigo-barras`.
+   *  Chamada ao sair do campo digitado manualmente e imediatamente após uma leitura pela câmera. */
+  async function checkCodigoDuplicate(rawCode: string) {
+    const code = normalizeScannedCode(rawCode);
+    if (!code) {
+      setCodigoBarrasDuplicate(null);
+      return;
+    }
+    const mine = ++codigoCheckSeq.current;
+    setCheckingCodigo(true);
+    const params = new URLSearchParams({ codigo: code });
+    if (editing) params.set("excludeId", editing.id);
+    const result = await apiRequest<{ duplicate: CodigoBarrasDuplicate | null }>(
+      `/api/financeiro/pagar/codigo-barras?${params.toString()}`,
+      "GET"
+    );
+    if (mine !== codigoCheckSeq.current) return; // chegou uma checagem mais nova nesse meio-tempo
+    setCheckingCodigo(false);
+    if (result.ok) setCodigoBarrasDuplicate(result.data.duplicate);
+  }
+
+  /** Lido pela câmera (ver BoletoScannerModal): preenche o código, tenta extrair valor/vencimento
+   *  (boleto bancário/arrecadação — ver `extractBoletoFields`) e já checa duplicidade. Não precisa
+   *  de `useCallback`: o modal guarda a referência mais recente num ref próprio (ver comentário em
+   *  boleto-scanner-modal.tsx), então a identidade desta função pode mudar a cada render sem
+   *  reiniciar a câmera — e assim ela sempre fecha sobre o `editing` mais atual, não um antigo. */
+  function handleCodeDetected(raw: string) {
+    setScannerOpen(false);
+    const code = normalizeScannedCode(raw);
+    const extracted = extractBoletoFields(code);
+    setForm((f) => ({
+      ...f,
+      codigoBarras: code,
+      ...(extracted ? { valor: String(round2(extracted.valor)) } : {}),
+      ...(extracted?.vencimento ? { dataVencimento: format(extracted.vencimento, "yyyy-MM-dd") } : {}),
+    }));
+    setCodigoBarrasNote(
+      extracted
+        ? `Valor${extracted.vencimento ? " e vencimento" : ""} preenchidos automaticamente a partir do código lido — confira antes de salvar.`
+        : null
+    );
+    checkCodigoDuplicate(code);
+  }
+
+  async function copyCode(id: string, code: string) {
+    await navigator.clipboard.writeText(code);
+    setCopiedCodigoId(id);
+    setTimeout(() => setCopiedCodigoId(null), 1500);
+  }
+
   function putDrafts(next: DraftItem[]) {
     draftsRef.current = next;
     setDrafts(next);
@@ -419,6 +503,7 @@ export function ContasPagarClient({
   function openNew() {
     setEditing(null);
     resetCompra();
+    resetCodigoBarras();
     setFormError(null);
     setForm({ ...emptyForm, categoriaId: categorias[0]?.id ?? "", bankAccountId: contas[0]?.id ?? "" });
     setShowForm(true);
@@ -506,8 +591,10 @@ export function ContasPagarClient({
       parcelaAtual: p.parcelaAtual ? String(p.parcelaAtual) : "",
       observacoes: p.observacoes ?? "",
       status: p.status,
+      codigoBarras: p.codigoBarras ?? "",
     });
     resetCompra();
+    resetCodigoBarras();
     setFormError(null);
     setSupplierId(findSupplier(p.fornecedor)?.id ?? null);
     setHadCompra(!!p.invoice);
@@ -547,6 +634,14 @@ export function ContasPagarClient({
           ? "Não foi possível carregar os itens desta conta. Feche e abra de novo antes de salvar (assim nenhum item se perde)."
           : "Aguarde os itens carregarem."
       );
+      return;
+    }
+    if (checkingCodigo) {
+      fail("Aguarde a checagem do código de barras/Pix.");
+      return;
+    }
+    if (codigoBarrasDuplicate) {
+      fail("Este código de barras/Pix já está cadastrado em outro lançamento. Resolva a duplicidade antes de salvar.");
       return;
     }
 
@@ -850,21 +945,32 @@ export function ContasPagarClient({
                   <CombinadoCell invoice={p.invoice} />
                 </td>
                 <td className="py-2 pr-4">
-                  <div className={`flex items-center gap-2 justify-end ${!canCreate ? "hidden" : ""}`}>
-                    {p.status !== "PAGO" && (
-                      <button onClick={() => markPaid(p)} title="Marcar como pago" className="text-nord-gray hover:text-nord-success">
-                        <Check size={14} />
+                  <div className="flex items-center gap-2 justify-end">
+                    {p.codigoBarras && (
+                      <button
+                        onClick={() => copyCode(p.id, p.codigoBarras!)}
+                        title="Copiar código de barras/Pix"
+                        className="text-nord-gray hover:text-white"
+                      >
+                        {copiedCodigoId === p.id ? <Check size={14} className="text-nord-success" /> : <ScanBarcode size={14} />}
                       </button>
                     )}
-                    <button onClick={() => duplicate(p)} title="Duplicar" className="text-nord-gray hover:text-white">
-                      <Copy size={14} />
-                    </button>
-                    <button onClick={() => openEdit(p)} className="text-nord-gray hover:text-white">
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => setConfirmDeleteId(p.id)} className="text-nord-gray hover:text-nord-danger">
-                      <Trash2 size={14} />
-                    </button>
+                    <div className={`flex items-center gap-2 ${!canCreate ? "hidden" : ""}`}>
+                      {p.status !== "PAGO" && (
+                        <button onClick={() => markPaid(p)} title="Marcar como pago" className="text-nord-gray hover:text-nord-success">
+                          <Check size={14} />
+                        </button>
+                      )}
+                      <button onClick={() => duplicate(p)} title="Duplicar" className="text-nord-gray hover:text-white">
+                        <Copy size={14} />
+                      </button>
+                      <button onClick={() => openEdit(p)} className="text-nord-gray hover:text-white">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => setConfirmDeleteId(p.id)} className="text-nord-gray hover:text-nord-danger">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -940,6 +1046,59 @@ export function ContasPagarClient({
               </div>
             </div>
           )}
+          <div className="col-span-2">
+            <Field label="Código de barras do boleto ou Pix “copia e cola” (opcional)">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={form.codigoBarras}
+                  onChange={(e) => {
+                    setForm({ ...form, codigoBarras: e.target.value });
+                    setCodigoBarrasNote(null);
+                    if (codigoBarrasDuplicate) setCodigoBarrasDuplicate(null);
+                  }}
+                  onBlur={() => checkCodigoDuplicate(form.codigoBarras)}
+                  placeholder="Leia pela câmera, cole o Pix ou digite a linha digitável do boleto"
+                  className="input flex-1 min-w-[220px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white whitespace-nowrap"
+                >
+                  <ScanBarcode size={13} /> Ler pela câmera
+                </button>
+                {form.codigoBarras.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => copyCode("__form__", form.codigoBarras.trim())}
+                    title="Copiar código"
+                    className="p-2 rounded-lg border border-nord-border text-nord-gray hover:text-white"
+                  >
+                    {copiedCodigoId === "__form__" ? <Check size={13} className="text-nord-success" /> : <Copy size={13} />}
+                  </button>
+                )}
+              </div>
+            </Field>
+            {checkingCodigo && <p className="mt-1 text-[11px] text-nord-gray">Checando duplicidade...</p>}
+            {codigoBarrasNote && !codigoBarrasDuplicate && <p className="mt-1 text-[11px] text-nord-warning">{codigoBarrasNote}</p>}
+            {codigoBarrasDuplicate && (
+              <div className="mt-2 flex items-start gap-2 p-3 rounded-lg bg-nord-danger/10 border border-nord-danger/30">
+                <AlertTriangle size={14} className="text-nord-danger mt-0.5 shrink-0" />
+                <p className="text-xs text-nord-danger">
+                  {codigoBarrasDuplicate.visible ? (
+                    <>
+                      Este código já está cadastrado: <strong>{codigoBarrasDuplicate.number}</strong> —{" "}
+                      {codigoBarrasDuplicate.fornecedor} — {formatCurrency(codigoBarrasDuplicate.valor)} — vencimento{" "}
+                      {format(new Date(codigoBarrasDuplicate.dataVencimento), "dd/MM/yyyy")} (loja {codigoBarrasDuplicate.empresa}).
+                      Não é possível lançar o mesmo boleto duas vezes.
+                    </>
+                  ) : (
+                    "Este código já está cadastrado em outra loja. Não é possível lançar o mesmo boleto duas vezes."
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
           <Field label="Descrição">
             <input required value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} className="input" />
           </Field>
@@ -1075,12 +1234,14 @@ export function ContasPagarClient({
         </div>
         <button
           onClick={submit}
-          disabled={saving || loadingCompra || compraLoadFailed}
+          disabled={saving || loadingCompra || compraLoadFailed || checkingCodigo || !!codigoBarrasDuplicate}
           className="w-full mt-2 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 text-white text-sm font-medium rounded-lg py-2.5"
         >
           {saving ? "Salvando..." : drafts.length > 0 ? "Salvar com os itens" : "Salvar"}
         </button>
       </Modal>
+
+      <BoletoScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} onDetected={handleCodeDetected} />
 
       <ConfirmDialog
         open={confirmDiscard}

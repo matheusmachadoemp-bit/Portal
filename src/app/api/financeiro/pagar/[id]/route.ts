@@ -3,10 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { parseDayInput } from "@/lib/timezone";
 import { auth } from "@/auth";
 import { balanceDelta } from "@/lib/finance";
-import type { FinanceEntryStatus } from "@prisma/client";
+import { Prisma, type FinanceEntryStatus } from "@prisma/client";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { normalizeSupplierKey } from "@/lib/compra-itens";
+import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
+import { normalizeScannedCode } from "@/lib/boleto-barcode";
+import { findPayableDuplicate, formatDuplicateMessage } from "@/lib/boleto-barcode-server";
 import {
   CompraError,
   deleteInvoiceIfOrphan,
@@ -57,6 +60,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const parsed = parseCompra(body.compra);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     compra = parsed.compra;
+  }
+
+  // Código de barras do boleto (ou Pix "copia e cola"): ausente = não mexe; vazio/null = limpa;
+  // valor novo = normaliza e checa duplicidade ANTES de gravar (não só pelo erro do Postgres),
+  // excluindo o PRÓPRIO lançamento da checagem (ele não é duplicado dele mesmo). Único
+  // GLOBALMENTE, não por loja — ver `findPayableDuplicate`.
+  let codigoBarras: string | null | undefined;
+  if (body.codigoBarras === null) {
+    codigoBarras = null;
+  } else if (body.codigoBarras !== undefined) {
+    // Corta pelo tamanho ANTES de normalizar: `normalizeScannedCode` já é seguro contra ReDoS (a
+    // regex não tem como "explodir"), mas não tem por que gastar um `.test()`/`.replace()` em
+    // cima de um texto gigante enviado de propósito antes de nem saber se ele é válido.
+    const rawCodigo = String(body.codigoBarras);
+    if (rawCodigo.length > 500) {
+      return NextResponse.json({ error: "Código de barras/Pix inválido (texto longo demais)." }, { status: 400 });
+    }
+    const normalized = normalizeScannedCode(rawCodigo);
+    if (!normalized) {
+      codigoBarras = null;
+    } else {
+      const duplicate = await findPayableDuplicate(normalized, session.user.id, session.user.role, id);
+      if (duplicate) {
+        return NextResponse.json({ error: formatDuplicateMessage(duplicate), duplicate }, { status: 409 });
+      }
+      codigoBarras = normalized;
+    }
   }
 
   const nextStatusCheck: FinanceEntryStatus = body.status ?? existingCheck.status;
@@ -117,6 +147,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           parcelaAtual: body.parcelaAtual !== undefined ? Number(body.parcelaAtual) : undefined,
           observacoes: body.observacoes ?? undefined,
           status: nextStatus,
+          codigoBarras,
         },
       });
 
@@ -170,6 +201,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
   } catch (error) {
     if (error instanceof CompraError) return NextResponse.json({ error: error.message }, { status: 400 });
+    // Rede de segurança contra uma corrida entre duas pessoas editando ao mesmo tempo (mesmo
+    // raciocínio do POST, ver comentário lá): a checagem de duplicidade acima já rodou antes da
+    // transação, mas busca de novo aqui garante a mesma resposta 409 estruturada em vez de 500.
+    if (
+      codigoBarras &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002" &&
+      (p2002ConstraintIncludes(error, "codigoBarras") ?? true)
+    ) {
+      const duplicate = await findPayableDuplicate(codigoBarras, session.user.id, session.user.role, id);
+      if (duplicate) return NextResponse.json({ error: formatDuplicateMessage(duplicate), duplicate }, { status: 409 });
+    }
     throw error;
   }
 
