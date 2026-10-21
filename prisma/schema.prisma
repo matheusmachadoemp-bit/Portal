@@ -199,6 +199,11 @@ model User {
   fechamentoEscalationLogs           FechamentoEscalationLog[]
   fechamentoOcorrenciasTransformadas FechamentoOcorrencia[]              @relation("FechamentoOcorrenciaTransformadoPor")
   fechamentoOcorrenciasResolvidas    FechamentoOcorrencia[]              @relation("FechamentoOcorrenciaResolvidoPor")
+  feedbackReportsCriados             FeedbackReport[]                    @relation("FeedbackCriador")
+  feedbackReportsResponsavel         FeedbackReport[]                    @relation("FeedbackResponsavel")
+  feedbackAttachments                FeedbackAttachment[]
+  feedbackHistoricoEntries           FeedbackHistory[]
+  feedbackComments                   FeedbackComment[]
 }
 
 model UserPermission {
@@ -399,6 +404,7 @@ model Empresa {
   shiftSwapRequests                  ShiftSwapRequest[]
   scheduleChangeLogs                 ScheduleChangeLog[]
   subcategories                      Subcategory[]
+  feedbackReports                    FeedbackReport[]
 }
 
 model UserEmpresaAccess {
@@ -445,6 +451,10 @@ model Category {
   // `linked === true` e a categoria navega direto pra /portal/{key} sem nenhuma subcategoria
   // selecionada — ver GenericFileItem e src/app/portal/[category]/page.tsx.
   genericFileItems GenericFileItem[]
+  // Central de Bugs e Melhorias — "Módulo afetado" de um relato quando a categoria não tem
+  // nenhuma subcategoria (Início/Configurações/Usuários, ver `linked` acima). A maioria dos
+  // relatos usa `Subcategory.feedbackReports` em vez deste — ver FeedbackReport.
+  feedbackReports  FeedbackReport[]
 }
 
 model Subcategory {
@@ -479,6 +489,9 @@ model Subcategory {
   // rota física/mapa hardcoded específico (Grupo B do catch-all genérico, ou patch do Grupo A em
   // Ficha Técnica/Metas) — ver GenericFileItem.
   genericFileItems GenericFileItem[]
+  // Central de Bugs e Melhorias — "Módulo afetado" de um relato (o caso comum: a maioria dos
+  // módulos com tela/funcionalidade própria é uma subcategoria) — ver FeedbackReport.
+  feedbackReports  FeedbackReport[]
 
   @@unique([categoryId, key])
 }
@@ -4680,6 +4693,12 @@ model Notification {
   /// um dia existir, o aviso no sino não deve sumir junto, só perde o link "VER AVALIAÇÃO".
   customerSurveyResponseId String?
   customerSurveyResponse   CustomerSurveyResponse? @relation(fields: [customerSurveyResponseId], references: [id], onDelete: SetNull)
+  /// Central de Bugs e Melhorias — novo bug/sugestão (pra todo ADMINISTRADOR ativo) ou
+  /// atualização de status (pra quem criou o relato). `onDelete: SetNull`, mesmo padrão de
+  /// `chamadoId`/`customerSurveyResponseId`: hoje não existe rota que apague um
+  /// `FeedbackReport`, mas se existir um dia, o aviso no sino não deve sumir, só perde o link.
+  feedbackReportId         String?
+  feedbackReport           FeedbackReport?         @relation(fields: [feedbackReportId], references: [id], onDelete: SetNull)
   read                     Boolean                 @default(false)
   createdAt                DateTime                @default(now())
 
@@ -6268,4 +6287,230 @@ model RouletteEligibility {
   updatedAt    DateTime @updatedAt
 
   @@unique([empresaId, telefone])
+}
+
+// ---------------------------------------------------------------------------
+// CENTRAL DE BUGS E MELHORIAS — Fase 1 (backend: schema, rotas de API,
+// permissões, upload de anexo, notificação). Qualquer usuário autenticado pode
+// reportar um bug ou sugerir uma melhoria do próprio Portal; o painel
+// administrativo (Fase 3, Caio) é restrito ao cargo ADMINISTRADOR — decisão do
+// Matheus: "Proprietário" = o `Role.ADMINISTRADOR` que já existe, não um
+// papel separado. Fases 2 (ícone global + modal de envio) e 3 (dashboard
+// visual) consomem as rotas em `src/app/api/feedback/**` — ver
+// `src/lib/feedback-server.ts` para a lógica compartilhada.
+// ---------------------------------------------------------------------------
+
+enum FeedbackTipo {
+  BUG
+  SUGESTAO
+}
+
+/// Só preenchido/validado quando `tipo === BUG` (checado em código, não no banco —
+/// ver `validateFeedbackPayload` em `src/lib/feedback-server.ts`).
+enum FeedbackCategoriaProblema {
+  FUNCIONALIDADE_NAO_FUNCIONA
+  INFORMACOES_INCORRETAS
+  ERRO_VISUAL
+  LENTIDAO
+  TRAVAMENTO
+  PROBLEMA_ACESSO
+  ERRO_AO_SALVAR
+  OUTRO
+}
+
+/// Só preenchido/validado quando `tipo === BUG`.
+enum FeedbackImpacto {
+  BAIXO
+  MEDIO
+  ALTO
+  CRITICO
+}
+
+/// Sugerida automaticamente a partir de `impacto` na criação (BUG) ou MEDIA fixa
+/// (SUGESTAO) — ver `derivePrioridadeInicial`, mas sempre ajustável pelo admin depois
+/// via `PATCH /api/feedback/[id]`.
+enum FeedbackPrioridade {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+/// Um único enum pros dois tipos (BUG e SUGESTAO) em vez de dois enums separados —
+/// `tipo` já diferencia qual subconjunto é válido pra cada relato (RECEBIDO/RECEBIDA
+/// em diante são os dois "estados iniciais", um por tipo; o restante segue o fluxo
+/// próprio de cada um). Validado em código (`FEEDBACK_STATUS_BY_TIPO`,
+/// `src/lib/feedback-server.ts`), não há constraint de banco impedindo um BUG de ganhar
+/// um status "de sugestão" — a API (`PATCH /api/feedback/[id]`) é quem garante isso.
+enum FeedbackStatus {
+  // Bugs
+  RECEBIDO
+  EM_ANALISE
+  EM_CORRECAO
+  AGUARDANDO_VALIDACAO
+  CORRIGIDO
+  REABERTO
+  NAO_REPRODUZIDO
+  // Sugestões
+  RECEBIDA
+  EM_AVALIACAO
+  APROVADA
+  EM_DESENVOLVIMENTO
+  IMPLEMENTADA
+  RECUSADA
+}
+
+/// Contador atômico do protocolo sequencial por tipo (`BUG-000105` / `MEL-000048`,
+/// 6 dígitos) — `tipo` é a própria chave primária (no máximo 2 linhas: BUG e SUGESTAO).
+/// Incrementado via `upsert`/`increment` dentro da mesma transação que cria o
+/// `FeedbackReport` (mesmo padrão atômico de `RateLimitHit`/`checkRateLimit`,
+/// `src/lib/rate-limit.ts`: nunca lê-e-regrava um valor, então dois relatos
+/// concorrentes do mesmo tipo nunca recebem o mesmo número). Preferido a uma
+/// sequence nativa do Postgres por tipo porque não dá pra ter uma sequence
+/// "condicional" (BUG vs SUGESTAO) sem duas sequences manuais + SQL cru — este
+/// contador fica inteiramente dentro do fluxo normal do Prisma (schema + migration
+/// geradas por `prisma migrate dev`, sem SQL feito à mão).
+model FeedbackProtocolCounter {
+  tipo       FeedbackTipo @id
+  lastNumber Int          @default(0)
+}
+
+model FeedbackReport {
+  id        String       @id @default(cuid())
+  /// Formato `BUG-000105` / `MEL-000048` — ver `generateFeedbackProtocolo`,
+  /// `src/lib/feedback-server.ts`.
+  protocolo String       @unique
+  tipo      FeedbackTipo
+  titulo    String       @db.VarChar(120)
+  descricao String
+
+  /// "Módulo afetado" — consultado dinamicamente em Category/Subcategory (nunca uma
+  /// lista hardcoded, ver `GET /api/feedback/modulos`), nunca os três ao mesmo tempo:
+  /// `subcategoriaId` é o caso comum (a maioria dos módulos com tela própria é uma
+  /// subcategoria do menu lateral); `categoriaId` cobre as categorias SEM nenhuma
+  /// subcategoria (Início/Configurações/Usuários — ver `Category.linked`);
+  /// `moduloAfetadoTexto` é o texto livre de fallback pro que não está no menu lateral
+  /// (ex.: tela de login, "Geral/todo o sistema"). Validado em `POST /api/feedback`
+  /// (exige pelo menos um preenchido) — sem constraint de banco pra isso.
+  categoriaId        String?
+  categoria          Category?    @relation(fields: [categoriaId], references: [id])
+  subcategoriaId     String?
+  subcategoria       Subcategory? @relation(fields: [subcategoriaId], references: [id])
+  moduloAfetadoTexto String?
+
+  /// Só para tipo BUG (validado em código — ver `FeedbackCategoriaProblema`/`FeedbackImpacto`).
+  categoriaProblema FeedbackCategoriaProblema?
+  impacto           FeedbackImpacto?
+  /// Só para tipo SUGESTAO.
+  beneficioEsperado String?
+
+  prioridade FeedbackPrioridade @default(MEDIA)
+  status     FeedbackStatus     @default(RECEBIDO)
+
+  usuarioCriadorId String
+  usuarioCriador   User     @relation("FeedbackCriador", fields: [usuarioCriadorId], references: [id])
+  /// Loja do usuário no momento do envio (contexto de loja ativa) — opcional de propósito:
+  /// um relato sobre o Portal em si (não um problema específico de uma loja) continua
+  /// visível para Administradores de QUALQUER loja, nunca só a de quem reportou. Ver decisão
+  /// documentada no relatório da tarefa (CLAUDE.md / handoff do Otavio).
+  empresaId        String?
+  empresa          Empresa? @relation(fields: [empresaId], references: [id])
+
+  responsavelId String?
+  responsavel   User?   @relation("FeedbackResponsavel", fields: [responsavelId], references: [id])
+
+  /// Metadados técnicos capturados automaticamente (nunca pedidos ao usuário) — rota de
+  /// origem, navegador, SO, tipo de dispositivo, versão do Portal. Sempre sanitizado antes
+  /// de gravar (nunca senha/token/cookie) — ver `buildFeedbackMetadata`,
+  /// `src/lib/feedback-server.ts`. Formato livre (JSON) de propósito: é só contexto de
+  /// diagnóstico pro admin, não é consultado/filtrado por nenhuma rota.
+  metadados Json?
+
+  /// Sinalização de possível duplicidade (comparação simples de título + módulo + descrição
+  /// contra relatos recentes do mesmo módulo, ver `findPossibleDuplicate`,
+  /// `src/lib/feedback-server.ts`) — NUNCA bloqueia o envio, só grava o vínculo pro admin
+  /// avaliar. `onDelete` default (SetNull, relação opcional): não há hoje nenhuma rota que
+  /// apague um `FeedbackReport`, mas se existir um dia, o vínculo só se desfaz, sem travar
+  /// a exclusão do original.
+  possivelDuplicataDeId String?
+  possivelDuplicataDe   FeedbackReport?  @relation("FeedbackDuplicata", fields: [possivelDuplicataDeId], references: [id])
+  duplicatas            FeedbackReport[] @relation("FeedbackDuplicata")
+
+  /// Histórico de Atualizações (changelog) — preenchido pelo admin ao marcar
+  /// CORRIGIDO/IMPLEMENTADA (ex.: "v1.4.2", ou uma data de deploy).
+  versaoCorrigidaEm String?
+  descricaoSolucao  String?
+  /// Preenchido automaticamente quando `status` entra num dos valores terminais
+  /// (CORRIGIDO/NAO_REPRODUZIDO para BUG, IMPLEMENTADA/RECUSADA para SUGESTAO) e limpo de
+  /// volta pra null se reaberto — ver `PATCH /api/feedback/[id]`. Base do KPI "tempo médio
+  /// de resolução" do dashboard.
+  dataConclusao     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  anexos        FeedbackAttachment[]
+  historico     FeedbackHistory[]
+  comentarios   FeedbackComment[]
+  notifications Notification[]
+
+  @@index([tipo, status])
+  @@index([empresaId])
+  @@index([usuarioCriadorId])
+  @@index([responsavelId])
+  @@index([categoriaId])
+  @@index([subcategoriaId])
+  // Suporta tanto a listagem admin (ordenação padrão por mais recente) quanto a checagem de
+  // duplicidade (relatos recentes do mesmo módulo) e a evolução mensal do dashboard.
+  @@index([createdAt])
+}
+
+model FeedbackAttachment {
+  id               String         @id @default(cuid())
+  feedbackReportId String
+  feedbackReport   FeedbackReport @relation(fields: [feedbackReportId], references: [id], onDelete: Cascade)
+  /// URL do Vercel Blob — validada com `isValidBlobUrl` (`src/lib/manutencao-server.ts`,
+  /// reaproveitada) antes de gravar, mesmo padrão de `ManutencaoAnexo`.
+  fileUrl          String
+  mimeType         String?
+  /// Nome original do arquivo, sempre sanitizado com `sanitizeFileName` (`src/lib/upload.ts`)
+  /// antes de gravar — nunca o nome cru enviado pelo cliente.
+  fileName         String
+  sizeBytes        Int?
+  uploadedById     String
+  uploadedBy       User           @relation(fields: [uploadedById], references: [id])
+  createdAt        DateTime       @default(now())
+
+  @@index([feedbackReportId])
+}
+
+model FeedbackHistory {
+  id                   String         @id @default(cuid())
+  feedbackReportId     String
+  feedbackReport       FeedbackReport @relation(fields: [feedbackReportId], references: [id], onDelete: Cascade)
+  /// "STATUS" | "PRIORIDADE" | "RESPONSAVEL" | "DESCRICAO_SOLUCAO" | "VERSAO_CORRIGIDA_EM" —
+  /// string livre (não enum) de propósito: é só um rótulo de log, nunca filtrado/comparado
+  /// por valor em nenhuma regra de negócio, e novos campos editáveis não deveriam exigir
+  /// migration só para ganhar um valor de enum novo.
+  tipoAlteracao        String
+  valorAnterior        String?
+  valorNovo            String?
+  usuarioResponsavelId String
+  usuarioResponsavel   User           @relation(fields: [usuarioResponsavelId], references: [id])
+  comentario           String?
+  createdAt            DateTime       @default(now())
+
+  @@index([feedbackReportId])
+}
+
+model FeedbackComment {
+  id               String         @id @default(cuid())
+  feedbackReportId String
+  feedbackReport   FeedbackReport @relation(fields: [feedbackReportId], references: [id], onDelete: Cascade)
+  autorId          String
+  autor            User           @relation(fields: [autorId], references: [id])
+  conteudo         String
+  createdAt        DateTime       @default(now())
+
+  @@index([feedbackReportId])
 }
