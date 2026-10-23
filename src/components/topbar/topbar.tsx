@@ -36,19 +36,24 @@ function Clock() {
   );
 }
 
-/** Botão do ícone fixo da Central de Bugs e Melhorias — mesmo padrão visual/hover dos demais
- * botões de ícone do Topbar (ex.: `NotificationBell`). Renderizado duas vezes no `Topbar`
- * (versão centralizada para telas com folga e versão ao lado dos ícones da direita no mobile),
- * ambas disparando a mesma modal. */
+/** Botão do ícone fixo da Central de Bugs e Melhorias — em azul (cor de destaque do Design
+ * System) pra ficar claro que é uma ação diferente dos demais ícones neutros do Topbar (ex.:
+ * `NotificationBell`). Renderizado duas vezes no `Topbar` (versão centralizada para telas com
+ * folga e versão ao lado dos ícones da direita no mobile), ambas disparando a mesma modal. A
+ * partir de `lg` (telas com espaço de sobra — nessa largura o sidebar permanente já assumiu, então
+ * o cabeçalho tem menos concorrência por espaço) o nome "Bugs e Melhorias" aparece do lado do
+ * ícone; abaixo disso (inclusive a versão mobile, que nunca chega a renderizar em `lg` porque já
+ * está escondida desde `sm`) mostra só o ícone, pra não brigar por espaço com título/busca. */
 function FeedbackTriggerButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
   return (
     <button
       onClick={onClick}
-      title="Reportar Bug ou Sugerir Melhoria"
-      aria-label="Reportar Bug ou Sugerir Melhoria"
-      className={`w-8 h-8 rounded-lg flex items-center justify-center text-nord-gray hover:text-white hover:bg-white/5 transition ${className}`}
+      title="Bugs e Melhorias — Reportar Bug ou Sugerir Melhoria"
+      aria-label="Bugs e Melhorias — Reportar Bug ou Sugerir Melhoria"
+      className={`h-9 px-2 lg:px-3 rounded-lg flex items-center gap-2 text-nord-blue-light hover:bg-nord-blue/15 transition shrink-0 ${className}`}
     >
-      <MessageSquarePlus size={17} />
+      <MessageSquarePlus size={20} className="shrink-0" />
+      <span className="hidden lg:inline text-sm font-medium whitespace-nowrap">Bugs e Melhorias</span>
     </button>
   );
 }
@@ -67,15 +72,22 @@ export function Topbar({
 
   return (
     <header className="h-16 border-b border-nord-border bg-nord-panel/60 backdrop-blur sticky top-0 z-30 flex items-center justify-between px-4 md:px-6 gap-2">
-      {/* `max-w-[calc(50%-28px)]` a partir de `sm` (mesmo breakpoint em que o ícone centralizado
+      {/* `max-w-[calc(50%-Xpx)]` a partir de `sm` (mesmo breakpoint em que o ícone centralizado
           abaixo aparece): como esta div é filha direta do `<header>` (flex container), um
           `max-width` em porcentagem resolve contra a largura do PRÓPRIO header — trava esse
           grupo (botão de menu + título) para nunca passar da metade do cabeçalho, garantindo que
           o título (incluindo saudações dinâmicas longas, ex. "Bem-vindo(a) de volta, Fulano" na
           Tela de Início) nunca sobreponha o ícone centralizado, por mais comprido que o título
           fique — sem isso, um título comprido o bastante conseguia ficar por cima do ícone em
-          larguras intermediárias (confirmado ao testar em 640px de largura). */}
-      <div className="flex items-center gap-2 min-w-0 sm:max-w-[calc(50%-28px)]">
+          larguras intermediárias (confirmado ao testar em 640px de largura). O valor de X muda
+          por breakpoint porque o botão centralizado muda de largura: de `sm` a `lg` ele é só o
+          ícone (36px medido ao vivo, por isso 32px de margem — metade do botão + folga), e a
+          partir de `lg` ele ganha o texto "Bugs e Melhorias" do lado (174px medido ao vivo, por
+          isso 100px de margem — metade do botão + folga). Revalidado com varredura de larguras de
+          320 a 1920px, incluindo os breakpoints exatos (640, 768, 1024) e um título/subtítulo
+          propositalmente extremo pra forçar este grupo a esticar até o próprio limite máximo —
+          nenhuma sobreposição encontrada (ver relatório da tarefa). */}
+      <div className="flex items-center gap-2 min-w-0 sm:max-w-[calc(50%-32px)] lg:max-w-[calc(50%-100px)]">
         <button
           onClick={() => setMobileMenuOpen(true)}
           className="lg:hidden shrink-0 text-nord-gray hover:text-white p-2 -ml-2 rounded-lg hover:bg-white/5"
@@ -98,15 +110,16 @@ export function Topbar({
         <FeedbackTriggerButton onClick={() => setFeedbackOpen(true)} />
       </div>
 
-      {/* Mesmo `max-w-[calc(50%-28px)]` do grupo da esquerda, e pela mesma razão: sem ele, a
-          barra de pesquisa (256px fixos, só visível a partir de `md`) ou o sidebar permanente
-          (que passa a ocupar largura a partir de `lg`) conseguiam, bem em cima desses dois
-          breakpoints, empurrar esse grupo pra dentro da metade esquerda do cabeçalho e cobrir o
-          ícone centralizado (confirmado ao vivo: exatamente em 768px e 1024px de largura — as
-          duas larguras mais comuns de iPad — o ícone ficava clicável "por baixo" da barra de
-          pesquisa). A busca virou flexível (`flex-1 min-w-0 max-w-64` + input `w-full`) pra poder
-          encolher dentro desse limite em vez de insistir nos 256px fixos e estourar o grupo. */}
-      <div className="flex items-center gap-3 sm:min-w-0 sm:max-w-[calc(50%-28px)]">
+      {/* Mesmo `max-w-[calc(50%-Xpx)]` do grupo da esquerda (ver comentário lá pros valores de X
+          por breakpoint), e pela mesma razão: sem ele, a barra de pesquisa (256px fixos, só
+          visível a partir de `md`) ou o sidebar permanente (que passa a ocupar largura a partir
+          de `lg`) conseguiam, bem em cima desses dois breakpoints, empurrar esse grupo pra dentro
+          da metade esquerda do cabeçalho e cobrir o ícone centralizado (confirmado ao vivo:
+          exatamente em 768px e 1024px de largura — as duas larguras mais comuns de iPad — o ícone
+          ficava clicável "por baixo" da barra de pesquisa). A busca virou flexível (`flex-1
+          min-w-0 max-w-64` + input `w-full`) pra poder encolher dentro desse limite em vez de
+          insistir nos 256px fixos e estourar o grupo. */}
+      <div className="flex items-center gap-3 sm:min-w-0 sm:max-w-[calc(50%-32px)] lg:max-w-[calc(50%-100px)]">
         <FeedbackTriggerButton onClick={() => setFeedbackOpen(true)} className="sm:hidden" />
         <NotificationBell />
         <div className="relative hidden md:flex flex-1 min-w-0 max-w-64">
