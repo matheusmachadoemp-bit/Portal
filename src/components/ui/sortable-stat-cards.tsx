@@ -26,6 +26,8 @@ export type SortableStatCardConfig = {
   href?: string;
   /** Elemento pequeno e clicável (ex.: botão de ícone) renderizado ao lado do valor — usado para ações rápidas como revelar/ocultar um valor sensível. */
   action?: ReactNode;
+  /** Quando informado (e `href` ausente), o card inteiro vira um botão — usado para ações locais na mesma tela (ex.: abrir um detalhamento). */
+  onClick?: () => void;
 };
 
 function SortableCard({ id, locked, children }: { id: string; locked: boolean; children: React.ReactNode }) {
@@ -163,6 +165,7 @@ export function SortableStatCards({
             invertDeltaColor={card.invertDeltaColor}
             href={card.href}
             action={card.action}
+            onClick={card.onClick}
           />
         ),
       }))}

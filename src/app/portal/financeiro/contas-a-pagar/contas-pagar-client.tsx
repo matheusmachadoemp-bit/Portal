@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Check, Download, Copy, Repeat, ScanBarcode, AlertTriangle } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
+import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
@@ -166,6 +168,7 @@ export function ContasPagarClient({
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [quickFilter, setQuickFilter] = useState<"" | "SEM_ITENS" | "ACIMA" | "CONTESTACAO">("");
+  const [showAboveModal, setShowAboveModal] = useState(false);
   // “O que foi comprado” (itens da nota) do formulário aberto.
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
@@ -258,16 +261,14 @@ export function ContasPagarClient({
     const now = new Date();
     const today = format(now, "yyyy-MM-dd");
     const month = today.slice(0, 7);
-    const limit = new Date(now);
-    limit.setDate(limit.getDate() + 6); // hoje + 6 dias = 7 dias contando hoje
-    const in7 = format(limit, "yyyy-MM-dd");
     let monthTotal = 0;
     let monthDetailed = 0;
     let aboveValue = 0;
     let aboveCount = 0;
+    const aboveList: { payable: PayableDTO; diff: number }[] = [];
     let contestedValue = 0;
     let contestedCount = 0;
-    let dueSoon = 0;
+    let dueInPeriod = 0;
     for (const p of payables) {
       if (p.status === "CANCELADO") continue;
       const inv = p.invoice;
@@ -278,26 +279,35 @@ export function ContasPagarClient({
         if (inv && isAboveAgreed({ diferenca: diff })) {
           aboveValue += diff;
           aboveCount += 1;
+          aboveList.push({ payable: p, diff });
         }
       }
       if (inv?.divergenciaStatus === "EM_CONTESTACAO") {
         contestedCount += 1;
         contestedValue += Math.max(0, round2(inv.totalComparado - inv.totalCombinado));
       }
-      if (p.status !== "PAGO") {
-        const due = format(new Date(p.dataVencimento), "yyyy-MM-dd");
-        if (due >= today && due <= in7) dueSoon += p.valor;
+      // Valor ainda a pagar (não cancelado, não pago) dentro do filtro de vencimento ativo na tela
+      // (mesma função que filtra a lista abaixo) — acompanha o filtro em vez de uma janela fixa.
+      if (
+        p.status !== "PAGO" &&
+        matchesDueDateFilter(new Date(p.dataVencimento), p.status, filterVencimento, { from: customFrom, to: customTo }, ["PAGO", "CANCELADO"], now)
+      ) {
+        dueInPeriod += p.valor;
       }
     }
     return {
       detailedPct: monthTotal > 0 ? Math.round((monthDetailed / monthTotal) * 100) : 0,
       aboveValue,
       aboveCount,
+      aboveList,
       contestedValue,
       contestedCount,
-      dueSoon,
+      dueInPeriod,
+      // Só a primeira letra maiúscula ("Outubro de 2026", não "Outubro De 2026" — o `date-fns`
+      // devolve tudo minúsculo e um `capitalize` do Tailwind maiusculizaria cada palavra, inclusive o "de").
+      monthLabel: capitalizeFirst(format(now, "MMMM 'de' yyyy", { locale: ptBR })),
     };
-  }, [payables]);
+  }, [payables, filterVencimento, customFrom, customTo]);
 
   const totalFiltrado = filtered.reduce((a, p) => a + p.valor, 0);
 
@@ -306,6 +316,20 @@ export function ContasPagarClient({
     const data = await res.json();
     setPayables(data.payables);
   }
+
+  /** Aplica o preset (ou intervalo personalizado) escolhido na fileira de botões de vencimento. */
+  function applyVencimento(key: DueDateFilterKey, from?: string, to?: string) {
+    setFilterVencimento(key);
+    setCustomFrom(from ?? "");
+    setCustomTo(to ?? "");
+  }
+
+  // Rótulo do filtro de vencimento ativo, para o card "A pagar no período selecionado" refletir
+  // dinamicamente a opção escolhida (inclusive o intervalo exato, quando é "Personalizado").
+  const vencimentoFiltroLabel =
+    filterVencimento === "personalizado" && customFrom && customTo
+      ? `${formatDateKeyBR(customFrom)} a ${formatDateKeyBR(customTo)}`
+      : DUE_DATE_FILTER_OPTIONS.find((o) => o.key === filterVencimento)?.label ?? "Todos os vencimentos";
 
   function resetCompra() {
     setSupplierId(null);
@@ -810,9 +834,27 @@ export function ContasPagarClient({
       className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
       cards={[
         { key: "detalhado", label: "Detalhado nas contas do mês", value: `${kpis.detailedPct}%`, icon: "ListChecks", color: "#1464F4", hint: "do valor lançado neste mês já tem itens" },
-        { key: "acima", label: "Acima do combinado no mês", value: formatCurrency(kpis.aboveValue), icon: "TrendingUp", color: "#ef4444", hint: `em ${kpis.aboveCount} ${kpis.aboveCount === 1 ? "conta" : "contas"}` },
+        {
+          key: "acima",
+          label: "Acima do combinado no mês",
+          value: formatCurrency(kpis.aboveValue),
+          icon: "TrendingUp",
+          color: "#ef4444",
+          hint:
+            kpis.aboveCount > 0
+              ? `em ${kpis.aboveCount} ${kpis.aboveCount === 1 ? "conta" : "contas"} · clique para ver`
+              : "nenhuma conta acima do combinado neste mês",
+          onClick: kpis.aboveCount > 0 ? () => setShowAboveModal(true) : undefined,
+        },
         { key: "contestacao", label: "Em contestação", value: `${kpis.contestedCount} ${kpis.contestedCount === 1 ? "conta" : "contas"}`, icon: "MessageSquare", color: "#f59e0b", hint: `${formatCurrency(kpis.contestedValue)} cobrados a mais` },
-        { key: "proximos-7", label: "A pagar nos próximos 7 dias", value: formatCurrency(kpis.dueSoon), icon: "CalendarClock", color: "#1464F4", hint: "contas em aberto que vencem em até 7 dias (hoje incluído)" },
+        {
+          key: "proximos-7",
+          label: "A pagar no período selecionado",
+          value: formatCurrency(kpis.dueInPeriod),
+          icon: "CalendarClock",
+          color: "#1464F4",
+          hint: `contas em aberto, exclui pagas · ${vencimentoFiltroLabel}`,
+        },
       ]}
     />
     <Section
@@ -830,13 +872,6 @@ export function ContasPagarClient({
             {Object.entries(STATUS_LABEL).map(([k, v]) => (
               <option key={k} value={k}>
                 {v}
-              </option>
-            ))}
-          </select>
-          <select value={filterVencimento} onChange={(e) => setFilterVencimento(e.target.value as DueDateFilterKey)} className="input-sm">
-            {DUE_DATE_FILTER_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
               </option>
             ))}
           </select>
@@ -864,13 +899,16 @@ export function ContasPagarClient({
         </p>
       )}
       <FormError message={rowError} />
-      {filterVencimento === "personalizado" && (
-        <div className="flex items-center gap-2 mb-3">
-          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input-sm" />
-          <span className="text-xs text-nord-gray">até</span>
-          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="input-sm" />
-        </div>
-      )}
+      <div className="mb-4">
+        <p className="text-[10px] uppercase tracking-wide text-nord-gray mb-1.5">Vencimento</p>
+        <PeriodFilterBar
+          periodo={filterVencimento}
+          onApply={applyVencimento}
+          options={DUE_DATE_FILTER_OPTIONS}
+          initialCustomFrom={customFrom}
+          initialCustomTo={customTo}
+        />
+      </div>
       <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Filtro rápido por itens">
         {(
           [
@@ -894,7 +932,8 @@ export function ContasPagarClient({
         ))}
       </div>
       <p className="text-xs text-nord-gray mb-3">
-        Total filtrado: <span className="text-white font-medium">{formatCurrency(totalFiltrado)}</span> ({filtered.length} lançamentos)
+        Total filtrado (todos os status, inclusive pagas):{" "}
+        <span className="text-white font-medium">{formatCurrency(totalFiltrado)}</span> ({filtered.length} lançamentos)
       </p>
       <div className="overflow-x-auto nord-scrollbar">
         <table className="w-full text-sm">
@@ -1340,6 +1379,41 @@ export function ContasPagarClient({
         </button>
       </Modal>
 
+      <Modal open={showAboveModal} onClose={() => setShowAboveModal(false)} title="Acima do combinado no mês" widthClass="max-w-2xl">
+        <p className="text-xs text-nord-gray mb-3">
+          Boletos com itens cobrados acima do preço combinado, lançados em {kpis.monthLabel} (data de competência).
+        </p>
+        {kpis.aboveList.length === 0 ? (
+          <p className="py-6 text-center text-sm text-nord-gray">Nenhum boleto acima do combinado neste mês.</p>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto nord-scrollbar">
+            {kpis.aboveList.map(({ payable: p, diff }) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-nord-border p-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-white truncate">
+                    {p.fornecedor} <span className="text-nord-gray">· Nº {p.number}</span>
+                  </p>
+                  <p className="text-xs text-nord-gray truncate">{p.descricao}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-medium text-nord-danger">+{formatCurrency(diff)}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAboveModal(false);
+                      openEdit(p);
+                    }}
+                    className="text-[11px] text-nord-blue-light hover:underline"
+                  >
+                    Abrir boleto
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
       <ConfirmDialog
         open={!!confirmDeleteId}
         title="Excluir conta a pagar"
@@ -1398,6 +1472,17 @@ function CombinadoCell({ invoice }: { invoice: InvoiceSummary | null }) {
     );
   }
   return <Badge tone="success">Dentro do combinado</Badge>;
+}
+
+/** "AAAA-MM-DD" (chave de dia dos campos de data) -> "DD/MM/AAAA" para exibição. */
+function formatDateKeyBR(key: string): string {
+  const [y, m, d] = key.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+/** Maiusculiza só a primeira letra (ex.: "outubro de 2026" -> "Outubro de 2026"). */
+function capitalizeFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
