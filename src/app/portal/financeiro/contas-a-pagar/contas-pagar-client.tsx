@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Check, Download, Copy, Repeat, ScanBarcode, AlertTriangle } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -12,7 +12,6 @@ import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
 import { detailPercent, isAboveAgreed, itemKey, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
 import { normalizeScannedCode, extractBoletoFields } from "@/lib/boleto-barcode";
-import { BoletoScannerModal } from "./boleto-scanner-modal";
 import {
   CompraItensEditor,
   EMPTY_DECISION,
@@ -62,7 +61,7 @@ type PayableDTO = {
   parcelaAtual: number | null;
   observacoes: string | null;
   status: string;
-  /** Código de barras do boleto (ou Pix "copia e cola") lido pela câmera ou digitado ao cadastrar — ver boleto-barcode.ts. */
+  /** Código de barras do boleto (ou Pix "copia e cola") bipado com o leitor físico ou digitado ao cadastrar — ver boleto-barcode.ts. */
   codigoBarras: string | null;
   /** Resumo da compra (“o que foi comprado”) ligada à conta, se houver. */
   invoice: InvoiceSummary | null;
@@ -189,8 +188,8 @@ export function ContasPagarClient({
   const [decidedDiff, setDecidedDiff] = useState(0);
   const [autoPagamento, setAutoPagamento] = useState(false);
   const [repriceNote, setRepriceNote] = useState<string | null>(null);
-  // Código de barras do boleto / Pix lido pela câmera ou digitado (ver boleto-barcode.ts).
-  const [scannerOpen, setScannerOpen] = useState(false);
+  // Código de barras do boleto / Pix bipado com o leitor físico ou digitado (ver boleto-barcode.ts).
+  const codigoBarrasInputRef = useRef<HTMLInputElement>(null);
   const [codigoBarrasDuplicate, setCodigoBarrasDuplicate] = useState<CodigoBarrasDuplicate | null>(null);
   const [checkingCodigo, setCheckingCodigo] = useState(false);
   const [codigoBarrasNote, setCodigoBarrasNote] = useState<string | null>(null);
@@ -339,7 +338,8 @@ export function ContasPagarClient({
   }
 
   /** Checa se o código já está cadastrado em outro lançamento — ver `/api/financeiro/pagar/codigo-barras`.
-   *  Chamada ao sair do campo digitado manualmente e imediatamente após uma leitura pela câmera. */
+   *  Chamada ao sair do campo (onBlur) e logo depois de "bipar" o leitor físico (onKeyDown Enter) —
+   *  ver `applyCodigoBarras` abaixo. */
   async function checkCodigoDuplicate(rawCode: string) {
     const code = normalizeScannedCode(rawCode);
     if (!code) {
@@ -359,13 +359,11 @@ export function ContasPagarClient({
     if (result.ok) setCodigoBarrasDuplicate(result.data.duplicate);
   }
 
-  /** Lido pela câmera (ver BoletoScannerModal): preenche o código, tenta extrair valor/vencimento
-   *  (boleto bancário/arrecadação — ver `extractBoletoFields`) e já checa duplicidade. Não precisa
-   *  de `useCallback`: o modal guarda a referência mais recente num ref próprio (ver comentário em
-   *  boleto-scanner-modal.tsx), então a identidade desta função pode mudar a cada render sem
-   *  reiniciar a câmera — e assim ela sempre fecha sobre o `editing` mais atual, não um antigo. */
-  function handleCodeDetected(raw: string) {
-    setScannerOpen(false);
+  /** Chamada ao "bipar" o código no leitor físico (Enter, ver onKeyDown do campo) ou ao sair do
+   *  campo (onBlur), nos dois casos depois de digitar/colar manualmente também: normaliza o código,
+   *  tenta extrair valor/vencimento (boleto bancário/arrecadação — ver `extractBoletoFields`) e já
+   *  checa duplicidade. */
+  function applyCodigoBarras(raw: string) {
     const code = normalizeScannedCode(raw);
     const extracted = extractBoletoFields(code);
     setForm((f) => ({
@@ -514,6 +512,17 @@ export function ContasPagarClient({
     if (dirty && drafts.length > 0) setConfirmDiscard(true);
     else setShowForm(false);
   }
+
+  // Ao abrir "Nova conta a pagar" (não ao editar, onde o fornecedor já vem preenchido), foca direto
+  // no campo de código de barras: quem usa o leitor físico de código de barras (aparelho tipo
+  // pistola, USB, "digita" os caracteres e aperta Enter sozinho) pode bipar o boleto assim que a
+  // tela abre, sem precisar clicar no campo primeiro. Roda depois do foco padrão do Modal (que foca
+  // o primeiro elemento focável do diálogo, normalmente o botão de fechar "X") porque este
+  // componente é o pai do `Modal` na árvore — efeitos de componentes filhos disparam antes dos do
+  // pai no mesmo commit — então este .focus() sempre vence por último.
+  useEffect(() => {
+    if (showForm && !editing) codigoBarrasInputRef.current?.focus();
+  }, [showForm, editing]);
 
   /** Mexeu nos itens: se a diferença passou do que já tinha sido contestado/aceito, a escolha antiga não vale mais. */
   function changeDrafts(next: DraftItem[]) {
@@ -1050,23 +1059,25 @@ export function ContasPagarClient({
             <Field label="Código de barras do boleto ou Pix “copia e cola” (opcional)">
               <div className="flex flex-wrap items-center gap-2">
                 <input
+                  ref={codigoBarrasInputRef}
                   value={form.codigoBarras}
                   onChange={(e) => {
                     setForm({ ...form, codigoBarras: e.target.value });
                     setCodigoBarrasNote(null);
                     if (codigoBarrasDuplicate) setCodigoBarrasDuplicate(null);
                   }}
-                  onBlur={() => checkCodigoDuplicate(form.codigoBarras)}
-                  placeholder="Leia pela câmera, cole o Pix ou digite a linha digitável do boleto"
+                  onBlur={() => applyCodigoBarras(form.codigoBarras)}
+                  onKeyDown={(e) => {
+                    // O leitor físico de código de barras "digita" os caracteres e aperta Enter
+                    // sozinho ao terminar — processa na hora, sem depender do campo perder o foco.
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      applyCodigoBarras(e.currentTarget.value);
+                    }
+                  }}
+                  placeholder="Bipe aqui com o leitor, cole o Pix ou digite a linha digitável do boleto"
                   className="input flex-1 min-w-[220px]"
                 />
-                <button
-                  type="button"
-                  onClick={() => setScannerOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white whitespace-nowrap"
-                >
-                  <ScanBarcode size={13} /> Ler pela câmera
-                </button>
                 {form.codigoBarras.trim() && (
                   <button
                     type="button"
@@ -1240,8 +1251,6 @@ export function ContasPagarClient({
           {saving ? "Salvando..." : drafts.length > 0 ? "Salvar com os itens" : "Salvar"}
         </button>
       </Modal>
-
-      <BoletoScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} onDetected={handleCodeDetected} />
 
       <ConfirmDialog
         open={confirmDiscard}
