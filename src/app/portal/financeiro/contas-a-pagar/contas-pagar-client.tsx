@@ -1205,6 +1205,8 @@ export function ContasPagarClient({
             items={drafts}
             onItemsChange={changeDrafts}
             ingredients={ingredients}
+            categorias={categorias}
+            categoriaIdBoleto={form.categoriaId}
             hints={hints}
             lastPurchase={lastPurchase}
             loadingHistory={loadingHistory}

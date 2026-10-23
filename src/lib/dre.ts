@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { DRE_STRUCTURE, type DreRowDef } from "@/lib/dre-structure";
+import { getFinancialCategories } from "@/lib/financial-categories";
+import { splitPayableByCategory } from "@/lib/compra-itens";
 
 export type DreComputedRow = {
   key: string;
@@ -26,14 +28,21 @@ export async function computeDre({
 
   const empresaFilter = { empresaId: { in: empresaIds } };
 
-  const [payables, receivables] = await Promise.all([
+  const [payables, receivables, categorias] = await Promise.all([
     prisma.payable.findMany({
       where: {
         status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
         dataCompetencia: { gte: start, lte: end },
         ...empresaFilter,
       },
-      select: { valor: true, categoria: { select: { dreKey: true } } },
+      // `categoriaId` + os itens (quando o boleto tem "O que foi comprado" categorizado por item):
+      // ver `splitPayableByCategory`, usado para o boleto não cair inteiro numa categoria só quando
+      // ele mistura produtos de categorias diferentes (contas a pagar multicategoria).
+      select: {
+        valor: true,
+        categoriaId: true,
+        invoice: { select: { items: { select: { categoriaId: true, total: true } } } },
+      },
     }),
     prisma.receivable.findMany({
       where: {
@@ -43,14 +52,23 @@ export async function computeDre({
       },
       select: { valor: true, categoria: { select: { dreKey: true } } },
     }),
+    getFinancialCategories(),
   ]);
+
+  const dreKeyByCategoriaId = new Map(categorias.map((c) => [c.id, c.dreKey]));
 
   // valor absoluto lançado por categoria (chave = dreKey da categoria)
   const byDreKey = new Map<string, number>();
   const addValue = (dreKey: string, valor: number) => {
     byDreKey.set(dreKey, (byDreKey.get(dreKey) ?? 0) + valor);
   };
-  for (const p of payables) addValue(p.categoria.dreKey, p.valor);
+  for (const p of payables) {
+    const splits = splitPayableByCategory(p.valor, p.categoriaId, p.invoice?.items ?? []);
+    for (const s of splits) {
+      const dreKey = dreKeyByCategoriaId.get(s.categoriaId);
+      if (dreKey) addValue(dreKey, s.valor);
+    }
+  }
   for (const r of receivables) addValue(r.categoria.dreKey, r.valor);
 
   const rows: DreComputedRow[] = [];

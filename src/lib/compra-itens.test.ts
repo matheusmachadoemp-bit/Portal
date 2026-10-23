@@ -12,6 +12,7 @@ import {
   normalizeSupplierKey,
   resolveDivergence,
   round2,
+  splitPayableByCategory,
   type NormalizedItem,
 } from "@/lib/compra-itens";
 
@@ -264,4 +265,122 @@ test("normalizeSupplierKey: sem acento, caixa e espaços; não trata % nem _ com
   assert.equal(normalizeSupplierKey("PADARIA SUL"), "padaria sul");
   assert.equal(normalizeSupplierKey("%"), "%");
   assert.notEqual(normalizeSupplierKey("%"), normalizeSupplierKey("Moinho Sul"));
+});
+
+test("normalizeItems: categoriaId por item é opcional e só sanitiza o formato", () => {
+  const base = exemplo[0];
+  const [comCategoria] = ok([{ ...base, categoriaId: "cat-descartaveis" }]);
+  assert.equal(comCategoria.categoriaId, "cat-descartaveis");
+  const [semCategoria] = ok([{ ...base, categoriaId: undefined }]);
+  assert.equal(semCategoria.categoriaId, null);
+  const [categoriaVazia] = ok([{ ...base, categoriaId: "" }]);
+  assert.equal(categoriaVazia.categoriaId, null);
+  const [categoriaNull] = ok([{ ...base, categoriaId: null }]);
+  assert.equal(categoriaNull.categoriaId, null);
+  const r = normalizeItems([{ ...base, categoriaId: "x".repeat(101) }]);
+  assert.equal(r.ok, false);
+  assert.match((r as { ok: false; error: string }).error, /categoria financeira inválida/);
+});
+
+// ------------------------------------------------------------------------------------------------
+// splitPayableByCategory (contas a pagar multicategoria — rateio pra DRE/Fluxo de Caixa/Dashboard)
+// ------------------------------------------------------------------------------------------------
+
+test("splitPayableByCategory: sem nenhum item categorizado, cai 100% na categoria do boleto (comportamento de sempre)", () => {
+  assert.deepEqual(splitPayableByCategory(1000, "cat-boleto", []), [{ categoriaId: "cat-boleto", valor: 1000 }]);
+  assert.deepEqual(
+    splitPayableByCategory(1000, "cat-boleto", [
+      { categoriaId: null, total: 600 },
+      { categoriaId: null, total: 400 },
+    ]),
+    [{ categoriaId: "cat-boleto", valor: 1000 }]
+  );
+});
+
+test("splitPayableByCategory: itens somando zero (ex. só bonificação) não tenta dividir por zero", () => {
+  assert.deepEqual(
+    splitPayableByCategory(500, "cat-boleto", [{ categoriaId: "cat-x", total: 0 }]),
+    [{ categoriaId: "cat-boleto", valor: 500 }]
+  );
+});
+
+test("splitPayableByCategory: boleto misto (descartáveis + limpeza), itens fecham exatamente com o valor", () => {
+  // Exemplo do pedido do Matheus: nota de R$ 1.000 com descartáveis (R$ 700) e material de limpeza (R$ 300).
+  const splits = splitPayableByCategory(1000, "cat-descartaveis", [
+    { categoriaId: "cat-descartaveis", total: 700 },
+    { categoriaId: "cat-limpeza", total: 300 },
+  ]);
+  const byId = new Map(splits.map((s) => [s.categoriaId, s.valor]));
+  assert.equal(byId.get("cat-descartaveis"), 700);
+  assert.equal(byId.get("cat-limpeza"), 300);
+  assert.equal(splits.reduce((a, s) => a + s.valor, 0), 1000); // nunca perde nem duplica centavo
+});
+
+test("splitPayableByCategory: item sem categoria escolhida cai na categoria do boleto, proporcionalmente", () => {
+  // R$ 1.000: metade categorizada como "limpeza", a outra metade sem categoria escolhida.
+  const splits = splitPayableByCategory(1000, "cat-boleto", [
+    { categoriaId: "cat-limpeza", total: 500 },
+    { categoriaId: null, total: 500 },
+  ]);
+  assert.deepEqual(
+    splits.sort((a, b) => a.categoriaId.localeCompare(b.categoriaId)),
+    [
+      { categoriaId: "cat-boleto", valor: 500 },
+      { categoriaId: "cat-limpeza", valor: 500 },
+    ]
+  );
+});
+
+test("splitPayableByCategory: 100% dos itens categorizados — o gap contra o boleto segue essas categorias, não a do boleto", () => {
+  // Boleto de R$ 1.200, mas os itens lançados (100% categorizados) somam só R$ 1.000 (frete/taxas não
+  // itemizados, por ex.): sem nenhum peso "sem categoria" para absorver o gap, ele segue proporcionalmente
+  // a quem FOI categorizado — nunca trava a conta por isso.
+  const splits = splitPayableByCategory(1200, "cat-boleto", [
+    { categoriaId: "cat-descartaveis", total: 1000 },
+  ]);
+  assert.deepEqual(splits, [{ categoriaId: "cat-descartaveis", valor: 1200 }]);
+
+  // Itens somam MAIS que o boleto (ex.: ainda não ajustou o valor final) — ainda assim nunca trava
+  // nem estoura a soma: o rateio é proporcional ao PESO de cada item dentro do total dos itens,
+  // aplicado sobre o valor do boleto (não sobre o total dos itens).
+  const acima = splitPayableByCategory(1000, "cat-boleto", [
+    { categoriaId: "cat-descartaveis", total: 600 },
+    { categoriaId: "cat-limpeza", total: 600 },
+  ]);
+  const byIdAcima = new Map(acima.map((s) => [s.categoriaId, s.valor]));
+  assert.equal(byIdAcima.get("cat-descartaveis"), 500);
+  assert.equal(byIdAcima.get("cat-limpeza"), 500);
+  assert.equal(acima.reduce((a, s) => a + s.valor, 0), 1000);
+});
+
+test("splitPayableByCategory: parte sem categoria escolhida — essa fração do gap (e do peso) cai na categoria do boleto", () => {
+  // Boleto de R$ 1.200; metade do PESO dos itens (R$ 500 de R$ 1.000) foi categorizada como
+  // "descartáveis", a outra metade ficou sem categoria escolhida (ex.: item digitado sem pensar nisso).
+  const splits = splitPayableByCategory(1200, "cat-boleto", [
+    { categoriaId: "cat-descartaveis", total: 500 },
+    { categoriaId: null, total: 500 },
+  ]);
+  const byId = new Map(splits.map((s) => [s.categoriaId, s.valor]));
+  assert.equal(byId.get("cat-descartaveis"), 600); // 50% do peso → 50% dos R$ 1.200
+  assert.equal(byId.get("cat-boleto"), 600); // a outra metade (sem categoria) + sua fração do gap
+  assert.equal(splits.reduce((a, s) => a + s.valor, 0), 1200);
+});
+
+test("splitPayableByCategory: categoria do boleto também escolhida num item — soma no mesmo balde, sem entrada duplicada", () => {
+  const splits = splitPayableByCategory(900, "cat-descartaveis", [
+    { categoriaId: "cat-descartaveis", total: 600 },
+    { categoriaId: "cat-limpeza", total: 300 },
+  ]);
+  assert.equal(splits.filter((s) => s.categoriaId === "cat-descartaveis").length, 1);
+  const byId = new Map(splits.map((s) => [s.categoriaId, s.valor]));
+  assert.equal(byId.get("cat-descartaveis"), 600);
+  assert.equal(byId.get("cat-limpeza"), 300);
+});
+
+test("splitPayableByCategory: AJUSTE (frete/desconto) categorizado participa do rateio igual aos outros itens", () => {
+  const splits = splitPayableByCategory(1030, "cat-boleto", [
+    { categoriaId: "cat-descartaveis", total: 1000 },
+    { categoriaId: "cat-descartaveis", total: 30 }, // frete categorizado junto
+  ]);
+  assert.deepEqual(splits, [{ categoriaId: "cat-descartaveis", valor: 1030 }]);
 });
