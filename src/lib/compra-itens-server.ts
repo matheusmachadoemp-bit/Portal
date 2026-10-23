@@ -104,7 +104,7 @@ async function snapshotInvoice(tx: Tx, invoiceId: string, empresaId: string) {
       divergenciaValor: true,
       items: {
         orderBy: { ordem: "asc" },
-        select: { kind: true, nome: true, quantidade: true, unidade: true, precoCombinado: true, precoCobrado: true, total: true },
+        select: { kind: true, nome: true, quantidade: true, unidade: true, precoCombinado: true, precoCobrado: true, total: true, categoriaId: true },
       },
     },
   });
@@ -142,6 +142,17 @@ export async function saveCompraForPayable(
     if (missing.length > 0) throw new CompraError("Um dos insumos escolhidos não existe mais nesta loja. Atualize a página e escolha de novo.");
   }
   const items = compra.items.map((i) => (i.ingredientId ? { ...i, nome: (names.get(i.ingredientId) ?? i.nome).slice(0, 120) } : i));
+
+  // Categoria financeira por item (opcional, contas a pagar multicategoria): FinancialCategory é
+  // cadastro global (sem empresaId), então basta existir — ver `splitPayableByCategory` em
+  // `compra-itens.ts` para como isso entra na DRE/Fluxo de Caixa/Dashboard.
+  const categoriaIds = [...new Set(items.map((i) => i.categoriaId).filter((id): id is string => !!id))];
+  if (categoriaIds.length > 0) {
+    const foundCategorias = await tx.financialCategory.count({ where: { id: { in: categoriaIds } } });
+    if (foundCategorias !== categoriaIds.length) {
+      throw new CompraError("Uma das categorias financeiras escolhidas para os itens não existe mais. Atualize a página e escolha de novo.");
+    }
+  }
 
   const before = currentInvoiceId ? await snapshotInvoice(tx, currentInvoiceId, payable.empresaId) : null;
   const current = before
@@ -193,6 +204,7 @@ export async function saveCompraForPayable(
     origemCombinado: i.origemCombinado,
     precoCobrado: i.precoCobrado,
     total: i.total,
+    categoriaId: i.categoriaId,
   }));
 
   let invoiceId: string;

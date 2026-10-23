@@ -40,9 +40,13 @@ export type DraftItem = {
   precoCobrado: string;
   /** Só em ajustes: o valor é um desconto (entra com sinal negativo). */
   desconto: boolean;
+  /** Categoria financeira (DRE) deste item — null = "mesma do boleto" (ver `splitPayableByCategory`
+   *  em `@/lib/compra-itens`). Item novo já nasce com a categoria do boleto pré-selecionada. */
+  categoriaId: string | null;
 };
 
 export type IngredientOption = { id: string; name: string; unidade: string; unidadeCompra: string | null };
+export type FinancialCategoryOption = { id: string; name: string };
 
 export type SavedItem = {
   kind: ItemKind;
@@ -54,6 +58,7 @@ export type SavedItem = {
   precoCombinado: number | null;
   origemCombinado: PriceSource | null;
   precoCobrado: number;
+  categoriaId: string | null;
 };
 
 export type LastPurchase = { id: string; dataCompra: string; numeroNota: string | null; totalCobrado: number; itens: SavedItem[] };
@@ -92,6 +97,7 @@ export function draftFromSaved(it: SavedItem): DraftItem {
     origemCombinado: it.origemCombinado,
     precoCobrado: textOf(desconto ? Math.abs(it.precoCobrado) : it.precoCobrado),
     desconto,
+    categoriaId: it.categoriaId,
   };
 }
 
@@ -120,6 +126,7 @@ export function draftsToPayload(items: DraftItem[]) {
     precoCombinado: d.precoCombinado.trim() === "" ? null : d.kind === "AJUSTE" ? withSign(d.precoCombinado, d.desconto) : d.precoCombinado,
     origemCombinado: d.precoCombinado.trim() === "" ? null : d.origemCombinado ?? "MANUAL",
     precoCobrado: d.kind === "AJUSTE" ? withSign(d.precoCobrado, d.desconto) : d.precoCobrado,
+    categoriaId: d.categoriaId,
   }));
 }
 
@@ -140,8 +147,9 @@ export function summarize(items: DraftItem[]) {
   return { rows, totals: computeTotals(rows), breakdown: diffBreakdown(rows) };
 }
 
-/** Itens novos já com o “combinado” sugerido pelo último preço pago a este fornecedor. */
-export function newItemFromIngredient(ing: IngredientOption, hints: Record<string, PriceHint>): DraftItem {
+/** Itens novos já com o “combinado” sugerido pelo último preço pago a este fornecedor, e a
+ *  categoria financeira pré-selecionada igual à do boleto (quem lança só troca o que for diferente). */
+export function newItemFromIngredient(ing: IngredientOption, hints: Record<string, PriceHint>, categoriaIdBoleto: string): DraftItem {
   const unidade = ing.unidadeCompra || ing.unidade;
   const hint = hints[itemKey({ kind: "INSUMO", ingredientId: ing.id, nome: ing.name, unidade })];
   return {
@@ -156,15 +164,42 @@ export function newItemFromIngredient(ing: IngredientOption, hints: Record<strin
     origemCombinado: hint ? hint.origem : null,
     precoCobrado: "",
     desconto: false,
+    categoriaId: categoriaIdBoleto || null,
   };
 }
 
-export function newOtherItem(nome = ""): DraftItem {
-  return { key: newKey(), kind: "OUTRO", ingredientId: null, nome, grupo: "Outros", quantidade: "", unidade: "un", precoCombinado: "", origemCombinado: null, precoCobrado: "", desconto: false };
+export function newOtherItem(nome = "", categoriaIdBoleto = ""): DraftItem {
+  return {
+    key: newKey(),
+    kind: "OUTRO",
+    ingredientId: null,
+    nome,
+    grupo: "Outros",
+    quantidade: "",
+    unidade: "un",
+    precoCombinado: "",
+    origemCombinado: null,
+    precoCobrado: "",
+    desconto: false,
+    categoriaId: categoriaIdBoleto || null,
+  };
 }
 
-export function newAdjustment(nome: string, desconto = false): DraftItem {
-  return { key: newKey(), kind: "AJUSTE", ingredientId: null, nome, grupo: "", quantidade: "1", unidade: "", precoCombinado: "", origemCombinado: null, precoCobrado: "", desconto };
+export function newAdjustment(nome: string, desconto = false, categoriaIdBoleto = ""): DraftItem {
+  return {
+    key: newKey(),
+    kind: "AJUSTE",
+    ingredientId: null,
+    nome,
+    grupo: "",
+    quantidade: "1",
+    unidade: "",
+    precoCombinado: "",
+    origemCombinado: null,
+    precoCobrado: "",
+    desconto,
+    categoriaId: categoriaIdBoleto || null,
+  };
 }
 
 function normalizeSearch(text: string) {
@@ -206,6 +241,8 @@ export function CompraItensEditor({
   items,
   onItemsChange,
   ingredients,
+  categorias,
+  categoriaIdBoleto,
   hints,
   lastPurchase,
   loadingHistory,
@@ -223,6 +260,12 @@ export function CompraItensEditor({
   items: DraftItem[];
   onItemsChange: (items: DraftItem[]) => void;
   ingredients: IngredientOption[];
+  /** Categorias financeiras (DRE) para o seletor por item — mesma lista do campo "Categoria
+   *  Financeira" do boleto. */
+  categorias: FinancialCategoryOption[];
+  /** Categoria financeira escolhida no boleto agora (campo "Categoria Financeira" do formulário):
+   *  todo item novo já nasce com ela selecionada. */
+  categoriaIdBoleto: string;
   hints: Record<string, PriceHint>;
   lastPurchase: LastPurchase | null;
   loadingHistory: boolean;
@@ -284,8 +327,8 @@ export function CompraItensEditor({
     setFocusKey(item.key);
   }
   function pickOption(index: number) {
-    if (index < matches.length) add(newItemFromIngredient(matches[index], hints));
-    else add(newOtherItem(query.trim()));
+    if (index < matches.length) add(newItemFromIngredient(matches[index], hints, categoriaIdBoleto));
+    else add(newOtherItem(query.trim(), categoriaIdBoleto));
   }
 
   function onSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -397,6 +440,22 @@ export function CompraItensEditor({
             </select>
           </>
         )}
+        {/* Categoria financeira (DRE) deste item — mesmo seletor pra Insumo, Outro item e Ajuste
+            (frete/desconto): sem caso especial, como decidido. Vazio = "mesma do boleto". */}
+        <select
+          value={d.categoriaId ?? ""}
+          onChange={(e) => update(d.key, { categoriaId: e.target.value || null })}
+          aria-label={`Categoria financeira de ${label}`}
+          title="Categoria financeira (DRE) deste item — padrão: mesma do boleto"
+          className="input-sm !py-0.5 max-w-[11rem]"
+        >
+          <option value="">Mesma do boleto</option>
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </div>
     );
 
@@ -503,7 +562,8 @@ export function CompraItensEditor({
           </h3>
           <p className="text-xs text-nord-gray mt-0.5 max-w-xl">
             Liste os itens da nota para saber em quais produtos você gasta mais e se o fornecedor cobrou o que combinou.
-            Não mexe no estoque.
+            Não mexe no estoque. Boleto com produtos de categorias diferentes (ex.: descartáveis + material de
+            limpeza)? Troque a categoria de cada item — só muda quem veio diferente da categoria do boleto.
           </p>
         </div>
         <div className="flex flex-col items-start sm:items-end gap-1">
@@ -705,13 +765,13 @@ export function CompraItensEditor({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={locked} onClick={() => add(newOtherItem())} className="btn-outline !py-1.5 !px-2.5 !text-xs disabled:opacity-50">
+          <button type="button" disabled={locked} onClick={() => add(newOtherItem("", categoriaIdBoleto))} className="btn-outline !py-1.5 !px-2.5 !text-xs disabled:opacity-50">
             <Plus size={13} /> Outro item
           </button>
-          <button type="button" disabled={locked} onClick={() => add(newAdjustment("Frete"))} className="btn-outline !py-1.5 !px-2.5 !text-xs disabled:opacity-50">
+          <button type="button" disabled={locked} onClick={() => add(newAdjustment("Frete", false, categoriaIdBoleto))} className="btn-outline !py-1.5 !px-2.5 !text-xs disabled:opacity-50">
             <Plus size={13} /> Frete
           </button>
-          <button type="button" disabled={locked} onClick={() => add(newAdjustment("Desconto", true))} className="btn-outline !py-1.5 !px-2.5 !text-xs disabled:opacity-50">
+          <button type="button" disabled={locked} onClick={() => add(newAdjustment("Desconto", true, categoriaIdBoleto))} className="btn-outline !py-1.5 !px-2.5 !text-xs disabled:opacity-50">
             <Plus size={13} /> Desconto
           </button>
         </div>

@@ -25,6 +25,7 @@ import { FinanceCharts } from "./charts";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getFinancialCategories } from "@/lib/financial-categories";
+import { splitPayableByCategory } from "@/lib/compra-itens";
 
 // Checagem de cargo (MANAGER_ROLES) — mesmo padrão de cargo já usado no módulo RH (rotas de API
 // desde o commit f109b8e) e replicado aqui: sem ela, qualquer COLABORADOR com o Perfil de
@@ -81,7 +82,15 @@ async function getData() {
         dataCompetencia: { gte: subDays(now, 400) },
         empresaId: { in: empresaIds },
       },
-      select: { categoriaId: true, valor: true, dataCompetencia: true },
+      // Itens (quando o boleto tem "O que foi comprado" categorizado por item): ver
+      // `splitPayableByCategory`, usado só no gráfico "despesas por categoria" abaixo — o total de
+      // saídas (soma de `valor`) não muda, só pra qual categoria cada pedaço é contado.
+      select: {
+        categoriaId: true,
+        valor: true,
+        dataCompetencia: true,
+        invoice: { select: { items: { select: { categoriaId: true, total: true } } } },
+      },
     }),
   ]);
 
@@ -151,7 +160,8 @@ async function getData() {
       .slice(0, 8);
   }
 
-  const despesasChart = groupByCategory(payablesThisMonth);
+  const despesasSplit = payablesThisMonth.flatMap((p) => splitPayableByCategory(p.valor, p.categoriaId, p.invoice?.items ?? []));
+  const despesasChart = groupByCategory(despesasSplit);
   const receitasChart = groupByCategory(receivablesThisMonth);
 
   return {

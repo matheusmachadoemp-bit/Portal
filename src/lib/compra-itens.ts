@@ -55,6 +55,8 @@ export type ItemInput = {
   precoCombinado?: unknown;
   origemCombinado?: unknown;
   precoCobrado?: unknown;
+  /// Categoria financeira (FinancialCategory) deste item — opcional, ver `NormalizedItem.categoriaId`.
+  categoriaId?: unknown;
 };
 
 export type NormalizedItem = {
@@ -69,6 +71,9 @@ export type NormalizedItem = {
   origemCombinado: PriceSource | null;
   precoCobrado: number;
   total: number;
+  /// Categoria financeira (DRE) deste item, escolhida por quem lança. Ausente (null) = o valor deste
+  /// item cai na categoria do boleto (`Payable.categoriaId`) — ver `splitPayableByCategory`.
+  categoriaId: string | null;
 };
 
 function cleanString(value: unknown, max: number): string {
@@ -171,6 +176,17 @@ export function normalizeItems(raw: unknown): { ok: true; items: NormalizedItem[
       return { ok: false, error: `${label} (${nome}): valor total do item grande demais. Confira quantidade e preço.` };
     }
 
+    // Categoria financeira do item (opcional): só sanitiza o formato aqui (o mesmo padrão de
+    // `ingredientId`/`supplierId` em outros pontos deste módulo) — se o id existe de verdade e está
+    // ativo é responsabilidade de quem grava (`compra-itens-server.ts`), que tem acesso ao banco.
+    let categoriaId: string | null = null;
+    if (it.categoriaId !== undefined && it.categoriaId !== null && it.categoriaId !== "") {
+      if (typeof it.categoriaId !== "string" || it.categoriaId.length > 100) {
+        return { ok: false, error: `${label} (${nome}): categoria financeira inválida.` };
+      }
+      categoriaId = it.categoriaId;
+    }
+
     items.push({
       ordem: i,
       kind,
@@ -183,6 +199,7 @@ export function normalizeItems(raw: unknown): { ok: true; items: NormalizedItem[
       origemCombinado: origem,
       precoCobrado: cobrado,
       total: round2(quantidade * cobrado),
+      categoriaId,
     });
   }
   return { ok: true, items };
@@ -284,6 +301,70 @@ export function detailPercent(totalCobrado: number, valorBoleto: number): number
 /** Os itens fecham com o valor do boleto (até 5 centavos de diferença)? */
 export function closesWithBoleto(totalCobrado: number, valorBoleto: number): boolean {
   return Math.abs(round2(totalCobrado) - round2(valorBoleto)) <= DIVERGENCE_TOLERANCE;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Categoria financeira por item (contas a pagar multi-categoria)
+// ------------------------------------------------------------------------------------------------
+
+export type PayableCategorySplitItem = { categoriaId: string | null; total: number };
+export type PayableCategorySplit = { categoriaId: string; valor: number };
+
+/**
+ * Reparte o valor de UM boleto pelas categorias financeiras escolhidas item a item (ver
+ * `SupplierInvoiceItem.categoriaId`), preservando sempre a soma total = `valor` — nenhum centavo é
+ * perdido ou duplicado, mesmo quando os itens não "fecham" com o boleto (ver `closesWithBoleto`,
+ * que aqui NUNCA trava: a diferença só muda para qual categoria ela é contada).
+ *
+ * Regra (divisão proporcional): cada item com `categoriaId` preenchido recebe uma fatia de `valor`
+ * proporcional ao seu peso (`total`) dentro da soma de TODOS os itens (categorizados ou não). A
+ * fatia que sobra — a fração do peso que NÃO tinha categoria escolhida — cai na categoria do
+ * próprio boleto (`categoriaIdBoleto`), o mesmo lugar onde o valor inteiro cairia se ninguém
+ * tivesse categorizado nenhum item. Repare que isso também carrega, PROPORCIONALMENTE, a diferença
+ * entre o total dos itens e o valor do boleto (o "gap"): se 100% do peso dos itens já tem categoria
+ * escolhida, 100% do valor do boleto — gap incluído — segue essas categorias (nada fica pra
+ * categoria do boleto, mesmo que os itens não fechem exatamente com o valor); só quando existe peso
+ * SEM categoria é que uma fração do gap acaba sobrando pra categoria do boleto.
+ *
+ * Sem nenhum item categorizado (ou sem itens, ou itens somando zero): devolve exatamente
+ * `[{ categoriaId: categoriaIdBoleto, valor }]` — o comportamento de sempre, idêntico ao de antes
+ * desta função existir, para todo o histórico já lançado. É isso que DRE (`dre.ts`), Fluxo de Caixa
+ * (`fluxo-caixa-server.ts`) e o gráfico do Dashboard Financeiro devem usar — os três com a MESMA
+ * função, para nunca contarem histórias diferentes do mesmo boleto.
+ */
+export function splitPayableByCategory(
+  valor: number,
+  categoriaIdBoleto: string,
+  items: PayableCategorySplitItem[]
+): PayableCategorySplit[] {
+  const totalItens = round2(items.reduce((acc, it) => acc + it.total, 0));
+  const hasCategorized = items.some((it) => it.categoriaId);
+  if (!hasCategorized || totalItens === 0) {
+    return [{ categoriaId: categoriaIdBoleto, valor: round2(valor) }];
+  }
+
+  const porCategoria = new Map<string, number>();
+  let alocado = 0;
+  for (const it of items) {
+    if (!it.categoriaId) continue;
+    const fatia = round2((it.total / totalItens) * valor);
+    porCategoria.set(it.categoriaId, round2((porCategoria.get(it.categoriaId) ?? 0) + fatia));
+    alocado = round2(alocado + fatia);
+  }
+  // Itens sem categoria escolhida + o que sobrar do arredondamento/diferença contra o valor do
+  // boleto: tudo cai na categoria do próprio boleto (soma com o que ela já tiver recebido, se ela
+  // também apareceu categorizada em algum item).
+  const resto = round2(valor - alocado);
+  porCategoria.set(categoriaIdBoleto, round2((porCategoria.get(categoriaIdBoleto) ?? 0) + resto));
+
+  // Categoria com fatia zero (ex.: todos os itens fecharam certinho noutra categoria, sem sobra
+  // nenhuma pra categoria do boleto) não precisa aparecer — mas o array nunca fica vazio: sem
+  // nenhuma fatia de verdade, cai de volta no comportamento de sempre (categoria do boleto = valor
+  // inteiro), nunca "some" o valor do boleto.
+  const resultado = [...porCategoria.entries()]
+    .filter(([, valorCategoria]) => Math.abs(valorCategoria) > 0.004)
+    .map(([categoriaId, valorCategoria]) => ({ categoriaId, valor: valorCategoria }));
+  return resultado.length > 0 ? resultado : [{ categoriaId: categoriaIdBoleto, valor: round2(valor) }];
 }
 
 // ------------------------------------------------------------------------------------------------

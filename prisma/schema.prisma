@@ -3810,9 +3810,13 @@ model FinancialCategory {
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
 
-  payables           Payable[]
-  receivables        Receivable[]
-  recurringTemplates RecurringTemplate[]
+  payables             Payable[]
+  receivables          Receivable[]
+  recurringTemplates   RecurringTemplate[]
+  /// Itens de "O que foi comprado" categorizados individualmente (ver `SupplierInvoiceItem.categoriaId`):
+  /// permite que um boleto misto (ex. descartáveis + material de limpeza) entre na DRE separado por
+  /// categoria em vez de cair inteiro na categoria única do boleto (`Payable.categoriaId`).
+  supplierInvoiceItems SupplierInvoiceItem[]
 }
 
 model FinanceAttachment {
@@ -4108,9 +4112,18 @@ model SupplierInvoiceItem {
   precoCobrado    Float
   /// quantidade × precoCobrado, arredondado em centavos.
   total           Float
+  /// Categoria financeira (DRE) deste item, opcional: quando ausente (todo o histórico antes desta
+  /// coluna, ou quando quem lança não precisa dividir), o valor do item continua caindo inteiro na
+  /// categoria do boleto (`Payable.categoriaId`) — ver `splitPayableByCategory` em `compra-itens.ts`,
+  /// usado por DRE, Fluxo de Caixa e Dashboard Financeiro para nunca contarem histórias diferentes do
+  /// mesmo boleto. Null nunca é promovido para a categoria do boleto silenciosamente: o rateio é feito
+  /// no cálculo do relatório, não gravado de volta no item.
+  categoriaId     String?
+  categoria       FinancialCategory?          @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
   @@index([ingredientId])
+  @@index([categoriaId])
 }
 
 // ---------------------------------------------------------------------------
