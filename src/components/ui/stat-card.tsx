@@ -14,6 +14,7 @@ export function StatCard({
   invertDeltaColor = false,
   href,
   action,
+  onClick,
 }: {
   label: string;
   value: string;
@@ -28,11 +29,13 @@ export function StatCard({
   href?: string;
   /** Elemento pequeno e clicável (ex.: botão de ícone) renderizado ao lado do valor — usado para ações rápidas como revelar/ocultar um valor sensível. */
   action?: ReactNode;
+  /** Quando informado (e `href` ausente), o card inteiro vira um botão — usado para ações locais na mesma tela (ex.: abrir um detalhamento). */
+  onClick?: () => void;
 }) {
   const rising = (delta ?? 0) >= 0;
   const good = rising !== invertDeltaColor;
   const className = `nord-card p-4 flex flex-col gap-3 min-w-0 border-t-2 transition-colors hover:border-white/20${
-    href ? " cursor-pointer" : ""
+    href || onClick ? " cursor-pointer" : ""
   }`;
 
   const content = (
@@ -83,6 +86,14 @@ export function StatCard({
       <Link href={href} className={className} style={{ borderTopColor: color }}>
         {content}
       </Link>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${className} w-full text-left`} style={{ borderTopColor: color }}>
+        {content}
+      </button>
     );
   }
 
