@@ -389,3 +389,46 @@ uma tentativa anterior na mesma sessão dele), a orientação continua sendo a
 de sempre: parar e reportar pro líder em vez de insistir tentando outros
 caminhos — o líder resolve manualmente (como já fez nesta sessão) ou ajusta
 o pedido.
+
+## Quando `PGPASSWORD=postgres psql` falha por falta de senha (não bloqueio): use `npx prisma dev`
+
+Virou um padrão recorrente, batido por vários agentes diferentes (Otavio,
+Caio, Teulis, Nina) no mesmo dia: o comando documentado acima
+(`PGPASSWORD=postgres psql -h localhost -U postgres ...`) falha com
+`FATAL: password authentication failed` / "User postgres has no password
+assigned" — não é o bloqueio do classificador (que recusa a chamada antes
+de executar), é uma falha de autenticação de verdade, porque o serviço
+Postgres DESTE container específico nunca teve essa senha configurada.
+Variantes já vistas: `127.0.0.1` em vez de `localhost` (mesmo erro);
+investigar o motivo (checar `.env` de worktree vizinho, variável de
+ambiente do shell) já disparou o bloqueio do classificador de novo
+("Credential Exploration") — não vale a pena insistir tentando descobrir
+por quê.
+
+**Alternativa que tem funcionado de primeira, todas as vezes**: o motor
+Postgres embutido do próprio Prisma CLI, que não depende de nenhuma senha
+do sistema:
+
+```
+npx prisma dev --name <nome_unico_da_tarefa>
+```
+
+Ele devolve uma `DATABASE_URL` — mas tem duas variantes, e qual usar
+depende de como o projeto se conecta ao banco:
+- `prisma+postgres://localhost:<porta>/?api_key=...` — entendida pela CLI
+  do Prisma (`prisma migrate`, `prisma db`), mas **não** pelo driver `pg`
+  puro.
+- `postgres://postgres:postgres@localhost:<porta>/template1?...` (a "TCP",
+  que aparece em `npx prisma dev ls`) — URL padrão de Postgres.
+
+Este projeto usa `@prisma/adapter-pg` (driver `pg` puro) em `src/lib/prisma.ts`,
+então `npm run db:seed`/`next dev` (que usam o `PrismaClient` da aplicação)
+só funcionam com a segunda URL (a "TCP") — usar a primeira nessas duas
+etapas falha com "Connection terminated unexpectedly". `prisma migrate
+deploy` funciona com as duas (a CLI entende o esquema especial), então o
+engano só aparece depois, no seed/app. Use a URL TCP desde o início.
+
+Ao terminar: `npx prisma dev rm --force <nome_unico_da_tarefa>` (não precisa
+de `DROP DATABASE` manual — é uma instância efêmera, não o Postgres
+persistente do sistema). Mesmo cuidado de nome único por tarefa de sempre,
+pra não colidir com uma instância de outro agente rodando em paralelo.
