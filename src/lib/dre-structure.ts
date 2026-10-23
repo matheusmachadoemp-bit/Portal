@@ -117,6 +117,7 @@ export const DRE_STRUCTURE: DreRowDef[] = [
       { key: "monitoramento-seguranca", name: "Monitoramento/Segurança e Alarme" },
       { key: "telefone-internet", name: "Telefone/ Internet" },
       { key: "gasolina", name: "Despesas com Gasolina" },
+      { key: "administracao", name: "Administração" },
       { key: "outras-despesas-administrativas", name: "Outras Despesas Administrativas" },
     ],
   },
