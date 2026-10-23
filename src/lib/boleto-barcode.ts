@@ -1,8 +1,9 @@
 /**
- * Leitura de código de barras/QR de boleto em Financeiro > Contas a Pagar: normaliza o texto lido
- * pela câmera (ou digitado manualmente) antes de guardar, e — quando é um boleto bancário ou de
- * arrecadação/convênio reconhecível pelo layout Febraban/BCB — extrai valor e vencimento do
- * próprio código, para pré-preencher o formulário (editável, nunca travado).
+ * Leitura de código de barras/QR de boleto em Financeiro > Contas a Pagar: normaliza o texto
+ * bipado com o leitor físico de código de barras (ou digitado/colado manualmente, no mesmo campo —
+ * não existe mais leitura pela câmera do dispositivo) antes de guardar, e — quando é um boleto
+ * bancário ou de arrecadação/convênio reconhecível pelo layout Febraban/BCB — extrai valor e
+ * vencimento do próprio código, para pré-preencher o formulário (editável, nunca travado).
  *
  * Isomórfico (sem `"use client"`/sem nada exclusivo de Node): usado tanto no formulário (client)
  * quanto nas rotas de API (server, para normalizar antes de checar duplicidade). A extração usa
@@ -22,8 +23,8 @@ const MASK_CHARS = /[\s.\-/]/g;
 /**
  * Normaliza o texto lido/digitado antes de guardar ou comparar: se é um código "de boleto"
  * (só dígitos, possivelmente com a máscara de pontuação da linha digitável entre eles), guarda só
- * os dígitos — assim a mesma conta lida pela câmera (código de barras, 44 dígitos, sem máscara) e
- * digitada manualmente (linha digitável, 47/48 dígitos, com máscara) caem no mesmo valor
+ * os dígitos — assim a mesma conta bipada com o leitor físico (código de barras, 44 dígitos, sem
+ * máscara) e digitada manualmente (linha digitável, 47/48 dígitos, com máscara) caem no mesmo valor
  * canônico, e a checagem de duplicidade funciona nos dois casos. Qualquer outro formato (ex.: Pix
  * "copia e cola", que mistura letras e números) é devolvido exatamente como veio — nenhum
  * caractere dele é "máscara", então não há nada para tirar.
