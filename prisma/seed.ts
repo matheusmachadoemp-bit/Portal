@@ -126,6 +126,37 @@ const CATEGORIES = [
       { key: "cartilhas", name: "Cartilhas", icon: "BookOpen" },
       { key: "logo", name: "Logo", icon: "Image" },
       { key: "arquivos", name: "Arquivos", icon: "FolderOpen" },
+      // Central de Bugs e Melhorias (Fase 3 — Fases 1/2 já publicadas: backend em
+      // src/app/api/feedback/** e ícone global no topbar). Só o painel administrativo entra
+      // aqui no menu lateral (tela pública de envio continua acessível só pelo ícone do
+      // topbar, sem item de menu próprio). Tela em
+      // src/app/portal/administrativo/bugs-melhorias/page.tsx (construída pelo Caio em
+      // paralelo — pode não existir ainda no momento desta mudança; o link do menu aponta
+      // pro caminho certo de qualquer forma, já que é montado como
+      // `/portal/${categoria.key}/${subcategoria.key}`, src/components/sidebar/sidebar.tsx).
+      // De propósito SEM entrada em MODULES (src/lib/permissions.ts) nem linha de
+      // ModulePermission pra chave de MÓDULO INTEIRO ("administrativo" ou uma "bugs-melhorias"
+      // isolada): mesma decisão já tomada pro painel admin da API na Fase 1 (ver
+      // prisma/migrations/20261021184823_central_bugs_melhorias) — ninguém deve conseguir
+      // liberar o PAINEL (a API por trás dele) pra outro cargo pela tela de Permissões, que só
+      // configura módulos inteiros do catálogo `MODULES`, nunca uma chave composta
+      // "categoria:subcategoria".
+      //
+      // Achado validado ao vivo nesta tarefa (ver relatório): sem mais nada, o link herdaria o
+      // `canView` da categoria "administrativo" inteira — já `true` por padrão pra praticamente
+      // todo perfil (Gerente/Supervisor/Gestor/Funcionário incluídos, via
+      // `defaultLevelForRole`/`ACCESS_LEVEL_TO_MODULE_FLAGS`) — e apareceria no menu pra quem
+      // não é Administrador. Corrigido com uma linha de `ModulePermission` de CHAVE COMPOSTA
+      // ("administrativo:bugs-melhorias", `canView: false` pra todo perfil exceto
+      // "administrador"), no loop de perfis logo abaixo (mesmo padrão de
+      // `ensureDefaultSubcategoryPermissions`, @/lib/authz) — essa chave composta não aparece na
+      // tela de Permissões (que só configura módulos inteiros), então não contradiz o parágrafo
+      // acima. Backfill equivalente pra produção:
+      // prisma/migrations/20261023194500_administrativo_bugs_melhorias_restringe_nao_admin.
+      // Decisão confirmada com o Matheus: só o Role ADMINISTRADOR vê — sem exceção pro perfil
+      // "gestor" (diferente do comportamento padrão de `ensureDefaultSubcategoryPermissions`,
+      // que libera Administrador E Gestor).
+      { key: "bugs-melhorias", name: "Bugs e Melhorias", icon: "Bug" },
     ],
   },
   {
@@ -825,6 +856,40 @@ async function main() {
           moduleKey: "satisfacao-cliente:roleta",
           canView: true,
           canExecute: true,
+          canCreate: false,
+          canEdit: false,
+          canDelete: false,
+        },
+      });
+    }
+
+    // Central de Bugs e Melhorias (Fase 3) > painel administrativo: restrito a SÓ o Role
+    // ADMINISTRADOR, decisão confirmada com o Matheus — mesmo critério literal já usado pela
+    // API do painel (`session.user.role !== "ADMINISTRADOR"`, sem exceção pra Gestor, ver
+    // src/app/api/feedback/dashboard/route.ts e src/app/api/feedback/[id]/route.ts). Sem uma
+    // linha própria pra chave composta "administrativo:bugs-melhorias", a subcategoria herdaria
+    // o `canView` da categoria "administrativo" inteira — que já é `true` por padrão pra
+    // praticamente todo perfil (ver `flags` acima) — e apareceria no menu pra quem não devia
+    // (achado validado ao vivo nesta tarefa, ver comentário em CATEGORIES/"bugs-melhorias" e a
+    // migration `20261023194500_administrativo_bugs_melhorias_restringe_nao_admin`, que faz o
+    // mesmo backfill pra produção, já que o deploy automático nunca roda este seed).
+    //
+    // Perfil "administrador" de propósito NÃO entra aqui: não precisa de linha nenhuma, já que
+    // `buildVisibilityResolver`/`hasModulePermission` retornam acesso total pra `role ===
+    // "ADMINISTRADOR"` antes de sequer olhar pra `ModulePermission`. Os outros 7 perfis do
+    // catálogo `PERMISSION_PROFILES` ficam com todas as 5 flags em `false` (nível "NENHUM") —
+    // mesmo padrão de `ensureDefaultSubcategoryPermissions` (@/lib/authz), só que aplicado aqui
+    // via migration/seed em vez de pela tela de editar menu, e sem a exceção pro perfil
+    // "gestor" que aquela função dá (aqui é só Administrador mesmo).
+    if (profile.key !== "administrador") {
+      await prisma.modulePermission.upsert({
+        where: { profileId_moduleKey: { profileId: record.id, moduleKey: "administrativo:bugs-melhorias" } },
+        update: {},
+        create: {
+          profileId: record.id,
+          moduleKey: "administrativo:bugs-melhorias",
+          canView: false,
+          canExecute: false,
           canCreate: false,
           canEdit: false,
           canDelete: false,
