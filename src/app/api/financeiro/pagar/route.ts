@@ -107,9 +107,10 @@ export async function POST(req: Request) {
     compra = parsed.compra;
   }
 
-  // Código de barras do boleto (ou Pix "copia e cola"), lido pela câmera ou digitado manualmente:
-  // opcional, mas a duplicidade é checada ANTES de tentar gravar (não só pelo erro do Postgres) —
-  // ver `findPayableDuplicate` (único GLOBALMENTE, não por loja, de propósito).
+  // Código de barras do boleto (ou Pix "copia e cola"), lido pelo leitor físico de código de barras
+  // (funciona como teclado) ou digitado manualmente: opcional, mas a duplicidade é checada ANTES de
+  // tentar gravar (não só pelo erro do Postgres) — ver `findPayableDuplicate` (único GLOBALMENTE,
+  // não por loja, de propósito).
   let codigoBarras: string | null = null;
   if (body.codigoBarras !== undefined && body.codigoBarras !== null) {
     // Corta pelo tamanho ANTES de normalizar: `normalizeScannedCode` já é seguro contra ReDoS (a
@@ -127,6 +128,13 @@ export async function POST(req: Request) {
       }
       codigoBarras = normalized;
     }
+  }
+
+  // FinancialCategory é cadastro global (sem empresaId, ver `compra-itens-server.ts`), então basta
+  // existir — não há "pertencer à loja" para checar aqui.
+  const categoria = await prisma.financialCategory.findUnique({ where: { id: body.categoriaId } });
+  if (!categoria) {
+    return NextResponse.json({ error: "Categoria financeira não encontrada." }, { status: 400 });
   }
 
   const status = body.status || "EM_ABERTO";

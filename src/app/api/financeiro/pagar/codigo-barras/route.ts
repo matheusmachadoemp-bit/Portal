@@ -5,9 +5,10 @@ import { normalizeScannedCode } from "@/lib/boleto-barcode";
 import { findPayableDuplicate } from "@/lib/boleto-barcode-server";
 
 /**
- * Checagem "ao vivo" de duplicidade de código de barras/Pix, usada pela tela assim que a câmera lê
- * um código (ou o usuário termina de digitar manualmente) — antes mesmo de tentar salvar, para
- * avisar e bloquear o formulário na hora (ver maquete do pedido). O POST/PATCH de
+ * Checagem "ao vivo" de duplicidade de código de barras/Pix, usada pela tela assim que o leitor
+ * físico de código de barras (que funciona como teclado) lê um código (ou o usuário termina de
+ * digitar manualmente) — antes mesmo de tentar salvar, para avisar e bloquear o formulário na hora
+ * (ver maquete do pedido). O POST/PATCH de
  * `api/financeiro/pagar` fazem a MESMA checagem de novo antes de gravar (nunca confiam só nesta
  * consulta prévia, que podia estar desatualizada por uma corrida entre duas pessoas cadastrando ao
  * mesmo tempo).

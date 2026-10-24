@@ -89,6 +89,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // FinancialCategory é cadastro global (sem empresaId, ver `compra-itens-server.ts`), então basta
+  // existir — só valida quando `categoriaId` é de fato enviado (campo opcional neste PATCH).
+  if (body.categoriaId !== undefined && body.categoriaId !== null) {
+    const categoria = await prisma.financialCategory.findUnique({ where: { id: body.categoriaId } });
+    if (!categoria) {
+      return NextResponse.json({ error: "Categoria financeira não encontrada." }, { status: 400 });
+    }
+  }
+
   const nextStatusCheck: FinanceEntryStatus = body.status ?? existingCheck.status;
   const nextValorCheck = body.valor !== undefined ? Number(body.valor) : existingCheck.valor;
   const nextBankAccountIdCheck =
