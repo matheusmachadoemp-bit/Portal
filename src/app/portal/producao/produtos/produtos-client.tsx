@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Plus, Trash2, Pencil, X } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
@@ -56,6 +56,12 @@ export function ProdutosClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Trava síncrona além do estado `saving` acima: `saving` só reflete a UI depois que o React
+  // processa o `setSaving(true)` (pode levar um "tick"), então dois cliques/toques muito
+  // rápidos no botão Salvar (comum em tablet de cozinha/bar) poderiam, em teoria, passar os
+  // dois pelo `if (saving) return` antes do primeiro re-render acontecer. `useRef` muda na
+  // hora, sem esperar o React re-renderizar, então bloqueia esse segundo disparo de verdade.
+  const savingRef = useRef(false);
 
   async function refresh() {
     const res = await fetch("/api/producao/itens");
@@ -120,11 +126,12 @@ export function ProdutosClient({
   }
 
   async function submit() {
-    if (saving) return;
+    if (savingRef.current) return;
     if (!form.name || !form.categoryId) {
       setError("Nome e categoria são obrigatórios.");
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     const payload = {
@@ -147,6 +154,7 @@ export function ProdutosClient({
       setShowForm(false);
       refresh();
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -216,7 +224,14 @@ export function ProdutosClient({
         {itens.length === 0 && <p className="text-sm text-nord-gray col-span-full text-center py-10">Nenhum produto de produção cadastrado ainda.</p>}
       </div>
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar produto de produção" : "Novo produto de produção"} widthClass="max-w-2xl">
+      <Modal
+        key={editing?.id ?? "producao-produto-novo"}
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        closeDisabled={saving}
+        title={editing ? "Editar produto de produção" : "Novo produto de produção"}
+        widthClass="max-w-2xl"
+      >
         <FormError message={error} />
         <div className="grid grid-cols-2 gap-3">
           <label className="block col-span-2">
@@ -226,6 +241,7 @@ export function ProdutosClient({
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               list="producao-nome-sugestoes"
               placeholder="Digite ou escolha um insumo da ficha técnica"
+              autoComplete="off"
               className="input"
             />
             <datalist id="producao-nome-sugestoes">
@@ -268,7 +284,12 @@ export function ProdutosClient({
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Unidade</span>
-            <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" />
+            <input
+              value={form.unidade}
+              onChange={(e) => setForm({ ...form, unidade: e.target.value })}
+              autoComplete="off"
+              className="input"
+            />
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Tipo de produção</span>
@@ -293,20 +314,40 @@ export function ProdutosClient({
           {form.tipo === "FIXO" && (
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Quantidade mínima diária</span>
-              <input value={form.quantidadeMinima} onChange={(e) => setForm({ ...form, quantidadeMinima: e.target.value })} className="input" />
+              <input
+                value={form.quantidadeMinima}
+                onChange={(e) => setForm({ ...form, quantidadeMinima: e.target.value })}
+                autoComplete="off"
+                className="input"
+              />
             </label>
           )}
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Margem de segurança (%)</span>
-            <input value={form.margemSeguranca} onChange={(e) => setForm({ ...form, margemSeguranca: e.target.value })} className="input" />
+            <input
+              value={form.margemSeguranca}
+              onChange={(e) => setForm({ ...form, margemSeguranca: e.target.value })}
+              autoComplete="off"
+              className="input"
+            />
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Tamanho do lote (opcional)</span>
-            <input value={form.tamanhoLote} onChange={(e) => setForm({ ...form, tamanhoLote: e.target.value })} className="input" />
+            <input
+              value={form.tamanhoLote}
+              onChange={(e) => setForm({ ...form, tamanhoLote: e.target.value })}
+              autoComplete="off"
+              className="input"
+            />
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Validade (dias, opcional)</span>
-            <input value={form.validadeDias} onChange={(e) => setForm({ ...form, validadeDias: e.target.value })} className="input" />
+            <input
+              value={form.validadeDias}
+              onChange={(e) => setForm({ ...form, validadeDias: e.target.value })}
+              autoComplete="off"
+              className="input"
+            />
           </label>
           <label className="block">
             <span className="block text-xs text-nord-gray mb-1">Horário limite padrão</span>
