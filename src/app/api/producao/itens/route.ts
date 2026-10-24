@@ -70,6 +70,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
+  // ProductionCategory é cadastro global (sem empresaId, igual FinancialCategory — ver
+  // `compra-itens-server.ts`), então basta existir. Exigimos também `active: true` porque a
+  // tela só oferece categorias ativas no <select> de cadastro; uma categoria desativada não
+  // deveria poder ser escolhida num produto novo.
+  const categoria = await prisma.productionCategory.findUnique({ where: { id: body.categoryId }, select: { active: true } });
+  if (!categoria || !categoria.active) {
+    return NextResponse.json(
+      { error: "A categoria de produção escolhida não existe mais. Atualize a página e escolha de novo." },
+      { status: 400 }
+    );
+  }
+
   const ingredientes: IngredienteInput[] = Array.isArray(body.ingredientes) ? body.ingredientes : [];
 
   const item = await prisma.$transaction(async (tx) => {

@@ -59,6 +59,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
+  // ProductionCategory é cadastro global (sem empresaId, igual FinancialCategory — ver
+  // `compra-itens-server.ts`), então basta existir. Só validamos quando o payload está de fato
+  // trocando a categoria (categoryId diferente do já salvo): exigimos existir e estar `active:
+  // true`, pois a tela só oferece categorias ativas no <select>. Se a categoria já salva no item
+  // foi desativada depois (o que o cadastro de categorias permite sem mover os itens — só a
+  // exclusão exige isso), não bloqueamos a edição de outros campos do produto por isso.
+  if (body.categoryId && body.categoryId !== existing.categoryId) {
+    const categoria = await prisma.productionCategory.findUnique({ where: { id: body.categoryId }, select: { active: true } });
+    if (!categoria || !categoria.active) {
+      return NextResponse.json(
+        { error: "A categoria de produção escolhida não existe mais. Atualize a página e escolha de novo." },
+        { status: 400 }
+      );
+    }
+  }
+
   const ingredientes: IngredienteInput[] | undefined = Array.isArray(body.ingredientes) ? body.ingredientes : undefined;
 
   const item = await prisma.$transaction(async (tx) => {
