@@ -80,7 +80,7 @@ export function NovaCategoriaModal({
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Nova categoria de produção">
+    <Modal open={open} onClose={handleClose} closeDisabled={saving} title="Nova categoria de produção">
       <div className="space-y-3">
         <FormError message={error} />
         <label className="block">

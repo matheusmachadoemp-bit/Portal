@@ -115,12 +115,27 @@ export function Modal({
   title,
   children,
   widthClass = "max-w-lg",
+  closeDisabled = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   widthClass?: string;
+  /**
+   * Enquanto true, ignora o fechamento pelo X, pelo clique no fundo (backdrop) e pelo Esc —
+   * use isso enquanto uma requisição que o usuário disparou (ex.: salvar) ainda está em
+   * andamento. Sem essa trava, o usuário consegue fechar o modal achando que "cancelou" a
+   * ação, mas a requisição já em voo continua rodando no servidor e termina criando/alterando
+   * o dado de qualquer jeito, sem o usuário nunca ver o resultado — e se ele reabrir o mesmo
+   * modal pra tentar de novo antes da requisição antiga terminar, a conclusão tardia dela pode
+   * até fechar essa SEGUNDA tentativa no meio, descartando o que ele já tinha digitado (foi
+   * exatamente assim que "Cachaça 51" apareceu sozinha ao tentar criar "Polvo" em Produção >
+   * Produtos de Produção). Enquanto `closeDisabled` estiver true, o usuário só recupera o
+   * controle quando a própria requisição terminar (sucesso fecha o modal normalmente; erro
+   * mostra a mensagem com o modal ainda aberto para tentar de novo).
+   */
+  closeDisabled?: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,13 +146,18 @@ export function Modal({
     setMounted(true);
   }, []);
 
-  useFocusTrap(containerRef, open && mounted, onClose);
+  function handleClose() {
+    if (closeDisabled) return;
+    onClose();
+  }
+
+  useFocusTrap(containerRef, open && mounted, handleClose);
 
   if (!open || !mounted) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
       <div
         ref={containerRef}
         role="dialog"
@@ -148,7 +168,12 @@ export function Modal({
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-nord-border sticky top-0 z-10 bg-nord-card">
           <h2 id={titleId} className="text-white font-semibold text-base">{title}</h2>
-          <button onClick={onClose} className="text-nord-gray hover:text-white">
+          <button
+            onClick={handleClose}
+            disabled={closeDisabled}
+            aria-label="Fechar"
+            className="text-nord-gray hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-nord-gray"
+          >
             <X size={18} />
           </button>
         </div>
