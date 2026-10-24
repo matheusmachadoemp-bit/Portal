@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, BookOpen, Clock, Play, Printer, RefreshCw, Search, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, BookOpen, Clock, Play, Printer, RefreshCw, Search, Sparkles, Timer } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import {
@@ -19,6 +19,30 @@ import { FinalizarModal } from "./finalizar-modal";
 import { EtiquetaModal } from "./etiqueta-modal";
 
 type StatusFilter = "TODOS" | "PENDENTE" | "EM_PRODUCAO" | "CONCLUIDO" | "ATRASADO";
+
+/** Formata uma duração em milissegundos como MM:SS, ou HH:MM:SS a partir de 1 hora. */
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
+
+/** Cronômetro ao vivo de um card: conta sozinho (1 tick por segundo) a partir de `inicio`,
+ * isolado num componente próprio para não re-renderizar a lista inteira a cada tick. */
+function CronometroAtivo({ inicio }: { inicio: string }) {
+  const [agora, setAgora] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const decorrido = agora - new Date(inicio).getTime();
+  return <span className="font-mono tabular-nums text-white font-semibold">{formatDuration(decorrido)}</span>;
+}
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "TODOS", label: "Todos" },
@@ -232,6 +256,15 @@ export function HojeClient({
                 </p>
               )}
 
+              {ordem.status === "CONCLUIDO" && ordem.horaInicio && ordem.horaFim && (
+                <p className="flex items-center gap-1.5 text-xs text-nord-gray">
+                  <Timer size={12} /> Tempo de produção:{" "}
+                  <span className="font-mono tabular-nums text-white font-medium">
+                    {formatDuration(new Date(ordem.horaFim).getTime() - new Date(ordem.horaInicio).getTime())}
+                  </span>
+                </p>
+              )}
+
               <div className="flex items-center justify-between text-xs text-nord-gray">
                 <span className="flex items-center gap-1">
                   <Clock size={12} /> Até {prazoLabel}
@@ -263,6 +296,11 @@ export function HojeClient({
                 >
                   <Play size={14} /> Iniciar Produção
                 </button>
+              )}
+              {(ordem.status === "EM_PRODUCAO" || ordem.status === "ATRASADO") && ordem.horaInicio && (
+                <p className="flex items-center gap-1.5 text-xs text-nord-gray">
+                  <Timer size={12} /> Em produção há <CronometroAtivo inicio={ordem.horaInicio} />
+                </p>
               )}
               {(ordem.status === "EM_PRODUCAO" || ordem.status === "ATRASADO") && (
                 <button
