@@ -6,19 +6,30 @@ lançamentos no banco (ferramenta openfinance_list_transactions), o resultado gr
 arquivo, e este script converte e envia ao portal (POST /api/financeiro/conciliacao/sync).
 Só usa a biblioteca padrão do Python.
 
+Como chamar: sempre como UM comando simples, a partir da raiz do repositório, com caminho relativo e a
+conta por --account (sem prefixo VAR=valor, sem ; && || nem pipes, sem cd encadeado): é o único formato
+que a regra de permissão do repositório reconhece.
+
+Conta do banco: use --account ID depois do subcomando (state, plan ou post). O id é o mesmo cadastrado em
+Caixa da Empresa > Editar conta (até 200 caracteres, sem espaços). Se --account faltar, usa a variável de
+ambiente BANK_ACCOUNT_ID (jeito antigo, ainda aceito). Se os dois existirem, --account vence.
+
 Variáveis de ambiente:
   BANK_SYNC_SECRET      senha de integração (a mesma do portal). Nunca é impressa.
   BANK_SYNC_URL         endereço do portal (padrão: https://www.portalnord.com.br)
-  BANK_ACCOUNT_ID       id da conta no banco (o mesmo cadastrado em Caixa da Empresa > Editar conta)
+  BANK_ACCOUNT_ID       (opcional) id da conta no banco, usado só quando --account não é informado
 
 Comandos:
-  state                       mostra o que o portal já tem desta conta
-  plan [--since AAAA-MM-DD]   diz quais períodos buscar (histórico completo na 1ª vez; depois só o recente)
-  post ARQUIVO [--balance N] [--window-complete --from AAAA-MM-DD --to AAAA-MM-DD]
+  state --account ID                       mostra o que o portal já tem desta conta
+  plan --account ID [--since AAAA-MM-DD]   diz quais períodos buscar (histórico completo na 1ª vez; depois só o recente)
+  post ARQUIVO --account ID [--balance N] [--window-complete --from AAAA-MM-DD --to AAAA-MM-DD]
                               converte e envia o resultado salvo da ferramenta. `--from/--to` é o período
                               que foi pedido ao banco; com `--window-complete` o portal remove os
                               "não compensados" daquele período que o banco deixou de listar.
-  post ARQUIVO --dry-run      só converte e mostra estatísticas (não envia nada)
+  post ARQUIVO --account ID --dry-run      só converte e mostra estatísticas (não envia nada)
+
+Exemplo:
+  python3 scripts/bank-sync-bridge.py post /tmp/janela.json --account ID --balance 123.45 --window-complete --from 2026-10-07 --to 2026-10-23
 
 Código de saída: 0 = tudo certo; 1 = erro de uso/arquivo; 2 = o portal recusou ou não respondeu;
 3 = enviado, mas com lançamentos inválidos ou duplicatas/pendências que pedem revisão (ver o JSON).
@@ -35,6 +46,7 @@ from datetime import date, datetime, timedelta, timezone
 
 DEFAULT_URL = "https://www.portalnord.com.br"
 SYNC_PATH = "/api/financeiro/conciliacao/sync"
+MAX_ACCOUNT_LEN = 200  # o portal recusa id de conta com mais que isso
 CHUNK = 1500  # o portal aceita até 2000 por envio
 LOOKBACK_DAYS = 7  # quanto antes do lançamento mais recente buscar de novo (pendente que compensou, atraso do banco)
 SP = timezone(timedelta(hours=-3))  # São Paulo (sem horário de verão desde 2019)
@@ -45,15 +57,32 @@ def fail(msg, code=1):
     sys.exit(code)
 
 
-def cfg():
+def resolve_account(args):
+    """Conta alvo: --account vence; sem ele, usa BANK_ACCOUNT_ID do ambiente. Devolve "" se nenhum dos dois existir."""
+    flag = getattr(args, "account", None)
+    if flag is None:
+        return os.environ.get("BANK_ACCOUNT_ID", "").strip()
+    if not flag.strip():
+        fail("--account está vazio. Informe o id da conta do banco.")
+    if len(flag) > MAX_ACCOUNT_LEN:
+        fail("--account é longo demais (o portal aceita até %d caracteres)." % MAX_ACCOUNT_LEN)
+    if any(ch.isspace() or not ch.isprintable() for ch in flag):
+        fail("--account não pode ter espaços nem caracteres de controle.")
+    return flag
+
+
+def cfg(account):
     secret = os.environ.get("BANK_SYNC_SECRET", "").strip()
-    account = os.environ.get("BANK_ACCOUNT_ID", "").strip()
     url = (os.environ.get("BANK_SYNC_URL") or DEFAULT_URL).rstrip("/")
     if not secret:
         fail("BANK_SYNC_SECRET não está definido neste ambiente.")
     if not account:
-        fail("BANK_ACCOUNT_ID não está definido neste ambiente.")
+        fail("Conta do banco não informada: use --account ID (ou defina BANK_ACCOUNT_ID no ambiente).")
     return url, secret, account
+
+
+def state_url(url, account):
+    return "%s%s?openFinanceAccountId=%s" % (url, SYNC_PATH, urllib.parse.quote(account, safe=""))
 
 
 def _same_site(a, b):
@@ -116,16 +145,16 @@ def month_windows(start, end):
     return out
 
 
-def cmd_state(_args):
-    url, secret, account = cfg()
-    status, body = http("GET", "%s%s?openFinanceAccountId=%s" % (url, SYNC_PATH, account), secret)
+def cmd_state(args):
+    url, secret, account = cfg(resolve_account(args))
+    status, body = http("GET", state_url(url, account), secret)
     print(json.dumps({"http": status, **body}, ensure_ascii=False))
     sys.exit(0 if status == 200 else 2)
 
 
 def cmd_plan(args):
-    url, secret, account = cfg()
-    status, state = http("GET", "%s%s?openFinanceAccountId=%s" % (url, SYNC_PATH, account), secret)
+    url, secret, account = cfg(resolve_account(args))
+    status, state = http("GET", state_url(url, account), secret)
     if status != 200:
         fail("O portal respondeu %s ao consultar a conta (%s)." % (status, state.get("error", "sem detalhe")), 2)
     hoje = today_sp()
@@ -160,7 +189,7 @@ def to_portal(row):
     }
 
 
-def load_tool_result(path):
+def load_tool_result(path, account):
     try:
         raw = open(path, encoding="utf-8").read()
     except OSError as e:
@@ -183,8 +212,9 @@ def load_tool_result(path):
     total = data.get("total")
     if isinstance(total, int) and total != len(rows):
         fail("A ferramenta declarou %s lançamentos mas trouxe %s (paginação). Nada foi enviado." % (total, len(rows)))
-    if str((data.get("account") or {}).get("account_id", "")).strip() and os.environ.get("BANK_ACCOUNT_ID") and \
-            data["account"]["account_id"] != os.environ["BANK_ACCOUNT_ID"].strip():
+    # `account` é a conta RESOLVIDA (--account ou BANK_ACCOUNT_ID): impede enviar o arquivo de uma conta para outra.
+    if str((data.get("account") or {}).get("account_id", "")).strip() and account and \
+            data["account"]["account_id"] != account:
         fail("O arquivo é de outra conta do banco. Nada foi enviado.")
     return rows
 
@@ -203,7 +233,8 @@ def window_instants(args):
 
 
 def cmd_post(args):
-    rows = [to_portal(r) for r in load_tool_result(args.file)]
+    account = resolve_account(args)
+    rows = [to_portal(r) for r in load_tool_result(args.file, account)]
     stats = {"lancamentos": len(rows), "creditos": sum(1 for r in rows if r["type"] == "CREDIT"), "debitos": sum(1 for r in rows if r["type"] == "DEBIT"),
              "pendentes": sum(1 for r in rows if r["status"] == "PENDING"), "semContraparte": sum(1 for r in rows if not r["counterpart"])}
     if args.dry_run:
@@ -214,7 +245,7 @@ def cmd_post(args):
     if args.window_complete and not (args.window_from and args.window_to):
         fail("--window-complete exige --from e --to (o período que foi pedido ao banco).")
     janela_de, janela_ate = window_instants(args)
-    url, secret, account = cfg()
+    url, secret, account = cfg(account)
     totais = {"created": 0, "adopted": 0, "merged": 0, "rekeyed": 0, "updated": 0, "unchanged": 0, "removed": 0, "invalid": 0, "matched": 0,
               "duplicatesLeft": 0, "staleKept": 0, "fileRowsUnpaired": 0}
     amostras = []
@@ -247,9 +278,11 @@ def cmd_post(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("state").set_defaults(fn=cmd_state)
-    p = sub.add_parser("plan"); p.add_argument("--since", default="2025-01-01"); p.set_defaults(fn=cmd_plan)
-    q = sub.add_parser("post"); q.add_argument("file"); q.add_argument("--balance", type=float); q.add_argument("--window-complete", action="store_true")
+    acc_help = "id da conta no banco (vence BANK_ACCOUNT_ID do ambiente)"
+    s = sub.add_parser("state"); s.add_argument("--account", help=acc_help); s.set_defaults(fn=cmd_state)
+    p = sub.add_parser("plan"); p.add_argument("--account", help=acc_help); p.add_argument("--since", default="2025-01-01"); p.set_defaults(fn=cmd_plan)
+    q = sub.add_parser("post"); q.add_argument("file"); q.add_argument("--account", help=acc_help)
+    q.add_argument("--balance", type=float); q.add_argument("--window-complete", action="store_true")
     q.add_argument("--from", dest="window_from"); q.add_argument("--to", dest="window_to")
     q.add_argument("--dry-run", action="store_true"); q.add_argument("--out"); q.set_defaults(fn=cmd_post)
     args = ap.parse_args()
