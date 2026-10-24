@@ -136,6 +136,7 @@ export function ContasPagarClient({
   ingredients = [],
   canCreateSupplier = false,
   canCreate = true,
+  canEdit = true,
   isGrupoNordMode = true,
 }: {
   initialPayables: PayableDTO[];
@@ -147,9 +148,15 @@ export function ContasPagarClient({
   ingredients?: IngredientOption[];
   /** O perfil pode cadastrar fornecedor (Estoque) — habilita “Cadastrar como novo fornecedor” no formulário. */
   canCreateSupplier?: boolean;
+  /** Controla ações que criam um lançamento novo (POST): "Nova conta", "Conta recorrente", "Duplicar". */
   canCreate?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
+  /** Controla ações que alteram um lançamento já existente (PATCH): marcar como pago, editar/detalhar
+   *  itens. Permissão separada de `canCreate` — ver `PATCH /api/financeiro/pagar/[id]`, que exige
+   *  `canEdit`, não `canCreate`. Independe do modo Grupo Nord (edição age sobre a loja do próprio
+   *  lançamento, não sobre a loja ativa selecionada). */
+  canEdit?: boolean;
 }) {
   const [payables, setPayables] = useState(initialPayables);
   const [suppliers, setSuppliers] = useState(fornecedoresCadastrados);
@@ -891,11 +898,17 @@ export function ContasPagarClient({
         </div>
       }
     >
-      {!canCreate && (
+      {(!canCreate || !canEdit) && (
         <p className="mb-3 text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
-          {isGrupoNordMode
-            ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar ou editar contas."
-            : "Seu perfil de permissão não permite lançar ou editar contas neste módulo."}
+          {!canCreate && isGrupoNordMode
+            ? canEdit
+              ? "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar novas contas."
+              : "Você está no modo Grupo Nord (consolidado). Selecione uma loja específica no menu lateral para lançar novas contas. Seu perfil de permissão também não permite editar contas existentes."
+            : !canCreate && !canEdit
+            ? "Seu perfil de permissão não permite lançar ou editar contas neste módulo."
+            : !canCreate
+            ? "Seu perfil de permissão não permite lançar novas contas neste módulo."
+            : "Seu perfil de permissão não permite editar contas existentes neste módulo."}
         </p>
       )}
       <FormError message={rowError} />
@@ -973,7 +986,7 @@ export function ContasPagarClient({
                           style={{ width: `${detailPercent(p.invoice.totalCobrado, p.valor)}%` }}
                         />
                       </div>
-                      {canCreate && detailPercent(p.invoice.totalCobrado, p.valor) < 100 && (
+                      {canEdit && detailPercent(p.invoice.totalCobrado, p.valor) < 100 && (
                         <button type="button" onClick={() => openEdit(p)} className="mt-0.5 text-[11px] text-nord-blue-light hover:underline">
                           Completar
                         </button>
@@ -981,7 +994,7 @@ export function ContasPagarClient({
                     </div>
                   ) : p.status === "CANCELADO" ? (
                     <span className="text-xs text-nord-gray">—</span>
-                  ) : canCreate ? (
+                  ) : canEdit ? (
                     <button type="button" onClick={() => openEdit(p)} className="text-xs text-nord-blue-light hover:underline">
                       Sem itens · Detalhar
                     </button>
@@ -1003,21 +1016,30 @@ export function ContasPagarClient({
                         {copiedCodigoId === p.id ? <Check size={14} className="text-nord-success" /> : <ScanBarcode size={14} />}
                       </button>
                     )}
-                    <div className={`flex items-center gap-2 ${!canCreate ? "hidden" : ""}`}>
-                      {p.status !== "PAGO" && (
+                    <div className={`flex items-center gap-2 ${!canCreate && !canEdit ? "hidden" : ""}`}>
+                      {canEdit && p.status !== "PAGO" && (
                         <button onClick={() => markPaid(p)} title="Marcar como pago" className="text-nord-gray hover:text-nord-success">
                           <Check size={14} />
                         </button>
                       )}
-                      <button onClick={() => duplicate(p)} title="Duplicar" className="text-nord-gray hover:text-white">
-                        <Copy size={14} />
-                      </button>
-                      <button onClick={() => openEdit(p)} className="text-nord-gray hover:text-white">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setConfirmDeleteId(p.id)} className="text-nord-gray hover:text-nord-danger">
-                        <Trash2 size={14} />
-                      </button>
+                      {canCreate && (
+                        <button onClick={() => duplicate(p)} title="Duplicar" className="text-nord-gray hover:text-white">
+                          <Copy size={14} />
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button onClick={() => openEdit(p)} className="text-nord-gray hover:text-white">
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {/* Excluir ainda segue `canCreate` aqui, igual já era antes (o DELETE do servidor na
+                          verdade exige `canDelete` + cargo de gestão, não `canCreate`) — esse descompasso
+                          é um achado separado, fora do escopo deste ajuste (ver relato da tarefa). */}
+                      {canCreate && (
+                        <button onClick={() => setConfirmDeleteId(p.id)} className="text-nord-gray hover:text-nord-danger">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </td>
@@ -1397,16 +1419,18 @@ export function ContasPagarClient({
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-medium text-nord-danger">+{formatCurrency(diff)}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAboveModal(false);
-                      openEdit(p);
-                    }}
-                    className="text-[11px] text-nord-blue-light hover:underline"
-                  >
-                    Abrir boleto
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAboveModal(false);
+                        openEdit(p);
+                      }}
+                      className="text-[11px] text-nord-blue-light hover:underline"
+                    >
+                      Abrir boleto
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

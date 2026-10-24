@@ -19,6 +19,11 @@ export default async function ContasAPagarPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canManageFinanceiro = await hasModulePermission(session.user.id, "financeiro", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageFinanceiro;
+  // Editar uma conta já existente age sobre o `empresaId` dela mesma (ver `assertEmpresaAccess` em
+  // `PATCH /api/financeiro/pagar/[id]`), diferente de criar (que exige uma loja ativa única, ver
+  // `requireActiveSingleEmpresa` no POST) — por isso `canEdit` NÃO depende do modo Grupo Nord, só
+  // da permissão do perfil.
+  const canEdit = await hasModulePermission(session.user.id, "financeiro", "canEdit");
 
   const [payables, categorias, contas, fornecedoresCadastrados, ingredients, canCreateSupplier] = await Promise.all([
     prisma.payable.findMany({
@@ -80,6 +85,7 @@ export default async function ContasAPagarPage() {
           ingredients={ingredients}
           canCreateSupplier={canCreateSupplier}
           canCreate={canCreate}
+          canEdit={canEdit}
           isGrupoNordMode={ctx?.mode !== "single"}
         />
       </div>
