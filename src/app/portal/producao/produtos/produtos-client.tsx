@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Pencil, X } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { PRODUCTION_ITEM_TYPE_LABEL, PRODUCTION_ITEM_TYPE_OPTIONS, PRODUCTION_PRIORITY_OPTIONS } from "@/lib/producao";
+import { loadDraftEntries, newDraftId, removeDraftEntry, upsertDraftEntry } from "@/lib/session-draft";
 import type { CategoriaOption, ProductionItemDTO, SetorOption } from "../types";
 import { NovaCategoriaModal, type CategoriaCriada } from "../nova-categoria-modal";
 
@@ -32,6 +33,27 @@ const emptyForm = {
 function newLineKey() {
   return Math.random().toString(36).slice(2);
 }
+
+// Chave do rascunho em sessionStorage (ver src/lib/session-draft.ts) — só
+// este formulário (criar/editar produto de produção) usa essa chave. Guarda
+// uma LISTA de tentativas (ver `ProdutoDraftEntry`), não um rascunho só:
+// mais de uma tentativa interrompida (ex.: "Polvo" e, depois, "Lula", sem
+// decidir o aviso da primeira) precisa sobreviver ao mesmo tempo, sem uma
+// sobrescrever a outra em sessionStorage.
+const DRAFT_KEY = "producao-produtos-form-draft-v1";
+
+type ProdutoDraftEntry = {
+  // Identifica a TENTATIVA em si (gerado ao abrir o formulário), nunca o
+  // nome digitado — duas tentativas podem ter legitimamente o mesmo nome
+  // (ex.: duas categorias diferentes de "Arroz"), então nunca usamos o nome
+  // pra decidir se algo "já foi salvo" (ver efeito de recuperação abaixo).
+  draftId: string;
+  form: typeof emptyForm;
+  lines: IngredienteLine[];
+  // null quando o rascunho é de um produto NOVO (POST); com valor quando é
+  // de uma EDIÇÃO (PATCH) de um produto já existente.
+  editingId: string | null;
+};
 
 export function ProdutosClient({
   initialItens,
@@ -62,6 +84,97 @@ export function ProdutosClient({
   // dois pelo `if (saving) return` antes do primeiro re-render acontecer. `useRef` muda na
   // hora, sem esperar o React re-renderizar, então bloqueia esse segundo disparo de verdade.
   const savingRef = useRef(false);
+  // Lista de rascunhos pendentes (uma por TENTATIVA interrompida por
+  // navegação — ver `DRAFT_KEY`/`submit` abaixo e o comentário em
+  // `src/lib/session-draft.ts`). Mais de uma pode coexistir: ex. começar
+  // "Polvo", ser interrompido, sem decidir o aviso começar "Lula" também, e
+  // ser interrompido de novo — as duas precisam continuar oferecidas, não só
+  // a mais recente.
+  const [drafts, setDrafts] = useState<ProdutoDraftEntry[]>([]);
+  // Rascunho de EDIÇÃO cujo produto original não existe mais na lista
+  // carregada (foi desativado por outra aba/pessoa nesse meio-tempo) — só é
+  // setado quando o usuário clica "Continuar de onde parou" nesse caso
+  // específico. Em vez de silenciosamente virar uma CRIAÇÃO (POST) disfarçada
+  // de edição, pede confirmação explícita primeiro (ver `ConfirmDialog`
+  // abaixo), porque criar um produto novo com o mesmo nome do que sumiu é
+  // uma decisão que o usuário precisa tomar de olhos abertos, não que o
+  // sistema tome por ele.
+  const [pendingOrphanEdit, setPendingOrphanEdit] = useState<ProdutoDraftEntry | null>(null);
+  // Id da tentativa (rascunho) que a sessão ATUAL do modal representa —
+  // sempre setado ao abrir o formulário (`openNew`/`openEdit`/`restoreDraft`
+  // via `applyDraft`), nunca o nome digitado (ver `ProdutoDraftEntry`).
+  const draftIdRef = useRef<string | null>(null);
+  // Marca se a sessão ATUAL do modal já gravou/assumiu SUA PRÓPRIA entrada
+  // (`draftIdRef.current`) em sessionStorage — ou seja, se um fechamento
+  // explícito agora (X/Esc/backdrop) deve apagar essa entrada específica.
+  // Sem isso, abrir "Novo produto" pra cadastrar algo totalmente diferente e
+  // cancelar sem salvar removeria, de brinde, a entrada de OUTRA tentativa
+  // (ex.: o "Polvo" interrompido por navegação) que ainda nem foi
+  // oferecida/decidida pelo usuário. Note que isso só protege a entrada
+  // desta sessão — as demais, de outras tentativas, nunca são tocadas por
+  // `closeForm`/`submit` desta sessão de qualquer forma, já que cada uma
+  // vive sob seu próprio `draftId`.
+  const sessionOwnsDraftRef = useRef(false);
+
+  useEffect(() => {
+    // Intencionalmente só na montagem: é uma checagem "a página acabou de
+    // carregar, sobrou algum rascunho de antes?", não algo que deva reagir a
+    // toda atualização da lista enquanto o usuário já está trabalhando na
+    // tela.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage só existe no cliente; carrega, só na montagem, os rascunhos de uma navegação anterior pra oferecer
+    setDrafts(loadDraftEntries<ProdutoDraftEntry>(DRAFT_KEY));
+  }, []);
+
+  // Nunca decide sozinho que uma tentativa "já foi salva" — só informa (ver
+  // aviso no JSX abaixo). Comparar por NOME contra a lista inteira já foi
+  // tentado antes e causou um bug pior: dois produtos diferentes podem
+  // legitimamente ter o mesmo nome (ex. duas categorias com "Arroz"), então
+  // descartar automaticamente nesse caso já chegou a apagar, em silêncio,
+  // uma segunda tentativa de verdade que nunca tinha sido salva.
+  function existeProdutoComEsseNome(nome: string) {
+    const alvo = nome.trim().toLowerCase();
+    if (!alvo) return false;
+    return itens.some((i) => i.name.trim().toLowerCase() === alvo);
+  }
+
+  function applyDraft(entry: ProdutoDraftEntry, item: ProductionItemDTO | null) {
+    setEditing(item);
+    setForm(entry.form);
+    setLines(entry.lines);
+    setError(null);
+    setShowForm(true);
+    draftIdRef.current = entry.draftId;
+    sessionOwnsDraftRef.current = true;
+    // Só esconde essa entrada do aviso — ela continua em sessionStorage até
+    // a próxima tentativa de salvar terminar com sucesso (ou até o usuário
+    // fechar o modal explicitamente), caso essa navegação seja interrompida
+    // de novo. As demais entradas da lista (outras tentativas) continuam
+    // exibidas normalmente.
+    setDrafts((prev) => prev.filter((d) => d.draftId !== entry.draftId));
+  }
+
+  function restoreDraft(entry: ProdutoDraftEntry) {
+    if (!entry.editingId) {
+      applyDraft(entry, null);
+      return;
+    }
+    const item = itens.find((i) => i.id === entry.editingId) ?? null;
+    if (item) {
+      applyDraft(entry, item);
+      return;
+    }
+    // O produto que esse rascunho estava editando não existe mais na lista
+    // (foi desativado nesse meio-tempo) — pede confirmação explícita antes
+    // de deixar isso virar uma CRIAÇÃO disfarçada de edição (ver
+    // `ConfirmDialog` no JSX abaixo).
+    setPendingOrphanEdit(entry);
+  }
+
+  function discardDraft(draftId: string) {
+    removeDraftEntry(DRAFT_KEY, draftId);
+    setDrafts((prev) => prev.filter((d) => d.draftId !== draftId));
+    if (pendingOrphanEdit?.draftId === draftId) setPendingOrphanEdit(null);
+  }
 
   async function refresh() {
     const res = await fetch("/api/producao/itens");
@@ -75,6 +188,12 @@ export function ProdutosClient({
     setLines([]);
     setError(null);
     setShowForm(true);
+    // Nova tentativa, novo id — nunca reusa o id de um rascunho pendente
+    // diferente. Não mexe em `drafts`/sessionStorage: outras tentativas
+    // ainda não decididas continuam lá, intactas, pro aviso continuar
+    // oferecendo elas separadamente.
+    draftIdRef.current = newDraftId();
+    sessionOwnsDraftRef.current = false;
   }
 
   function openEdit(item: ProductionItemDTO) {
@@ -105,6 +224,9 @@ export function ProdutosClient({
     );
     setError(null);
     setShowForm(true);
+    // Ver comentário equivalente em `openNew`.
+    draftIdRef.current = newDraftId();
+    sessionOwnsDraftRef.current = false;
   }
 
   function addLine() {
@@ -140,6 +262,32 @@ export function ProdutosClient({
       ingredientId: form.ingredientId || null,
       ingredientes: lines.filter((l) => l.ingredientId && l.quantidadeUsada),
     };
+    // Garante que esta sessão do modal tem um id de rascunho — normalmente
+    // já vem de `openNew`/`openEdit`/`restoreDraft`, mas defensivo caso
+    // algum caminho futuro abra o form sem passar por eles.
+    if (!draftIdRef.current) draftIdRef.current = newDraftId();
+    const thisDraftId = draftIdRef.current;
+    // Grava o rascunho ANTES de disparar a requisição (ver `src/lib/
+    // session-draft.ts`): se o usuário apertar "voltar" do navegador (ou
+    // fechar a aba) enquanto ela está em voo, o navegador pode abortar a
+    // própria requisição antes de terminar (`net::ERR_ABORTED`) e o produto
+    // nunca chega a ser criado/editado — sem nenhuma mensagem de erro,
+    // porque a tela já mudou. `closeDisabled` no `Modal` só bloqueia fechar
+    // PELO MODAL (X/Esc/clique no fundo); não tem como, e não deveria
+    // tentar, bloquear uma navegação de página inteira (interceptar o botão
+    // "voltar" do navegador de forma confiável não é trivial nesta versão
+    // do Next.js App Router). Em vez disso, aceita que a navegação pode
+    // acontecer e evita a PERDA do que foi digitado: ao reabrir esta tela,
+    // o efeito de montagem acima detecta esse rascunho e oferece recuperá-lo.
+    // `upsertDraftEntry` grava SÓ a entrada com esse `draftId`, preservando
+    // qualquer outra tentativa pendente já guardada (ver `drafts` acima).
+    upsertDraftEntry<ProdutoDraftEntry>(DRAFT_KEY, {
+      draftId: thisDraftId,
+      form,
+      lines,
+      editingId: editing?.id ?? null,
+    });
+    sessionOwnsDraftRef.current = true;
     try {
       const res = await fetch(editing ? `/api/producao/itens/${editing.id}` : "/api/producao/itens", {
         method: editing ? "PATCH" : "POST",
@@ -151,12 +299,36 @@ export function ProdutosClient({
         setError(data.error ?? "Não foi possível salvar o produto de produção.");
         return;
       }
+      // Sucesso de verdade: essa entrada específica não serve mais pra nada
+      // (as demais, de outras tentativas, não são afetadas).
+      removeDraftEntry(DRAFT_KEY, thisDraftId);
+      setDrafts((prev) => prev.filter((d) => d.draftId !== thisDraftId));
       setShowForm(false);
       refresh();
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
+  }
+
+  function closeForm() {
+    // Fechamento explícito e deliberado do usuário (X, Esc, clique no
+    // fundo) — diferente de uma navegação involuntária, aqui dá pra
+    // confiar que ele realmente quis abandonar o que estava digitando.
+    // `closeDisabled` (abaixo, na prop do Modal) já impede isso enquanto
+    // `saving` for true, então a essa altura não há requisição em voo. Só
+    // apaga a entrada DESTA sessão em sessionStorage se ela chegou a
+    // gravá-la/assumi-la (ver `sessionOwnsDraftRef`) — senão corre o risco
+    // de descartar, de brinde, o rascunho de uma tentativa completamente
+    // diferente que o aviso no topo da tela ainda nem ofereceu. Outras
+    // entradas (de outras tentativas) nunca são tocadas aqui de qualquer
+    // forma, já que cada uma vive sob seu próprio `draftId`.
+    if (sessionOwnsDraftRef.current && draftIdRef.current) {
+      const thisDraftId = draftIdRef.current;
+      removeDraftEntry(DRAFT_KEY, thisDraftId);
+      setDrafts((prev) => prev.filter((d) => d.draftId !== thisDraftId));
+    }
+    setShowForm(false);
   }
 
   async function doDelete() {
@@ -180,6 +352,60 @@ export function ProdutosClient({
         ) : undefined
       }
     >
+      {drafts.length > 0 && (
+        <div className="flex flex-col gap-2 mb-3">
+          {drafts.map((d) => {
+            // Avisos adicionais, meramente informativos — nunca decidem
+            // nada sozinhos (ver `existeProdutoComEsseNome` e o motivo de
+            // não auto-descartar mais acima).
+            const possivelDuplicado = !d.editingId && existeProdutoComEsseNome(d.form.name);
+            const edicaoOrfa = !!d.editingId && !itens.some((i) => i.id === d.editingId);
+            return (
+              <div
+                key={d.draftId}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-nord-warning/10 border border-nord-warning/30"
+              >
+                <div className="text-xs text-nord-warning">
+                  <p>
+                    Você tinha {d.editingId ? "uma edição de produto" : "um produto"} em andamento
+                    {d.form.name ? (
+                      <>
+                        {" "}
+                        (<span className="font-medium">{d.form.name}</span>)
+                      </>
+                    ) : null}{" "}
+                    que não foi salvo — a navegação foi interrompida antes do salvamento terminar. Continuar de onde
+                    parou?
+                  </p>
+                  {possivelDuplicado && (
+                    <p className="mt-1 text-nord-warning/80">
+                      Atenção: já existe um produto chamado &quot;{d.form.name}&quot; cadastrado — confira se essa
+                      tentativa já não foi salva antes, pra não duplicar.
+                    </p>
+                  )}
+                  {edicaoOrfa && (
+                    <p className="mt-1 text-nord-warning/80">
+                      O produto que você estava editando não existe mais (pode ter sido desativado nesse
+                      meio-tempo) — continuar vai pedir confirmação antes de criar um produto NOVO com esses dados.
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => discardDraft(d.draftId)} className="text-xs text-nord-gray hover:text-white px-2 py-1.5">
+                    Descartar
+                  </button>
+                  <button
+                    onClick={() => restoreDraft(d)}
+                    className="text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium px-3 py-1.5 rounded-lg"
+                  >
+                    Continuar de onde parou
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {itens.map((item) => (
           <div key={item.id} className="nord-card p-4 flex flex-col gap-2">
@@ -227,7 +453,7 @@ export function ProdutosClient({
       <Modal
         key={editing?.id ?? "producao-produto-novo"}
         open={showForm}
-        onClose={() => setShowForm(false)}
+        onClose={closeForm}
         closeDisabled={saving}
         title={editing ? "Editar produto de produção" : "Novo produto de produção"}
         widthClass="max-w-2xl"
@@ -444,6 +670,18 @@ export function ProdutosClient({
         onCancel={() => setConfirmDeleteId(null)}
         confirmLabel="Desativar"
         danger
+      />
+
+      <ConfirmDialog
+        open={!!pendingOrphanEdit}
+        title="Produto original não encontrado"
+        message={`O produto que você estava editando ("${pendingOrphanEdit?.form.name ?? ""}") não existe mais — pode ter sido desativado nesse meio-tempo. Continuar vai criar um produto NOVO com os dados recuperados, não uma edição. Deseja continuar?`}
+        onConfirm={() => {
+          if (pendingOrphanEdit) applyDraft(pendingOrphanEdit, null);
+          setPendingOrphanEdit(null);
+        }}
+        onCancel={() => setPendingOrphanEdit(null)}
+        confirmLabel="Criar como produto novo"
       />
     </Section>
   );
