@@ -47,12 +47,14 @@ type Comentario = { nome: string; comentario: string; nota: number };
 // Os 5 campos de nota (Qualidade do Produto, Atendimento, Ambiente, Rodízio, Tempo de
 // Espera) não têm mais input no modal "Fechamento do mês" (seção "Resultado do período"
 // removida a pedido do usuário — sempre apareciam vazios), mas continuam inicializados aqui
-// a partir do registro já salvo: (1) a seção "NPS detalhado por categoria", fora do modal,
-// ainda exibe esses valores (agora congelados) e a comparação com o mês anterior; (2) a rota
-// POST /api/reuniao/salao trata qualquer um desses campos ausente no body como "grava null"
-// (ver route.ts) — se o form parasse de incluí-los, salvar o modal por qualquer outro motivo
-// (ex.: só um indicador do "Fechamento do mês") apagaria retroativamente uma nota já lançada
-// em um mês anterior. Mesmo padrão usado na Reunião Gerente para turnoverPercent/
+// a partir do registro já salvo: (1) a seção "NPS detalhado por categoria", que antes exibia
+// esses valores fora do modal, também foi removida da tela numa limpeza posterior, pelo mesmo
+// motivo (ver comentário por volta da linha ~388) — hoje eles não aparecem em lugar nenhum da
+// tela nem no PDF exportado, só continuam carregados no estado do form; (2) a rota POST
+// /api/reuniao/salao trata qualquer um desses campos ausente no body como "grava null" (ver
+// route.ts) — se o form parasse de incluí-los, salvar o modal por qualquer outro motivo (ex.:
+// só um indicador do "Fechamento do mês") apagaria retroativamente uma nota já lançada em um
+// mês anterior. Mesmo padrão usado na Reunião Gerente para turnoverPercent/
 // faltasAtrasosAtestados/checklistOperacionalPercent (ver gerente-client.tsx).
 function buildForm(m?: Meeting | null) {
   return {

@@ -57,6 +57,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valor é obrigatório e deve ser maior que zero." }, { status: 400 });
   }
 
+  // FinancialCategory é cadastro global (sem empresaId), então basta existir — não há "pertencer
+  // à loja" para checar aqui. Mesmo padrão usado em `/api/financeiro/pagar`. Validado ANTES de
+  // criar o template (campo obrigatório em `RecurringTemplate`, ver schema).
+  if (!body.categoriaId) {
+    return NextResponse.json({ error: "Categoria é obrigatória." }, { status: 400 });
+  }
+  const categoria = await prisma.financialCategory.findUnique({ where: { id: body.categoriaId } });
+  if (!categoria) {
+    return NextResponse.json({ error: "Categoria financeira não encontrada." }, { status: 400 });
+  }
+
   const tipo: "PAGAR" | "RECEBER" = body.tipo;
   const valor = valorInput;
   const diaVencimento = Number(body.diaVencimento) || 1;
