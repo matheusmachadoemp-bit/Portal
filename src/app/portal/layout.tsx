@@ -66,6 +66,17 @@ export default async function PortalLayout({ children }: { children: React.React
       {!session.user.isFirstLogin && <PushPermissionBanner />}
       <FirstLoginNotificationModal />
       <div className="flex min-h-screen w-full bg-nord-black">
+        {/* Ordem do DOM intencionalmente invertida em relação à ordem visual: o
+            conteúdo da página (que começa pela Topbar — busca, notificações,
+            troca de loja, menu do usuário) vem primeiro no HTML para que a
+            navegação por teclado (tecla Tab) a partir do topo da página chegue
+            primeiro à Topbar, e só depois ao menu lateral completo — ordem de
+            tabulação mais intuitiva (item de backlog de acessibilidade). A
+            classe `order-2` restaura a posição visual original (menu à
+            esquerda, conteúdo à direita): `order` do CSS só muda a ordem
+            visual no flex, nunca a ordem de tabulação, que sempre segue a
+            ordem do DOM. */}
+        <div className="flex-1 flex flex-col min-w-0 order-2">{children}</div>
         <Sidebar
           initialCategories={categories}
           userName={session.user.name ?? session.user.email ?? "Usuário"}
@@ -74,7 +85,6 @@ export default async function PortalLayout({ children }: { children: React.React
           activeEmpresaId={empresaContext.mode === "single" ? empresaContext.empresa.id : "GRUPO"}
           canViewGrupoNord={empresaContext.canViewGrupoNord}
         />
-        <div className="flex-1 flex flex-col min-w-0">{children}</div>
       </div>
     </MobileSidebarProvider>
   );
