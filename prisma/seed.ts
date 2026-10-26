@@ -495,7 +495,41 @@ const CATEGORIES = [
       { key: "roleta", name: "Roleta de Prêmios", icon: "Gift" },
     ],
   },
+  {
+    // Reservas — Etapa 1 (estrutura administrativa; ver prisma/migrations/
+    // 20261026040000_reservas_etapa1_schema e 20261026041000_reservas_etapa1_menu_permissao
+    // para o equivalente de produção, já que o deploy automático nunca roda este seed). Só
+    // "Configurações" tem página própria nesta etapa
+    // (src/app/portal/reservas/configuracoes/page.tsx) — as outras 7 subcategorias caem no
+    // conteúdo genérico de fallback até ganharem tela própria nas próximas etapas (mesas/
+    // ambientes, disponibilidade, a reserva em si, fila de espera, CRM, relatórios).
+    key: "reservas",
+    name: "Reservas",
+    icon: "CalendarCheck",
+    order: 20,
+    contentType: "reservas",
+    subs: [
+      { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
+      { key: "reservas", name: "Reservas", icon: "ClipboardList" },
+      { key: "calendario", name: "Calendário", icon: "CalendarDays" },
+      { key: "mesas-ambientes", name: "Mesas e Ambientes", icon: "Armchair" },
+      { key: "fila-espera", name: "Fila de Espera", icon: "Hourglass" },
+      { key: "clientes", name: "Clientes", icon: "Users" },
+      { key: "relatorios", name: "Relatórios", icon: "BarChart3" },
+      { key: "configuracoes", name: "Configurações", icon: "Settings" },
+    ],
+  },
 ];
+
+// Perfis de permissão com acesso automático ao módulo "reservas" (ver prompt da tarefa
+// "reservas-etapa1" — decisão explícita do Matheus: "Gerentes poderão administrar reservas e
+// mesas, de acordo com suas permissões"). Diferente do loop genérico de MODULES mais abaixo
+// (que daria VISUALIZAR, ou seja, visível no menu, pra QUALQUER perfil sem linha própria, via
+// `defaultLevelForProfileKey`): aqui só Administrador/Gestor/Gerente ganham acesso automático —
+// os demais 5 perfis (supervisor, lider, funcionario, marketing, financeiro) nascem em NENHUM,
+// disponíveis pra liberação manual na tela de Permissões. Mesmo racional replicado em
+// prisma/migrations/20261026041000_reservas_etapa1_menu_permissao para produção.
+const RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS = new Set(["administrador", "gestor", "gerente"]);
 
 async function main() {
   console.log("Seeding database...");
@@ -684,13 +718,21 @@ async function main() {
     });
     const flags = ACCESS_LEVEL_TO_MODULE_FLAGS[defaultLevelForProfileKey(profile.key)];
     for (const mod of MODULES) {
+      // "reservas" tem uma regra de visibilidade padrão DIFERENTE do resto do catálogo
+      // `MODULES` (ver `RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS` acima) — só
+      // administrador/gestor/gerente ganham as flags padrão do cargo; os demais perfis
+      // nascem em NENHUM em vez do VISUALIZAR que o loop genérico daria.
+      const modFlags =
+        mod.key === "reservas" && !RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS.has(profile.key)
+          ? ACCESS_LEVEL_TO_MODULE_FLAGS.NENHUM
+          : flags;
       await prisma.modulePermission.upsert({
         where: { profileId_moduleKey: { profileId: record.id, moduleKey: mod.key } },
         update: {},
         create: {
           profileId: record.id,
           moduleKey: mod.key,
-          ...flags,
+          ...modFlags,
         },
       });
     }
