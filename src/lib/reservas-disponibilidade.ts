@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import type { ReservationStatus } from "@prisma/client";
 import { spDateKey, spStartOfDay } from "@/lib/timezone";
 import { spDateTime, spWeekday } from "@/lib/checklist";
+import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 
 /**
  * Motor de disponibilidade de Reservas (Etapa 2) — ver prompt da tarefa "reservas-etapa2" (seção
@@ -16,6 +18,11 @@ import { spDateTime, spWeekday } from "@/lib/checklist";
  * "YYYY-MM-DD" + "HH:mm" em instante de São Paulo e calcula o dia da semana na mesma convenção
  * de `ReservationWeekdayHours.dayOfWeek` — 0 = domingo ... 6 = sábado) em vez de reinventar
  * conversão de fuso horário aqui.
+ *
+ * Etapa 3 (página pública `/reservar/[empresaKey]`) acrescentou `getMonthAvailability` (resumo de
+ * disponibilidade por dia, para o calendário) e os campos de contato/código curto de confirmação
+ * em `reserveTablesTransacted` — o resto do motor (incluindo `getAvailability`, já em produção
+ * desde a Etapa 2) não mudou.
  */
 
 /** Status de reserva que ainda OCUPA uma mesa (conta para conflito de horário). Finalizada,
@@ -337,15 +344,88 @@ export async function getAvailability(params: {
   };
 }
 
+export type DayAvailabilityStatus = "fechado" | "bloqueado" | "fora-do-prazo" | "sem-horario" | "disponivel";
+
+export type DayAvailability = {
+  dateKey: string;
+  status: DayAvailabilityStatus;
+  /** Só presente quando `status` é "sem-horario" ou "disponivel" (dia aberto) — mesmo campo de
+   * `AvailabilityResult.isSpecialGroup`, repassado pra o calendário poder sinalizar visualmente
+   * que aquele `partySize` é um grupo especial (ver `ReservationSettings.specialGroupThreshold`;
+   * o processo diferenciado em si continua fora de escopo, só o aviso visual). */
+  isSpecialGroup?: boolean;
+};
+
 /**
- * Cria uma reserva de forma segura contra concorrência — base para a Etapa 4 (fluxo de
- * confirmação de reserva), sem UI própria ainda nesta etapa. Mesmo padrão de
- * `pg_try_advisory_xact_lock` já usado em `syncBankTransactions` (src/lib/bank-sync-server.ts):
- * trava por ATRIBUIÇÃO DE RECURSO (aqui, o ambiente inteiro — todas as mesas de um ambiente
- * compartilham a mesma trava, já que uma combinação pode envolver qualquer mesa dele) dentro de
- * uma transação, revalida o conflito DEPOIS de obter a trava (a consulta de disponibilidade feita
- * antes de chamar esta função pode estar desatualizada no instante em que duas requisições
- * concorrentes chegam aqui) e só então grava a reserva + as atribuições de mesa.
+ * Resumo de disponibilidade de um MÊS inteiro (um status por dia, não a grade de horários) — usado
+ * pelo calendário da página pública (Etapa 3, `/reservar/[empresaKey]`) para colorir cada dia sem
+ * precisar que o cliente abra um por um. Reaproveita `getAvailability` dia a dia (nenhuma lógica de
+ * disponibilidade duplicada aqui) — ver `src/app/api/reservar/[empresaKey]/disponibilidade/route.ts`.
+ *
+ * Custo: um dia fechado/bloqueado/fora-do-prazo sai barato (`getAvailability` retorna cedo, antes
+ * de consultar mesas/combinações/ocupação); só dias efetivamente abertos E dentro da janela de
+ * antecedência pagam o custo completo da consulta. Para uma loja com `maxAdvanceDays` grande e
+ * tráfego alto, isso pode virar um ponto de otimização futura (ex.: uma versão que busca mesas/
+ * combinações/ocupação do mês inteiro de uma vez e itera em memória) — não feito nesta etapa por
+ * não ser necessário para o volume esperado de uma reserva de restaurante.
+ */
+export async function getMonthAvailability(params: {
+  empresaId: string;
+  environmentId: string;
+  partySize: number;
+  /** Ano cheio (ex.: 2026). */
+  year: number;
+  /** Mês 1-12 (NÃO 0-based — diferente do `Date` nativo do JS). */
+  month: number;
+}): Promise<{ days: DayAvailability[] }> {
+  const { empresaId, environmentId, partySize, year, month } = params;
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  const days: DayAvailability[] = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const result = await getAvailability({ empresaId, environmentId, dateKey, partySize });
+    if (!result.open) {
+      days.push({ dateKey, status: result.reason });
+      continue;
+    }
+    const hasAvailableSlot = result.slots.some((s) => s.available);
+    days.push({ dateKey, status: hasAvailableSlot ? "disponivel" : "sem-horario", isSpecialGroup: result.isSpecialGroup });
+  }
+  return { days };
+}
+
+/** Alfabeto do código curto de confirmação (`Reservation.confirmationCode`) sem caracteres
+ * ambíguos por telefone/e-mail: sem `0`/`O`, sem `1`/`I`. 32 símbolos, 6 caracteres = 32^6 (~1
+ * bilhão) combinações — colisão é rara o bastante para resolver só com um retry simples em vez de
+ * um contador atômico sequencial (padrão mais pesado, usado por `FeedbackProtocolCounter` para um
+ * formato tipo "BUG-000105" — não necessário aqui). */
+const CONFIRMATION_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const CONFIRMATION_CODE_LENGTH = 6;
+const CONFIRMATION_CODE_MAX_ATTEMPTS = 8;
+
+function generateConfirmationCode(): string {
+  let code = "";
+  for (let i = 0; i < CONFIRMATION_CODE_LENGTH; i++) {
+    code += CONFIRMATION_CODE_ALPHABET[Math.floor(Math.random() * CONFIRMATION_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+function isConfirmationCodeConflict(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "confirmationCode") ?? true);
+}
+
+/**
+ * Cria uma reserva de forma segura contra concorrência — motor interno consumido pela página
+ * pública da Etapa 3 (`POST /api/reservar/[empresaKey]/reservas`, ver `src/lib/reservas-publico.ts`
+ * para a seleção de mesa/combinação e validação de entrada feitas ANTES de chamar esta função).
+ * Mesmo padrão de `pg_try_advisory_xact_lock` já usado em `syncBankTransactions`
+ * (src/lib/bank-sync-server.ts): trava por ATRIBUIÇÃO DE RECURSO (aqui, o ambiente inteiro — todas
+ * as mesas de um ambiente compartilham a mesma trava, já que uma combinação pode envolver qualquer
+ * mesa dele) dentro de uma transação, revalida o conflito DEPOIS de obter a trava (a consulta de
+ * disponibilidade feita antes de chamar esta função pode estar desatualizada no instante em que
+ * duas requisições concorrentes chegam aqui) e só então grava a reserva + as atribuições de mesa.
  */
 export async function reserveTablesTransacted(params: {
   empresaId: string;
@@ -357,52 +437,97 @@ export async function reserveTablesTransacted(params: {
   partySize: number;
   clienteId?: string | null;
   cleaningMinutes: number;
-}): Promise<{ id: string }> {
-  const { empresaId, environmentId, tableIds, dateKey, startTime, endTime, partySize, clienteId, cleaningMinutes } = params;
+  /** Contato de quem fez a reserva (Etapa 3) — ver comentário em `Reservation.customerName` no
+   * schema. Sempre informados pelo fluxo público; opcionais aqui só para não travar uma eventual
+   * chamada futura (fora de escopo desta etapa) que não tenha esse contato em mãos. */
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+}): Promise<{ id: string; confirmationCode: string }> {
+  const {
+    empresaId,
+    environmentId,
+    tableIds,
+    dateKey,
+    startTime,
+    endTime,
+    partySize,
+    clienteId,
+    cleaningMinutes,
+    customerName,
+    customerPhone,
+    customerEmail,
+  } = params;
   if (tableIds.length === 0) throw new Error("Informe ao menos uma mesa.");
 
-  return prisma.$transaction(async (tx) => {
-    const [{ locked }] = await tx.$queryRaw<{ locked: boolean }[]>`
-      SELECT pg_try_advisory_xact_lock(hashtextextended(${`reservas-ambiente:${environmentId}`}, 0)) AS locked
-    `;
-    if (!locked) throw new ReservationBusyError();
+  // Retry da TRANSAÇÃO INTEIRA em caso de colisão do código curto (ver `isConfirmationCodeConflict`
+  // e o comentário do alfabeto acima) — nunca só da query de `create` dentro da MESMA transação já
+  // aberta: depois que uma query de uma transação Postgres falha com um erro real de constraint
+  // (`23505`), a transação inteira entra em estado "abortado" e qualquer query seguinte nela falha
+  // com `25P02`/P2039 ("current transaction is aborted"), inclusive um novo `tx.reservation.create`
+  // com um código diferente — achado do Teulis na revisão desta etapa, reproduzido ao vivo (a
+  // versão anterior deste código tentava de novo dentro da mesma transação e vazava um 500 cru já
+  // na 2ª tentativa). Refazer a transação do zero a cada colisão também já revalida o lock/conflito
+  // de novo, o que é correto (e não TEM que ser barato: colisão de 6 caracteres sem caracteres
+  // ambíguos é rara, ver `CONFIRMATION_CODE_ALPHABET`).
+  for (let attempt = 1; attempt <= CONFIRMATION_CODE_MAX_ATTEMPTS; attempt++) {
+    const confirmationCode = generateConfirmationCode();
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const [{ locked }] = await tx.$queryRaw<{ locked: boolean }[]>`
+          SELECT pg_try_advisory_xact_lock(hashtextextended(${`reservas-ambiente:${environmentId}`}, 0)) AS locked
+        `;
+        if (!locked) throw new ReservationBusyError();
 
-    // Revalida o conflito DENTRO da trava — a consulta de disponibilidade usada para decidir
-    // `tableIds` pode ter ficado desatualizada entre o momento em que foi feita e agora (ex.:
-    // outra reserva concorrente acabou de ocupar uma dessas mesas).
-    const cleaningMs = cleaningMinutes * 60 * 1000;
-    const from = spStartOfDay(addDaysToDateKey(dateKey, -1));
-    const to = spStartOfDay(addDaysToDateKey(dateKey, 2));
-    const candidates = await tx.reservation.findMany({
-      where: {
-        environmentId,
-        status: { in: RESERVATION_OCCUPYING_STATUSES },
-        date: { gte: from, lt: to },
-        tables: { some: { tableId: { in: tableIds } } },
-      },
-      select: { startTime: true, endTime: true, tables: { select: { tableId: true } } },
-    });
-    const hasConflict = candidates.some((r) => {
-      const occupiedEnd = new Date(r.endTime.getTime() + cleaningMs);
-      const overlaps = r.startTime < endTime && occupiedEnd > startTime;
-      return overlaps && r.tables.some((t) => tableIds.includes(t.tableId));
-    });
-    if (hasConflict) throw new ReservationConflictError();
+        // Revalida o conflito DENTRO da trava — a consulta de disponibilidade usada para decidir
+        // `tableIds` pode ter ficado desatualizada entre o momento em que foi feita e agora (ex.:
+        // outra reserva concorrente acabou de ocupar uma dessas mesas).
+        const cleaningMs = cleaningMinutes * 60 * 1000;
+        const from = spStartOfDay(addDaysToDateKey(dateKey, -1));
+        const to = spStartOfDay(addDaysToDateKey(dateKey, 2));
+        const candidates = await tx.reservation.findMany({
+          where: {
+            environmentId,
+            status: { in: RESERVATION_OCCUPYING_STATUSES },
+            date: { gte: from, lt: to },
+            tables: { some: { tableId: { in: tableIds } } },
+          },
+          select: { startTime: true, endTime: true, tables: { select: { tableId: true } } },
+        });
+        const hasConflict = candidates.some((r) => {
+          const occupiedEnd = new Date(r.endTime.getTime() + cleaningMs);
+          const overlaps = r.startTime < endTime && occupiedEnd > startTime;
+          return overlaps && r.tables.some((t) => tableIds.includes(t.tableId));
+        });
+        if (hasConflict) throw new ReservationConflictError();
 
-    const reservation = await tx.reservation.create({
-      data: {
-        empresaId,
-        environmentId,
-        clienteId: clienteId ?? null,
-        date: spStartOfDay(dateKey),
-        startTime,
-        endTime,
-        partySize,
-        status: "PENDENTE",
-        tables: { create: tableIds.map((tableId) => ({ tableId })) },
-      },
-    });
-    return { id: reservation.id };
-  });
+        const reservation = await tx.reservation.create({
+          data: {
+            empresaId,
+            environmentId,
+            clienteId: clienteId ?? null,
+            confirmationCode,
+            customerName: customerName ?? null,
+            customerPhone: customerPhone ?? null,
+            customerEmail: customerEmail ?? null,
+            date: spStartOfDay(dateKey),
+            startTime,
+            endTime,
+            partySize,
+            status: "PENDENTE",
+            tables: { create: tableIds.map((tableId) => ({ tableId })) },
+          },
+        });
+        return { id: reservation.id, confirmationCode: reservation.confirmationCode };
+      });
+    } catch (err) {
+      if (attempt === CONFIRMATION_CODE_MAX_ATTEMPTS || !isConfirmationCodeConflict(err)) throw err;
+      // Colisão de código: a transação inteira já foi revertida pelo Prisma (nenhuma mesa foi
+      // "gasta") — tenta de novo do zero, com um código novo, no próximo giro do loop.
+    }
+  }
+  // Inalcançável (o loop acima sempre retorna ou relança no último attempt) — só para o TypeScript
+  // entender que a função nunca "cai pro fim" sem devolver nada.
+  throw new Error("Não foi possível gerar um código de confirmação único.");
 }
 
