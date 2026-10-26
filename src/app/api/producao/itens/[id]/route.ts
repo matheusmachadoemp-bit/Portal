@@ -55,6 +55,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const body = await req.json();
 
+  // Produto desativado não pode ser editado por chamada direta à API (a tela
+  // já esconde itens inativos da lista, mas isso não impede uma chamada
+  // direta) — a única exceção é o próprio PATCH tentando REATIVAR o item
+  // (`active: true` explícito no corpo), caso esse fluxo venha a existir.
+  if (existing.active === false && body.active !== true) {
+    return NextResponse.json(
+      { error: "Este produto foi desativado e não pode mais ser editado." },
+      { status: 400 }
+    );
+  }
+
   if (body.fotoUrl && !isValidBlobUrl(body.fotoUrl)) {
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
