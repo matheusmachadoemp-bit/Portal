@@ -432,3 +432,31 @@ Ao terminar: `npx prisma dev rm --force <nome_unico_da_tarefa>` (não precisa
 de `DROP DATABASE` manual — é uma instância efêmera, não o Postgres
 persistente do sistema). Mesmo cuidado de nome único por tarefa de sempre,
 pra não colidir com uma instância de outro agente rodando em paralelo.
+
+## `npx prisma dev` + `migrate dev`/`migrate deploy` falha com P3005: use `DROP SCHEMA` antes
+
+Achado do Mylon, confirmado de forma independente pelo Teulis (Etapa 1 do
+módulo Reservas): um banco recém-criado por `npx prisma dev --name X` já
+nasce com o `schema.prisma` ATUAL inteiro sincronizado como DDL puro (tipo
+um `db push` automático) — mas **sem nenhuma tabela `_prisma_migrations`**,
+ou seja, sem histórico de migration nenhum registrado. Rodar `prisma migrate
+dev` ou `migrate deploy` logo em seguida falha com P3005 ("the database is
+not empty") sempre, porque o Prisma vê um schema já preenchido e nenhum
+histórico pra conciliar. **Isso é comportamento genuíno da ferramenta nesta
+versão do Prisma — não é o bloqueio do classificador do sandbox nem
+peculiaridade de ambiente de um agente específico.**
+
+**Correção, mais simples que recriar a instância ou fazer replay manual via
+`psql -f`**: no mesmo banco que o `prisma dev` acabou de criar, esvazie de
+verdade o schema antes de aplicar as migrations:
+
+```
+psql "<DATABASE_URL TCP de npx prisma dev ls>" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+npx prisma migrate deploy
+```
+
+Depois disso, `migrate deploy` aplica todo o histórico (produção + a(s)
+migration(s) nova(s) da tarefa) sem erro — confirme com `prisma migrate
+status` ("Database schema is up to date!") e, se quiser certeza total de que
+bate com o `schema.prisma`, `prisma migrate diff --from-config-datasource
+--to-schema=prisma/schema.prisma --exit-code` (sem saída = sem diferença).
