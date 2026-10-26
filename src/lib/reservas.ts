@@ -35,3 +35,21 @@ const HHMM_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 export function isValidHHMM(value: unknown): value is string {
   return typeof value === "string" && HHMM_PATTERN.test(value);
 }
+
+// Reservas — Etapa 2 (mesas, ambientes e motor de disponibilidade). Constantes compartilhadas
+// entre as rotas de API (src/app/api/reservas/{ambientes,mesas,combinacoes,disponibilidade}/**)
+// e a tela de Mesas e Ambientes (src/app/portal/reservas/mesas-ambientes/**).
+
+export const RESERVATION_TABLE_STATUS_LABEL: Record<string, string> = {
+  DISPONIVEL: "Disponível",
+  MANUTENCAO: "Manutenção",
+  INATIVA: "Inativa",
+};
+
+export const RESERVATION_TABLE_STATUSES = Object.keys(RESERVATION_TABLE_STATUS_LABEL);
+
+/** Valida um inteiro positivo (capacidade de ambiente/mesa, quantidade de pessoas etc.) vindo de
+ * fora — `Number.isInteger` sozinho aceita `0`/negativo, por isso o `> 0` explícito. */
+export function isPositiveInt(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
