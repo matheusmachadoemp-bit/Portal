@@ -204,6 +204,7 @@ model User {
   feedbackAttachments                FeedbackAttachment[]
   feedbackHistoricoEntries           FeedbackHistory[]
   feedbackComments                   FeedbackComment[]
+  reservationBlockedDatesCreated     ReservationBlockedDate[]            @relation("ReservationBlockedDateCreatedBy")
 }
 
 model UserPermission {
@@ -405,6 +406,12 @@ model Empresa {
   scheduleChangeLogs                 ScheduleChangeLog[]
   subcategories                      Subcategory[]
   feedbackReports                    FeedbackReport[]
+  // Reservas — Etapa 1 (estrutura administrativa, ver model ReservationSettings abaixo):
+  // configuração de funcionamento (1:1, mesmo padrão de productionSettings acima) e bloqueios
+  // de data excepcionais (feriados). Mesas/Ambientes/Reserva propriamente ditos ficam para as
+  // próximas etapas, fora do escopo desta.
+  reservationSettings                ReservationSettings?
+  reservationBlockedDates            ReservationBlockedDate[]
 }
 
 model UserEmpresaAccess {
@@ -6527,4 +6534,67 @@ model FeedbackComment {
   createdAt        DateTime       @default(now())
 
   @@index([feedbackReportId])
+}
+
+// ---------------------------------------------------------------------------
+// RESERVAS — Etapa 1 (estrutura administrativa: menu, permissão, configuração
+// de funcionamento/bloqueios). Mesas/Ambientes, disponibilidade, a reserva em
+// si, fila de espera, CRM/notificações e relatórios são etapas futuras —
+// propositalmente fora do escopo deste bloco (ver prompt da tarefa
+// "reservas-etapa1"). Model `ReservationSettings` 1:1 com `Empresa` (cada
+// loja Nord pode ter horário de funcionamento diferente), com os 7 dias da
+// semana numa tabela relacionada (`ReservationWeekdayHours`) em vez de 7
+// pares de campos booleano+horário direto em `ReservationSettings` — mais
+// fácil de ler/editar um dia por vez na tela de Configurações e extensível
+// (ex.: capacidade por dia) sem precisar de mais uma migration de schema no
+// futuro.
+// ---------------------------------------------------------------------------
+
+model ReservationSettings {
+  id        String   @id @default(cuid())
+  empresaId String   @unique
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  weekdayHours ReservationWeekdayHours[]
+}
+
+model ReservationWeekdayHours {
+  id         String               @id @default(cuid())
+  settingsId String
+  settings   ReservationSettings  @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  /// 0 = Domingo ... 6 = Sábado — mesma convenção de `ProductionWeekdayWeight.weekday` e de
+  /// `WEEKDAY_LABEL` (src/lib/producao.ts), reaproveitada aqui para não inventar uma segunda
+  /// convenção de índice de dia da semana no mesmo schema.
+  dayOfWeek  Int
+  /// Terça-feira já nasce com `open: false` por padrão (seed inicial) — decisão do Matheus
+  /// confirmada no pedido original desta etapa. Os demais dias nascem abertos. Tudo ajustável
+  /// depois na tela de Configurações.
+  open       Boolean              @default(true)
+  /// "HH:mm", sempre America/Sao_Paulo — mesma convenção de `TaskRecurrence.releaseTime`/
+  /// `ChecklistTemplate.horarioLiberacao` (ver src/lib/timezone.ts para o restante do schema que
+  /// grava DIA como instante; aqui é só HORA do dia, sem data, por isso string simples em vez de
+  /// `DateTime`).
+  openTime   String               @default("18:00")
+  closeTime  String               @default("23:00")
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([settingsId, dayOfWeek])
+}
+
+model ReservationBlockedDate {
+  id          String   @id @default(cuid())
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id])
+  /// DIA: meia-noite America/Sao_Paulo (spStartOfDay) — gravar via `parseDayInput`
+  /// (src/lib/timezone.ts), mesma convenção das demais colunas de DIA do schema (ex.:
+  /// `Vacation.dataInicio`, `Payable.dataCompetencia`).
+  date        DateTime
+  reason      String?
+  createdById String?
+  createdBy   User?    @relation("ReservationBlockedDateCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([empresaId, date])
 }
