@@ -10,7 +10,7 @@ import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
 import { spDateKey } from "@/lib/timezone";
-import { PURCHASE_STATUS, PURCHASE_STATUS_LABEL, PURCHASE_STATUS_TONE } from "@/lib/estoque";
+import { PURCHASE_PAYMENT_METHODS, PURCHASE_STATUS, PURCHASE_STATUS_LABEL, PURCHASE_STATUS_TONE } from "@/lib/estoque";
 import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 import { type RollingPeriodKey } from "@/lib/periods";
 
@@ -65,11 +65,6 @@ const EMPTY_EDIT_FORM: EditForm = {
   desconto: "0",
   frete: "0",
 };
-
-// Mesma lista usada em Financeiro > Contas a Pagar (contas-pagar-client.tsx) para "pagar um
-// fornecedor" — diferente de SALE_PAYMENT_METHODS (como o CLIENTE pagou a loja), que traz
-// Voucher/Pago Online/Fiado, sem sentido para pagamento a fornecedor.
-const PURCHASE_PAYMENT_METHODS = ["PIX", "DINHEIRO", "CARTAO_DEBITO", "CARTAO_CREDITO", "TED", "DOC", "TRANSFERENCIA", "CHEQUE", "BOLETO", "OUTRO"] as const;
 
 export function ComprasClient({
   initialPurchases,
@@ -453,7 +448,7 @@ export function ComprasClient({
                       <button onClick={() => setDetail(p)} className="text-xs text-nord-blue-light hover:underline">
                         Detalhes
                       </button>
-                      {canCreate && !p.recebido && (
+                      {canCreate && !p.recebido && p.status !== "CANCELADO" && (
                         <button onClick={() => openEdit(p)} className="text-xs text-nord-gray hover:text-white hover:underline">
                           Editar
                         </button>
