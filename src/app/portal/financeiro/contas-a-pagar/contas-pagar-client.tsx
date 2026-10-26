@@ -14,6 +14,7 @@ import { apiRequest } from "@/lib/api-client";
 import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
 import { detailPercent, isAboveAgreed, itemKey, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
 import { normalizeScannedCode, extractBoletoFields } from "@/lib/boleto-barcode";
+import { PURCHASE_PAYMENT_METHODS } from "@/lib/estoque";
 import {
   CompraItensEditor,
   EMPTY_DECISION,
@@ -95,18 +96,9 @@ const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" |
   ATRASADO: "danger",
 };
 
-const PAYMENT_METHODS = [
-  "PIX",
-  "DINHEIRO",
-  "CARTAO_DEBITO",
-  "CARTAO_CREDITO",
-  "TED",
-  "DOC",
-  "TRANSFERENCIA",
-  "CHEQUE",
-  "BOLETO",
-  "OUTRO",
-];
+/** Mesma lista de formas de pagamento usada em Estoque > Compras — ver `PURCHASE_PAYMENT_METHODS`
+ *  em `@/lib/estoque` (Contas a Pagar também é sempre "a empresa pagando um fornecedor/conta"). */
+const PAYMENT_METHODS = PURCHASE_PAYMENT_METHODS;
 
 const emptyForm = {
   number: "",
