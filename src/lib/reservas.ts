@@ -53,3 +53,22 @@ export const RESERVATION_TABLE_STATUSES = Object.keys(RESERVATION_TABLE_STATUS_L
 export function isPositiveInt(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
+
+// Reservas — Etapa 3 (página pública `/reservar/[empresaKey]`). `onlyDigits` fica aqui (em vez de
+// reexportado de `src/lib/customer-survey-server.ts`, que já tem uma cópia idêntica) porque este
+// arquivo não importa Prisma — pode ser usado tanto pelas rotas públicas novas (server) quanto
+// pelo componente client do formulário (`"use client"`, nunca pode puxar o Prisma Client pro
+// bundle do navegador), mesmo racional já documentado em `avaliar-client.tsx`.
+
+/** Mantém só os dígitos de um telefone informado em texto livre (com DDD, com ou sem máscara). */
+export function onlyDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Validação simples de formato (não confirma que o e-mail existe/recebe mensagens) — suficiente
+ * para recusar erros de digitação óbvios num campo opcional do formulário público. */
+export function isValidEmail(value: string): boolean {
+  return EMAIL_PATTERN.test(value);
+}

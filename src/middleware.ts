@@ -15,6 +15,12 @@ const PUBLIC_PATHS = [
   "/api/estoque/recebimento/responder",
   "/avaliar",
   "/api/satisfacao-cliente/responder",
+  // Reservas — Etapa 3: página pública de reserva (sem login) + as duas rotas de API públicas que
+  // ela consome (consulta de disponibilidade e criação da reserva). Prefixo `/api/reservar`
+  // (verbo) de propósito — não bate por `startsWith` com `/api/reservas` (substantivo, rotas
+  // autenticadas da Etapa 1/2: na 13ª posição da string uma tem "r" e a outra "s").
+  "/reservar",
+  "/api/reservar",
 ];
 
 // Caminhos públicos liberados por IGUALDADE exata (não por prefixo): rota nova criada embaixo deles

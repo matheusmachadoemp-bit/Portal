@@ -801,9 +801,12 @@ model Cliente {
   historicoImportado      ClienteHistoricoImportado[]
   customerSurveyResponses CustomerSurveyResponse[]
   rouletteSpins           RouletteSpin[]
-  // Reservas — Etapa 2: ligação opcional (nullable) com o módulo de Reservas — a ligação de
+  // Reservas — Etapa 2/3: ligação opcional (nullable) com o módulo de Reservas — a ligação de
   // verdade com CRM (histórico, VIP etc.) é de etapa futura; por enquanto é só "esta reserva foi
-  // feita por este cliente já cadastrado", quando aplicável.
+  // feita por este cliente já cadastrado", quando o telefone informado no fluxo público (Etapa 3,
+  // `/reservar/[empresaKey]`) já bate com um Cliente existente da loja. O fluxo público nunca cria
+  // um Cliente novo a partir de uma reserva — ver `Reservation.customerName`/`customerPhone`/
+  // `customerEmail` para onde o contato informado fica guardado quando não há Cliente associado.
   reservations            Reservation[]
 
   @@unique([empresaId, telefone])
@@ -6789,8 +6792,9 @@ enum ReservationStatus {
   NAO_COMPARECEU
 }
 
-/// Schema mínimo para o motor de disponibilidade (ver comentário no topo deste bloco) — sem
-/// nenhuma tela de criar/listar reserva ainda; isso é de etapa futura.
+/// Etapa 3 (página pública `/reservar/[empresaKey]`, ver `src/lib/reservas-disponibilidade.ts` e
+/// `src/lib/reservas-publico.ts`) acrescentou os campos de contato/código abaixo — o resto do
+/// model continua o schema mínimo da Etapa 2 para o motor de disponibilidade.
 model Reservation {
   id            String                       @id @default(cuid())
   empresaId     String
@@ -6799,6 +6803,23 @@ model Reservation {
   environment   ReservationEnvironment       @relation(fields: [environmentId], references: [id])
   clienteId     String?
   cliente       Cliente?                     @relation(fields: [clienteId], references: [id])
+  /// Código curto (6 caracteres, alfabeto sem 0/O/1/I para não confundir por telefone) mostrado
+  /// ao cliente na tela de confirmação da Etapa 3 — muito mais fácil de informar de volta pro
+  /// estabelecimento do que o `id` (cuid, 25 caracteres). Gerado e garantido único dentro de
+  /// `reserveTablesTransacted` (retry em caso de colisão, ver `src/lib/reservas-disponibilidade.ts`).
+  confirmationCode String                    @unique
+  /// Contato de quem fez a reserva pelo fluxo público — ver o comentário acima de
+  /// `Cliente.reservations` (prisma/schema.prisma): a ligação "de verdade" com o CRM (histórico,
+  /// VIP) é de etapa futura, então este fluxo NÃO força a criação de um `Cliente` completo.
+  /// `customerName`/`customerPhone` são sempre preenchidos pelo formulário público (nunca null na
+  /// prática, mas ficam nullable no schema para não travar uma eventual reserva futura criada
+  /// pelo próprio staff sem captura de contato do cliente — fora de escopo desta etapa);
+  /// `customerEmail` é opcional de verdade. Quando `customerPhone` já bate com um `Cliente`
+  /// existente da mesma loja (`Cliente.empresaId_telefone`), `clienteId` é preenchido também como
+  /// bônus de cross-reference — mas nenhum `Cliente` novo é criado a partir daqui.
+  customerName  String?
+  customerPhone String?
+  customerEmail String?
   /// DIA da reserva, meia-noite America/Sao_Paulo (`spStartOfDay`) — mesma convenção do resto do
   /// schema (ver `src/lib/timezone.ts`). Redundante com `startTime` de propósito: filtrar "todas
   /// as reservas do dia X" por uma coluna de DIA pura é mais simples/barato do que teria que
