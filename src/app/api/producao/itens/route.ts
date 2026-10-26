@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const categoria = searchParams.get("categoria");
   const q = searchParams.get("q");
 
-  const where: Record<string, unknown> = { empresaId: { in: empresaIds } };
+  const where: Record<string, unknown> = { empresaId: { in: empresaIds }, active: true };
   if (categoria) where.categoryId = categoria;
   if (q) where.name = { contains: q, mode: "insensitive" };
 
