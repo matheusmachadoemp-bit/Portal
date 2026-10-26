@@ -74,6 +74,19 @@ export class ReservationBusyError extends Error {
   }
 }
 
+/** Esgotamento real das `CONFIRMATION_CODE_MAX_ATTEMPTS` tentativas de gerar um código curto de
+ * confirmação sem colisão (ver `CONFIRMATION_CODE_ALPHABET` — praticamente impossível com 32^6
+ * combinações, mas ainda um caso de erro genuíno do código, não um erro "inesperado" de
+ * infraestrutura). Achado do Teulis na revisão da Etapa 3: antes desse erro específico existir,
+ * esse caso virava um 500 genérico na rota — semanticamente deveria ser um 503 (serviço/recurso
+ * temporariamente esgotado), já que é razoável esperar que tentar de novo mais tarde funcione. */
+export class ReservationCodeExhaustedError extends Error {
+  constructor() {
+    super("Não foi possível gerar um código de confirmação único após várias tentativas.");
+    this.name = "ReservationCodeExhaustedError";
+  }
+}
+
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
@@ -521,13 +534,16 @@ export async function reserveTablesTransacted(params: {
         return { id: reservation.id, confirmationCode: reservation.confirmationCode };
       });
     } catch (err) {
-      if (attempt === CONFIRMATION_CODE_MAX_ATTEMPTS || !isConfirmationCodeConflict(err)) throw err;
+      if (!isConfirmationCodeConflict(err)) throw err;
+      // Esgotou as tentativas de verdade (todas colidiram) — erro semântico específico (503 na
+      // rota), não o erro cru do Prisma (P2002) nem um 500 genérico.
+      if (attempt === CONFIRMATION_CODE_MAX_ATTEMPTS) throw new ReservationCodeExhaustedError();
       // Colisão de código: a transação inteira já foi revertida pelo Prisma (nenhuma mesa foi
       // "gasta") — tenta de novo do zero, com um código novo, no próximo giro do loop.
     }
   }
   // Inalcançável (o loop acima sempre retorna ou relança no último attempt) — só para o TypeScript
   // entender que a função nunca "cai pro fim" sem devolver nada.
-  throw new Error("Não foi possível gerar um código de confirmação único.");
+  throw new ReservationCodeExhaustedError();
 }
 

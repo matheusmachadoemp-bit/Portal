@@ -4,6 +4,7 @@ import { parseDateKey } from "@/lib/timezone";
 import { isPositiveInt, isValidHHMM, onlyDigits, isValidEmail } from "@/lib/reservas";
 import {
   ReservationBusyError,
+  ReservationCodeExhaustedError,
   ReservationConflictError,
   getAvailability,
   reserveTablesTransacted,
@@ -128,6 +129,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
   } catch (err) {
     if (err instanceof ReservationBusyError || err instanceof ReservationConflictError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    if (err instanceof ReservationCodeExhaustedError) {
+      // Esgotamento real das tentativas de código curto (achado do Teulis na revisão da Etapa 3)
+      // — 503 em vez do 500 genérico abaixo: não é um erro "inesperado" de infraestrutura, é um
+      // limite de tentativas atingido, caso em que tentar de novo em instantes tende a resolver.
+      // Mesmo assim, colisão esgotada nas 8 tentativas é praticamente impossível com 32^6
+      // combinações (ver comentário da classe) — se acontecer de verdade merece investigação, por
+      // isso o log abaixo (mesmo padrão do catch genérico), mesmo sem mudar o status/mensagem.
+      console.error("[POST /api/reservar/[empresaKey]/reservas] código de confirmação esgotado:", err);
+      return NextResponse.json(
+        { error: "Não foi possível gerar um código de confirmação agora, tente novamente em alguns instantes." },
+        { status: 503 },
+      );
     }
     // Qualquer outro erro (ex.: falha de conexão/driver com o banco) — nunca vaza detalhe interno
     // pra uma rota pública; fica logado no servidor para investigação.
