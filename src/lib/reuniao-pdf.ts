@@ -333,8 +333,13 @@ export function exportMeetingReportPdf(params: {
     centeredText(doc, "FOCO EM RESULTADOS. PAIXÃO EM SERVIR.", centerX, pageHeight - 10);
   });
 
-  // Página final: resumo + observações
-  doc.addPage();
+  // Página final: resumo + observações — só abre página nova se o loop de indicadores acima já
+  // tiver desenhado algo na página 1 (criada junto com `new jsPDF(...)`, sempre em branco até
+  // aqui). Com `indicators` vazio (empresa sem indicador cadastrado neste período, ou "Grupo
+  // Nord" consolidado) o loop não roda nenhuma vez — chamar `addPage()` incondicionalmente
+  // deixava essa página 1 sem fundo/marca nenhum, como uma folha em branco solta na frente do
+  // resumo, em vez de reaproveitá-la pra desenhar o resumo nela mesma.
+  if (indicators.length > 0) doc.addPage();
   drawPageBackground(doc, pageWidth, pageHeight);
   drawWordmark(doc, margin, 16);
 
@@ -368,43 +373,58 @@ export function exportMeetingReportPdf(params: {
   // Tabela de indicadores: comparação dos até 3 meses de histórico (mês selecionado +
   // 2 anteriores) já calculado por cada tela em `ind.historico` — substitui o antigo
   // conceito de META/STATUS, que não existe mais pros indicadores fixos.
-  const monthLabels = (indicators[0]?.historico ?? []).slice(-3).map((h) => h.monthLabel);
-  const colCount = Math.max(monthLabels.length, 1);
-  const labelColWidth = 64;
-  const colsStartX = margin + labelColWidth;
-  const colsAreaWidth = pageWidth - margin - colsStartX;
-  const colWidth = colsAreaWidth / colCount;
-  const colCenterX = (idx: number) => colsStartX + colWidth * idx + colWidth / 2;
+  //
+  // `indicators` pode chegar vazio de verdade (empresa nova sem nenhum indicador customizado
+  // cadastrado ainda em "Fechamento do mês" pra este período, ou modo "Grupo Nord" consolidado,
+  // que não tem indicador próprio) — ver `cadastradoNoPeriodo` em reuniao-server.ts e o filtro
+  // em `buildCustomIndicatorPdfEntries` (fechamento-do-mes.tsx). Nesse caso, mostra uma mensagem
+  // no lugar da tabela em vez de só desenhar o cabeçalho "INDICADOR" sem nenhuma linha abaixo
+  // (mesmo padrão de "NENHUMA META CADASTRADA..." usado mais abaixo pro card de metas).
+  if (indicators.length === 0) {
+    setColor(doc, "setTextColor", COLOR.grayLight);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    centeredText(doc, "NENHUM INDICADOR CADASTRADO NESTE PERÍODO", centerX, rowY + 6);
+    rowY += 22;
+  } else {
+    const monthLabels = (indicators[0]?.historico ?? []).slice(-3).map((h) => h.monthLabel);
+    const colCount = Math.max(monthLabels.length, 1);
+    const labelColWidth = 64;
+    const colsStartX = margin + labelColWidth;
+    const colsAreaWidth = pageWidth - margin - colsStartX;
+    const colWidth = colsAreaWidth / colCount;
+    const colCenterX = (idx: number) => colsStartX + colWidth * idx + colWidth / 2;
 
-  setColor(doc, "setTextColor", COLOR.gray);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text("INDICADOR", margin, rowY);
-  monthLabels.forEach((label, idx) => {
-    const isCurrent = idx === monthLabels.length - 1;
-    setColor(doc, "setTextColor", isCurrent ? COLOR.blue : COLOR.gray);
-    centeredText(doc, label.toUpperCase(), colCenterX(idx), rowY);
-  });
-  rowY += 3;
-  setColor(doc, "setDrawColor", COLOR.grid);
-  doc.line(margin, rowY, pageWidth - margin, rowY);
-  rowY += 8;
-
-  for (const ind of indicators) {
-    const historico = ind.historico.slice(-3);
-    setColor(doc, "setFillColor", COLOR.gold);
-    doc.circle(margin + 1.5, rowY - 1.5, 1.5, "F");
-    setColor(doc, "setTextColor", COLOR.white);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(ind.label, margin + 5, rowY);
-    historico.forEach((point, idx) => {
-      const isCurrent = idx === historico.length - 1;
-      setColor(doc, "setTextColor", isCurrent ? COLOR.white : COLOR.grayLight);
-      doc.setFont("helvetica", isCurrent ? "bold" : "normal");
-      centeredText(doc, formatValue(ind.unit, point.value), colCenterX(idx), rowY);
+    setColor(doc, "setTextColor", COLOR.gray);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("INDICADOR", margin, rowY);
+    monthLabels.forEach((label, idx) => {
+      const isCurrent = idx === monthLabels.length - 1;
+      setColor(doc, "setTextColor", isCurrent ? COLOR.blue : COLOR.gray);
+      centeredText(doc, label.toUpperCase(), colCenterX(idx), rowY);
     });
-    rowY += 10;
+    rowY += 3;
+    setColor(doc, "setDrawColor", COLOR.grid);
+    doc.line(margin, rowY, pageWidth - margin, rowY);
+    rowY += 8;
+
+    for (const ind of indicators) {
+      const historico = ind.historico.slice(-3);
+      setColor(doc, "setFillColor", COLOR.gold);
+      doc.circle(margin + 1.5, rowY - 1.5, 1.5, "F");
+      setColor(doc, "setTextColor", COLOR.white);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(ind.label, margin + 5, rowY);
+      historico.forEach((point, idx) => {
+        const isCurrent = idx === historico.length - 1;
+        setColor(doc, "setTextColor", isCurrent ? COLOR.white : COLOR.grayLight);
+        doc.setFont("helvetica", isCurrent ? "bold" : "normal");
+        centeredText(doc, formatValue(ind.unit, point.value), colCenterX(idx), rowY);
+      });
+      rowY += 10;
+    }
   }
 
   // Observações da reunião — painel com destaque (era só um título pequeno + texto
