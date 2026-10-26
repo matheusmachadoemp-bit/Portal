@@ -34,16 +34,19 @@ export async function GET(req: Request) {
 
   const current = ctx.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
 
-  const metrics =
-    ctx.mode === "single"
-      ? await computeSalaoMetrics(ctx.empresa.id, periodo)
-      : { npsPercent: null, faturamentoValor: 0, ticketMedioValor: null };
+  // `computeSalaoMetrics` aqui no GET ficava calculado só pra entrar num campo `metrics` da
+  // resposta que nenhuma tela/PDF lê (confirmado: salao-client.tsx usa só `current`/
+  // `melhorVendedor`/`comentarios`/`customIndicators` — NPS/Faturamento/Ticket Médio ao vivo
+  // foram removidos da tela e do PDF, ver comentário de `exportPdf` em salao-client.tsx) —
+  // removido daqui; `computeSalaoMetrics` continua usado de verdade no POST abaixo (grava
+  // `npsPercent`/`faturamentoValor`/`ticketMedioValor` no registro) e em `computeGerenteMetrics`
+  // (só o `npsPercent`).
   const melhorVendedor =
     ctx.mode === "single" ? await computeMelhorVendedor(ctx.empresa.id, periodo) : { nome: null, valor: null };
   const comentarios = ctx.mode === "single" ? await computeComentariosDestaque(ctx.empresa.id, periodo) : [];
   const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "SALAO", periodo) : [];
 
-  return NextResponse.json({ meetings, current, metrics, melhorVendedor, comentarios, periodo, customIndicators });
+  return NextResponse.json({ meetings, current, melhorVendedor, comentarios, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {
