@@ -21,7 +21,18 @@ export async function PageContainer({
   return (
     <>
       <Topbar title={title} subtitle={subtitle} user={user} />
-      <main className="flex-1 p-6 space-y-6 max-w-[1600px] w-full mx-auto">
+      {/* `id`/`tabIndex={-1}` são o alvo do skip link ("Pular para o
+          conteúdo") renderizado em `src/app/portal/layout.tsx`: permitem
+          mover o foco pra cá via `href="#main-content"` mesmo este `<main>`
+          não sendo naturalmente focável. `outline-none` só tira o contorno
+          padrão do navegador ao redor do container inteiro quando o foco
+          chega por aqui — o link em si já mostra o próprio indicador visual
+          de foco antes de ser ativado. */}
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 p-6 space-y-6 max-w-[1600px] w-full mx-auto outline-none"
+      >
         {backHref && <BackButton href={backHref} label={backLabel} />}
         {children}
       </main>

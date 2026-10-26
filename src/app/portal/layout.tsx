@@ -54,6 +54,20 @@ export default async function PortalLayout({ children }: { children: React.React
 
   return (
     <MobileSidebarProvider>
+      {/* "Pular para o conteúdo": primeiro elemento focável da página inteira
+          (antes até da Topbar). Fica visualmente invisível (`sr-only`) até
+          receber foco pelo teclado (Tab) — aí vira um botão visível no canto
+          superior esquerdo. Quem navega só por teclado pode apertar Enter
+          nele pra ir direto pro conteúdo principal (`#main-content`, o
+          `<main>` de `PageContainer`), sem precisar passar item por item pela
+          Topbar nem pelo menu lateral inteiro. Padrão comum de acessibilidade
+          web (WCAG 2.4.1 "Bypass Blocks"). */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:inline-flex focus:items-center focus:rounded-lg focus:bg-nord-blue focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-white focus:shadow-xl focus:outline-none focus:ring-2 focus:ring-nord-blue-light"
+      >
+        Pular para o conteúdo
+      </a>
       <PushRegistration />
       <IosInstallBanner />
       {/* No primeiro login de verdade, o FirstLoginNotificationModal já é o
