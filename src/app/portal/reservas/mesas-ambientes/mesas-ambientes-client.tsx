@@ -416,6 +416,11 @@ export function MesasAmbientesClient({
 
   const comboFormTables = tables.filter((t) => t.environmentId === comboForm.environmentId);
 
+  // Uma combinação só pode juntar mesas do MESMO ambiente, então o botão "Nova combinação" só
+  // faz sentido aparecer quando existir ao menos um ambiente com 2+ mesas — ter 2+ mesas no
+  // total espalhadas em ambientes diferentes não é suficiente.
+  const environmentIdWithEnoughTables = sortedEnvironments.find((e) => tablesByEnvironment(e.id).length >= 2)?.id;
+
   return (
     <div className="space-y-6">
       {!canCreate && (
@@ -590,9 +595,9 @@ export function MesasAmbientesClient({
         title="Combinações de mesas"
         action={
           canCreate &&
-          tables.length >= 2 && (
+          environmentIdWithEnoughTables && (
             <button
-              onClick={() => openCreateCombo(sortedEnvironments[0]?.id ?? "")}
+              onClick={() => openCreateCombo(environmentIdWithEnoughTables)}
               className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs"
             >
               <Plus size={13} /> Nova combinação

@@ -15,6 +15,7 @@ import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } 
 import { detailPercent, isAboveAgreed, itemKey, normalizeItems, computeTotals, round2, type PriceHint } from "@/lib/compra-itens";
 import { normalizeScannedCode, extractBoletoFields } from "@/lib/boleto-barcode";
 import { PURCHASE_PAYMENT_METHODS } from "@/lib/estoque";
+import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
 import {
   CompraItensEditor,
   EMPTY_DECISION,
@@ -1215,7 +1216,7 @@ export function ContasPagarClient({
             <select value={form.formaPagamento} onChange={(e) => setForm({ ...form, formaPagamento: e.target.value })} className="input">
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
-                  {m.replaceAll("_", " ")}
+                  {PAYMENT_METHOD_LABEL[m]}
                 </option>
               ))}
             </select>
