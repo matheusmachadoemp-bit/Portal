@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { addMonths, setDate } from "date-fns";
+import { addMonths, setDate, lastDayOfMonth, getDate } from "date-fns";
 import { parseDayInput } from "@/lib/timezone";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
 const MAX_INFINITE_MONTHS = 24; // gera 24 meses por vez para recorrências infinitas
+
+// Define o vencimento no dia `dia` do mês de `base`, sem deixar o `setDate` do date-fns "rolar"
+// pro mês seguinte quando esse dia não existir nesse mês (ex.: dia 31 em fevereiro). Sem isso,
+// `setDate(05/02/2026, 31)` devolveria 03/03/2026 em vez de ficar dentro de fevereiro — usa o
+// último dia do mês de `base` nesse caso.
+function vencimentoNoDia(base: Date, dia: number): Date {
+  const ultimoDiaDoMes = getDate(lastDayOfMonth(base));
+  return setDate(base, Math.min(dia, ultimoDiaDoMes));
+}
 
 export async function GET() {
   const session = await auth();
@@ -98,10 +107,26 @@ export async function POST(req: Request) {
     },
   });
 
+  // Se o diaVencimento configurado já tiver passado dentro do mês de início (ex.: início dia 26,
+  // vencimento dia 10), TODA a série de vencimentos é deslocada em 1 mês — decidido UMA única vez
+  // aqui, a partir do dia real de `dataInicio` (nunca a partir do dia de uma competência já
+  // "clampada" por um mês mais curto, como fevereiro; ver `vencimentoNoDia` acima), e aplicado
+  // igual a cada parcela abaixo. Isso garante, para qualquer combinação de dataInicio/diaVencimento:
+  // (1) nenhuma parcela vence antes de competir — se offsetMeses for 1, o vencimento cai sempre
+  // num mês inteiro depois da própria competência, então qualquer dia dentro desse mês já é maior
+  // que qualquer dia do mês da competência, mesmo com o clamping de `vencimentoNoDia`; se for 0, o
+  // clamping (min) preserva a ordem entre diaVencimento e o dia de dataInicio, então vencimento
+  // nunca fica atrás da competência; e (2) parcelas consecutivas nunca colidem no mesmo
+  // vencimento, porque cada uma cai num mês civil seguinte ao da anterior, nunca no mesmo mês —
+  // diferente de aplicar esse ajuste só na 1ª parcela (ou recalculado de forma independente em
+  // cada parcela), que ou deixa o mesmo problema reaparecer a partir da 2ª parcela, ou pode fazer
+  // duas parcelas vizinhas colidirem no mesmo dia.
+  const offsetMeses = diaVencimento < getDate(dataInicio) ? 1 : 0;
+
   const entries = [];
   for (let i = 0; i < meses; i++) {
     const competencia = addMonths(dataInicio, i);
-    const vencimento = setDate(competencia, diaVencimento);
+    const vencimento = vencimentoNoDia(addMonths(dataInicio, i + offsetMeses), diaVencimento);
     entries.push({
       descricao: body.descricao,
       categoriaId: body.categoriaId,
