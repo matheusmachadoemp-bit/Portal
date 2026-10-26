@@ -24,6 +24,13 @@ export default async function ContasAPagarPage() {
   // `requireActiveSingleEmpresa` no POST) — por isso `canEdit` NÃO depende do modo Grupo Nord, só
   // da permissão do perfil.
   const canEdit = await hasModulePermission(session.user.id, "financeiro", "canEdit");
+  // Espelha exatamente a checagem do `DELETE /api/financeiro/pagar/[id]`: exige a permissão
+  // `canDelete` do módulo E o cargo do usuário estar em MANAGER_ROLES — nenhuma das duas sozinha
+  // basta lá, então nenhuma das duas sozinha deve bastar aqui pra mostrar o botão de excluir.
+  const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+  const canDelete =
+    MANAGER_ROLES.includes(session.user.role) &&
+    (await hasModulePermission(session.user.id, "financeiro", "canDelete"));
 
   const [payables, categorias, contas, fornecedoresCadastrados, ingredients, canCreateSupplier] = await Promise.all([
     prisma.payable.findMany({
@@ -86,6 +93,7 @@ export default async function ContasAPagarPage() {
           canCreateSupplier={canCreateSupplier}
           canCreate={canCreate}
           canEdit={canEdit}
+          canDelete={canDelete}
           isGrupoNordMode={ctx?.mode !== "single"}
         />
       </div>

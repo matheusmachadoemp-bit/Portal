@@ -137,6 +137,7 @@ export function ContasPagarClient({
   canCreateSupplier = false,
   canCreate = true,
   canEdit = true,
+  canDelete = false,
   isGrupoNordMode = true,
 }: {
   initialPayables: PayableDTO[];
@@ -157,6 +158,11 @@ export function ContasPagarClient({
    *  `canEdit`, não `canCreate`. Independe do modo Grupo Nord (edição age sobre a loja do próprio
    *  lançamento, não sobre a loja ativa selecionada). */
   canEdit?: boolean;
+  /** Controla a exclusão (DELETE). Permissão separada de `canCreate`/`canEdit` — ver
+   *  `DELETE /api/financeiro/pagar/[id]`, que exige `canDelete` do módulo E o cargo em
+   *  MANAGER_ROLES (ADMINISTRADOR/GESTOR/GERENTE/SUPERVISOR). Já calculado espelhando essa
+   *  checagem em `page.tsx`, então aqui é só exibir/ocultar o botão. */
+  canDelete?: boolean;
 }) {
   const [payables, setPayables] = useState(initialPayables);
   const [suppliers, setSuppliers] = useState(fornecedoresCadastrados);
@@ -1016,7 +1022,7 @@ export function ContasPagarClient({
                         {copiedCodigoId === p.id ? <Check size={14} className="text-nord-success" /> : <ScanBarcode size={14} />}
                       </button>
                     )}
-                    <div className={`flex items-center gap-2 ${!canCreate && !canEdit ? "hidden" : ""}`}>
+                    <div className={`flex items-center gap-2 ${!canCreate && !canEdit && !canDelete ? "hidden" : ""}`}>
                       {canEdit && p.status !== "PAGO" && (
                         <button onClick={() => markPaid(p)} title="Marcar como pago" className="text-nord-gray hover:text-nord-success">
                           <Check size={14} />
@@ -1032,10 +1038,7 @@ export function ContasPagarClient({
                           <Pencil size={14} />
                         </button>
                       )}
-                      {/* Excluir ainda segue `canCreate` aqui, igual já era antes (o DELETE do servidor na
-                          verdade exige `canDelete` + cargo de gestão, não `canCreate`) — esse descompasso
-                          é um achado separado, fora do escopo deste ajuste (ver relato da tarefa). */}
-                      {canCreate && (
+                      {canDelete && (
                         <button onClick={() => setConfirmDeleteId(p.id)} className="text-nord-gray hover:text-nord-danger">
                           <Trash2 size={14} />
                         </button>
