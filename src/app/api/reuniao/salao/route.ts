@@ -36,17 +36,24 @@ export async function GET(req: Request) {
 
   // `computeSalaoMetrics` aqui no GET ficava calculado só pra entrar num campo `metrics` da
   // resposta que nenhuma tela/PDF lê (confirmado: salao-client.tsx usa só `current`/
-  // `melhorVendedor`/`comentarios`/`customIndicators` — NPS/Faturamento/Ticket Médio ao vivo
-  // foram removidos da tela e do PDF, ver comentário de `exportPdf` em salao-client.tsx) —
-  // removido daqui; `computeSalaoMetrics` continua usado de verdade no POST abaixo (grava
+  // `comentarios`/`customIndicators` — NPS/Faturamento/Ticket Médio ao vivo foram removidos
+  // da tela e do PDF, ver comentário de `exportPdf` em salao-client.tsx) — removido daqui;
+  // `computeSalaoMetrics` continua usado de verdade no POST abaixo (grava
   // `npsPercent`/`faturamentoValor`/`ticketMedioValor` no registro) e em `computeGerenteMetrics`
   // (só o `npsPercent`).
-  const melhorVendedor =
-    ctx.mode === "single" ? await computeMelhorVendedor(ctx.empresa.id, periodo) : { nome: null, valor: null };
+  //
+  // `computeMelhorVendedor` tinha a MESMA situação (achado numa investigação separada,
+  // iniciada por um comentário de `salao-client.tsx` sobre `page.tsx`/`initialMelhorVendedor`
+  // ainda calcular esse valor no SSR sem o client nunca desestruturar a prop — a seção "Melhor
+  // vendedor do mês" saiu da tela no commit aec6355f): o campo `melhorVendedor` aqui no GET
+  // também só alimentava algo que o `useEffect`/`refresh()` de salao-client.tsx nunca lê
+  // (eles desestruturam `data.current`/`data.comentarios`/`data.customIndicators`, nunca
+  // `data.melhorVendedor`) — removido daqui também. `computeMelhorVendedor` continua usado de
+  // verdade no POST abaixo (grava `melhorVendedorNome`/`melhorVendedorValor` no upsert).
   const comentarios = ctx.mode === "single" ? await computeComentariosDestaque(ctx.empresa.id, periodo) : [];
   const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "SALAO", periodo) : [];
 
-  return NextResponse.json({ meetings, current, melhorVendedor, comentarios, periodo, customIndicators });
+  return NextResponse.json({ meetings, current, comentarios, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {

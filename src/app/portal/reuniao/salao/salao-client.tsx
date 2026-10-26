@@ -41,7 +41,6 @@ type Meeting = {
   produtoMetas: ProdutoMeta[];
 };
 
-type MelhorVendedor = { nome: string | null; valor: number | null };
 type Comentario = { nome: string; comentario: string; nota: number };
 
 // Os 5 campos de nota (Qualidade do Produto, Atendimento, Ambiente, Rodízio, Tempo de
@@ -115,12 +114,6 @@ export function SalaoClient({
 }: {
   initialMeetings: Meeting[];
   initialCurrent: Meeting | null;
-  /** Não é mais desestruturada acima (a seção "Melhor vendedor do mês" saiu da
-   * tela, pedido do usuário — sempre aparecia vazia). O tipo continua exigindo
-   * essa prop porque `page.tsx` ainda calcula e passa `initialMelhorVendedor`
-   * (não mexemos no servidor); removê-la do tipo quebraria a chamada de
-   * `<SalaoClient>` em page.tsx com uma prop "desconhecida". */
-  initialMelhorVendedor: MelhorVendedor;
   initialComentarios: Comentario[];
   initialCustomIndicators: FechamentoIndicator[];
   periodo: string;

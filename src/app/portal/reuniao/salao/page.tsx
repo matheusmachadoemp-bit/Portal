@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/page-container";
 import { SalaoClient } from "./salao-client";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { currentPeriodo } from "@/lib/reuniao";
-import { computeMelhorVendedor, computeComentariosDestaque, loadReuniaoCustomIndicators } from "@/lib/reuniao-server";
+import { computeComentariosDestaque, loadReuniaoCustomIndicators } from "@/lib/reuniao-server";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -25,7 +25,14 @@ export default async function ReuniaoSalaoPage() {
   });
 
   const isSingle = ctx?.mode === "single";
-  const melhorVendedor = isSingle ? await computeMelhorVendedor(ctx.empresa.id, periodo) : { nome: null, valor: null };
+  // `computeMelhorVendedor` aqui no SSR ficava calculado (groupBy em WaiterSaleEntry +
+  // findUnique em Employee) só pra alimentar a prop `initialMelhorVendedor` de
+  // `<SalaoClient>` — que o client NUNCA desestruturava desde que a seção "Melhor vendedor
+  // do mês" saiu da tela (commit aec6355f, "Remove seções mortas da Reunião Salão"); o
+  // próprio salao-client.tsx já documentava isso em comentário. Removido daqui.
+  // `computeMelhorVendedor` continua usada de verdade no POST de
+  // src/app/api/reuniao/salao/route.ts (grava `melhorVendedorNome`/`melhorVendedorValor` no
+  // upsert) e no GET da mesma rota, então a função em reuniao-server.ts não foi tocada.
   const comentarios = isSingle ? await computeComentariosDestaque(ctx.empresa.id, periodo) : [];
 
   const current = isSingle ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
@@ -52,7 +59,6 @@ export default async function ReuniaoSalaoPage() {
       <SalaoClient
         initialMeetings={meetings.map((m) => ({ ...m, createdAt: m.createdAt.toISOString(), updatedAt: m.updatedAt.toISOString() }))}
         initialCurrent={current ? { ...current, createdAt: current.createdAt.toISOString(), updatedAt: current.updatedAt.toISOString() } : null}
-        initialMelhorVendedor={melhorVendedor}
         initialComentarios={comentarios}
         initialCustomIndicators={customIndicators}
         periodo={periodo}
