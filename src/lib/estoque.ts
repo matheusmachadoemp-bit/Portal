@@ -90,6 +90,18 @@ export const PURCHASE_STATUS_TONE: Record<string, "default" | "success" | "warni
   CANCELADO: "default",
 };
 
+/**
+ * Formas de pagamento válidas para "pagar um fornecedor" (compras e Contas a Pagar) — mesma
+ * lista usada em Financeiro > Contas a Pagar (contas-pagar-client.tsx), diferente de
+ * `SALE_PAYMENT_METHODS` (`@/lib/vendas-analytics`, como o CLIENTE pagou a loja), que traz
+ * Voucher/Pago Online/Fiado, sem sentido para pagamento a fornecedor. Usada tanto pela tela de
+ * edição de compra (compras-client.tsx) quanto pelo validador de `formaPagamento` do PATCH
+ * (`/api/estoque/compras/[id]`) — achado do Teulis, 2026-10: o PATCH validava contra
+ * `PAYMENT_METHOD_LABEL` (a lista CHEIA compartilhada com Vendas) em vez desta lista curada que a
+ * própria tela já restringe, permitindo em tese salvar Voucher/Fiado/Pago Online numa compra.
+ */
+export const PURCHASE_PAYMENT_METHODS = ["PIX", "DINHEIRO", "CARTAO_DEBITO", "CARTAO_CREDITO", "TED", "DOC", "TRANSFERENCIA", "CHEQUE", "BOLETO", "OUTRO"] as const;
+
 // ---------------------------------------------------------------------------
 // Recebimento de mercadorias
 // ---------------------------------------------------------------------------

@@ -6,8 +6,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { parseDayInput } from "@/lib/timezone";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
-import { PAYMENT_METHOD_LABEL } from "@/lib/vendas-analytics";
-import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { PURCHASE_PAYMENT_METHODS, RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 
 // Campos de cabeçalho que só podem ser editados enquanto a compra ainda não foi recebida — ver
 // bloqueio logo abaixo de `willReceive`. `status`, `numeroNota`, `notaFiscalUrl` e `observacoes`
@@ -80,11 +79,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // request aplicaria a edição e o snapshot de recebimento em ordens que poderiam ficar
   // inconsistentes entre si. Nenhuma tela hoje manda os dois juntos (botão "Marcar recebido" só
   // manda `status`), mas é barato travar aqui também em vez de confiar nisso.
-  if ((body.items !== undefined || LOCKABLE_HEADER_FIELDS.some((f) => body[f] !== undefined)) && (existing.status === "RECEBIDO" || !!existing.receiving || willReceive)) {
+  //
+  // `existing.status === "CANCELADO"` entra na mesma trava por completude (achado do Teulis,
+  // 2026-10): o botão "Editar" da tela (compras-client.tsx) já some pra um pedido cancelado, igual
+  // ao botão "Marcar recebido" — hoje nenhum caminho de código marca uma compra como CANCELADO
+  // (status dormente), mas se isso passar a existir no futuro, o servidor não deve aceitar editar
+  // fornecedor/datas/forma de pagamento/desconto/frete/itens de um pedido cancelado só porque
+  // nenhuma tela manda esse request hoje.
+  if ((body.items !== undefined || LOCKABLE_HEADER_FIELDS.some((f) => body[f] !== undefined)) && (existing.status === "RECEBIDO" || existing.status === "CANCELADO" || !!existing.receiving || willReceive)) {
     return NextResponse.json(
       {
         error:
-          "Este pedido já foi recebido (ou está sendo marcado como recebido nesta mesma requisição) — não é possível editar fornecedor, datas, forma de pagamento, desconto, frete ou os itens depois do recebimento confirmado.",
+          existing.status === "CANCELADO"
+            ? "Este pedido foi cancelado — não é possível editar fornecedor, datas, forma de pagamento, desconto, frete ou os itens de um pedido cancelado."
+            : "Este pedido já foi recebido (ou está sendo marcado como recebido nesta mesma requisição) — não é possível editar fornecedor, datas, forma de pagamento, desconto, frete ou os itens depois do recebimento confirmado.",
       },
       { status: 400 }
     );
@@ -176,7 +184,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  if (body.formaPagamento && !(body.formaPagamento in PAYMENT_METHOD_LABEL)) {
+  // Lista curada de "pagar um fornecedor" (a mesma que a própria tela de edição já oferece como
+  // opção), não a lista CHEIA compartilhada com Vendas (`PAYMENT_METHOD_LABEL`, que inclui
+  // Voucher/Pago Online/Fiado — sem sentido pra pagamento a fornecedor). Achado do Teulis, 2026-10.
+  if (body.formaPagamento && !(PURCHASE_PAYMENT_METHODS as readonly string[]).includes(body.formaPagamento)) {
     return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
   }
 
