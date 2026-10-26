@@ -25,6 +25,7 @@ export const MODULES = [
   { key: "loja-nord", label: "Loja Nord" },
   { key: "satisfacao-cliente", label: "Satisfação do Cliente" },
   { key: "fechamento-dia", label: "Fechamento do Dia" },
+  { key: "reservas", label: "Reservas" },
   { key: "configuracoes", label: "Configurações" },
   { key: "usuarios", label: "Usuários" },
 ] as const;
