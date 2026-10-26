@@ -36,6 +36,7 @@ import { logoutAction } from "@/app/actions/logout";
 import { StoreSwitcher } from "./store-switcher";
 import { useMobileSidebar } from "./mobile-sidebar-context";
 import type { CategoryDTO, SubcategoryDTO } from "./types";
+import { isSubcategoryVisible } from "./subcategory-visibility";
 import { GRUPO_SENTINEL } from "@/lib/empresa-constants";
 
 export function Sidebar({
@@ -81,16 +82,14 @@ export function Sidebar({
   }, [pathname]);
 
   const filtered = useMemo(() => {
-    // Subcategoria com `empresaId` setado (ex.: "Pizzas Salgadas" da Ficha Técnica) só aparece
-    // como link quando essa é a loja ativa — `empresaId: null` continua aparecendo sempre, igual
-    // já era pra Financeiro/RH/Estoque/etc. No modo "Grupo Nord" (`activeEmpresaId ===
-    // GRUPO_SENTINEL`, várias lojas ao mesmo tempo) não filtra por loja — mostra a união das
-    // subcategorias de todas as lojas, já que não existe uma loja única ativa pra restringir.
+    // Ver `isSubcategoryVisible` (./subcategory-visibility.ts) pros dois filtros aplicados aqui
+    // (loja ativa + status/active, este último a correção do achado da reestruturação da Ficha
+    // Técnica Zarki Sushi).
     const isGrupoNord = activeEmpresaId === GRUPO_SENTINEL;
     const byEmpresa = categories.map((c) => ({
       ...c,
-      subcategories: c.subcategories.filter(
-        (s) => !s.empresaId || isGrupoNord || s.empresaId === activeEmpresaId
+      subcategories: c.subcategories.filter((s) =>
+        isSubcategoryVisible(s, { activeEmpresaId, isGrupoNord, isAdmin })
       ),
     }));
     if (!query.trim()) return byEmpresa;
@@ -101,7 +100,7 @@ export function Sidebar({
         subcategories: c.subcategories.filter((s) => s.name.toLowerCase().includes(q)),
       }))
       .filter((c) => c.name.toLowerCase().includes(q) || c.subcategories.length > 0);
-  }, [categories, query, activeEmpresaId]);
+  }, [categories, query, activeEmpresaId, isAdmin]);
 
   async function persistCategoryOrder(items: CategoryDTO[]) {
     await fetch("/api/menu/reorder", {

@@ -200,6 +200,12 @@ Barra `h-2 rounded-full bg-nord-border`, preenchimento na cor passada
   visível só para admins.
 - Categoria/subcategoria desativada (`active: false`): opacidade
   reduzida (`opacity-45`).
+- **Subcategoria desativada só aparece pra admin/gestor** (esmaecida,
+  igual acima, pra saber que existe e poder reativar/excluir pelo menu
+  "⋮") — pra qualquer outro cargo ela é removida da lista (não aparece
+  nem esmaecida), porque a rota dela normalmente já não existe mais no
+  mapa de páginas e um usuário sem acesso ao toggle "Ativar/Desativar"
+  não teria como fazer nada além de cair num 404 clicando nela.
 
 ## Página / Topbar (`src/components/page-container.tsx`)
 
