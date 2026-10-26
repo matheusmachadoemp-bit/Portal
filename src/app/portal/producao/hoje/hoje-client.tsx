@@ -302,7 +302,7 @@ export function HojeClient({
                   <Timer size={12} /> Em produção há <CronometroAtivo inicio={ordem.horaInicio} />
                 </p>
               )}
-              {(ordem.status === "EM_PRODUCAO" || ordem.status === "ATRASADO") && (
+              {(ordem.status === "EM_PRODUCAO" || ordem.status === "ATRASADO") && ordem.horaInicio && (
                 <button
                   onClick={() => setFinalizando(ordem)}
                   className="w-full flex items-center justify-center gap-1.5 bg-nord-success/90 hover:bg-nord-success text-white text-sm font-medium rounded-lg py-2.5"
