@@ -504,3 +504,26 @@ cria shadow nenhum, só compara o schema.prisma contra o estado já conhecido
 do banco principal) e valide com `migrate deploy` + `migrate status` +
 `migrate diff --exit-code` — os mesmos três comandos já documentados acima,
 direto na conexão principal.
+
+## Muitos `npx prisma dev` ao mesmo tempo podem sobrecarregar a porta TCP compartilhada
+
+Com a regra de nunca deixar agente parado havendo demanda (ver "Como agir
+como líder"), é comum ter 4-6+ agentes rodando banco descartável via `npx
+prisma dev` ao mesmo tempo. O Caio já bateu nisso: a instância dele subia
+normal (o canal de controle `prisma+postgres://` funcionava, `migrate
+deploy` rodava por ali sem problema), mas a porta TCP crua do Postgres
+embutido (a URL que `next dev`/`npm run db:seed` precisam, por usarem
+`@prisma/adapter-pg`) travava e dava timeout em QUALQUER tentativa de
+conexão — confirmado que não era nada específico da própria branch (testou
+a porta de outro agente e viu o mesmo travamento) nem bloqueio de rede em
+geral (uma porta TCP qualquer, fora do Postgres, conectava normal). Suspeita
+é a camada de encaminhamento TCP compartilhada do ambiente ficando
+sobrecarregada com tantas instâncias concorrentes.
+
+Se isso acontecer: não insista tentando contornar com algo arriscado (criar
+usuário de sistema, peer-auth etc. — bateria no bloqueio "Credential
+Exploration" documentado acima). Pare, reporte pro líder, e tente de novo
+mais tarde (a contenção tende a aliviar conforme outras tarefas terminam e
+derrubam suas instâncias). O líder pode usar esse sinal para espaçar um
+pouco os próximos disparos em vez de sempre lotar os cinco agentes de
+produto ao mesmo tempo, se isso voltar a acontecer com frequência.
