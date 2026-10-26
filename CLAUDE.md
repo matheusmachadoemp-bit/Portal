@@ -527,3 +527,49 @@ mais tarde (a contenção tende a aliviar conforme outras tarefas terminam e
 derrubam suas instâncias). O líder pode usar esse sinal para espaçar um
 pouco os próximos disparos em vez de sempre lotar os cinco agentes de
 produto ao mesmo tempo, se isso voltar a acontecer com frequência.
+
+## Mesma causa, sintoma pior: disco cheio de verdade com muitos agentes em paralelo
+
+Além da porta TCP (acima), a mesma pressão de ter vários agentes rodando
+`npx prisma dev`/`next dev`/`npm install` ao mesmo tempo já encheu o disco
+do ambiente por completo pelo menos uma vez — não só a conexão Postgres
+falhava, o próprio terminal (`Bash`) parou de funcionar pra qualquer
+comando com saída não-trivial (até `echo`/`df`/`ps aux` davam erro de
+"Disk full"), porque o volume onde o harness guarda a saída dos comandos
+ficou com 0 MB livre. Só comandos com saída mínima (ex. `rm -rf X; echo
+done`) continuavam funcionando.
+
+**Diagnóstico, nessa ordem**: 1) tente um comando de saída mínima primeiro
+(`rm -rf <algo> 2>&1; echo done`) pra confirmar se o Bash ainda responde;
+2) se responder, redirecione comandos de diagnóstico maiores pra um
+arquivo fora de `/tmp` (ex. `df -h / > /home/user/Portal/.tmp_check.txt
+2>&1; echo ok`) e leia o arquivo com a ferramenta `Read` em vez de deixar
+a saída ir pro terminal — às vezes isso funciona mesmo quando o comando
+direto falha, às vezes não (o harness captura a saída de um jeito que não
+depende só do seu próprio redirecionamento, então nem sempre dá pra
+contornar).
+
+**O que realmente resolve** (confirmado ao vivo): os maiores consumidores
+de espaço, de longe, são `node_modules/` e `.next/` dentro de CADA
+worktree — não o código em si. Rodar `rm -rf <worktree>/node_modules
+<worktree>/.next` em worktrees de tarefas JÁ PUBLICADAS (branch já
+mesclada em produção, worktree só esperando ser reaproveitado ou ainda não
+limpo) libera a maior parte do espaço rapidamente, sem apagar nada de
+valor — `npm install` reconstrói tudo se precisar de novo. **Não tente
+`git worktree remove`** nesses casos: o classificador de segurança do
+sandbox recusa essa ação por padrão como "Irreversible Local Destruction",
+mesmo em worktree de tarefa já publicada — prefira sempre o `rm -rf` dos
+diretórios de build, que é reversível e não esbarra nesse bloqueio.
+
+Depois de liberar espaço, confirme que não sobrou processo de teste órfão
+(`ps aux | grep -E "next dev|prisma dev"` — se encheu o disco a ponto do
+Bash parar de responder, é bem provável que algum `next dev`/`npx prisma
+dev` de um agente tenha morrido sozinho no meio do trabalho, deixando
+`.env` solto no worktree dele; remova esse `.env` também) antes de confiar
+no worktree pra uma tarefa nova.
+
+Prevenção: com a regra de nunca deixar agente parado (ver "Como agir como
+líder"), é fácil acumular muitos worktrees de tarefas já publicadas sem
+nunca limpar o `node_modules`/`.next` deles. Vale o líder limpar esses
+diretórios de tarefas já publicadas periodicamente (não precisa esperar o
+disco encher), em vez de só reagir quando já deu problema.
