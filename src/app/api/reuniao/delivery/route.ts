@@ -28,10 +28,15 @@ export async function GET(req: Request) {
 
   const current = ctx.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
 
-  const metrics = ctx.mode === "single" ? await computeDeliveryMetrics(ctx.empresa.id, periodo) : { cancelamentoPercent: null };
+  // `computeDeliveryMetrics` aqui no GET ficava calculado só pra entrar num campo `metrics` da
+  // resposta que nenhuma tela/PDF lê (confirmado: delivery-client.tsx usa só `current`/
+  // `customIndicators` — Cancelamento ao vivo foi removido da tela e do PDF, ver comentário de
+  // `exportPdf` em delivery-client.tsx) — removido daqui; `computeDeliveryMetrics` continua
+  // usado de verdade no POST abaixo (grava `cancelamentoPercent` no registro) e em
+  // `computeGerenteMetrics`.
   const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "DELIVERY", periodo) : [];
 
-  return NextResponse.json({ meetings, current, metrics, periodo, customIndicators });
+  return NextResponse.json({ meetings, current, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {

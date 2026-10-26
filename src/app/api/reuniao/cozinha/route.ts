@@ -39,11 +39,15 @@ export async function GET(req: Request) {
   const current = ctx.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
   const latest = meetings[0] ?? null;
 
-  const metrics =
-    ctx.mode === "single" ? await computeCozinhaMetrics(ctx.empresa.id, periodo) : { cmvPercent: 0, desperdicioValor: 0, faturamento: 0 };
+  // `computeCozinhaMetrics` aqui no GET ficava calculado só pra entrar num campo `metrics` da
+  // resposta que nenhuma tela/PDF lê (confirmado: cozinha-client.tsx usa só `current`/`latest`/
+  // `customIndicators` — CMV/Desperdício ao vivo foram removidos da tela e do PDF, ver comentário
+  // de `exportPdf` em cozinha-client.tsx) — removido daqui; `computeCozinhaMetrics` continua
+  // usado de verdade no POST abaixo (grava `cmvPercent`/`desperdicioValor` no registro) e em
+  // `computeGerenteMetrics`.
   const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "COZINHA", periodo) : [];
 
-  return NextResponse.json({ meetings, current: current ?? null, latest, metrics, periodo, customIndicators });
+  return NextResponse.json({ meetings, current: current ?? null, latest, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {

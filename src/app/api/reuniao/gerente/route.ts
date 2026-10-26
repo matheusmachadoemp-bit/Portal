@@ -28,14 +28,15 @@ export async function GET(req: Request) {
 
   const current = ctx.mode === "single" ? (meetings.find((m) => m.periodo === periodo) ?? null) : null;
 
-  const metrics =
-    ctx.mode === "single"
-      ? await computeGerenteMetrics(ctx.empresa.id, periodo)
-      : { faturamentoTotalValor: null, cmvPercent: null, npsPercent: null, cancelamentoDeliveryPercent: null };
-
+  // `computeGerenteMetrics` aqui no GET ficava calculado só pra entrar num campo `metrics` da
+  // resposta que nenhuma tela/PDF lê (confirmado: gerente-client.tsx usa só `current`/
+  // `customIndicators` — Faturamento Total/CMV/NPS/Cancelamento Delivery ao vivo foram
+  // removidos da tela e do PDF, ver comentário de `exportPdf` em gerente-client.tsx) —
+  // removido daqui; `computeGerenteMetrics` continua usado de verdade no POST abaixo (grava
+  // os 4 campos no registro).
   const customIndicators = ctx.mode === "single" ? await loadReuniaoCustomIndicators(ctx.empresa.id, "GERENTE", periodo) : [];
 
-  return NextResponse.json({ meetings, current, metrics, periodo, customIndicators });
+  return NextResponse.json({ meetings, current, periodo, customIndicators });
 }
 
 export async function POST(req: Request) {
