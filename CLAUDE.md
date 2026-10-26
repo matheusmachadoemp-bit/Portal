@@ -460,3 +460,27 @@ migration(s) nova(s) da tarefa) sem erro — confirme com `prisma migrate
 status` ("Database schema is up to date!") e, se quiser certeza total de que
 bate com o `schema.prisma`, `prisma migrate diff --from-config-datasource
 --to-schema=prisma/schema.prisma --exit-code` (sem saída = sem diferença).
+
+## `npx prisma dev`: nenhum nome de banco dá isolamento real dentro da mesma instância — nunca use `migrate dev` nela
+
+Achado do Mylon (Etapa 2 do módulo Reservas), com a causa raiz corrigida pelo
+Teulis depois de reproduzir com cuidado: dentro de uma mesma instância `npx
+prisma dev --name X`, **todo** `CREATE DATABASE` — com ou sem `TEMPLATE`
+explícito, **incluindo** `TEMPLATE template0` — acaba compartilhando o MESMO
+schema físico do banco principal (`template1`) já migrado por essa instância.
+Não é cosmético: o Teulis confirmou isso derrubando o schema de um desses
+bancos "diferentes" (`DROP SCHEMA public CASCADE`) e vendo os outros (incluindo
+`template0` e `postgres`) ficarem vazios ao mesmo tempo — ou seja, não existe
+isolamento real por nome de banco nessa ferramenta, é tudo o mesmo
+armazenamento por trás.
+
+Consequência prática: `prisma migrate dev` precisa criar um shadow database
+que ele espera estar vazio — mas, numa instância onde o banco principal já
+foi migrado, esse shadow NUNCA está realmente vazio, e a migration falha.
+**Nunca rode `prisma migrate dev` numa instância `npx prisma dev` que já
+tenha sido migrada.** Em vez disso, gere a migration com `prisma migrate diff
+--from-config-datasource --to-schema=prisma/schema.prisma --script` (não
+cria shadow nenhum, só compara o schema.prisma contra o estado já conhecido
+do banco principal) e valide com `migrate deploy` + `migrate status` +
+`migrate diff --exit-code` — os mesmos três comandos já documentados acima,
+direto na conexão principal.
