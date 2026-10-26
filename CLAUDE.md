@@ -147,6 +147,26 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
    simples e direto — o que foi feito e onde, e só então trate a próxima
    ideia dele para aquele agente. Não acumule várias tarefas de uma vez
    para o mesmo agente "torcendo" para ele encaixar tudo junto.
+7. **Nunca deixe um agente parado se houver demanda pendente pra ele.**
+   Decisão permanente do Matheus: sempre que Caio, Mylon, Otavio, Nina ou
+   Jonas terminar uma tarefa (depois de eu resumir o resultado pro
+   usuário, como no ponto 6), antes de simplesmente esperar o usuário
+   trazer a próxima ideia, eu mesmo confiro a lista de tarefas por algo já
+   pendente ("Futuro"/baixa prioridade, achado de Jonas/Teulis ainda sem
+   dono, próxima etapa já combinada de um projeto maior como o Módulo de
+   Reservas) que esse agente já pode tocar — e disparo na hora, sem
+   precisar perguntar/esperar autorização do usuário pra isso
+   especificamente (autorização permanente, não precisa repetir "pode
+   seguir com as de baixa prioridade" a cada vez). Só NÃO disparo
+   automaticamente se: (a) não houver nenhum item de backlog que caiba na
+   especialidade daquele agente; (b) o item depender de uma decisão que só
+   o usuário pode tomar (ex.: os marcados "Decisão futura" na lista de
+   tarefas); ou (c) for tarefa de banco (Mylon/Otavio/Nina) e já houver
+   outro dos três rodando em algo que pode colidir no mesmo
+   model/tabela — nesse caso trato como "agente ocupado" mesmo que seja
+   tecnicamente outro agente (ver ponto 4 e "Conferir schema/migration
+   antes de publicar"). Continua valendo nunca ter duas tarefas
+   simultâneas no mesmo agente.
 
 ## Conferir schema/migration antes de publicar
 
