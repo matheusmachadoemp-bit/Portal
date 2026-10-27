@@ -6,7 +6,7 @@ import { PageContainer } from "@/components/page-container";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { formatCurrency, formatNumber, formatPercent, growth, pct } from "@/lib/calc";
-import { computeDre } from "@/lib/dre";
+import { computeDreFromRows, DRE_PAYABLE_SELECT, DRE_RECEIVABLE_SELECT } from "@/lib/dre";
 import {
   startOfDay,
   endOfDay,
@@ -39,7 +39,11 @@ async function getData() {
   const ctx = await getActiveEmpresaContext();
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
 
-  const [accounts, payablesOpen, receivablesOpen, dreThisMonth, dreLastMonth, catMap] = await Promise.all([
+  // Janela única de 400 dias (cobre o mês atual inteiro): alimenta tanto a DRE do mês atual/anterior
+  // (filtrada em memória por sub-período, via `computeDreFromRows`) quanto os gráficos/KPIs de
+  // faturamento e despesas por categoria abaixo — antes eram 3 buscas de tabela inteira sobrepostas
+  // (DRE mês atual + DRE mês anterior + esta janela), agora é 1 busca só por tabela.
+  const [accounts, payablesOpen, receivablesOpen, catMap, receivablesPaid, payablesPaid] = await Promise.all([
     prisma.bankAccount.findMany({ where: { active: true, empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
     prisma.payable.findMany({
       where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
@@ -49,32 +53,14 @@ async function getData() {
       where: { status: { in: ["EM_ABERTO", "ATRASADO"] }, empresaId: { in: empresaIds } },
       select: { id: true, valor: true },
     }),
-    computeDre({ month: now.getMonth() + 1, year: now.getFullYear(), empresaIds }),
-    computeDre({
-      month: subMonths(now, 1).getMonth() + 1,
-      year: subMonths(now, 1).getFullYear(),
-      empresaIds,
-    }),
     getFinancialCategories(),
-  ]);
-
-  const caixaAtual = accounts.reduce((acc, a) => acc + a.saldoAtual, 0);
-
-  const periods = {
-    hoje: { from: startOfDay(now), to: endOfDay(now) },
-    semana: { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }) },
-    mes: { from: startOfMonth(now), to: endOfMonth(now) },
-    ano: { from: startOfYear(now), to: endOfYear(now) },
-  };
-
-  const [receivablesPaid, payablesPaid] = await Promise.all([
     prisma.receivable.findMany({
       where: {
         status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
         dataCompetencia: { gte: subDays(now, 400) },
         empresaId: { in: empresaIds },
       },
-      select: { categoriaId: true, valor: true, dataCompetencia: true },
+      select: { ...DRE_RECEIVABLE_SELECT, dataCompetencia: true },
     }),
     prisma.payable.findMany({
       where: {
@@ -83,29 +69,46 @@ async function getData() {
         empresaId: { in: empresaIds },
       },
       // Itens (quando o boleto tem "O que foi comprado" categorizado por item): ver
-      // `splitPayableByCategory`, usado só no gráfico "despesas por categoria" abaixo — o total de
-      // saídas (soma de `valor`) não muda, só pra qual categoria cada pedaço é contado.
-      select: {
-        categoriaId: true,
-        valor: true,
-        dataCompetencia: true,
-        invoice: { select: { items: { select: { categoriaId: true, total: true } } } },
-      },
+      // `splitPayableByCategory`, usado só no gráfico "despesas por categoria" e na DRE abaixo — o
+      // total de saídas (soma de `valor`) não muda, só pra qual categoria cada pedaço é contado.
+      select: { ...DRE_PAYABLE_SELECT, dataCompetencia: true },
     }),
   ]);
 
+  const caixaAtual = accounts.reduce((acc, a) => acc + a.saldoAtual, 0);
+
+  const periods = {
+    hoje: { from: startOfDay(now), to: endOfDay(now) },
+    semana: { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }) },
+    mes: { from: startOfMonth(now), to: endOfMonth(now) },
+    mesAnterior: { from: startOfMonth(subMonths(now, 1)), to: endOfMonth(subMonths(now, 1)) },
+    ano: { from: startOfYear(now), to: endOfYear(now) },
+  };
+
   const sumInRange = (arr: { valor: number; dataCompetencia: Date }[], from: Date, to: Date) =>
     arr.filter((e) => e.dataCompetencia >= from && e.dataCompetencia <= to).reduce((a, e) => a + e.valor, 0);
+
+  const filterInRange = <T extends { dataCompetencia: Date }>(arr: T[], from: Date, to: Date) =>
+    arr.filter((e) => e.dataCompetencia >= from && e.dataCompetencia <= to);
+
+  const dreKeyByCategoriaId = new Map(catMap.map((c) => [c.id, c.dreKey]));
+
+  const dreThisMonth = computeDreFromRows({
+    payables: filterInRange(payablesPaid, periods.mes.from, periods.mes.to),
+    receivables: filterInRange(receivablesPaid, periods.mes.from, periods.mes.to),
+    dreKeyByCategoriaId,
+  });
+  const dreLastMonth = computeDreFromRows({
+    payables: filterInRange(payablesPaid, periods.mesAnterior.from, periods.mesAnterior.to),
+    receivables: filterInRange(receivablesPaid, periods.mesAnterior.from, periods.mesAnterior.to),
+    dreKeyByCategoriaId,
+  });
 
   const faturamentoHoje = sumInRange(receivablesPaid, periods.hoje.from, periods.hoje.to);
   const faturamentoSemana = sumInRange(receivablesPaid, periods.semana.from, periods.semana.to);
   const faturamentoMes = sumInRange(receivablesPaid, periods.mes.from, periods.mes.to);
   const faturamentoAno = sumInRange(receivablesPaid, periods.ano.from, periods.ano.to);
-  const faturamentoMesAnterior = sumInRange(
-    receivablesPaid,
-    startOfMonth(subMonths(now, 1)),
-    endOfMonth(subMonths(now, 1))
-  );
+  const faturamentoMesAnterior = sumInRange(receivablesPaid, periods.mesAnterior.from, periods.mesAnterior.to);
 
   const vencidas = payablesOpen.filter((p) => p.dataVencimento < startOfDay(now));
   const vencendoHoje = payablesOpen.filter(
@@ -139,12 +142,8 @@ async function getData() {
   }
 
   // despesas/receitas por categoria (mês atual)
-  const payablesThisMonth = payablesPaid.filter(
-    (p) => p.dataCompetencia >= periods.mes.from && p.dataCompetencia <= periods.mes.to
-  );
-  const receivablesThisMonth = receivablesPaid.filter(
-    (r) => r.dataCompetencia >= periods.mes.from && r.dataCompetencia <= periods.mes.to
-  );
+  const payablesThisMonth = filterInRange(payablesPaid, periods.mes.from, periods.mes.to);
+  const receivablesThisMonth = filterInRange(receivablesPaid, periods.mes.from, periods.mes.to);
 
   const catNameById = new Map(catMap.map((c) => [c.id, c.name]));
 

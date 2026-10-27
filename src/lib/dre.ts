@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { DRE_STRUCTURE, type DreRowDef } from "@/lib/dre-structure";
+import { DRE_STRUCTURE } from "@/lib/dre-structure";
 import { getFinancialCategories } from "@/lib/financial-categories";
 import { splitPayableByCategory } from "@/lib/compra-itens";
 
@@ -14,49 +14,46 @@ export type DreComputedRow = {
   categories?: { key: string; name: string; value: number }[];
 };
 
-export async function computeDre({
-  month,
-  year,
-  empresaIds,
+export type DrePayableRow = {
+  valor: number;
+  categoriaId: string;
+  // Itens (quando o boleto tem "O que foi comprado" categorizado por item): ver
+  // `splitPayableByCategory`, usado para o boleto não cair inteiro numa categoria só quando ele
+  // mistura produtos de categorias diferentes (contas a pagar multicategoria).
+  invoice?: { items: { categoriaId: string | null; total: number }[] } | null;
+};
+
+export type DreReceivableRow = {
+  valor: number;
+  categoriaId: string;
+};
+
+export const DRE_PAYABLE_SELECT = {
+  valor: true,
+  categoriaId: true,
+  invoice: { select: { items: { select: { categoriaId: true, total: true } } } },
+} as const;
+
+export const DRE_RECEIVABLE_SELECT = {
+  valor: true,
+  categoriaId: true,
+} as const;
+
+/**
+ * Cálculo puro da DRE (sem acesso a banco) a partir de lançamentos já buscados. Permite que quem já
+ * tenha os `Payable`/`Receivable` em memória (ex.: Dashboard Financeiro, que busca uma janela maior
+ * e filtra por sub-período) monte a DRE sem repetir a busca no banco — ver `computeDre` abaixo, que é
+ * só essa busca + esta função, para quem precisa da DRE de um único mês isolado.
+ */
+export function computeDreFromRows({
+  payables,
+  receivables,
+  dreKeyByCategoriaId,
 }: {
-  month: number; // 1-12
-  year: number;
-  empresaIds: string[];
-}): Promise<DreComputedRow[]> {
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 0, 23, 59, 59, 999);
-
-  const empresaFilter = { empresaId: { in: empresaIds } };
-
-  const [payables, receivables, categorias] = await Promise.all([
-    prisma.payable.findMany({
-      where: {
-        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
-        dataCompetencia: { gte: start, lte: end },
-        ...empresaFilter,
-      },
-      // `categoriaId` + os itens (quando o boleto tem "O que foi comprado" categorizado por item):
-      // ver `splitPayableByCategory`, usado para o boleto não cair inteiro numa categoria só quando
-      // ele mistura produtos de categorias diferentes (contas a pagar multicategoria).
-      select: {
-        valor: true,
-        categoriaId: true,
-        invoice: { select: { items: { select: { categoriaId: true, total: true } } } },
-      },
-    }),
-    prisma.receivable.findMany({
-      where: {
-        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
-        dataCompetencia: { gte: start, lte: end },
-        ...empresaFilter,
-      },
-      select: { valor: true, categoria: { select: { dreKey: true } } },
-    }),
-    getFinancialCategories(),
-  ]);
-
-  const dreKeyByCategoriaId = new Map(categorias.map((c) => [c.id, c.dreKey]));
-
+  payables: DrePayableRow[];
+  receivables: DreReceivableRow[];
+  dreKeyByCategoriaId: Map<string, string>;
+}): DreComputedRow[] {
   // valor absoluto lançado por categoria (chave = dreKey da categoria)
   const byDreKey = new Map<string, number>();
   const addValue = (dreKey: string, valor: number) => {
@@ -69,7 +66,10 @@ export async function computeDre({
       if (dreKey) addValue(dreKey, s.valor);
     }
   }
-  for (const r of receivables) addValue(r.categoria.dreKey, r.valor);
+  for (const r of receivables) {
+    const dreKey = dreKeyByCategoriaId.get(r.categoriaId);
+    if (dreKey) addValue(dreKey, r.valor);
+  }
 
   const rows: DreComputedRow[] = [];
   const groupTotals = new Map<string, number>();
@@ -107,6 +107,45 @@ export async function computeDre({
   return rows;
 }
 
+export async function computeDre({
+  month,
+  year,
+  empresaIds,
+}: {
+  month: number; // 1-12
+  year: number;
+  empresaIds: string[];
+}): Promise<DreComputedRow[]> {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0, 23, 59, 59, 999);
+
+  const empresaFilter = { empresaId: { in: empresaIds } };
+
+  const [payables, receivables, categorias] = await Promise.all([
+    prisma.payable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: start, lte: end },
+        ...empresaFilter,
+      },
+      select: DRE_PAYABLE_SELECT,
+    }),
+    prisma.receivable.findMany({
+      where: {
+        status: { in: ["PAGO", "PARCIALMENTE_PAGO"] },
+        dataCompetencia: { gte: start, lte: end },
+        ...empresaFilter,
+      },
+      select: DRE_RECEIVABLE_SELECT,
+    }),
+    getFinancialCategories(),
+  ]);
+
+  const dreKeyByCategoriaId = new Map(categorias.map((c) => [c.id, c.dreKey]));
+
+  return computeDreFromRows({ payables, receivables, dreKeyByCategoriaId });
+}
+
 function sum(groupTotals: Map<string, number>, keys: string[]) {
   return keys.reduce((acc, k) => acc + (groupTotals.get(k) ?? 0), 0);
 }
@@ -137,8 +176,4 @@ function computeResultValue(key: string, groupTotals: Map<string, number>): numb
     default:
       return 0;
   }
-}
-
-export function dreRowLabel(row: DreRowDef) {
-  return row.label;
 }
