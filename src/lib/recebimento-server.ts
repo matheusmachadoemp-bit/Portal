@@ -266,6 +266,17 @@ export function resolveRecebimentoDashboardRange(
 export async function loadSupplierReceivingHistory(supplierId: string) {
   const receivings = await prisma.receiving.findMany({
     where: { purchase: { supplierId } },
+    orderBy: { dataHora: "desc" },
+    // Teto de segurança (mesmo espírito de Compras/Perdas/Movimentações/Contagens, ver
+    // src/app/api/estoque/{compras,perdas,movimentos,contagens}/route.ts): sem `take`, esta ficha
+    // buscava TODO o histórico de recebimento de um fornecedor desde sempre — crescimento sem fim
+    // para fornecedor antigo/recorrente. 500 é bem acima do volume real esperado mesmo para um
+    // fornecedor com entrega semanal há vários anos (52/ano → quase 10 anos de histórico cabem
+    // dentro do teto), então não corta dado de uso normal. `orderBy` garante que, se o teto algum
+    // dia for atingido de verdade, sobra o histórico mais recente (o mais relevante pra avaliar o
+    // fornecedor hoje) — os indicadores abaixo passam a refletir "os 500 recebimentos mais
+    // recentes" em vez de literalmente todo o histórico só nesse caso extremo.
+    take: 500,
     include: {
       purchase: { select: { previsaoEntrega: true } },
       items: { include: { purchaseItem: { select: { quantidade: true, valorUnitario: true } } } },

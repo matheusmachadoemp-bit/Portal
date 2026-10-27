@@ -20,6 +20,13 @@ export async function GET() {
   const plans = await prisma.actionPlan.findMany({
     where: { empresaId: { in: empresaIdsForContext(ctx) } },
     orderBy: { createdAt: "desc" },
+    // Teto de segurança: sem `take`, esta lista crescia sem fim conforme o histórico de planos de
+    // ação acumula (mesma categoria de risco já tratada em Compras/Perdas/Movimentações/Contagens,
+    // `src/app/api/estoque/{compras,perdas,movimentos,contagens}/route.ts`). 300 segue o valor já
+    // usado em Compras (caminho sem filtro de período) e Perdas — bem acima do volume real
+    // esperado (plano de ação é criado manualmente, um por vez, nunca em massa), então não corta
+    // dado de uso normal.
+    take: 300,
     include: { empresa: { select: { name: true, color: true } }, createdBy: { select: { name: true } } },
   });
   return NextResponse.json({ plans });
