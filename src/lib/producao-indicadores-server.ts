@@ -168,27 +168,54 @@ export async function getConsumoComparativo(empresaIds: string[], date: Date): P
     },
   });
 
-  const rows: ConsumoComparativoRow[] = [];
-  for (const order of orders) {
-    const [ultimoMovimentoAntes, saldoAnteriorInformado] = await Promise.all([
-      prisma.productionStockMovement.findFirst({
-        where: { productionItemId: order.productionItemId, createdAt: { lt: dayStart } },
-        orderBy: { createdAt: "desc" },
-        select: { saldoApos: true },
-      }),
-      prisma.productionStockMovement.findFirst({
-        where: { productionItemId: order.productionItemId, type: "SALDO_ANTERIOR", createdAt: { gte: dayEnd, lt: dayAfterEnd } },
-        select: { saldoApos: true },
-      }),
-    ]);
+  if (orders.length === 0) return [];
 
-    const estoqueInicial = ultimoMovimentoAntes?.saldoApos ?? 0;
+  // Em vez de 2 idas ao banco por ordem (N+1), busca os dois conjuntos em lote
+  // para todos os productionItemId do dia de uma vez.
+  const itemIds = Array.from(new Set(orders.map((o) => o.productionItemId)));
+
+  // (a) Último movimento antes do dia, por item: primeiro o createdAt máximo de
+  // cada item (groupBy), depois uma única consulta pontual pelos pares
+  // item+createdAt para obter o saldoApos correspondente.
+  const ultimosAntes = await prisma.productionStockMovement.groupBy({
+    by: ["productionItemId"],
+    where: { productionItemId: { in: itemIds }, createdAt: { lt: dayStart } },
+    _max: { createdAt: true },
+  });
+  const paresUltimoAntes = ultimosAntes
+    .filter((u): u is typeof u & { _max: { createdAt: Date } } => u._max.createdAt !== null)
+    .map((u) => ({ productionItemId: u.productionItemId, createdAt: u._max.createdAt }));
+
+  const movimentosNoMax = paresUltimoAntes.length
+    ? await prisma.productionStockMovement.findMany({
+        where: { OR: paresUltimoAntes.map((p) => ({ productionItemId: p.productionItemId, createdAt: p.createdAt })) },
+        select: { productionItemId: true, saldoApos: true },
+      })
+    : [];
+  const estoqueInicialPorItem = new Map<string, number>();
+  for (const m of movimentosNoMax) {
+    if (!estoqueInicialPorItem.has(m.productionItemId)) estoqueInicialPorItem.set(m.productionItemId, m.saldoApos);
+  }
+
+  // (b) Saldo anterior informado (lançamento manual do dia), também em uma
+  // única consulta com productionItemId: { in: [...] }.
+  const saldosInformados = await prisma.productionStockMovement.findMany({
+    where: { productionItemId: { in: itemIds }, type: "SALDO_ANTERIOR", createdAt: { gte: dayEnd, lt: dayAfterEnd } },
+    select: { productionItemId: true, saldoApos: true },
+  });
+  const saldoInformadoPorItem = new Map<string, number>();
+  for (const s of saldosInformados) {
+    if (!saldoInformadoPorItem.has(s.productionItemId)) saldoInformadoPorItem.set(s.productionItemId, s.saldoApos);
+  }
+
+  return orders.map((order) => {
+    const estoqueInicial = estoqueInicialPorItem.get(order.productionItemId) ?? 0;
     const produzido = order.quantidadeProduzida ?? 0;
     const disponivel = estoqueInicial + produzido;
     const saldoEsperado = disponivel - order.necessidadePrevista;
-    const saldoReal = saldoAnteriorInformado?.saldoApos ?? null;
+    const saldoReal = saldoInformadoPorItem.get(order.productionItemId) ?? null;
 
-    rows.push({
+    return {
       productionItemId: order.productionItemId,
       name: order.productionItem.name,
       unidade: order.productionItem.unidade,
@@ -199,8 +226,6 @@ export async function getConsumoComparativo(empresaIds: string[], date: Date): P
       saldoEsperado,
       saldoReal,
       diferenca: saldoReal !== null ? saldoReal - saldoEsperado : null,
-    });
-  }
-
-  return rows;
+    };
+  });
 }

@@ -4,11 +4,23 @@ import { auth } from "@/auth";
 import { getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
-/** Cobertura mínima por setor (`SectorCoverageConfig`) da loja ativa — alimenta o card "Cobertura
- *  por setor" e a validação (com aviso, nunca bloqueio) ao cadastrar folga. */
+/**
+ * Cobertura mínima por setor (`SectorCoverageConfig`) da loja ativa — alimenta o card "Cobertura
+ * por setor" e a validação (com aviso, nunca bloqueio) ao cadastrar folga.
+ *
+ * Mesma checagem de cargo (MANAGER_ROLES) já aplicada em `/api/rh/escala-folgas/entries` e
+ * `/api/rh/escala-folgas/calendario` (BUG-004, achado da auditoria do Jonas) — sem ela, qualquer
+ * COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView/canCreate=true de
+ * fábrica) conseguia ver/alterar a cobertura mínima de todos os setores da loja.
+ */
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     return NextResponse.json({ error: "Seu perfil de permissão não permite ver o RH." }, { status: 403 });
   }
@@ -32,6 +44,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canCreate"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite configurar cobertura mínima." },
