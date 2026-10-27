@@ -7,6 +7,7 @@ import { ContasReceberClient } from "./contas-receber-client";
 import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getActiveFinancialCategories } from "@/lib/financial-categories";
+import { REFRESH_WINDOW_DAYS } from "@/lib/due-date-filter";
 
 export default async function ContasAReceberPage() {
   const session = await auth();
@@ -21,7 +22,7 @@ export default async function ContasAReceberPage() {
 
   const [receivables, categorias, contas] = await Promise.all([
     prisma.receivable.findMany({
-      where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), 120) } },
+      where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), REFRESH_WINDOW_DAYS) } },
       orderBy: { dataVencimento: "asc" },
       include: { categoria: true, bankAccount: { select: { name: true } }, createdBy: { select: { name: true } }, empresa: { select: { id: true, name: true, color: true } } },
     }),
