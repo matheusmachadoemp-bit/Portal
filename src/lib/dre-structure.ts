@@ -233,12 +233,3 @@ export function allDreCategories(): { key: string; name: string; groupKey: strin
   }
   return out;
 }
-
-export function findGroupByCategoryKey(dreKey: string) {
-  for (const row of DRE_STRUCTURE) {
-    if (row.type === "group" && row.categories.some((c) => c.key === dreKey)) {
-      return row;
-    }
-  }
-  return undefined;
-}
