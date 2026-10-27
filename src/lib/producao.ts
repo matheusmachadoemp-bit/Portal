@@ -51,17 +51,6 @@ export const PRODUCTION_AJUSTE_MOTIVO_OPTIONS = [
   { key: "OUTRO", label: "Outro" },
 ];
 
-export const PRODUCTION_AJUSTE_MOTIVO_LABEL: Record<string, string> = Object.fromEntries(
-  PRODUCTION_AJUSTE_MOTIVO_OPTIONS.map((m) => [m.key, m.label])
-);
-
-export const PRODUCTION_STOCK_MOVEMENT_TYPE_LABEL: Record<string, string> = {
-  PRODUCAO: "Produção finalizada",
-  SALDO_ANTERIOR: "Saldo do turno anterior",
-  AJUSTE: "Ajuste manual",
-  PERDA: "Perda",
-};
-
 export const WEEKDAY_LABEL: Record<number, string> = {
   0: "Domingo",
   1: "Segunda",
@@ -81,19 +70,6 @@ export const WEEKDAY_SHORT_LABEL: Record<number, string> = {
   5: "Sex",
   6: "Sáb",
 };
-
-const HISTORY_ACTION_LABEL: Record<string, string> = {
-  CRIADO: "criou a ordem de produção",
-  INICIADO: "iniciou a produção",
-  FINALIZADO: "finalizou a produção",
-  AJUSTADO: "ajustou a quantidade sugerida",
-  ATRASADO: "ordem marcada como atrasada",
-  STATUS_ALTERADO: "alterou o status",
-};
-
-export function describeProductionHistoryAction(action: string): string {
-  return HISTORY_ACTION_LABEL[action] ?? action;
-}
 
 /** Uma ordem sem prazo cumprido, ainda não concluída, conta como atrasada — calculado ao vivo,
  * sem depender só do cron rodar (mesmo padrão de `isChamadoOverdue`/tarefas). */
