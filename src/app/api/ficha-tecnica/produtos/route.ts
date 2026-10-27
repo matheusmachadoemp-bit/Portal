@@ -8,6 +8,7 @@ import { createWithAutoCode } from "@/lib/ficha-code";
 import { isProductCategory } from "@/lib/ficha-code-core";
 import { cleanProductName, normalizeProductName } from "@/lib/ficha-nome";
 import { DuplicateProductNameError, withUniqueProductName } from "@/lib/ficha-nome-server";
+import { autoLinkResaleIngredient } from "@/lib/ficha-autolink";
 
 // Checagem de cargo (MANAGER_ROLES) — sem ela, qualquer COLABORADOR com o Perfil de Permissão
 // padrão "Funcionário" (ficha-tecnica:canView=true de fábrica) conseguia ver o custo/fornecedor
@@ -107,8 +108,8 @@ export async function POST(req: Request) {
     // `withUniqueProductName` recusa nome igual ao de outro produto desta loja e categoria (409) e, por
     // rodar numa transação com trava por loja, também barra dois salvamentos simultâneos.
     product = await createWithAutoCode(category, (code) =>
-      withUniqueProductName(empresa.id, category, name, null, (tx) =>
-        tx.product.create({
+      withUniqueProductName(empresa.id, category, name, null, async (tx) => {
+        const created = await tx.product.create({
           data: {
             empresaId: empresa.id,
             name,
@@ -138,8 +139,26 @@ export async function POST(req: Request) {
             },
           },
           include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
-        })
-      )
+        });
+
+        // Produto de revenda simples (ex.: lata de refrigerante): se foi criado sem nenhum
+        // ingrediente informado e existe um Insumo com o mesmo nome nesta loja, auto-liga (ver
+        // src/lib/ficha-autolink.ts para as regras completas e o porquê).
+        if (created.ingredients.length === 0) {
+          await autoLinkResaleIngredient(tx, {
+            productId: created.id,
+            productName: created.name,
+            empresaId: empresa.id,
+          });
+          const ingredients = await tx.productIngredient.findMany({
+            where: { productId: created.id },
+            include: { ingredient: true },
+            orderBy: { order: "asc" },
+          });
+          return { ...created, ingredients };
+        }
+        return created;
+      })
     );
   } catch (e) {
     if (e instanceof DuplicateProductNameError) {

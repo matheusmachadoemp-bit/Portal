@@ -7,6 +7,7 @@ import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { isProductCategory } from "@/lib/ficha-code-core";
 import { cleanProductName, normalizeProductName } from "@/lib/ficha-nome";
 import { DuplicateProductNameError, withUniqueProductName } from "@/lib/ficha-nome-server";
+import { autoLinkResaleIngredientLocked } from "@/lib/ficha-autolink";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -113,6 +114,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ),
     });
   }
+
+  // Produto de revenda simples (ex.: lata de refrigerante): se, depois desta edição, o produto
+  // ficou sem NENHUM ingrediente (seja porque `body.ingredients` nem foi enviado e ele já estava
+  // assim, seja porque a edição limpou a lista de propósito) e existe um Insumo com o mesmo nome
+  // nesta loja, auto-liga — a verificação da contagem de ingredientes acontece dentro da própria
+  // chamada, então é seguro chamar sempre aqui. Usa a variante com trava por produto (não a versão
+  // "nua" usada dentro da transação do POST) porque, diferente da criação, esta rota não roda numa
+  // transação própria: sem a trava, duas edições do mesmo produto ao mesmo tempo poderiam criar
+  // dois `ProductIngredient` para o mesmo Insumo e dobrar o custo calculado (ver
+  // src/lib/ficha-autolink.ts).
+  await autoLinkResaleIngredientLocked({
+    productId: id,
+    productName: name ?? existing.name,
+    empresaId: existing.empresaId,
+  });
 
   const product = await prisma.product.findUnique({
     where: { id },
