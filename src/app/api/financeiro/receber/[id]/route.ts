@@ -24,7 +24,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 403 }
     );
   }
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Corpo da requisição inválido (esperado JSON)." }, { status: 400 });
+  }
 
   // Datas: ausente = não mexe; dataRecebimento null = limpa. Gravadas à meia-noite de São Paulo (03:00Z).
   const dataCompetencia = body.dataCompetencia ? parseDayInput(body.dataCompetencia) : undefined;

@@ -8,6 +8,7 @@ import { subDays } from "date-fns";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { getActiveFinancialCategories } from "@/lib/financial-categories";
 import { INVOICE_SUMMARY_SELECT } from "@/lib/compra-itens-server";
+import { REFRESH_WINDOW_DAYS } from "@/lib/due-date-filter";
 
 export default async function ContasAPagarPage() {
   const session = await auth();
@@ -34,7 +35,7 @@ export default async function ContasAPagarPage() {
 
   const [payables, categorias, contas, fornecedoresCadastrados, ingredients, canCreateSupplier] = await Promise.all([
     prisma.payable.findMany({
-      where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), 120) } },
+      where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), REFRESH_WINDOW_DAYS) } },
       orderBy: { dataVencimento: "asc" },
       include: {
         categoria: true,
