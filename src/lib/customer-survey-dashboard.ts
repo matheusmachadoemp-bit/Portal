@@ -114,8 +114,12 @@ export type DashboardKpis = {
   criticasCount: number;
   criticasPercent: number;
   clientesUnicos: number;
-  /** Roleta de prêmios (Fase 6) ainda não existe — sempre 0 por enquanto (nunca omitido: o
-   *  pedido original, seção 12, já lista "prêmios ganhos" como KPI fixo do dashboard). */
+  /** Giros da Roleta de Prêmios (Fase 6/7) que resultaram em um prêmio de verdade no período —
+   *  conta `RouletteSpin` com `codigo` preenchido (o sentinela "Tente novamente" sempre grava
+   *  `codigo: null`, ver comentário em `RouletteSpin.codigo` no schema e em
+   *  `src/lib/roulette-server.ts`), filtrado pela `submittedAt` da avaliação que originou o giro
+   *  (cada `RouletteSpin` vem de 1 avaliação concluída, `responseId` único) para ficar no mesmo
+   *  critério de período das demais métricas deste dashboard. */
   premiosGanhos: number;
 };
 
@@ -141,18 +145,27 @@ export async function computeDashboardKpis(empresaIds: string[], from: Date, to:
     };
   }
 
-  const rows = await prisma.$queryRaw<DashboardKpisRow[]>(Prisma.sql`
-    SELECT
-      COUNT(*)::int AS total,
-      COALESCE(AVG(r."notaGeral"), 0)::float AS "notaMedia",
-      COUNT(*) FILTER (WHERE r."notaGeral" >= COALESCE(cfg."notaPositivaAPartirDe", ${NOTA_POSITIVA_A_PARTIR_DE_PADRAO}))::int AS positivas,
-      COUNT(*) FILTER (WHERE r.critica)::int AS criticas,
-      COUNT(DISTINCT r."clienteId")::int AS "clientesUnicos"
-    FROM "CustomerSurveyResponse" r
-    LEFT JOIN "CustomerSurveyConfig" cfg ON cfg."empresaId" = r."empresaId"
-    WHERE r."empresaId" = ANY(${empresaIds}::text[])
-      AND r."submittedAt" >= ${from} AND r."submittedAt" <= ${to}
-  `);
+  const [rows, premiosGanhos] = await Promise.all([
+    prisma.$queryRaw<DashboardKpisRow[]>(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS total,
+        COALESCE(AVG(r."notaGeral"), 0)::float AS "notaMedia",
+        COUNT(*) FILTER (WHERE r."notaGeral" >= COALESCE(cfg."notaPositivaAPartirDe", ${NOTA_POSITIVA_A_PARTIR_DE_PADRAO}))::int AS positivas,
+        COUNT(*) FILTER (WHERE r.critica)::int AS criticas,
+        COUNT(DISTINCT r."clienteId")::int AS "clientesUnicos"
+      FROM "CustomerSurveyResponse" r
+      LEFT JOIN "CustomerSurveyConfig" cfg ON cfg."empresaId" = r."empresaId"
+      WHERE r."empresaId" = ANY(${empresaIds}::text[])
+        AND r."submittedAt" >= ${from} AND r."submittedAt" <= ${to}
+    `),
+    prisma.rouletteSpin.count({
+      where: {
+        empresaId: { in: empresaIds },
+        codigo: { not: null },
+        response: { submittedAt: { gte: from, lte: to } },
+      },
+    }),
+  ]);
 
   const row = rows[0] ?? { total: 0, notaMedia: 0, positivas: 0, criticas: 0, clientesUnicos: 0 };
   const total = Number(row.total);
@@ -166,7 +179,7 @@ export async function computeDashboardKpis(empresaIds: string[], from: Date, to:
     criticasCount: criticas,
     criticasPercent: pct(criticas, total),
     clientesUnicos: Number(row.clientesUnicos),
-    premiosGanhos: 0,
+    premiosGanhos,
   };
 }
 

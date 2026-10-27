@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { growth } from "@/lib/calc";
 import {
-  computeClienteMetrics,
+  computeClienteMetricsFromResumo,
   computeDashboardSummary,
   bucketRiskDistribution,
   bucketFrequencia,
@@ -10,27 +10,29 @@ import {
   isReativacao,
   type CrmPeriodKey,
 } from "@/lib/crm";
+import { loadClientesResumo, loadVendasResumoPorCliente } from "@/lib/crm-data";
 import { spDayStart, spDayEnd, spAddDays } from "@/lib/periods";
 
-async function loadClientesComVendas(empresaIds: string[]) {
-  return prisma.cliente.findMany({
-    where: { empresaId: { in: empresaIds } },
-    select: {
-      id: true,
-      empresaId: true,
-      nome: true,
-      telefone: true,
-      whatsapp: true,
-      email: true,
-      dataNascimento: true,
-      endereco: true,
-      bairro: true,
-      cidade: true,
-      canalPreferido: true,
-      createdAt: true,
-      vendas: { select: { id: true, dateTime: true, valorTotal: true, channel: true } },
-    },
-  });
+/**
+ * Mesma técnica de `loadClientesResumo` (achado de performance #294, ver
+ * crm-data.ts): nenhuma linha de `Sale`/`SaleItem` é buscada de propósito
+ * sem filtro/cache. O Dashboard, diferente das outras 8 telas do módulo,
+ * também precisa da sequência ORDENADA de vendas por cliente (sem itens) —
+ * `receitaPorTipo`/`evolucao` filtram venda a venda por dia/período, e
+ * `isReativacao` precisa comparar cada venda com a imediatamente anterior
+ * (que pode estar fora do período) — então reaproveita o mesmo par de
+ * funções já cacheadas (60s) usado pelo relatório "Receita recuperada" de
+ * CRM > Relatórios (`loadClientesResumo` para os dados base + agregados
+ * pedidos/totalGasto/primeira/última compra calculados no Postgres via
+ * `sale.groupBy`, `loadVendasResumoPorCliente` para a sequência de vendas
+ * sem `SaleItem`) em vez de uma query própria sem `select`/cache.
+ */
+async function loadClientesComVendasResumo(empresaIds: string[]) {
+  const [clientes, vendasPorCliente] = await Promise.all([
+    loadClientesResumo(empresaIds),
+    loadVendasResumoPorCliente(empresaIds),
+  ]);
+  return clientes.map((c) => ({ ...c, vendas: vendasPorCliente.get(c.id) ?? [] }));
 }
 
 export async function getCrmDashboardData(
@@ -47,14 +49,18 @@ export async function getCrmDashboardData(
   // como estava (evita mexer no resto da função por causa só disso); o `key`/`label` do card
   // abaixo também não mudaram.
   const [clientes, npsPendentes] = await Promise.all([
-    loadClientesComVendas(empresaIds),
+    loadClientesComVendasResumo(empresaIds),
     prisma.customerSurveyResponse.count({ where: { empresaId: { in: empresaIds }, critica: true, status: { not: "RESOLVIDA" } } }),
   ]);
 
   const summary = computeDashboardSummary(clientes, periodFrom, periodTo);
   const prevSummary = computeDashboardSummary(clientes, prevFrom, prevTo);
 
-  const metrics = computeClienteMetrics(clientes);
+  // Pedidos/totalGasto/primeira/última compra já vêm agregados do Postgres
+  // (via `loadClientesResumo`) — usa `computeClienteMetricsFromResumo` em vez
+  // de `computeClienteMetrics` pra não recalcular esses 4 números em JS a
+  // partir de `vendas[]` (resultado idêntico, ver crm.ts).
+  const metrics = computeClienteMetricsFromResumo(clientes);
   const risco = bucketRiskDistribution(metrics);
   const frequencia = bucketFrequencia(metrics);
   const insights = buildInsights(metrics);
