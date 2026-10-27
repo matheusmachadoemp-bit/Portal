@@ -101,13 +101,6 @@ export const FILE_CATEGORY_OPTIONS = [
   "Identidade Visual",
 ];
 
-export const CAMPAIGN_STATUS_OPTIONS = [
-  { key: "PLANEJADA", label: "Planejada", tone: "default" as const },
-  { key: "EM_ANDAMENTO", label: "Em Andamento", tone: "info" as const },
-  { key: "PAUSADA", label: "Pausada", tone: "warning" as const },
-  { key: "CONCLUIDA", label: "Concluída", tone: "success" as const },
-];
-
 export const IDEA_STATUS_OPTIONS = [
   { key: "NOVA", label: "Nova", tone: "default" as const },
   { key: "EM_AVALIACAO", label: "Em Avaliação", tone: "info" as const },

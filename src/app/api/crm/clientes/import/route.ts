@@ -265,7 +265,10 @@ export async function POST(req: Request) {
     });
   }
 
-  const existingClientes = await prisma.cliente.findMany({ where: { empresaId: empresa.id } });
+  const existingClientes = await prisma.cliente.findMany({
+    where: { empresaId: empresa.id },
+    select: { id: true, telefone: true },
+  });
   const byTelefone = new Map(existingClientes.filter((c) => c.telefone).map((c) => [onlyDigits(c.telefone!), c]));
 
   const toCreate = parsed.filter((r) => !(r.telefone && byTelefone.has(r.telefone)));
@@ -297,7 +300,10 @@ export async function POST(req: Request) {
 
   // Recarrega para ter o id de todo mundo (inclusive os recém-criados),
   // já que createMany não retorna os registros criados.
-  const allClientes = await prisma.cliente.findMany({ where: { empresaId: empresa.id } });
+  const allClientes = await prisma.cliente.findMany({
+    where: { empresaId: empresa.id },
+    select: { id: true, telefone: true },
+  });
   const clienteIdByTelefone = new Map(allClientes.filter((c) => c.telefone).map((c) => [onlyDigits(c.telefone!), c.id]));
 
   let updated = 0;
