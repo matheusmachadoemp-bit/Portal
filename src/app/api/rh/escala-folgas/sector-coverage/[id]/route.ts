@@ -4,9 +4,19 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
+// BUG-004 (mesma lacuna já corrigida em `/api/rh/escala-folgas/sector-coverage` (rota base),
+// `/api/rh/escala-folgas/entries[/[id]]` e `/api/rh/escala-folgas/calendario`): faltava a mesma
+// checagem de cargo (MANAGER_ROLES) aqui — sem ela, qualquer COLABORADOR com o Perfil de
+// Permissão padrão "Funcionário" (rh:canEdit/canDelete=true de fábrica) conseguia editar/excluir
+// a cobertura mínima de setor de qualquer loja.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.sectorCoverageConfig.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
@@ -38,6 +48,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.sectorCoverageConfig.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });

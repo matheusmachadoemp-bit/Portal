@@ -4,9 +4,19 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 
+// BUG-004 (mesma lacuna já corrigida em `/api/rh/escala-folgas/day-off-types` (rota base),
+// `/api/rh/escala-folgas/entries[/[id]]` e `/api/rh/escala-folgas/calendario`): faltava a mesma
+// checagem de cargo (MANAGER_ROLES) aqui — sem ela, qualquer COLABORADOR com o Perfil de
+// Permissão padrão "Funcionário" (rh:canEdit/canDelete=true de fábrica) conseguia editar/excluir
+// tipos de folga do catálogo global.
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canEdit"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite editar tipos de folga." },
@@ -36,6 +46,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canDelete"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite excluir tipos de folga." },

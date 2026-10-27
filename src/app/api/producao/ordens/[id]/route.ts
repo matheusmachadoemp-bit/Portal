@@ -11,32 +11,6 @@ import { hasModulePermission } from "@/lib/authz";
 import { assertEmpresaAccess, findUsersWithoutEmpresaAccess } from "@/lib/empresa";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "producao", "canView"))) {
-    return NextResponse.json({ error: "Seu perfil de permissão não permite ver a Produção." }, { status: 403 });
-  }
-
-  const { id } = await params;
-  const ordem = await prisma.productionOrder.findUnique({
-    where: { id },
-    include: {
-      productionItem: { include: { category: true, setor: true } },
-      responsavel: { select: { id: true, name: true } },
-      ajustePor: { select: { id: true, name: true } },
-      forecast: true,
-      history: { orderBy: { createdAt: "desc" }, include: { user: { select: { id: true, name: true } } } },
-    },
-  });
-  if (!ordem) return NextResponse.json({ error: "Ordem de produção não encontrada." }, { status: 404 });
-  if (!(await assertEmpresaAccess(session.user.id, session.user.role, ordem.empresaId))) {
-    return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
-  }
-
-  return NextResponse.json({ ordem });
-}
-
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

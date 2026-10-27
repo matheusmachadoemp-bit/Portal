@@ -125,10 +125,6 @@ export const TASK_RECURRENCE_FREQ_OPTIONS = [
   { key: "PERSONALIZADA", label: "Personalizado (a cada N dias)" },
 ] as const;
 
-export const TASK_RECURRENCE_FREQ_LABEL: Record<string, string> = Object.fromEntries(
-  TASK_RECURRENCE_FREQ_OPTIONS.map((f) => [f.key, f.label])
-);
-
 export const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 type RecurrenceConfig = { weekdays?: number[]; intervalDays?: number; dayOfMonth?: number };
@@ -176,21 +172,6 @@ export function recurrenceMatchesDate(recurrence: Pick<TaskRecurrence, "freq" | 
       return false;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Origem da tarefa (preparado para automações/integrações futuras)
-// ---------------------------------------------------------------------------
-
-export const TASK_SOURCE_LABEL: Record<string, string> = {
-  MANUAL: "Manual",
-  REUNIAO: "Reunião",
-  INDICADOR: "Indicador",
-  CHECKLIST: "Checklist",
-  OCORRENCIA: "Ocorrência",
-  MANUTENCAO: "Manutenção",
-  TREINAMENTO: "Treinamento",
-  AUTOMACAO: "Automação",
-};
 
 // ---------------------------------------------------------------------------
 // Histórico — rótulos legíveis para as ações registradas em TaskHistory
