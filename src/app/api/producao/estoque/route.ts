@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { lancarProductionStockMovement, PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
+import { prisma } from "@/lib/prisma";
 
 const ALLOWED_TYPES = ["SALDO_ANTERIOR", "AJUSTE", "PERDA"] as const;
 
@@ -35,6 +36,14 @@ export async function POST(req: Request) {
   const quantidade = Number(body.quantidade);
   if (!Number.isFinite(quantidade) || quantidade < 0) {
     return NextResponse.json({ error: "Informe uma quantidade válida." }, { status: 400 });
+  }
+
+  const productionItem = await prisma.productionItem.findUnique({
+    where: { id: body.productionItemId },
+    select: { id: true, empresaId: true },
+  });
+  if (!productionItem || productionItem.empresaId !== empresa.id) {
+    return NextResponse.json({ error: "Produto inválido para esta loja." }, { status: 400 });
   }
 
   const stock = await lancarProductionStockMovement(

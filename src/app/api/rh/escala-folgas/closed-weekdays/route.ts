@@ -11,10 +11,20 @@ const WEEKDAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sex
  * (0=domingo..6=sábado, mesmo vocabulário de `spWeekday`/`ProductionWeekdayWeight`), com
  * `ativo: false` para dias sem configuração cadastrada ainda (nunca precisa existir uma linha
  * pra cada dia de antemão — só nasce quando um dia é marcado como fechado).
+ *
+ * Mesma checagem de cargo (MANAGER_ROLES) já aplicada em `/api/rh/escala-folgas/entries` e
+ * `/api/rh/escala-folgas/calendario` (BUG-004, achado da auditoria do Jonas) — sem ela, qualquer
+ * COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView/canEdit=true de fábrica)
+ * conseguia ver/alterar os dias de loja fechada.
  */
+const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
+
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canView"))) {
     return NextResponse.json({ error: "Seu perfil de permissão não permite ver o RH." }, { status: 403 });
   }
@@ -41,6 +51,9 @@ export async function GET() {
 export async function PATCH(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!MANAGER_ROLES.includes(session.user.role)) {
+    return NextResponse.json({ error: "Acesso restrito a gestores." }, { status: 403 });
+  }
   if (!(await hasModulePermission(session.user.id, "rh", "canEdit"))) {
     return NextResponse.json(
       { error: "Seu perfil de permissão não permite configurar dias de loja fechada." },
