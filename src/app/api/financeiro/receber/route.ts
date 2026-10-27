@@ -6,6 +6,18 @@ import { balanceDelta } from "@/lib/finance";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
+// Teto de segurança (mesmo espírito de `take: 300/2000` em `/api/estoque/compras` e `MAX_ROWS` em
+// `/api/financeiro/conciliacao`): sem isso, qualquer chamada deste GET sem filtro de data devolvia
+// o histórico inteiro da loja desde sempre — e era exatamente isso que `refresh()` em
+// `contas-receber-client.tsx` fazia depois de QUALQUER ação (criar/editar/receber/excluir), trocando
+// silenciosamente a janela de "últimos 120 dias" do carregamento inicial (ver
+// `contas-a-receber/page.tsx`) por "tudo". A correção de raiz é `refresh()` reenviar a mesma janela
+// de 120 dias (`from`, sem `to` — os mesmos limites do carregamento inicial, que só tem piso e não
+// teto, para não esconder vencimentos futuros); os tetos abaixo são só uma rede de segurança
+// adicional para quem chamar esta rota sem nenhum filtro de data.
+const MAX_ROWS_WITH_DATE_FILTER = 5000;
+const MAX_ROWS_WITHOUT_DATE_FILTER = 500;
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,13 +36,27 @@ export async function GET(req: Request) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
+  // `to` é opcional: com só `from`, o filtro fica "a partir de" (mesmo comportamento do
+  // carregamento inicial em `page.tsx`, que nunca tetou vencimentos futuros).
+  const fromDate = from ? new Date(from) : null;
+  const toDate = to ? new Date(to) : null;
+  if ((from && (!fromDate || Number.isNaN(fromDate.getTime()))) || (to && (!toDate || Number.isNaN(toDate.getTime())))) {
+    return NextResponse.json({ error: "Parâmetro de data inválido." }, { status: 400 });
+  }
+
+  // Sem filtro de data, o teto (MAX_ROWS_WITHOUT_DATE_FILTER) precisa pegar os lançamentos MAIS
+  // RECENTES (não os mais antigos) — mesmo padrão de `/api/estoque/compras` (`orderBy: { data:
+  // "desc" }` antes do `take`). Por isso buscamos em ordem decrescente e devolvemos de volta em
+  // ordem crescente (reverse), para manter o mesmo contrato de ordenação (`asc`) que o ramo com
+  // filtro de data já usa e que a tela espera para exibir a lista.
   const receivables = await prisma.receivable.findMany({
     where: {
       empresaId: { in: empresaIdsForContext(ctx) },
       ...(status ? { status: status as never } : {}),
-      ...(from && to ? { dataVencimento: { gte: new Date(from), lte: new Date(to) } } : {}),
+      ...(fromDate ? { dataVencimento: { gte: fromDate, ...(toDate ? { lte: toDate } : {}) } } : {}),
     },
-    orderBy: { dataVencimento: "asc" },
+    orderBy: { dataVencimento: fromDate ? "asc" : "desc" },
+    take: fromDate ? MAX_ROWS_WITH_DATE_FILTER : MAX_ROWS_WITHOUT_DATE_FILTER,
     include: {
       categoria: { select: { name: true } },
       createdBy: { select: { name: true } },
@@ -38,7 +64,7 @@ export async function GET(req: Request) {
     },
   });
 
-  return NextResponse.json({ receivables });
+  return NextResponse.json({ receivables: fromDate ? receivables : receivables.slice().reverse() });
 }
 
 export async function POST(req: Request) {

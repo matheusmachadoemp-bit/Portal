@@ -1,14 +1,21 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Plus, Pencil, Trash2, Check, Download, Copy } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, Download, Copy, AlertTriangle, X } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/calc";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
-import { DUE_DATE_FILTER_OPTIONS, matchesDueDateFilter, type DueDateFilterKey } from "@/lib/due-date-filter";
+import {
+  DUE_DATE_FILTER_OPTIONS,
+  matchesDueDateFilter,
+  isOutsideRefreshWindow,
+  OUTSIDE_REFRESH_WINDOW_MESSAGE,
+  REFRESH_WINDOW_DAYS,
+  type DueDateFilterKey,
+} from "@/lib/due-date-filter";
 
 type ReceivableDTO = {
   id: string;
@@ -104,6 +111,10 @@ export function ContasReceberClient({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
+  // Aviso de "salvou, mas caiu fora da janela de 120 dias que a lista busca" — ver
+  // `isOutsideRefreshWindow`. Setado/limpo a cada criar/editar/duplicar (nunca por marcar como
+  // recebido/excluir, que não mudam `dataVencimento`).
+  const [outOfWindowNotice, setOutOfWindowNotice] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -128,7 +139,15 @@ export function ContasReceberClient({
   const totalFiltrado = filtered.reduce((a, p) => a + p.valor, 0);
 
   async function refresh() {
-    const res = await fetch("/api/financeiro/receber");
+    // Mesma janela de 120 dias do carregamento inicial (ver contas-a-receber/page.tsx) — sem isso, o
+    // GET sem filtro nenhum devolve o histórico inteiro da loja desde sempre (só com um teto de
+    // segurança no backend), e qualquer ação (criar/editar/receber/excluir) chamava `refresh()` e
+    // trocava a lista visível de "últimos 120 dias" para "tudo". O filtro de vencimento selecionável
+    // na tela (`filterVencimento`, abaixo) é um filtro de EXIBIÇÃO sobre a lista já carregada (ex.:
+    // "Vencidas", "Esta semana") — não controla quanto tempo pra trás buscar, por isso não
+    // reaproveitamos ele aqui.
+    const from = subDays(new Date(), REFRESH_WINDOW_DAYS).toISOString();
+    const res = await fetch(`/api/financeiro/receber?from=${encodeURIComponent(from)}`);
     const data = await res.json();
     setReceivables(data.receivables);
   }
@@ -136,6 +155,8 @@ export function ContasReceberClient({
   function openNew() {
     setEditing(null);
     setForm({ ...emptyForm, categoriaId: categorias[0]?.id ?? "", bankAccountId: contas[0]?.id ?? "" });
+    setFormError(null);
+    setOutOfWindowNotice(false);
     setShowForm(true);
   }
 
@@ -164,6 +185,8 @@ export function ContasReceberClient({
       dataVencimento: format(new Date(p.dataVencimento), "yyyy-MM-dd"),
       dataRecebimento: p.dataRecebimento ? format(new Date(p.dataRecebimento), "yyyy-MM-dd") : "",
     };
+    setFormError(null);
+    setOutOfWindowNotice(false);
     setShowForm(true);
   }
 
@@ -194,13 +217,18 @@ export function ContasReceberClient({
       }
     }
     const result = editing
-      ? await apiRequest(`/api/financeiro/receber/${editing.id}`, "PATCH", payload)
-      : await apiRequest("/api/financeiro/receber", "POST", payload);
+      ? await apiRequest<{ receivable: { dataVencimento: string } }>(`/api/financeiro/receber/${editing.id}`, "PATCH", payload)
+      : await apiRequest<{ receivable: { dataVencimento: string } }>("/api/financeiro/receber", "POST", payload);
     setSaving(false);
     if (!result.ok) {
       setFormError(result.error);
       return;
     }
+    // Avisa se o vencimento salvo ficou fora da janela que `refresh()` busca (ver
+    // isOutsideRefreshWindow) — sem isso, o lançamento some da lista sem explicação depois de
+    // salvar. Só este fluxo (criar/editar) e `duplicate()` mexem em `dataVencimento`; marcar como
+    // recebido/excluir não, por isso não disparam este aviso.
+    setOutOfWindowNotice(isOutsideRefreshWindow(new Date(result.data.receivable.dataVencimento)));
     setShowForm(false);
     refresh();
   }
@@ -220,7 +248,8 @@ export function ContasReceberClient({
 
   async function duplicate(p: ReceivableDTO) {
     setRowError(null);
-    const result = await apiRequest("/api/financeiro/receber", "POST", {
+    setOutOfWindowNotice(false);
+    const result = await apiRequest<{ receivable: { dataVencimento: string } }>("/api/financeiro/receber", "POST", {
       cliente: p.cliente,
       descricao: `${p.descricao} (cópia)`,
       categoriaId: p.categoriaId,
@@ -236,6 +265,10 @@ export function ContasReceberClient({
       setRowError(result.error);
       return;
     }
+    // Mesmo aviso de `submit()`: a cópia herda o vencimento do original, que normalmente já está
+    // dentro da janela (senão o original não estaria visível pra duplicar) — mas confere de
+    // qualquer forma, por segurança.
+    setOutOfWindowNotice(isOutsideRefreshWindow(new Date(result.data.receivable.dataVencimento)));
     refresh();
   }
 
@@ -317,6 +350,15 @@ export function ContasReceberClient({
         </p>
       )}
       <FormError message={rowError} />
+      {outOfWindowNotice && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-nord-warning/10 border border-nord-warning/30 mb-3">
+          <AlertTriangle size={14} className="text-nord-warning mt-0.5 shrink-0" />
+          <p className="text-xs text-nord-warning flex-1">{OUTSIDE_REFRESH_WINDOW_MESSAGE}</p>
+          <button onClick={() => setOutOfWindowNotice(false)} className="text-nord-gray hover:text-white shrink-0">
+            <X size={14} />
+          </button>
+        </div>
+      )}
       {filterVencimento === "personalizado" && (
         <div className="flex items-center gap-2 mb-3">
           <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="input-sm" />

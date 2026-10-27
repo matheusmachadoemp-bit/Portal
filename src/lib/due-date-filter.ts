@@ -1,4 +1,4 @@
-import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from "date-fns";
 import { parseDateKey, spEndOfDay, spStartOfDay } from "@/lib/timezone";
 
 /**
@@ -52,3 +52,27 @@ export function matchesDueDateFilter(
       return true;
   }
 }
+
+/**
+ * Janela de dias que o carregamento inicial de Contas a Pagar/Receber (Server Component, ver
+ * `contas-a-pagar/page.tsx` e `contas-a-receber/page.tsx`) e o `refresh()` dos respectivos clients
+ * usam para buscar no backend (`GET /api/financeiro/pagar|receber?from=...`). NÃO É o mesmo
+ * conceito do `DueDateFilterKey` acima (aquele filtra, na tela, uma lista que já está carregada;
+ * este decide o que é buscado do banco). Um lançamento com vencimento mais antigo que essa janela
+ * nunca aparece na lista, mesmo que o usuário troque `DueDateFilterKey` — por isso o aviso em
+ * `isOutsideRefreshWindow` abaixo, mostrado ao criar/editar/duplicar um lançamento que caiu fora
+ * dela.
+ */
+export const REFRESH_WINDOW_DAYS = 120;
+
+/** Verdadeiro se `dataVencimento` é mais antiga que `REFRESH_WINDOW_DAYS` dias atrás — ou seja, vai
+ *  desaparecer da lista de Contas a Pagar/Receber até o usuário consultar diretamente um período
+ *  anterior (hoje não há nenhum filtro na tela que amplie essa busca; é sempre os últimos
+ *  `REFRESH_WINDOW_DAYS` dias). Vencimentos futuros nunca contam como "fora": a janela só tem piso,
+ *  não teto, de propósito (ver comentário em `page.tsx`). */
+export function isOutsideRefreshWindow(dataVencimento: Date, now: Date = new Date()): boolean {
+  return dataVencimento < subDays(now, REFRESH_WINDOW_DAYS);
+}
+
+/** Mesmo texto nas duas telas (Contas a Pagar e Contas a Receber) — ver `isOutsideRefreshWindow`. */
+export const OUTSIDE_REFRESH_WINDOW_MESSAGE = `Lançamento salvo normalmente, mas o vencimento é mais antigo que os últimos ${REFRESH_WINDOW_DAYS} dias mostrados nesta lista — por isso ele não aparece aqui.`;
