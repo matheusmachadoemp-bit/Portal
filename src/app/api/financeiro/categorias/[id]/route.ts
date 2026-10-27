@@ -53,6 +53,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     );
   }
   const { id } = await params;
+
+  // Mesmo padrão de `DELETE /api/estoque/fornecedores/[id]` (conta `purchase.count`) e
+  // `DELETE /api/estoque/categorias/[id]` (conta `ingredient.count`): a constraint é `ON DELETE
+  // RESTRICT` (Payable/Receivable/RecurringTemplate → FinancialCategory, ver schema.prisma), então
+  // excluir direto lançava um erro de banco (P2003) não tratado, virando 500 genérico pro usuário.
+  const [payablesCount, receivablesCount, recurringCount] = await Promise.all([
+    prisma.payable.count({ where: { categoriaId: id } }),
+    prisma.receivable.count({ where: { categoriaId: id } }),
+    prisma.recurringTemplate.count({ where: { categoriaId: id } }),
+  ]);
+  if (payablesCount > 0 || receivablesCount > 0 || recurringCount > 0) {
+    return NextResponse.json(
+      { error: "Esta categoria possui lançamentos vinculados e não pode ser excluída." },
+      { status: 400 }
+    );
+  }
+
   await prisma.financialCategory.delete({ where: { id } });
   revalidateTag("financial-categories", { expire: 0 });
   return NextResponse.json({ ok: true });
