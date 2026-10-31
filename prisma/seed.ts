@@ -520,6 +520,40 @@ const CATEGORIES = [
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
+  {
+    // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver prisma/migrations/
+    // 20261031010000_nord_ai_fundacao_schema e 20261031011000_nord_ai_fundacao_menu para o
+    // equivalente de produção, já que o deploy automático nunca roda este seed). Única
+    // subcategoria desta etapa é "Painel" (a conversa com o assistente em si) — sem pasta de
+    // rota física ainda (fundação = schema/menu/permissão/API, sem UI); cai no fallback
+    // genérico até Caio construir a tela de chat de verdade (ver migration de menu).
+    //
+    // A migration de produção dá a esta categoria/subcategoria a cor "#1464F4" (destaque do
+    // Design System, mesma cor do botão de Bugs e Melhorias no Topbar e do default do color
+    // picker de categoria/subcategoria nova) — ver comentário completo na migration de menu.
+    // Este array `CATEGORIES` (igual todo o resto dele: nenhuma categoria/subcategoria daqui
+    // tem cor própria) não repassa `color` pro `prisma.category.upsert`/`prisma.subcategory.
+    // upsert` no loop abaixo — então em banco novo via `npm run db:seed` esta categoria nasce
+    // com o default do schema ("#2952E3"), não com o destaque; só a migration (produção) aplica
+    // a cor de destaque de verdade. Divergência sem efeito prático (cosmético, só em dev).
+    //
+    // DE PROPÓSITO sem entrada em MODULES (src/lib/permissions.ts): por enquanto só o Role
+    // ADMINISTRADOR acessa o módulo (checagem literal nas rotas src/app/api/nord-ai/**, mesmo
+    // padrão de "bugs-melhorias" — ver src/app/portal/administrativo/bugs-melhorias/page.tsx).
+    // Sem linha nenhuma em
+    // `ModulePermission` para "nord-ai"/"nord-ai:painel", o item já fica oculto por padrão pra
+    // qualquer perfil que não seja Administrador (regra de "negar sem linha explícita" de
+    // `buildVisibilityResolver`/`hasModulePermission`) — não precisa de uma 2ª migration
+    // restringindo, diferente do caso de "bugs-melhorias" (cuja categoria-mãe "administrativo"
+    // já era visível por padrão pra quase todo perfil). Liberar Gerente/outros perfis é uma
+    // tarefa futura, quando o módulo estiver mais maduro (decisão de escopo desta etapa).
+    key: "nord-ai",
+    name: "Nord AI",
+    icon: "Sparkles",
+    order: 21,
+    contentType: "nord-ai",
+    subs: [{ key: "painel", name: "Painel", icon: "Bot" }],
+  },
 ];
 
 // Perfis de permissão com acesso automático ao módulo "reservas" (ver prompt da tarefa
