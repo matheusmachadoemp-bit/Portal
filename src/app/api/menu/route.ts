@@ -4,15 +4,41 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { MENU_CATEGORIES_TAG } from "@/lib/menu-categories";
 import { ensureDefaultModulePermissions } from "@/lib/authz";
+import { buildVisibilityResolver } from "@/lib/permissions";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const categories = await prisma.category.findMany({
-    orderBy: { order: "asc" },
-    include: { subcategories: { orderBy: { order: "asc" } } },
-  });
+  const [allCategories, dbUser] = await Promise.all([
+    prisma.category.findMany({
+      orderBy: { order: "asc" },
+      include: { subcategories: { orderBy: { order: "asc" } } },
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        permissionProfile: { select: { modulePermissions: { select: { moduleKey: true, canView: true } } } },
+        permissions: { select: { moduleKey: true, level: true } },
+      },
+    }),
+  ]);
+
+  // Mesmo filtro de visibilidade aplicado ao menu lateral renderizado no servidor
+  // (src/app/portal/layout.tsx) — sem isto, esta rota devolvia nome/ícone/cor/key de TODAS as
+  // categorias/subcategorias pra qualquer usuário autenticado, independente de permissão (achado
+  // de segurança #128: vazamento de metadado, já que o sidebar em si já filtra corretamente no
+  // SSR; esta rota client-side é que estava crua).
+  const isVisible = buildVisibilityResolver(
+    session.user.role,
+    dbUser?.permissionProfile?.modulePermissions,
+    dbUser?.permissions
+  );
+  const categories = isVisible
+    ? allCategories
+        .filter((c) => isVisible(c.key))
+        .map((c) => ({ ...c, subcategories: c.subcategories.filter((s) => isVisible(`${c.key}:${s.key}`)) }))
+    : allCategories;
 
   return NextResponse.json({ categories });
 }
