@@ -97,6 +97,23 @@ export function UniformesClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
+  // `employees` já vem filtrado (sem DESLIGADO — ver ../page.tsx) pra não oferecer gente que já
+  // saiu numa entrega NOVA. Mas uma entrega HISTÓRICA pode ser de alguém já demitido — ao abrir
+  // "Editar" nessa entrega (`openEdit` acima seta `form.employeeId = d.employeeId`), sem esse
+  // colaborador na lista o `<select>` ficaria sem nenhuma `<option>` correspondente ao value atual
+  // (sem seleção visível) e, se alguém escolhesse outro nome achando que precisava preencher,
+  // reatribuiria silenciosamente a entrega pra outro colaborador (achado do Teulis). Mesmo padrão
+  // de "incluir o valor atual quando ele não está na lista filtrada" já usado em
+  // `cargoSelectOptions`/`setorSelectOptions` (employee-profile-client.tsx) — só entra quando
+  // `editing` aponta pra mesma entrega (nunca em "Nova entrega", onde `editing` é `null`).
+  const employeeSelectOptions = useMemo(
+    () =>
+      editing && form.employeeId === editing.employeeId && !employees.some((emp) => emp.id === editing.employeeId)
+        ? [{ id: editing.employeeId, name: editing.employee.name, setor: editing.employee.setor }, ...employees]
+        : employees,
+    [editing, form.employeeId, employees]
+  );
+
   const visible = useMemo(() => {
     return deliveries
       .filter((d) => (fixedEmployeeId ? d.employeeId === fixedEmployeeId : true))
@@ -329,7 +346,7 @@ export function UniformesClient({
             <div className="col-span-2">
               <Field label="Colaborador">
                 <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
-                  {employees.map((emp) => (
+                  {employeeSelectOptions.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name} — {emp.setor}
                     </option>

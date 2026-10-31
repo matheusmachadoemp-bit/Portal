@@ -33,6 +33,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "URL de arquivo inválida." }, { status: 400 });
   }
 
+  // Demitir/reativar (entrar ou sair de DESLIGADO) passam a ter rota própria (`[id]/demitir`,
+  // `[id]/reativar`), restrita a ADMINISTRADOR/GESTOR e que já grava a data de desligamento +
+  // auditoria (ver racional lá). Esta rota genérica continua liberada pra GERENTE/SUPERVISOR
+  // alternarem ATIVO/FÉRIAS/AFASTADO normalmente, mas bloqueia qualquer tentativa de mudar
+  // DE/PARA DESLIGADO por aqui — inclusive via chamada direta à API, não só pela tela (a tela já
+  // não oferece mais "Desligado" no select de Status, exceto como valor já atual e desabilitado).
+  if (body.status !== undefined && body.status !== existing.status && (body.status === "DESLIGADO" || existing.status === "DESLIGADO")) {
+    return NextResponse.json(
+      { error: 'Para demitir ou reativar um colaborador, use os botões "Demitir"/"Reativar" na ficha dele.' },
+      { status: 400 }
+    );
+  }
+
   // Contato de emergência é obrigatório (mesma regra do POST — ver racional lá), mas só checamos
   // quando o campo foi de fato enviado no corpo (`!== undefined`): este PATCH também é chamado com
   // um corpo parcial contendo só `{ photoUrl }` pela troca rápida de foto (handlePhotoChange em
