@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Pencil, Trash2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
@@ -54,6 +54,23 @@ type LoteResultado = {
 type LoteResponse = {
   resultados: LoteResultado[];
   totalExcluidos: number;
+  totalBloqueados: number;
+};
+
+// Resultado por item da edição em lote (POST /api/ficha-tecnica/insumos/editar-lote). Mesma
+// forma de LoteResultado/LoteResponse acima (exclusão), só troca "excluido"/"totalExcluidos" por
+// "atualizado"/"totalAtualizados" — ver comentário da rota pra o motivo de cada bloqueio possível
+// (insumo não encontrado, de outra loja, ou categoria inválida pra essa loja).
+type LoteEditResultado = {
+  id: string;
+  nome: string | null;
+  atualizado: boolean;
+  motivo?: string;
+};
+
+type LoteEditResponse = {
+  resultados: LoteEditResultado[];
+  totalAtualizados: number;
   totalBloqueados: number;
 };
 
@@ -171,6 +188,15 @@ export function ProdutosClient({
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<LoteResponse | null>(null);
+
+  // Edição em lote de Categoria/Setor (não precisa de ConfirmDialog antes, diferente da exclusão:
+  // o próprio modal de edição já é a confirmação, com os campos que serão aplicados visíveis).
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkEditCategoryId, setBulkEditCategoryId] = useState("");
+  const [bulkEditSetor, setBulkEditSetor] = useState("");
+  const [bulkEditSubmitting, setBulkEditSubmitting] = useState(false);
+  const [bulkEditError, setBulkEditError] = useState<string | null>(null);
+  const [bulkEditResult, setBulkEditResult] = useState<LoteEditResponse | null>(null);
 
   const vencimentoLimite = useMemo(() => new Date().getTime() + 7 * 86400000, []);
 
@@ -314,6 +340,48 @@ export function ProdutosClient({
       setSelected(new Set());
       setBulkDeleting(false);
       refresh();
+    }
+  }
+
+  async function doBulkEdit() {
+    if (selected.size === 0 || bulkEditSubmitting) return;
+    if (!bulkEditCategoryId && !bulkEditSetor) return;
+    setBulkEditSubmitting(true);
+    setBulkEditError(null);
+    const ids = Array.from(selected);
+    try {
+      const res = await fetch("/api/ficha-tecnica/insumos/editar-lote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids,
+          // Só manda o campo se o usuário de fato escolheu um valor — "Não alterar" (opção vazia
+          // do select) significa não incluir a chave no corpo, pra API tratar como "não mudar"
+          // (mesma convenção de campo ausente = não altera do formulário de produto único).
+          ...(bulkEditCategoryId ? { categoryId: bulkEditCategoryId } : {}),
+          ...(bulkEditSetor ? { setor: bulkEditSetor } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        // Erro na requisição como um todo (payload inválido, sem permissão etc., nada foi
+        // alterado) — mantém o modal de edição aberto com os campos preenchidos, igual submit()
+        // faz pro formulário de produto único, pra o usuário poder corrigir e tentar de novo sem
+        // perder a seleção de categoria/setor nem precisar reabrir o modal.
+        setBulkEditError(data?.error ?? "Não foi possível editar os produtos selecionados.");
+        return;
+      }
+      // Requisição aceita (ainda que parte dos itens tenha sido bloqueada individualmente — ver
+      // totalBloqueados no resultado): fecha o modal de edição, limpa a seleção (mesmo padrão de
+      // doBulkDelete) e mostra o resultado detalhado por item.
+      setShowBulkEdit(false);
+      setBulkEditCategoryId("");
+      setBulkEditSetor("");
+      setSelected(new Set());
+      setBulkEditResult(data as LoteEditResponse);
+      refresh();
+    } finally {
+      setBulkEditSubmitting(false);
     }
   }
 
@@ -473,15 +541,33 @@ export function ProdutosClient({
           {canDelete && selected.size > 0 && (
             <div className="mb-4 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-nord-blue/10 border border-nord-blue/30">
               <span className="text-sm text-white font-medium">{selected.size} produtos selecionados</span>
-              <button
-                onClick={() => {
-                  setDeleteError(null);
-                  setConfirmBulkDelete(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-danger/90 hover:bg-nord-danger text-white"
-              >
-                <Trash2 size={13} /> Excluir selecionados
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Mesma permissão do link "Editar" de cada linha (canCreate — ver comentário da
+                    prop em ProdutosClient) — quem não pode editar um insumo por vez também não
+                    pode editar vários de uma vez. */}
+                {canCreate && (
+                  <button
+                    onClick={() => {
+                      setBulkEditError(null);
+                      setBulkEditCategoryId("");
+                      setBulkEditSetor("");
+                      setShowBulkEdit(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-blue/90 hover:bg-nord-blue text-white"
+                  >
+                    <Pencil size={13} /> Editar selecionados
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setDeleteError(null);
+                    setConfirmBulkDelete(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-danger/90 hover:bg-nord-danger text-white"
+                >
+                  <Trash2 size={13} /> Excluir selecionados
+                </button>
+              </div>
             </div>
           )}
 
@@ -763,6 +849,87 @@ export function ProdutosClient({
               </div>
             )}
             <button onClick={() => setBulkResult(null)} className="btn-primary w-full mt-4 py-2.5">
+              Fechar
+            </button>
+          </Modal>
+
+          <Modal open={showBulkEdit} onClose={() => setShowBulkEdit(false)} title="Editar selecionados">
+            <p className="text-xs text-nord-gray mb-3">
+              Escolha uma nova categoria e/ou um novo setor para aplicar aos {selected.size} produto(s)
+              selecionado(s). Deixe em branco (&quot;Não alterar&quot;) o campo que você não quer mudar — só
+              o(s) campo(s) preenchido(s) será(ão) aplicado(s); o restante de cada produto continua
+              como estava.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Nova categoria</span>
+                <select className="input" value={bulkEditCategoryId} onChange={(e) => setBulkEditCategoryId(e.target.value)}>
+                  <option value="">Não alterar</option>
+                  {/* Só categorias ativas: diferente do dropdown do formulário de produto único
+                      (que inclui inativas pra preservar a exibição de uma classificação antiga),
+                      aqui o usuário está ESCOLHENDO uma categoria nova pra aplicar — não faz
+                      sentido oferecer uma categoria desativada como destino, mesmo raciocínio do
+                      filtro "Todas as categorias" acima. */}
+                  {activeCategoryOptions.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs text-nord-gray mb-1">Novo setor</span>
+                <select className="input" value={bulkEditSetor} onChange={(e) => setBulkEditSetor(e.target.value)}>
+                  <option value="">Não alterar</option>
+                  {setores.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {bulkEditError && <p className="text-xs text-nord-danger mt-3">{bulkEditError}</p>}
+            <button
+              onClick={doBulkEdit}
+              disabled={(!bulkEditCategoryId && !bulkEditSetor) || bulkEditSubmitting}
+              className="btn-primary w-full mt-4 py-2.5"
+            >
+              {bulkEditSubmitting ? "Aplicando..." : "Aplicar"}
+            </button>
+          </Modal>
+
+          <Modal open={!!bulkEditResult} onClose={() => setBulkEditResult(null)} title="Resultado da edição em lote">
+            {bulkEditResult && (
+              <div className="space-y-3">
+                {bulkEditResult.totalAtualizados > 0 && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-nord-success/10 border border-nord-success/30">
+                    <CheckCircle2 size={14} className="text-nord-success mt-0.5 shrink-0" />
+                    <p className="text-xs text-nord-success">
+                      {bulkEditResult.totalAtualizados} produto(s) atualizado(s) com sucesso.
+                    </p>
+                  </div>
+                )}
+                {bulkEditResult.totalBloqueados > 0 && (
+                  <div className="p-3 rounded-lg bg-nord-warning/10 border border-nord-warning/30">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle size={14} className="text-nord-warning mt-0.5 shrink-0" />
+                      <p className="text-xs text-nord-warning">
+                        {bulkEditResult.totalBloqueados} produto(s) não puderam ser atualizados:
+                      </p>
+                    </div>
+                    <ul className="mt-2 ml-6 list-disc space-y-1 text-xs text-nord-gray">
+                      {bulkEditResult.resultados
+                        .filter((r) => !r.atualizado)
+                        .map((r) => (
+                          <li key={r.id}>
+                            <span className="text-white">{r.nome ?? "Um item"}</span>
+                            {" — "}
+                            {r.motivo ?? "Não foi possível atualizar."}
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            <button onClick={() => setBulkEditResult(null)} className="btn-primary w-full mt-4 py-2.5">
               Fechar
             </button>
           </Modal>
