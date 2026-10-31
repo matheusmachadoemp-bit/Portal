@@ -6,7 +6,7 @@ import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpre
 import { hasModulePermission } from "@/lib/authz";
 import { spStartOfDay } from "@/lib/checklist";
 import { evaluateSectorCoverage, resolveOwnSetor, resolveSchedulePeriod } from "@/lib/escala-folgas-server";
-import { parseDateKeyInput } from "@/lib/escala-folgas";
+import { parseDateKeyInput, type CoverageResult } from "@/lib/escala-folgas";
 
 const ENTRY_INCLUDE = {
   employee: { select: { id: true, name: true, setor: true, cargo: true, photoUrl: true } },
@@ -40,6 +40,17 @@ const ENTRY_INCLUDE = {
  * qualquer COLABORADOR com o Perfil de Permissão padrão "Funcionário" (rh:canView=true de
  * fábrica) conseguia chamar este GET/POST direto e ver/cadastrar folgas de todos os colegas, de
  * todos os setores.
+ *
+ * `POST` aceita 2 formatos de payload (ver corpo da função pra detalhe de cada um):
+ * - Legado: `{ employeeId: string, dayOffTypeId, date, observacao? }` — cria UMA `DayOffEntry`,
+ *   resposta `{ dayOffEntry, saved, coverage }` ou `{ error }`, exatamente como sempre foi.
+ * - Lote (novo, pra eventos que envolvem vários colaboradores de setores diferentes no mesmo dia,
+ *   ex. "Aniversário Coletivo"/"Dia da Massagem"): `{ employeeIds: string[], dayOffTypeId, date,
+ *   observacao? }` — cria uma `DayOffEntry` por colaborador da lista (mesmo `dayOffTypeId`+`date`
+ *   pra todos), resposta `{ saved, results, createdCount, failedCount }` com um item em `results`
+ *   por colaborador (`status: "created" | "coverage_pending" | "error"`), sempre HTTP 200 — nunca
+ *   tudo-ou-nada: um colaborador com conflito (já tem folga nesse dia), fora da loja ativa, ou
+ *   abaixo da cobertura mínima do setor (sem confirmação) não impede os demais do mesmo lote.
  */
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
@@ -94,6 +105,22 @@ export async function GET(req: Request) {
   return NextResponse.json({ entries });
 }
 
+/**
+ * Resultado de UM colaborador da lista `employeeIds` no modo lote (ver `POST` abaixo) — formato
+ * novo desta tarefa (eventos tipo "Aniversário Coletivo"/"Dia da Massagem" que marcam vários
+ * colaboradores de setores diferentes no mesmo dia, de uma vez). Nunca falha tudo-ou-nada: cada
+ * colaborador tem seu próprio resultado, então um conflito (já tem folga nesse dia) ou um
+ * colaborador inválido não derruba os demais que deram certo.
+ */
+type BatchEntryResult = {
+  employeeId: string;
+  employeeName: string | null;
+} & (
+  | { status: "created"; dayOffEntry: Prisma.DayOffEntryGetPayload<{ include: typeof ENTRY_INCLUDE }>; coverage: CoverageResult | null }
+  | { status: "coverage_pending"; coverage: CoverageResult }
+  | { status: "error"; error: string }
+);
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -113,33 +140,38 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
-  const employeeId = typeof body?.employeeId === "string" ? body.employeeId : "";
   const dayOffTypeId = typeof body?.dayOffTypeId === "string" ? body.dayOffTypeId : "";
   // `date` chega como "YYYY-MM-DD" pronto (data escolhida no calendário) — usado direto como
   // dateKey, nunca reconvertido via `spDateKey(new Date(...))` (ver `parseDateKeyInput`).
   const dateKey = parseDateKeyInput(body?.date);
-  if (!employeeId || !dateKey || !dayOffTypeId) {
+  const observacao = typeof body?.observacao === "string" ? body.observacao.trim() || null : null;
+  const confirmarApesarDoAviso = body?.confirmarApesarDoAviso === true;
+
+  // Payload em LOTE (novo nesta tarefa): `employeeIds: string[]` cria a MESMA folga/evento (mesmo
+  // `dayOffTypeId` + `date`) pra vários colaboradores numa chamada só — pensado pra eventos como
+  // "Aniversário Coletivo"/"Dia da Massagem", que envolvem gente de setores diferentes no mesmo
+  // dia. Quando `employeeIds` vem no body (mesmo um array de 1), o modo lote assume e a resposta
+  // usa o formato novo (`results`/`createdCount`/`failedCount`, ver `BatchEntryResult`) — o
+  // `employeeId: string` legado continua funcionando exatamente como antes (resposta antiga, um
+  // `dayOffEntry`/`error` só) quando `employeeIds` não é enviado.
+  const employeeIdsRaw: unknown[] = Array.isArray(body?.employeeIds) ? body.employeeIds : [];
+  const employeeIdsBatch = Array.isArray(body?.employeeIds)
+    ? Array.from(
+        new Set(
+          employeeIdsRaw.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim())
+        )
+      )
+    : null;
+  const legacyEmployeeId = typeof body?.employeeId === "string" ? body.employeeId : "";
+
+  if (!dateKey || !dayOffTypeId) {
     return NextResponse.json({ error: "Informe colaborador, data (AAAA-MM-DD) e tipo de folga." }, { status: 400 });
   }
-
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-  if (!employee || employee.empresaId !== empresa.id) {
-    return NextResponse.json({ error: "Colaborador inválido para a loja ativa." }, { status: 400 });
+  if (!employeeIdsBatch && !legacyEmployeeId) {
+    return NextResponse.json({ error: "Informe colaborador, data (AAAA-MM-DD) e tipo de folga." }, { status: 400 });
   }
-  if (employee.status !== "ATIVO") {
-    return NextResponse.json({ error: "Só é possível cadastrar folga para colaborador ativo." }, { status: 400 });
-  }
-
-  // Líder só cadastra pro próprio setor (item 16) — Gerente/Administrador cadastram pra qualquer
-  // setor da loja.
-  if (session.user.role === "SUPERVISOR") {
-    const ownSetor = await resolveOwnSetor(session.user.id);
-    if (!ownSetor || ownSetor !== employee.setor) {
-      return NextResponse.json(
-        { error: "Você só pode cadastrar folga para colaboradores do seu próprio setor." },
-        { status: 403 }
-      );
-    }
+  if (employeeIdsBatch && employeeIdsBatch.length === 0) {
+    return NextResponse.json({ error: "Informe ao menos um colaborador." }, { status: 400 });
   }
 
   const dayOffType = await prisma.dayOffType.findUnique({ where: { id: dayOffTypeId } });
@@ -158,8 +190,100 @@ export async function POST(req: Request) {
     );
   }
 
+  // Líder só cadastra pro próprio setor (item 16) — Gerente/Administrador cadastram pra qualquer
+  // setor da loja. Resolvido uma vez só (não depende do colaborador), reaproveitado pros dois modos.
+  const ownSetor = session.user.role === "SUPERVISOR" ? await resolveOwnSetor(session.user.id) : null;
+
+  // --- Modo LOTE: um resultado por colaborador, nunca tudo-ou-nada. ---
+  if (employeeIdsBatch) {
+    const schedulePeriod = await resolveSchedulePeriod(empresa.id, dateKey);
+    const results: BatchEntryResult[] = [];
+
+    for (const employeeId of employeeIdsBatch) {
+      const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+      if (!employee || employee.empresaId !== empresa.id) {
+        results.push({ employeeId, employeeName: employee?.name ?? null, status: "error", error: "Colaborador inválido para a loja ativa." });
+        continue;
+      }
+      if (employee.status !== "ATIVO") {
+        results.push({ employeeId, employeeName: employee.name, status: "error", error: "Só é possível cadastrar folga para colaborador ativo." });
+        continue;
+      }
+      if (session.user.role === "SUPERVISOR" && (!ownSetor || ownSetor !== employee.setor)) {
+        results.push({
+          employeeId,
+          employeeName: employee.name,
+          status: "error",
+          error: "Você só pode cadastrar folga para colaboradores do seu próprio setor.",
+        });
+        continue;
+      }
+
+      const coverage = await evaluateSectorCoverage({ empresaId: empresa.id, setor: employee.setor, employeeId, dateKey });
+      if (coverage?.insuficiente && !confirmarApesarDoAviso) {
+        // Aviso, nunca bloqueio (item 5 do pedido original) — mas, igual no modo legado, não cria
+        // enquanto o cliente não confirmar apesar do aviso. Os outros colaboradores do lote
+        // continuam seguindo seu próprio fluxo normalmente.
+        results.push({ employeeId, employeeName: employee.name, status: "coverage_pending", coverage });
+        continue;
+      }
+
+      try {
+        const dayOffEntry = await prisma.dayOffEntry.create({
+          data: {
+            empresaId: empresa.id,
+            employeeId,
+            schedulePeriodId: schedulePeriod.id,
+            dayOffTypeId,
+            date: spStartOfDay(dateKey),
+            observacao,
+            autorizadoPorId: coverage?.insuficiente ? session.user.id : null,
+            autorizadoEm: coverage?.insuficiente ? new Date() : null,
+            createdById: session.user.id,
+          },
+          include: ENTRY_INCLUDE,
+        });
+        results.push({ employeeId, employeeName: employee.name, status: "created", dayOffEntry, coverage });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          results.push({
+            employeeId,
+            employeeName: employee.name,
+            status: "error",
+            error: "Esse colaborador já tem uma folga cadastrada nesse dia. Edite a folga existente em vez de criar outra.",
+          });
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    const createdCount = results.filter((r) => r.status === "created").length;
+    const failedCount = results.length - createdCount;
+    // Sempre 200: o resultado "real" (quem foi criado, quem falhou e por quê) está no corpo
+    // (`results`), nunca num código HTTP só — evita a tela ter que decidir entre "sucesso",
+    // "parcial" e "falha total" olhando status em vez do array.
+    return NextResponse.json({ saved: createdCount > 0, results, createdCount, failedCount });
+  }
+
+  // --- Modo legado: um `employeeId` só, resposta no formato de sempre (inalterado). ---
+  const employeeId = legacyEmployeeId;
+
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!employee || employee.empresaId !== empresa.id) {
+    return NextResponse.json({ error: "Colaborador inválido para a loja ativa." }, { status: 400 });
+  }
+  if (employee.status !== "ATIVO") {
+    return NextResponse.json({ error: "Só é possível cadastrar folga para colaborador ativo." }, { status: 400 });
+  }
+  if (session.user.role === "SUPERVISOR" && (!ownSetor || ownSetor !== employee.setor)) {
+    return NextResponse.json(
+      { error: "Você só pode cadastrar folga para colaboradores do seu próprio setor." },
+      { status: 403 }
+    );
+  }
+
   const coverage = await evaluateSectorCoverage({ empresaId: empresa.id, setor: employee.setor, employeeId, dateKey });
-  const confirmarApesarDoAviso = body?.confirmarApesarDoAviso === true;
   if (coverage?.insuficiente && !confirmarApesarDoAviso) {
     // Aviso, nunca bloqueio (item 5 do pedido original): devolve os números pro cliente decidir
     // se confirma, sem gravar nada ainda.
@@ -176,7 +300,7 @@ export async function POST(req: Request) {
         schedulePeriodId: schedulePeriod.id,
         dayOffTypeId,
         date: spStartOfDay(dateKey),
-        observacao: typeof body?.observacao === "string" ? body.observacao.trim() || null : null,
+        observacao,
         autorizadoPorId: coverage?.insuficiente ? session.user.id : null,
         autorizadoEm: coverage?.insuficiente ? new Date() : null,
         createdById: session.user.id,
