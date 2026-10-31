@@ -45,8 +45,11 @@ export default async function DocumentosPage() {
       orderBy: { createdAt: "desc" },
       include: { employee: { select: { name: true, setor: true } } },
     }),
+    // `status: { not: "DESLIGADO" }` só no seletor de "escolher colaborador" para um NOVO
+    // documento (mesmo racional de ../ponto-eletronico/page.tsx) — os documentos HISTÓRICOS de
+    // quem já foi demitido (`documents` acima) continuam intactos e visíveis.
     prisma.employee.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, status: { not: "DESLIGADO" } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, setor: true },
     }),

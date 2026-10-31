@@ -520,6 +520,40 @@ const CATEGORIES = [
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
+  {
+    // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver prisma/migrations/
+    // 20261031010000_nord_ai_fundacao_schema e 20261031011000_nord_ai_fundacao_menu para o
+    // equivalente de produção, já que o deploy automático nunca roda este seed). Única
+    // subcategoria desta etapa é "Painel" (a conversa com o assistente em si) — sem pasta de
+    // rota física ainda (fundação = schema/menu/permissão/API, sem UI); cai no fallback
+    // genérico até Caio construir a tela de chat de verdade (ver migration de menu).
+    //
+    // A migration de produção dá a esta categoria/subcategoria a cor "#1464F4" (destaque do
+    // Design System, mesma cor do botão de Bugs e Melhorias no Topbar e do default do color
+    // picker de categoria/subcategoria nova) — ver comentário completo na migration de menu.
+    // Este array `CATEGORIES` (igual todo o resto dele: nenhuma categoria/subcategoria daqui
+    // tem cor própria) não repassa `color` pro `prisma.category.upsert`/`prisma.subcategory.
+    // upsert` no loop abaixo — então em banco novo via `npm run db:seed` esta categoria nasce
+    // com o default do schema ("#2952E3"), não com o destaque; só a migration (produção) aplica
+    // a cor de destaque de verdade. Divergência sem efeito prático (cosmético, só em dev).
+    //
+    // DE PROPÓSITO sem entrada em MODULES (src/lib/permissions.ts): por enquanto só o Role
+    // ADMINISTRADOR acessa o módulo (checagem literal nas rotas src/app/api/nord-ai/**, mesmo
+    // padrão de "bugs-melhorias" — ver src/app/portal/administrativo/bugs-melhorias/page.tsx).
+    // Sem linha nenhuma em
+    // `ModulePermission` para "nord-ai"/"nord-ai:painel", o item já fica oculto por padrão pra
+    // qualquer perfil que não seja Administrador (regra de "negar sem linha explícita" de
+    // `buildVisibilityResolver`/`hasModulePermission`) — não precisa de uma 2ª migration
+    // restringindo, diferente do caso de "bugs-melhorias" (cuja categoria-mãe "administrativo"
+    // já era visível por padrão pra quase todo perfil). Liberar Gerente/outros perfis é uma
+    // tarefa futura, quando o módulo estiver mais maduro (decisão de escopo desta etapa).
+    key: "nord-ai",
+    name: "Nord AI",
+    icon: "Sparkles",
+    order: 21,
+    contentType: "nord-ai",
+    subs: [{ key: "painel", name: "Painel", icon: "Bot" }],
+  },
 ];
 
 // Perfis de permissão com acesso automático ao módulo "reservas" (ver prompt da tarefa
@@ -723,10 +757,23 @@ async function main() {
       // `MODULES` (ver `RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS` acima) — só
       // administrador/gestor/gerente ganham as flags padrão do cargo; os demais perfis
       // nascem em NENHUM em vez do VISUALIZAR que o loop genérico daria.
+      //
+      // "rh" para o perfil "financeiro" também é um caso especial: o nível padrão do perfil
+      // (VISUALIZAR, calculado a partir de `defaultLevelForProfileKey("financeiro")`) não traz
+      // `canDelete`. Decisão confirmada com o Matheus (achado "RH > Colaboradores: Financeiro
+      // não consegue excluir cadastro duplicado", Gabriele/Paulo Sérgio Lima Rabelo): Financeiro
+      // precisa conseguir excluir colaborador (ex.: cadastro duplicado por engano) pro próprio
+      // trabalho de folha de pagamento, então ganha `canDelete` extra aqui — sem mudar
+      // `canExecute`/`canCreate`/`canEdit` (continuam o que `flags` já dá) nem o nível de nenhum
+      // outro módulo/perfil. Mesmo backfill replicado em
+      // prisma/migrations/20261031000000_rh_financeiro_pode_excluir_colaborador (produção nunca
+      // roda este seed — ver padrão já usado por outras migrations de permissão deste arquivo).
       const modFlags =
         mod.key === "reservas" && !RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS.has(profile.key)
           ? ACCESS_LEVEL_TO_MODULE_FLAGS.NENHUM
-          : flags;
+          : mod.key === "rh" && profile.key === "financeiro"
+            ? { ...flags, canDelete: true }
+            : flags;
       await prisma.modulePermission.upsert({
         where: { profileId_moduleKey: { profileId: record.id, moduleKey: mod.key } },
         update: {},
@@ -2834,6 +2881,12 @@ async function main() {
       { key: "compensacao", nome: "Compensação", kind: "FOLGA", cor: "#14b8a6", ordem: 3 },
       { key: "ferias", nome: "Férias", kind: "FERIAS", cor: "#f59e0b", ordem: 4, isSystem: true },
       { key: "afastamento", nome: "Afastamento", kind: "AFASTAMENTO", cor: "#ef4444", ordem: 5, isSystem: true },
+      // Eventos que na prática envolvem vários colaboradores de setores diferentes no mesmo dia
+      // (ex.: "Aline Souza - CQ, Matheus Henrique - sushibar, Jonas Lemos - Bar") — motivo de
+      // `POST /api/rh/escala-folgas/entries` ganhar suporte a `employeeIds` em lote nesta mesma
+      // tarefa, pra não obrigar o gestor a repetir o cadastro pessoa por pessoa.
+      { key: "aniversario-coletivo", nome: "Aniversário Coletivo", kind: "FOLGA", cor: "#f97316", ordem: 6 },
+      { key: "dia-da-massagem", nome: "Dia da Massagem", kind: "FOLGA", cor: "#ec4899", ordem: 7 },
     ];
     for (const t of DAY_OFF_TYPES) {
       await prisma.dayOffType.upsert({

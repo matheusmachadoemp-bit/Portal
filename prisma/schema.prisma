@@ -205,6 +205,9 @@ model User {
   feedbackHistoricoEntries           FeedbackHistory[]
   feedbackComments                   FeedbackComment[]
   reservationBlockedDatesCreated     ReservationBlockedDate[]            @relation("ReservationBlockedDateCreatedBy")
+  // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver model AiConversation no final deste
+  // arquivo para o racional de design).
+  aiConversations                    AiConversation[]
 }
 
 model UserPermission {
@@ -417,6 +420,11 @@ model Empresa {
   reservationEnvironments            ReservationEnvironment[]
   reservationTableCombinations       ReservationTableCombination[]
   reservations                       Reservation[]
+  // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver model AiConversation no final deste
+  // arquivo). Nullable do lado da conversa (uma conversa "consolidada"/Grupo Nord não tem
+  // empresa única) — `onDelete: SetNull` lá para excluir uma empresa não arrastar o histórico
+  // de conversa inteiro, só desvincular.
+  aiConversations                    AiConversation[]
 }
 
 model UserEmpresaAccess {
@@ -1791,6 +1799,9 @@ model Employee {
   sales                   Sale[]
   importedGarcomItems     ImportedGarcomItem[]
   financeEntries          EmployeeFinanceEntry[]
+  /// Ponta inversa de `Payable.employeeId` — lançamentos de Contas a Pagar vinculados a este
+  /// colaborador (ver comentário completo em `Payable`).
+  payables                Payable[]
   timeEntries             TimeEntry[]
   vacations               Vacation[]
   uniformDeliveries       UniformDelivery[]
@@ -3900,6 +3911,16 @@ model Payable {
   status              FinanceEntryStatus @default(EM_ABERTO)
   recurringTemplateId String?
   recurringTemplate   RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id])
+  /// Vínculo OPCIONAL com um colaborador (RH), para lançamentos de Contas a Pagar que na verdade são
+  /// pagamento a colaborador (folha, bonificação) em vez de fornecedor de insumo — `fornecedor`
+  /// continua sendo texto livre (não trocou por FK, ver comentário no campo e em
+  /// `contas-a-pagar/page.tsx`), este campo só permite ALÉM disso estruturar "quanto pagamos pro
+  /// fulano" para consultas futuras. A maioria dos lançamentos (fornecedor de verdade) nunca
+  /// preenche isso. `onDelete: SetNull` (não `Cascade`): nunca apaga um lançamento financeiro
+  /// histórico só porque o colaborador foi excluído — na prática nem deve acontecer, porque
+  /// desligar um colaborador só muda `Employee.status` para DESLIGADO, sem apagar a ficha.
+  employeeId          String?
+  employee            Employee?          @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   /// "O que foi comprado" neste boleto (itens, preço combinado × cobrado). Vários boletos (parcelas) da
   /// mesma nota apontam para a MESMA compra. Opcional: boletos sem itens continuam valendo.
   invoiceId           String?
@@ -3920,6 +3941,7 @@ model Payable {
   @@index([empresaId, status, dataVencimento])
   @@index([empresaId, dataCompetencia])
   @@index([invoiceId])
+  @@index([employeeId])
 }
 
 model Receivable {
@@ -6858,4 +6880,88 @@ model ReservationTableAssignment {
 
   @@unique([reservationId, tableId])
   @@index([tableId])
+}
+
+// ---------------------------------------------------------------------------
+// NORD AI — Fase 1, Etapa 1 (fundação do módulo: conversas/mensagens com o assistente de IA
+// do Portal. Sem a parte de previsão/monitoramento proativo ainda — isso é de uma fase
+// futura). Princípio central do módulo (decisão do Matheus): o assistente NUNCA pode
+// "inventar" um número/indicador — toda resposta sobre dado real vem de uma consulta real ao
+// banco (ver `src/lib/nord-ai.ts`), nunca de "achismo" do modelo de linguagem.
+//
+// Acesso: por enquanto só Role ADMINISTRADOR. As rotas em `src/app/api/nord-ai/**` checam isso
+// de forma literal (`session.user.role !== "ADMINISTRADOR"`), mesmo padrão já usado pela
+// Central de Bugs e Melhorias (`src/app/portal/administrativo/bugs-melhorias/page.tsx`). A
+// TELA ainda não tem rota física própria nesta etapa (fundação = schema/menu/permissão/API,
+// sem UI — ver prisma/migrations/20261031011000_nord_ai_fundacao_menu): a subcategoria
+// "nord-ai:painel" cai no fallback genérico (`GenericModulePage`, @/components/generic-module),
+// que já nega acesso a quem não é Administrador por conta própria (`hasModulePermission` sem
+// nenhuma linha de `ModulePermission` para esta chave — ver migration de menu). Construir a
+// tela de chat de verdade é tarefa futura (Caio).
+//
+// O pedido original prevê liberar o módulo também para Gerente/outros perfis no futuro, mas
+// isso fica para uma tarefa de ajuste fino separada, quando o módulo estiver mais maduro —
+// decisão de escopo desta etapa, não uma limitação técnica.
+// ---------------------------------------------------------------------------
+
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
+/// Uma conversa com o Nord AI. Pertence sempre a UM usuário (`userId`, autor/dono — nunca
+/// compartilhada entre usuários nesta etapa) e, opcionalmente, a UMA empresa (`empresaId`).
+///
+/// Decisão de design sobre `empresaId` (pedido explicitamente deixava a cargo de quem
+/// implementasse): nullable, SEM tabela de junção N:N (`AiConversationEmpresa`). Uma conversa
+/// é sempre sobre "uma loja específica" (`empresaId` preenchido — contexto de dados daquela
+/// empresa) OU "consolidada/Grupo Nord" (`empresaId = null` — ex. Administrador perguntando
+/// sobre o grupo como um todo). Essa segunda opção já cobre "várias lojas ao mesmo tempo" sem
+/// precisar de uma linha por empresa por conversa — o mesmo modelo binário "uma loja | todas"
+/// já usado em todo o resto do Portal para o modo "Grupo Nord" (ver `EmpresaContext.mode`,
+/// `src/lib/empresa.ts`: só existem os modos "single" e "grupo", nunca um subconjunto
+/// arbitrário de lojas). Não há hoje nenhum caso de uma conversa amarrada a um subconjunto
+/// específico (ex. 2 lojas entre 3), então uma tabela de junção seria complexidade sem uso
+/// real nesta etapa; se esse caso aparecer no futuro, dá para introduzir
+/// `AiConversationEmpresa` então, sem remover este campo (que continuaria valendo para
+/// conversas de uma loja só).
+///
+/// `onDelete: SetNull` em `empresa` (não Cascade): excluir uma empresa não deve apagar o
+/// histórico de conversa do usuário — a conversa só perde a amarração e passa a se comportar
+/// como "consolidada".
+model AiConversation {
+  id        String   @id @default(cuid())
+  empresaId String?
+  empresa   Empresa? @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Resumo automático da conversa (gerado a partir da primeira pergunta — ver
+  /// `src/lib/nord-ai.ts`) ou "Nova conversa" enquanto nenhuma mensagem foi enviada ainda.
+  title     String   @default("Nova conversa")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AiMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([empresaId])
+}
+
+/// Uma mensagem (do usuário ou do assistente) dentro de uma `AiConversation`. Sem campo
+/// estruturado de "fontes/indicadores citados" nesta etapa — quando a resposta do assistente
+/// cita um dado real (ex. faturamento do dia), isso vem só como parte do próprio texto
+/// (`content`); estruturar isso fica para uma etapa futura, se fizer sentido.
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AiMessageRole
+  /// Sem `@db.VarChar`: mapeia para `text` no Postgres (mesmo padrão já usado pelo resto do
+  /// schema para campos de texto longo sem limite, ex. `FeedbackReport.descricao` — o projeto
+  /// não usa a anotação `@db.Text` em nenhum outro lugar, já que ela é redundante com o
+  /// mapeamento padrão do Prisma para `String` no provider postgresql).
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
 }
