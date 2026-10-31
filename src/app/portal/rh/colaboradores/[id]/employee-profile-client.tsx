@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Pencil, Eye, EyeOff } from "lucide-react";
+import { Pencil, Eye, EyeOff, UserX, UserCheck } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
@@ -76,6 +76,7 @@ export function EmployeeProfileClient({
   financeChartData,
   occurrenceCounts,
   canCreate = true,
+  canDismiss = false,
   isGrupoNordMode = true,
 }: {
   employee: EmployeeDTO;
@@ -113,6 +114,13 @@ export function EmployeeProfileClient({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   occurrenceCounts: any;
   canCreate?: boolean;
+  /**
+   * Controla os botões "Demitir"/"Reativar" — mais restrito que `canCreate` (que já exige módulo
+   * "rh" + loja única): só ADMINISTRADOR/GESTOR, nunca GERENTE/SUPERVISOR (ver racional em
+   * ../page.tsx e em `/api/rh/employees/[id]/demitir`). A rota de API valida isso de novo, então
+   * esta prop é só para não exibir os botões pra quem não pode usá-los.
+   */
+  canDismiss?: boolean;
   /** Diferencia por que `canCreate` é falso: modo Grupo Nord (consolidado) ou permissão do perfil numa loja específica. */
   isGrupoNordMode?: boolean;
 }) {
@@ -121,6 +129,16 @@ export function EmployeeProfileClient({
   const [showEdit, setShowEdit] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // Demitir pede a data de desligamento (pré-preenchida com hoje, editável) num modal próprio —
+  // nunca um `confirm()` do navegador, ação sensível demais pra 1 clique. Reativar não precisa de
+  // nenhum dado extra, só confirmação (reaproveita `ConfirmDialog`).
+  const [showDismiss, setShowDismiss] = useState(false);
+  const [dismissDate, setDismissDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [dismissSubmitting, setDismissSubmitting] = useState(false);
+  const [dismissError, setDismissError] = useState<string | null>(null);
+  const [showReactivateConfirm, setShowReactivateConfirm] = useState(false);
+  const [reactivateSubmitting, setReactivateSubmitting] = useState(false);
+  const [reactivateError, setReactivateError] = useState<string | null>(null);
   // Troca de foto direto no cabeçalho da ficha — mesmo mecanismo
   // (@vercel/blob/client + PATCH só da URL) do avatar do próprio usuário em
   // src/components/topbar/user-menu.tsx (handleAvatarChange). "photoUrl"
@@ -292,6 +310,49 @@ export function EmployeeProfileClient({
     }
   }
 
+  async function submitDismiss() {
+    if (dismissSubmitting) return;
+    setDismissError(null);
+    if (!dismissDate) return setDismissError("Informe a data de desligamento.");
+    setDismissSubmitting(true);
+    try {
+      const res = await fetch(`/api/rh/employees/${employee.id}/demitir`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ terminationDate: dismissDate }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Erro ao demitir colaborador.");
+      }
+      setShowDismiss(false);
+      router.refresh();
+    } catch (err) {
+      setDismissError(err instanceof Error ? err.message : "Erro ao demitir colaborador.");
+    } finally {
+      setDismissSubmitting(false);
+    }
+  }
+
+  async function submitReactivate() {
+    if (reactivateSubmitting) return;
+    setReactivateError(null);
+    setReactivateSubmitting(true);
+    try {
+      const res = await fetch(`/api/rh/employees/${employee.id}/reativar`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Erro ao reativar colaborador.");
+      }
+      setShowReactivateConfirm(false);
+      router.refresh();
+    } catch (err) {
+      setReactivateError(err instanceof Error ? err.message : "Erro ao reativar colaborador.");
+    } finally {
+      setReactivateSubmitting(false);
+    }
+  }
+
   const initials = employee.name
     .split(" ")
     .slice(0, 2)
@@ -343,6 +404,9 @@ export function EmployeeProfileClient({
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-nord-gray">
               <span>Admissão: {format(new Date(employee.admissionDate), "dd/MM/yyyy")}</span>
               <span>Tempo de empresa: {tempoDeEmpresa(employee.admissionDate)}</span>
+              {employee.status === "DESLIGADO" && employee.terminationDate && (
+                <span className="text-nord-danger">Desligado em: {format(new Date(employee.terminationDate), "dd/MM/yyyy")}</span>
+              )}
               {employee.cpf && (
                 <span className="inline-flex items-center gap-1">
                   CPF: {revealedFields.cpf ? employee.cpf : "•••.•••.•••-••"}
@@ -375,19 +439,44 @@ export function EmployeeProfileClient({
             {!photoUploading && photoError && <p className="text-xs text-nord-danger mt-1">{photoError}</p>}
           </div>
         </div>
-        {canCreate && (
-          <button
-            onClick={() => {
-              setEditError(null);
-              setCargoManualEntry(false);
-              setSetorManualEntry(false);
-              setShowEdit(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white self-start"
-          >
-            <Pencil size={13} /> Editar
-          </button>
-        )}
+        <div className="flex items-center gap-2 self-start">
+          {canCreate && (
+            <button
+              onClick={() => {
+                setEditError(null);
+                setCargoManualEntry(false);
+                setSetorManualEntry(false);
+                setShowEdit(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white"
+            >
+              <Pencil size={13} /> Editar
+            </button>
+          )}
+          {canDismiss && employee.status !== "DESLIGADO" && (
+            <button
+              onClick={() => {
+                setDismissError(null);
+                setDismissDate(format(new Date(), "yyyy-MM-dd"));
+                setShowDismiss(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-danger/40 text-nord-danger hover:bg-nord-danger/10"
+            >
+              <UserX size={13} /> Demitir
+            </button>
+          )}
+          {canDismiss && employee.status === "DESLIGADO" && (
+            <button
+              onClick={() => {
+                setReactivateError(null);
+                setShowReactivateConfirm(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white"
+            >
+              <UserCheck size={13} /> Reativar
+            </button>
+          )}
+        </div>
       </div>
 
       <SortableStatCards
@@ -662,12 +751,25 @@ export function EmployeeProfileClient({
               <input type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} className="input" />
             </Field>
             <Field label="Status">
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
+              {/* "Desligado" não é uma opção aqui de propósito: demitir/reativar passaram a ter
+                  botão e rota própria (ver "Demitir"/"Reativar" no cabeçalho da ficha), que pedem
+                  a data de desligamento e gravam auditoria. Se o status atual já é DESLIGADO, o
+                  select fica desabilitado (a única forma de mudar é pelo botão "Reativar") — a API
+                  também bloqueia essa transição por aqui, mesmo que o HTML seja manipulado. */}
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                className="input"
+                disabled={employee.status === "DESLIGADO"}
+              >
                 <option value="ATIVO">Ativo</option>
                 <option value="FERIAS">Férias</option>
                 <option value="AFASTADO">Afastado</option>
-                <option value="DESLIGADO">Desligado</option>
+                {employee.status === "DESLIGADO" && <option value="DESLIGADO">Desligado</option>}
               </select>
+              {employee.status === "DESLIGADO" && (
+                <p className="text-[11px] text-nord-gray mt-1">Use o botão &quot;Reativar&quot; no topo da ficha para voltar este colaborador ao quadro de ativos.</p>
+              )}
             </Field>
             <Field label="Telefone">
               <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input" />
@@ -734,6 +836,79 @@ export function EmployeeProfileClient({
             {editSubmitting ? "Salvando..." : "Salvar"}
           </button>
         </form>
+      </Modal>
+
+      <Modal open={showDismiss} onClose={() => !dismissSubmitting && setShowDismiss(false)} title="Demitir colaborador" closeDisabled={dismissSubmitting}>
+        <FormError message={dismissError} />
+        <p className="text-sm text-nord-gray mb-4">
+          <span className="text-white font-medium">{employee.name}</span> vai sair do quadro de colaboradores ativos
+          (deixa de contar nas listagens e contadores de RH que mostram quem está trabalhando). Todo o histórico dela
+          — Ocorrências, Ponto, Férias, Financeiro, Escala de Folgas, Uniformes e Documentos — continua intacto e
+          acessível normalmente, só o status muda para &quot;Desligado&quot;.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitDismiss();
+          }}
+        >
+          <Field label="Data de desligamento">
+            <input
+              type="date"
+              required
+              value={dismissDate}
+              onChange={(e) => setDismissDate(e.target.value)}
+              className="input"
+            />
+          </Field>
+          <div className="flex justify-end gap-2 mt-5">
+            <button
+              type="button"
+              onClick={() => setShowDismiss(false)}
+              disabled={dismissSubmitting}
+              className="px-4 py-2 text-sm rounded-lg border border-nord-border text-nord-gray hover:text-white hover:border-white/30 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={dismissSubmitting}
+              className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-nord-danger/90 hover:bg-nord-danger disabled:opacity-50"
+            >
+              {dismissSubmitting ? "Demitindo..." : "Confirmar demissão"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={showReactivateConfirm}
+        onClose={() => !reactivateSubmitting && setShowReactivateConfirm(false)}
+        title="Reativar colaborador"
+        closeDisabled={reactivateSubmitting}
+        widthClass="max-w-sm"
+      >
+        <FormError message={reactivateError} />
+        <p className="text-sm text-nord-gray mb-5">
+          <span className="text-white font-medium">{employee.name}</span> volta para o quadro de colaboradores ativos
+          (status muda para &quot;Ativo&quot; e a data de desligamento é removida).
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setShowReactivateConfirm(false)}
+            disabled={reactivateSubmitting}
+            className="px-4 py-2 text-sm rounded-lg border border-nord-border text-nord-gray hover:text-white hover:border-white/30 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={submitReactivate}
+            disabled={reactivateSubmitting}
+            className="px-4 py-2 text-sm rounded-lg text-white font-medium bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50"
+          >
+            {reactivateSubmitting ? "Reativando..." : "Confirmar reativação"}
+          </button>
+        </div>
       </Modal>
 
     </div>

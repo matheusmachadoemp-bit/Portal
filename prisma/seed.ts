@@ -2881,6 +2881,12 @@ async function main() {
       { key: "compensacao", nome: "Compensação", kind: "FOLGA", cor: "#14b8a6", ordem: 3 },
       { key: "ferias", nome: "Férias", kind: "FERIAS", cor: "#f59e0b", ordem: 4, isSystem: true },
       { key: "afastamento", nome: "Afastamento", kind: "AFASTAMENTO", cor: "#ef4444", ordem: 5, isSystem: true },
+      // Eventos que na prática envolvem vários colaboradores de setores diferentes no mesmo dia
+      // (ex.: "Aline Souza - CQ, Matheus Henrique - sushibar, Jonas Lemos - Bar") — motivo de
+      // `POST /api/rh/escala-folgas/entries` ganhar suporte a `employeeIds` em lote nesta mesma
+      // tarefa, pra não obrigar o gestor a repetir o cadastro pessoa por pessoa.
+      { key: "aniversario-coletivo", nome: "Aniversário Coletivo", kind: "FOLGA", cor: "#f97316", ordem: 6 },
+      { key: "dia-da-massagem", nome: "Dia da Massagem", kind: "FOLGA", cor: "#ec4899", ordem: 7 },
     ];
     for (const t of DAY_OFF_TYPES) {
       await prisma.dayOffType.upsert({

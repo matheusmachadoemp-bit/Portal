@@ -97,6 +97,23 @@ export function FeriasClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
+  // `employees` já vem filtrado (sem DESLIGADO — ver ../page.tsx) pra não oferecer gente que já
+  // saiu num período de férias NOVO. Mas um período HISTÓRICO pode ser de alguém já demitido — ao
+  // abrir "Editar" nesse período (`openEdit` abaixo seta `form.employeeId = v.employeeId`), sem
+  // esse colaborador na lista o `<select>` ficaria sem nenhuma `<option>` correspondente ao value
+  // atual (sem seleção visível) e, se alguém escolhesse outro nome achando que precisava
+  // preencher, reatribuiria silenciosamente o período de férias pra outro colaborador (achado do
+  // Teulis). Mesmo padrão de "incluir o valor atual quando ele não está na lista filtrada" já
+  // usado em `cargoSelectOptions`/`setorSelectOptions` (employee-profile-client.tsx) — só entra
+  // quando `editing` aponta pro mesmo período (nunca em "Novo período", onde `editing` é `null`).
+  const employeeSelectOptions = useMemo(
+    () =>
+      editing && form.employeeId === editing.employeeId && !employees.some((emp) => emp.id === editing.employeeId)
+        ? [{ id: editing.employeeId, name: editing.employee.name, setor: editing.employee.setor }, ...employees]
+        : employees,
+    [editing, form.employeeId, employees]
+  );
+
   const visible = useMemo(() => {
     return fixedEmployeeId ? vacations.filter((v) => v.employeeId === fixedEmployeeId) : vacations;
   }, [vacations, fixedEmployeeId]);
@@ -365,7 +382,7 @@ export function FeriasClient({
             <div className="col-span-2">
               <Field label="Colaborador">
                 <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
-                  {employees.map((emp) => (
+                  {employeeSelectOptions.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name} — {emp.setor}
                     </option>

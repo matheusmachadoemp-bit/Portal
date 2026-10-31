@@ -103,6 +103,23 @@ export function FinanceiroClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
+  // `employees` já vem filtrado (sem DESLIGADO — ver ../page.tsx) pra não oferecer gente que já
+  // saiu num lançamento NOVO. Mas um lançamento HISTÓRICO pode ser de alguém já demitido — ao
+  // abrir "Editar" nesse lançamento (`openEdit` abaixo seta `form.employeeId = e.employeeId`), sem
+  // esse colaborador na lista o `<select>` ficaria sem nenhuma `<option>` correspondente ao value
+  // atual (sem seleção visível) e, se alguém escolhesse outro nome achando que precisava
+  // preencher, reatribuiria silenciosamente o lançamento pra outro colaborador (achado do Teulis).
+  // Mesmo padrão de "incluir o valor atual quando ele não está na lista filtrada" já usado em
+  // `cargoSelectOptions`/`setorSelectOptions` (employee-profile-client.tsx) — só entra quando
+  // `editing` aponta pro mesmo lançamento (nunca em "Novo lançamento", onde `editing` é `null`).
+  const employeeSelectOptions = useMemo(
+    () =>
+      editing && form.employeeId === editing.employeeId && !employees.some((emp) => emp.id === editing.employeeId)
+        ? [{ id: editing.employeeId, name: editing.employee.name, setor: editing.employee.setor }, ...employees]
+        : employees,
+    [editing, form.employeeId, employees]
+  );
+
   // Só usado pra decidir o que a TABELA mostra (lista de "atividade recente", que já tem `take` —
   // isso é esperado, nunca foi o problema). `entries` já vem do servidor filtrado por `targetId`
   // (ver `refresh` abaixo), então este `.filter()` é normalmente um no-op — fica só como estado de
@@ -360,7 +377,7 @@ export function FinanceiroClient({
             <div className="col-span-2">
               <Field label="Colaborador">
                 <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
-                  {employees.map((emp) => (
+                  {employeeSelectOptions.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name} — {emp.setor}
                     </option>

@@ -58,7 +58,10 @@ export default async function OcorrenciasPage() {
         createdBy: { select: { name: true } },
       },
     }),
-    prisma.employee.findMany({ where: { empresaId: { in: empresaIds } }, orderBy: { name: "asc" } }),
+    // `status: { not: "DESLIGADO" }` só no seletor de "escolher colaborador" para uma NOVA
+    // ocorrência (mesmo racional de ../ponto-eletronico/page.tsx) — as ocorrências HISTÓRICAS de
+    // quem já foi demitido (`occurrences` acima) continuam intactas e visíveis.
+    prisma.employee.findMany({ where: { empresaId: { in: empresaIds }, status: { not: "DESLIGADO" } }, orderBy: { name: "asc" } }),
     computeOccurrenceCounts(occurrenceWhere),
     computeOccurrenceRanking(occurrenceWhere),
   ]);

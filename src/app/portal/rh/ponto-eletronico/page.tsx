@@ -69,8 +69,12 @@ export default async function PontoEletronicoPage() {
       include: { employee: { select: { name: true, setor: true } } },
       take: TIME_ENTRIES_SAFETY_TAKE,
     }),
+    // `status: { not: "DESLIGADO" }` só nesta lista de "escolher colaborador" para um NOVO
+    // lançamento — colaboradores demitidos somem do seletor (não dá mais pra lançar ponto novo
+    // pra quem já saiu), mas os lançamentos HISTÓRICOS deles (`entries` acima, sem esse filtro)
+    // continuam intactos e visíveis normalmente.
     prisma.employee.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, status: { not: "DESLIGADO" } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, setor: true },
     }),

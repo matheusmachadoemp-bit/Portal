@@ -700,12 +700,27 @@ export function ColaboradoresClient({
               <input type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} className="input" />
             </Field>
             <Field label="Status">
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="input">
+              {/* "Desligado" não é selecionável aqui de propósito — demitir/reativar têm botão e
+                  rota própria na Ficha do Colaborador (restrita a Administrador/Gestor, pede a
+                  data de desligamento e grava auditoria). Se o colaborador já está desligado, o
+                  select fica travado nesse valor (voltar exige o botão "Reativar" na ficha dele) —
+                  a API bloqueia essa transição por aqui mesmo que o HTML seja manipulado. */}
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                className="input"
+                disabled={editing?.status === "DESLIGADO"}
+              >
                 <option value="ATIVO">Ativo</option>
                 <option value="FERIAS">Férias</option>
                 <option value="AFASTADO">Afastado</option>
-                <option value="DESLIGADO">Desligado</option>
+                {editing?.status === "DESLIGADO" && <option value="DESLIGADO">Desligado</option>}
               </select>
+              {editing?.status === "DESLIGADO" && (
+                <p className="text-[11px] text-nord-gray mt-1">
+                  Use o botão &quot;Reativar&quot; na ficha do colaborador para voltar ao quadro de ativos.
+                </p>
+              )}
             </Field>
             <Field label="Telefone">
               <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input" />
