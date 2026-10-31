@@ -723,10 +723,23 @@ async function main() {
       // `MODULES` (ver `RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS` acima) — só
       // administrador/gestor/gerente ganham as flags padrão do cargo; os demais perfis
       // nascem em NENHUM em vez do VISUALIZAR que o loop genérico daria.
+      //
+      // "rh" para o perfil "financeiro" também é um caso especial: o nível padrão do perfil
+      // (VISUALIZAR, calculado a partir de `defaultLevelForProfileKey("financeiro")`) não traz
+      // `canDelete`. Decisão confirmada com o Matheus (achado "RH > Colaboradores: Financeiro
+      // não consegue excluir cadastro duplicado", Gabriele/Paulo Sérgio Lima Rabelo): Financeiro
+      // precisa conseguir excluir colaborador (ex.: cadastro duplicado por engano) pro próprio
+      // trabalho de folha de pagamento, então ganha `canDelete` extra aqui — sem mudar
+      // `canExecute`/`canCreate`/`canEdit` (continuam o que `flags` já dá) nem o nível de nenhum
+      // outro módulo/perfil. Mesmo backfill replicado em
+      // prisma/migrations/20261031000000_rh_financeiro_pode_excluir_colaborador (produção nunca
+      // roda este seed — ver padrão já usado por outras migrations de permissão deste arquivo).
       const modFlags =
         mod.key === "reservas" && !RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS.has(profile.key)
           ? ACCESS_LEVEL_TO_MODULE_FLAGS.NENHUM
-          : flags;
+          : mod.key === "rh" && profile.key === "financeiro"
+            ? { ...flags, canDelete: true }
+            : flags;
       await prisma.modulePermission.upsert({
         where: { profileId_moduleKey: { profileId: record.id, moduleKey: mod.key } },
         update: {},
