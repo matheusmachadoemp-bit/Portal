@@ -4,7 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import Image from "next/image";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, DoorClosed, ImageDown, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  DoorClosed,
+  ImageDown,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Section, ColorBadge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { MonthCalendar } from "@/components/ui/month-calendar";
@@ -54,6 +65,23 @@ type EmployeeOptionDTO = { id: string; name: string; setor: string; cargo: strin
  * desacoplados de propósito).
  */
 type CoverageResult = { quantidadeMinima: number; escalados: number; deficit: number; insuficiente: boolean };
+
+/**
+ * Resultado de UM colaborador no modo lote de `POST /api/rh/escala-folgas/entries` (mesmo formato
+ * de `BatchEntryResult` daquela rota, sem o `dayOffEntry` em si — a tela só precisa saber se deu
+ * certo, se falta confirmar cobertura, ou o motivo do erro; o calendário é sempre recarregado do
+ * zero via `refreshCalendario()` depois, nunca montado a partir desse payload). Usado tanto pra 1
+ * colaborador só (a tela sempre manda `employeeIds`, mesmo com 1 item, pra reaproveitar um único
+ * caminho de código) quanto pra vários de uma vez.
+ */
+type BatchEntryResultDTO = {
+  employeeId: string;
+  employeeName: string | null;
+} & (
+  | { status: "created" }
+  | { status: "coverage_pending"; coverage: CoverageResult }
+  | { status: "error"; error: string }
+);
 
 /** Valor sentinela da opção "+ Cadastrar novo tipo..." no fim do `<select>` de "Tipo de folga" —
  *  nunca colide com um id real de `DayOffType` (que são sempre `cuid()`). */
@@ -113,6 +141,32 @@ function stripDiacritics(s: string): string {
  *  mais já está indisponível nesse dia). */
 function formatCoverageMessage(c: CoverageResult): string {
   return `Só ficaria${c.escalados === 1 ? "" : "m"} ${c.escalados} colaborador(es) escalado(s) nesse setor nesse dia (mínimo configurado: ${c.quantidadeMinima}) — faltam ${c.deficit}. Confirma mesmo assim?`;
+}
+
+/** Mesmo aviso de `formatCoverageMessage` acima, mas pro modo lote (Adicionar folga pra vários
+ *  colaboradores de uma vez): cada um pode pertencer a um setor diferente e cada setor tem seu
+ *  próprio número de cobertura, então lista um por um em vez de uma frase só. Só chamado com pelo
+ *  menos 1 item (`status: "coverage_pending"`). */
+function formatBatchCoverageMessage(pending: (BatchEntryResultDTO & { status: "coverage_pending" })[]) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-nord-gray">
+        {pending.length === 1
+          ? "A cobertura mínima do setor ficaria abaixo do configurado:"
+          : `A cobertura mínima do setor ficaria abaixo do configurado para ${pending.length} colaborador(es):`}
+      </p>
+      <ul className="space-y-1 text-xs text-nord-gray list-disc ml-4">
+        {pending.map((p) => (
+          <li key={p.employeeId}>
+            <span className="text-white">{p.employeeName ?? "Colaborador"}</span> — só ficaria
+            {p.coverage.escalados === 1 ? "" : "m"} {p.coverage.escalados} escalado(s) (mínimo{" "}
+            {p.coverage.quantidadeMinima}, faltam {p.coverage.deficit})
+          </li>
+        ))}
+      </ul>
+      <p className="text-sm text-nord-gray">Confirma mesmo assim?</p>
+    </div>
+  );
 }
 
 /** "YYYY-MM-DD" -> `Date` LOCAL (meio-dia irrelevante, só ano/mês/dia importam aqui) — usado só
@@ -440,6 +494,68 @@ function MonthNavControls({ cursor, onCursorChange }: { cursor: Date; onCursorCh
   );
 }
 
+/**
+ * Lista de checkboxes pra escolher 1+ colaboradores no formulário "Adicionar folga" — substitui o
+ * antigo `<select>` de colaborador único (editar continua com colaborador fixo, sem esta lista).
+ * Lista "crua" (sem busca/paginação): o universo já vem filtrado pelo servidor (só ATIVOs da loja
+ * ativa, e só do próprio setor quando Líder — ver `EmployeeOptionDTO`), então deve ser pequeno o
+ * suficiente pra caber numa lista rolável comum.
+ */
+function EmployeeMultiSelect({
+  employees,
+  selected,
+  onChange,
+}: {
+  employees: EmployeeOptionDTO[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const allIds = useMemo(() => employees.map((e) => e.id), [employees]);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selected.includes(id));
+
+  function toggleOne(id: string) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  }
+
+  return (
+    <div className="rounded-lg border border-nord-border bg-nord-panel/40 overflow-hidden">
+      <label className="flex items-center gap-2 px-3 py-2 border-b border-nord-border/60 bg-nord-panel/60 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={allSelected}
+          onChange={() => onChange(allSelected ? [] : allIds)}
+          className="accent-nord-blue"
+        />
+        <span className="text-xs text-nord-gray">
+          {allSelected ? "Desmarcar todos" : "Selecionar todos"} ({employees.length})
+        </span>
+        {selected.length > 0 && (
+          <span className="ml-auto text-xs text-nord-blue-light font-medium">{selected.length} selecionado(s)</span>
+        )}
+      </label>
+      <div className="max-h-48 overflow-y-auto nord-scrollbar divide-y divide-nord-border/40">
+        {employees.map((emp) => (
+          <label
+            key={emp.id}
+            className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/5 select-none"
+          >
+            <input
+              type="checkbox"
+              checked={selected.includes(emp.id)}
+              onChange={() => toggleOne(emp.id)}
+              className="accent-nord-blue shrink-0"
+            />
+            <span className="text-sm text-white truncate">{emp.name}</span>
+            <span className="ml-auto text-xs text-nord-gray shrink-0 pl-2">
+              {emp.setor} · {emp.cargo}
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function EscalaFolgasClient({
   isSupervisor,
   ownSetor,
@@ -500,7 +616,9 @@ export function EscalaFolgasClient({
   // logo abaixo — nunca precisa ser resetado à mão em cada botão que fecha o formulário.
   const [dayModalView, setDayModalView] = useState<"list" | "form">("list");
   const [editingEntry, setEditingEntry] = useState<IndisponivelDTO | null>(null);
-  const [entryForm, setEntryForm] = useState({ employeeId: "", dayOffTypeId: "", observacao: "" });
+  // `employeeIds` só é usado ao CRIAR (multi-seleção, item desta tarefa); ao editar o colaborador é
+  // fixo (o da folga já existente, mostrado como texto), então fica sempre vazio nesse caso.
+  const [entryForm, setEntryForm] = useState({ employeeIds: [] as string[], dayOffTypeId: "", observacao: "" });
   const [entrySubmitting, setEntrySubmitting] = useState(false);
   const [entryFormError, setEntryFormError] = useState<string | null>(null);
 
@@ -518,8 +636,23 @@ export function EscalaFolgasClient({
 
   // Não-nulo = a API avisou que a cobertura mínima do setor ficaria insuficiente e ainda não
   // gravou nada (`{ saved: false, coverage }`) — mostra o `ConfirmDialog` de aviso com os números;
-  // confirmando, reenvia a mesma requisição com `confirmarApesarDoAviso: true`.
+  // confirmando, reenvia a mesma requisição com `confirmarApesarDoAviso: true`. Só usado ao EDITAR
+  // (`PATCH`, 1 colaborador só, formato de resposta de sempre) — ao criar usa `pendingBatchCoverage`
+  // abaixo, mesmo com 1 colaborador só (a tela sempre manda `employeeIds` nesse caso).
   const [pendingCoverage, setPendingCoverage] = useState<CoverageResult | null>(null);
+  // Não-nulo = resultado do `POST` em modo lote (ver `BatchEntryResultDTO`) trazendo 1+ colaboradores
+  // com `status: "coverage_pending"` — junto com os demais resultados já definitivos daquela mesma
+  // chamada (`created`/`error`), que não podem ser perdidos ao resolver os pendentes. Confirmando,
+  // reenvia só os `employeeId` ainda pendentes com `confirmarApesarDoAviso: true`; cancelando (só
+  // quando há 2+ colaboradores no lote — ver `handleCancelBatchCoverage`), os pendentes entram no
+  // resumo final como "não criado".
+  const [pendingBatchCoverage, setPendingBatchCoverage] = useState<BatchEntryResultDTO[] | null>(null);
+  // Resumo final do `POST` em modo lote — só aparece quando o lote tinha 2+ colaboradores (com 1 só,
+  // a tela se comporta como antes: fecha o modal silenciosamente no sucesso, ou mostra o erro inline
+  // no próprio formulário). Modal próprio, aberto depois que o modal "Adicionar folga" já fechou.
+  const [batchResult, setBatchResult] = useState<{ createdCount: number; results: BatchEntryResultDTO[] } | null>(
+    null
+  );
   const [deletingEntry, setDeletingEntry] = useState<IndisponivelDTO | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -571,9 +704,11 @@ export function EscalaFolgasClient({
   function openDay(dateKey: string) {
     setDayModalView("list");
     setEditingEntry(null);
-    setEntryForm({ employeeId: "", dayOffTypeId: "", observacao: "" });
+    setEntryForm({ employeeIds: [], dayOffTypeId: "", observacao: "" });
     setEntryFormError(null);
     setPendingCoverage(null);
+    setPendingBatchCoverage(null);
+    setBatchResult(null);
     setDeletingEntry(null);
     setDeleteError(null);
     resetNewTypeForm();
@@ -700,18 +835,20 @@ export function EscalaFolgasClient({
 
   function openCreateForm() {
     setEditingEntry(null);
-    setEntryForm({ employeeId: "", dayOffTypeId: "", observacao: "" });
+    setEntryForm({ employeeIds: [], dayOffTypeId: "", observacao: "" });
     setEntryFormError(null);
     setPendingCoverage(null);
+    setPendingBatchCoverage(null);
     resetNewTypeForm();
     setDayModalView("form");
   }
 
   function openEditForm(p: IndisponivelDTO) {
     setEditingEntry(p);
-    setEntryForm({ employeeId: p.employeeId, dayOffTypeId: p.dayOffType.id, observacao: p.observacao ?? "" });
+    setEntryForm({ employeeIds: [], dayOffTypeId: p.dayOffType.id, observacao: p.observacao ?? "" });
     setEntryFormError(null);
     setPendingCoverage(null);
+    setPendingBatchCoverage(null);
     resetNewTypeForm();
     setDayModalView("form");
   }
@@ -721,25 +858,21 @@ export function EscalaFolgasClient({
     setEditingEntry(null);
     setEntryFormError(null);
     setPendingCoverage(null);
+    setPendingBatchCoverage(null);
     resetNewTypeForm();
   }
 
   /**
-   * Cria (`editingEntry` nulo) ou edita uma folga. `confirmarApesarDoAviso` só vai `true` quando
-   * chamado de novo a partir do `ConfirmDialog` de cobertura insuficiente (ver `pendingCoverage`
-   * abaixo) — a 1ª tentativa é sempre sem esse campo, deixando a API decidir se precisa avisar.
-   * `employeeId`/`date` só entram no body ao CRIAR: o `PATCH` não aceita trocar o colaborador de
-   * uma folga já existente (só `date?`/`dayOffTypeId?`/`observacao?`), e a data já é a do dia
-   * clicado no calendário — por isso nenhum dos dois formulários (criar/editar) mostra um campo de
-   * data separado, só o colaborador (fixo ao editar) e o tipo.
+   * Edita uma folga já existente (`PATCH`, 1 colaborador só — o `PATCH` não aceita trocar o
+   * colaborador de uma folga já existente, só `date?`/`dayOffTypeId?`/`observacao?`). Mesmo formato
+   * de resposta de sempre (`{ dayOffEntry, saved, coverage }` ou `{ saved: false, coverage }` ou
+   * `{ error }`), sem relação com o modo lote do `POST` (que só existe pra CRIAR). `confirmarApesar
+   * DoAviso` só vai `true` quando chamado de novo a partir do `ConfirmDialog` de cobertura
+   * insuficiente (`pendingCoverage` abaixo) — a 1ª tentativa é sempre sem esse campo.
    */
-  async function submitEntry(confirmarApesarDoAviso: boolean) {
-    if (entrySubmitting || !selectedDate) return;
+  async function submitEditEntry(confirmarApesarDoAviso: boolean) {
+    if (entrySubmitting || !selectedDate || !editingEntry) return;
     setEntryFormError(null);
-    if (!editingEntry && !entryForm.employeeId) {
-      setEntryFormError("Selecione o colaborador.");
-      return;
-    }
     if (!entryForm.dayOffTypeId) {
       setEntryFormError("Selecione o tipo de folga.");
       return;
@@ -751,23 +884,13 @@ export function EscalaFolgasClient({
         dayOffTypeId: entryForm.dayOffTypeId,
         observacao: entryForm.observacao.trim() || null,
       };
-      if (!editingEntry) {
-        body.employeeId = entryForm.employeeId;
-        body.date = selectedDate;
-      }
       if (confirmarApesarDoAviso) body.confirmarApesarDoAviso = true;
 
-      const res = editingEntry
-        ? await fetch(`/api/rh/escala-folgas/entries/${editingEntry.sourceId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          })
-        : await fetch("/api/rh/escala-folgas/entries", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
+      const res = await fetch(`/api/rh/escala-folgas/entries/${editingEntry.sourceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setPendingCoverage(null);
@@ -793,6 +916,152 @@ export function EscalaFolgasClient({
     } finally {
       setEntrySubmitting(false);
     }
+  }
+
+  /**
+   * Chama o `POST` em modo lote (ver `BatchEntryResultDTO`) pros `employeeIds` informados — sempre
+   * esse formato ao CRIAR, mesmo com 1 colaborador só, pra ter um único caminho de código (o
+   * próprio backend já aceita isso de propósito, ver comentário na rota). Devolve o array de
+   * resultados em caso de sucesso HTTP (200 — o lote nunca falha tudo-ou-nada), ou `null` se a
+   * própria requisição falhar por completo (erro de validação, permissão, ou conexão) — nesses
+   * casos `entryFormError` já fica setado aqui, quem chamou só precisa checar o retorno.
+   */
+  async function submitCreateEntries(employeeIds: string[], confirmarApesarDoAviso: boolean) {
+    if (!selectedDate || employeeIds.length === 0) return null;
+    setEntrySubmitting(true);
+    setEntryFormError(null);
+    try {
+      const body: Record<string, unknown> = {
+        employeeIds,
+        dayOffTypeId: entryForm.dayOffTypeId,
+        date: selectedDate,
+        observacao: entryForm.observacao.trim() || null,
+      };
+      if (confirmarApesarDoAviso) body.confirmarApesarDoAviso = true;
+
+      const res = await fetch("/api/rh/escala-folgas/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEntryFormError(data?.error ?? "Não foi possível salvar a folga.");
+        return null;
+      }
+      return (data.results ?? []) as BatchEntryResultDTO[];
+    } catch {
+      setEntryFormError("Falha de conexão ao salvar. Verifique sua internet e tente novamente.");
+      return null;
+    } finally {
+      setEntrySubmitting(false);
+    }
+  }
+
+  /**
+   * Botão "Salvar" do formulário de CRIAR (nunca chamado ao editar — ver `submitEditEntry`).
+   * Valida o formulário, dispara a 1ª tentativa do lote (sem confirmar cobertura ainda) e decide o
+   * que fazer com o resultado em `finalizeCreateResults`.
+   */
+  async function handleSubmitCreate() {
+    if (entrySubmitting) return;
+    setEntryFormError(null);
+    if (entryForm.employeeIds.length === 0) {
+      setEntryFormError("Selecione ao menos um colaborador.");
+      return;
+    }
+    if (!entryForm.dayOffTypeId) {
+      setEntryFormError("Selecione o tipo de folga.");
+      return;
+    }
+    const results = await submitCreateEntries(entryForm.employeeIds, false);
+    if (!results) return; // entryFormError já setado por submitCreateEntries.
+    await finalizeCreateResults(results);
+  }
+
+  /** Separa quem ainda precisa de confirmação de cobertura (`coverage_pending`) do resto — se
+   *  houver algum, abre o aviso (`pendingBatchCoverage`) e espera confirmar/cancelar antes de
+   *  decidir o desfecho final; sem nenhum pendente, já finaliza direto. */
+  async function finalizeCreateResults(results: BatchEntryResultDTO[]) {
+    const hasPending = results.some((r) => r.status === "coverage_pending");
+    if (hasPending) {
+      setPendingBatchCoverage(results);
+      return;
+    }
+    await completeCreateResults(results);
+  }
+
+  /**
+   * Desfecho final do lote de criação (sem nenhum `coverage_pending` em aberto) — sempre recarrega
+   * o calendário primeiro (igual já fazia `submitEditEntry`/o `submitEntry` de antes). Com 1
+   * colaborador só, mantém a experiência de sempre: sucesso fecha o formulário em silêncio, erro
+   * mostra a mensagem inline no próprio formulário (sem modal de resumo). Com 2+, sempre mostra o
+   * resumo em modal próprio (`batchResult`), com sucesso total ou parcial — igual ao padrão já usado
+   * em "Excluir selecionados" de Estoque > Produtos.
+   */
+  async function completeCreateResults(results: BatchEntryResultDTO[]) {
+    await refreshCalendario();
+    if (results.length === 1) {
+      const [r] = results;
+      if (r.status === "created") {
+        closeEntryForm();
+      } else if (r.status === "error") {
+        setEntryFormError(r.error);
+      }
+      return;
+    }
+    const createdCount = results.filter((r) => r.status === "created").length;
+    setBatchResult({ createdCount, results });
+    setSelectedDate(null);
+  }
+
+  /** Confirma o(s) aviso(s) de cobertura insuficiente do lote (`pendingBatchCoverage`) — reenvia só
+   *  quem ainda está `coverage_pending`, com `confirmarApesarDoAviso: true`; os demais resultados
+   *  daquele mesmo lote (já definitivos) são preservados e combinados no desfecho final. */
+  async function handleConfirmBatchCoverage() {
+    if (!pendingBatchCoverage || entrySubmitting) return;
+    const pendingIds = pendingBatchCoverage
+      .filter((r): r is BatchEntryResultDTO & { status: "coverage_pending" } => r.status === "coverage_pending")
+      .map((r) => r.employeeId);
+    const others = pendingBatchCoverage.filter((r) => r.status !== "coverage_pending");
+    const confirmResults = await submitCreateEntries(pendingIds, true);
+    if (!confirmResults) {
+      // `entryFormError` já setado por `submitCreateEntries` — ainda assim atualiza o calendário
+      // pra refletir quem já tinha sido criado na 1ª chamada do lote, antes desta falha na 2ª etapa
+      // (confirmar). Mantém `pendingBatchCoverage` com o estado antigo pra não perder o contexto —
+      // o usuário pode tentar "Confirmar mesmo assim" de novo.
+      await refreshCalendario();
+      return;
+    }
+    setPendingBatchCoverage(null);
+    await completeCreateResults([...others, ...confirmResults]);
+  }
+
+  /**
+   * Cancela o(s) aviso(s) de cobertura do lote. Com 1 colaborador só, nada foi gravado ainda (igual
+   * ao fluxo de sempre com 1 colaborador) — só fecha o aviso e devolve pro formulário, sem finalizar
+   * nada. Com 2+, os demais colaboradores do mesmo lote já podem ter sido gravados de verdade (a
+   * criação é por colaborador, não tudo-ou-nada) — por isso finaliza o lote, marcando quem não
+   * confirmou como "não criado" no resumo.
+   */
+  function handleCancelBatchCoverage() {
+    if (!pendingBatchCoverage) return;
+    if (pendingBatchCoverage.length === 1) {
+      setPendingBatchCoverage(null);
+      return;
+    }
+    const resolved: BatchEntryResultDTO[] = pendingBatchCoverage.map((r) =>
+      r.status === "coverage_pending"
+        ? {
+            employeeId: r.employeeId,
+            employeeName: r.employeeName,
+            status: "error",
+            error: "Não criado: cobertura mínima do setor insuficiente e não confirmado.",
+          }
+        : r
+    );
+    setPendingBatchCoverage(null);
+    void completeCreateResults(resolved);
   }
 
   /**
@@ -1148,26 +1417,22 @@ export function EscalaFolgasClient({
                 </p>
               </div>
             ) : (
-              <label className="block">
-                <span className="block text-xs text-nord-gray mb-1">Colaborador</span>
-                <select
-                  value={entryForm.employeeId}
-                  onChange={(e) => setEntryForm({ ...entryForm, employeeId: e.target.value })}
-                  className="input"
-                >
-                  <option value="">Selecione...</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} — {emp.setor} · {emp.cargo}
-                    </option>
-                  ))}
-                </select>
-                {employees.length === 0 && (
+              <div>
+                <span className="block text-xs text-nord-gray mb-1">
+                  Colaborador(es) — marque um ou mais para cadastrar a mesma folga de uma vez
+                </span>
+                {employees.length === 0 ? (
                   <span className="block text-xs text-nord-warning mt-1">
                     Nenhum colaborador ativo disponível para cadastro de folga.
                   </span>
+                ) : (
+                  <EmployeeMultiSelect
+                    employees={employees}
+                    selected={entryForm.employeeIds}
+                    onChange={(employeeIds) => setEntryForm({ ...entryForm, employeeIds })}
+                  />
                 )}
-              </label>
+              </div>
             )}
 
             <label className="block">
@@ -1267,12 +1532,16 @@ export function EscalaFolgasClient({
               </button>
               <button
                 type="button"
-                onClick={() => submitEntry(false)}
+                onClick={() => (editingEntry ? submitEditEntry(false) : handleSubmitCreate())}
                 disabled={entrySubmitting || showNewTypeForm}
                 title={showNewTypeForm ? "Cadastre ou cancele o novo tipo de folga antes de salvar" : undefined}
                 className="flex-1 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg py-2.5"
               >
-                {entrySubmitting ? "Salvando..." : "Salvar"}
+                {entrySubmitting
+                  ? "Salvando..."
+                  : !editingEntry && entryForm.employeeIds.length > 1
+                    ? `Salvar para ${entryForm.employeeIds.length} colaboradores`
+                    : "Salvar"}
               </button>
             </div>
           </div>
@@ -1283,11 +1552,70 @@ export function EscalaFolgasClient({
         open={!!pendingCoverage}
         title="Cobertura mínima do setor"
         message={pendingCoverage ? formatCoverageMessage(pendingCoverage) : ""}
-        onConfirm={() => submitEntry(true)}
+        onConfirm={() => submitEditEntry(true)}
         onCancel={() => setPendingCoverage(null)}
         confirmLabel={entrySubmitting ? "Confirmando..." : "Confirmar mesmo assim"}
         danger
       />
+
+      <ConfirmDialog
+        open={!!pendingBatchCoverage}
+        title="Cobertura mínima do setor"
+        message={
+          pendingBatchCoverage
+            ? formatBatchCoverageMessage(
+                pendingBatchCoverage.filter(
+                  (r): r is BatchEntryResultDTO & { status: "coverage_pending" } => r.status === "coverage_pending"
+                )
+              )
+            : ""
+        }
+        onConfirm={handleConfirmBatchCoverage}
+        onCancel={handleCancelBatchCoverage}
+        confirmLabel={entrySubmitting ? "Confirmando..." : "Confirmar mesmo assim"}
+        danger
+      />
+
+      <Modal open={!!batchResult} onClose={() => setBatchResult(null)} title="Resultado do cadastro de folgas">
+        {batchResult && (
+          <div className="space-y-3">
+            {batchResult.createdCount > 0 && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-nord-success/10 border border-nord-success/30">
+                <CheckCircle2 size={14} className="text-nord-success mt-0.5 shrink-0" />
+                <p className="text-xs text-nord-success">
+                  Folga cadastrada com sucesso para {batchResult.createdCount} de {batchResult.results.length}{" "}
+                  colaborador(es).
+                </p>
+              </div>
+            )}
+            {batchResult.results.some((r) => r.status !== "created") && (
+              <div className="p-3 rounded-lg bg-nord-warning/10 border border-nord-warning/30">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-nord-warning mt-0.5 shrink-0" />
+                  <p className="text-xs text-nord-warning">
+                    {batchResult.results.filter((r) => r.status !== "created").length} colaborador(es) não tiveram a
+                    folga cadastrada:
+                  </p>
+                </div>
+                <ul className="mt-2 ml-6 list-disc space-y-1 text-xs text-nord-gray">
+                  {batchResult.results
+                    .filter((r): r is BatchEntryResultDTO & { status: "error" } => r.status === "error")
+                    .map((r) => (
+                      <li key={r.employeeId}>
+                        <span className="text-white">{r.employeeName ?? "Um colaborador"}</span>
+                        {" — "}
+                        {r.error}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        <button onClick={() => setBatchResult(null)} className="btn-primary w-full mt-4 py-2.5">
+          Fechar
+        </button>
+      </Modal>
 
       <ConfirmDialog
         open={!!deletingEntry}
