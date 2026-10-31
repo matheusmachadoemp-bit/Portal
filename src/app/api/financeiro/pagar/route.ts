@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import { addMonths } from "date-fns";
 import { Prisma } from "@prisma/client";
 import { parseDayInput } from "@/lib/timezone";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { balanceDelta } from "@/lib/finance";
+import { balanceDelta, splitInstallments } from "@/lib/finance";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
@@ -126,12 +128,44 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valor é obrigatório e deve ser maior que zero." }, { status: 400 });
   }
 
+  // Parcelamento: quando marcado, a quantidade de parcelas é obrigatória e define quantos
+  // lançamentos `Payable` serão criados de uma vez (ver bloco da transação abaixo) — o `valor`
+  // digitado acima é o TOTAL da compra, dividido entre as parcelas por `splitInstallments`
+  // (`src/lib/finance.ts`). `parcelaAtual` não é mais pedido ao criar (a série sempre nasce
+  // 1/N, 2/N, ..., N/N): só existe como metadado de leitura ao editar uma parcela já existente, e o
+  // PATCH (`[id]/route.ts`) não deixa mudar isso depois de criado — ver decisão lá.
+  const parcelado = !!body.parcelado;
+  let quantidadeParcelas: number | null = null;
+  if (parcelado) {
+    quantidadeParcelas = Number(body.quantidadeParcelas);
+    if (!Number.isInteger(quantidadeParcelas) || quantidadeParcelas < 2 || quantidadeParcelas > 120) {
+      return NextResponse.json(
+        { error: "Para um lançamento parcelado, informe a quantidade de parcelas (um número inteiro entre 2 e 120)." },
+        { status: 400 }
+      );
+    }
+  }
+
   // "O que foi comprado" (opcional): validado ANTES de gravar qualquer coisa.
   let compra: ParsedCompra | null = null;
   if (body.compra !== undefined && body.compra !== null) {
     const parsed = parseCompra(body.compra);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     compra = parsed.compra;
+  }
+  if (parcelado && compra) {
+    // Ligar "O que foi comprado" (que carrega o TOTAL da compra) a várias parcelas de uma vez
+    // quebraria `detailPercent`/a barra de progresso da listagem (compara o total cobrado da compra
+    // com o valor de CADA linha — aqui, só a fatia da parcela): mais simples e correto não aceitar os
+    // dois juntos nesta chamada. Quem quiser detalhar itens de uma compra parcelada abre uma parcela
+    // específica depois (PATCH) e lança os itens com valor compatível com aquela parcela.
+    return NextResponse.json(
+      {
+        error:
+          'Não é possível detalhar "O que foi comprado" junto com a criação de várias parcelas de uma vez. Cadastre o parcelamento primeiro e depois abra cada parcela para detalhar os itens dela, se precisar.',
+      },
+      { status: 400 }
+    );
   }
 
   // Código de barras do boleto (ou Pix "copia e cola"), lido pelo leitor físico de código de barras
@@ -185,66 +219,127 @@ export async function POST(req: Request) {
     }
   }
 
-  let payable;
+  let created;
   try {
-    payable = await prisma.$transaction(async (tx) => {
-      // number vem do id sequencial autoincrementado pelo Postgres (sequence),
-      // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo
-      // número (condição de corrida real com o COUNT(*) anterior).
-      let created = await tx.payable.create({
-        data: {
-          number: body.number || "",
+    created = await prisma.$transaction(async (tx) => {
+      if (!parcelado) {
+        // ---- fluxo de sempre: um único lançamento ----
+        // number vem do id sequencial autoincrementado pelo Postgres (sequence),
+        // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo
+        // número (condição de corrida real com o COUNT(*) anterior).
+        let row = await tx.payable.create({
+          data: {
+            number: body.number || "",
+            fornecedor: body.fornecedor,
+            descricao: body.descricao,
+            categoriaId: body.categoriaId,
+            centroCusto: body.centroCusto || null,
+            employeeId,
+            empresaId: empresa.id,
+            valor,
+            dataCompetencia,
+            dataVencimento,
+            dataPagamento,
+            bankAccountId: body.bankAccountId || null,
+            formaPagamento: body.formaPagamento || null,
+            parcelado: false,
+            quantidadeParcelas: null,
+            parcelaAtual: null,
+            installmentGroupId: null,
+            observacoes: body.observacoes || null,
+            status,
+            codigoBarras,
+            createdById: session.user.id,
+          },
+        });
+
+        if (!body.number) {
+          row = await tx.payable.update({
+            where: { id: row.id },
+            data: { number: `CP-${String(row.sequence).padStart(5, "0")}` },
+          });
+        }
+
+        const delta = balanceDelta(-1, status, valor);
+        if (delta && row.bankAccountId) {
+          await tx.bankAccount.update({
+            where: { id: row.bankAccountId },
+            data: { saldoAtual: { increment: delta } },
+          });
+        }
+
+        if (compra) {
+          await saveCompraForPayable(tx, {
+            userId: session.user.id,
+            payable: {
+              id: row.id,
+              empresaId: row.empresaId,
+              fornecedor: row.fornecedor,
+              dataCompetencia: row.dataCompetencia,
+            },
+            compra,
+          });
+        }
+
+        return [row];
+      }
+
+      // ---- parcelado: N lançamentos de uma vez, cada um com a fatia do valor total
+      // (`splitInstallments`) e vencimento/competência deslocados em 1 mês por parcela (mesmo
+      // `addMonths` que Recorrentes usa para gerar vários meses de uma vez — `addMonths` do
+      // date-fns já lida sozinho com meses mais curtos, tipo fevereiro, sem "rolar" pro mês
+      // seguinte, então nenhuma data extra de clamping é necessária aqui). ----
+      const installmentGroupId = randomUUID();
+      const valores = splitInstallments(valor, quantidadeParcelas!);
+      const rows = await tx.payable.createManyAndReturn({
+        data: valores.map((valorParcela, i) => ({
+          // Número próprio por parcela — nunca `body.number` (a tela nunca envia um valor nele, ver
+          // comentário no form; mesmo que viesse, repetir o mesmo número em N linhas confundiria
+          // mais do que ajudaria). Mesmo padrão `CP-REC-<id>-<i+1>` de Recorrentes, adaptado: não
+          // depende da sequence/update em 2 passos porque `createManyAndReturn` não permite emendar
+          // um update por linha antes de saber a sequence de cada uma sem um loop; usar um id só
+          // (`installmentGroupId`) já garante número distinto E identificável como a mesma série.
+          number: `CP-PARC-${installmentGroupId.slice(-6)}-${i + 1}`,
           fornecedor: body.fornecedor,
           descricao: body.descricao,
           categoriaId: body.categoriaId,
           centroCusto: body.centroCusto || null,
           employeeId,
           empresaId: empresa.id,
-          valor,
-          dataCompetencia,
-          dataVencimento,
+          valor: valorParcela,
+          dataCompetencia: addMonths(dataCompetencia, i),
+          dataVencimento: addMonths(dataVencimento, i),
           dataPagamento,
           bankAccountId: body.bankAccountId || null,
           formaPagamento: body.formaPagamento || null,
-          parcelado: !!body.parcelado,
-          quantidadeParcelas: body.quantidadeParcelas ? Number(body.quantidadeParcelas) : null,
-          parcelaAtual: body.parcelaAtual ? Number(body.parcelaAtual) : null,
+          parcelado: true,
+          quantidadeParcelas,
+          parcelaAtual: i + 1,
+          installmentGroupId,
           observacoes: body.observacoes || null,
           status,
-          codigoBarras,
+          // Código de barras/Pix escaneado é de UM boleto físico (o desta primeira parcela) — nunca
+          // repetido nas outras (a coluna é única globalmente): as próximas recebem o código delas
+          // depois, uma a uma, via PATCH, quando o boleto de cada uma chegar.
+          codigoBarras: i === 0 ? codigoBarras : null,
           createdById: session.user.id,
-        },
+        })),
       });
 
-      if (!body.number) {
-        created = await tx.payable.update({
-          where: { id: created.id },
-          data: { number: `CP-${String(created.sequence).padStart(5, "0")}` },
-        });
-      }
-
+      // Saldo da conta bancária: UM único ajuste com o valor TOTAL digitado (não um por parcela, e
+      // não o total repetido N vezes) — matematicamente idêntico à soma dos ajustes de cada parcela,
+      // porque a soma das fatias de `splitInstallments` bate exatamente com `valor`.
       const delta = balanceDelta(-1, status, valor);
-      if (delta && created.bankAccountId) {
+      const bankAccountId = body.bankAccountId || null;
+      if (delta && bankAccountId) {
         await tx.bankAccount.update({
-          where: { id: created.bankAccountId },
+          where: { id: bankAccountId },
           data: { saldoAtual: { increment: delta } },
         });
       }
 
-      if (compra) {
-        await saveCompraForPayable(tx, {
-          userId: session.user.id,
-          payable: {
-            id: created.id,
-            empresaId: created.empresaId,
-            fornecedor: created.fornecedor,
-            dataCompetencia: created.dataCompetencia,
-          },
-          compra,
-        });
-      }
-
-      return created;
+      // `compra` nunca chega aqui: bloqueado antes da transação quando `parcelado && compra`.
+      return rows;
     });
   } catch (error) {
     if (error instanceof CompraError) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -266,16 +361,24 @@ export async function POST(req: Request) {
     throw error;
   }
 
-  await prisma.auditLog.create({
-    data: {
-      userId: session.user.id,
-      empresaId: empresa.id,
-      action: "CREATE",
-      entityType: "Payable",
-      entityId: payable.id,
-      after: JSON.stringify(payable),
-    },
-  });
+  // Auditoria por lançamento (igual ao fluxo de sempre, 1 entrada por `Payable`), mesmo quando a
+  // chamada gerou várias parcelas de uma vez.
+  for (const row of created) {
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        empresaId: empresa.id,
+        action: "CREATE",
+        entityType: "Payable",
+        entityId: row.id,
+        after: JSON.stringify(row),
+      },
+    });
+  }
 
-  return NextResponse.json({ payable });
+  // A tela (ver `submit()`/`duplicate()` em `contas-pagar-client.tsx`) só olha `payable.dataVencimento`
+  // para avisar se o lançamento ficou fora da janela de 120 dias que `refresh()` busca — devolver a
+  // 1ª parcela (a de vencimento mais próximo) como `payable` mantém esse contrato sem mudar a tela.
+  const payable = created.find((row) => row.parcelaAtual === 1) ?? created[0];
+  return NextResponse.json({ payable, parcelas: created.length });
 }

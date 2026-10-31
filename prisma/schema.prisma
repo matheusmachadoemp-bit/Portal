@@ -3907,6 +3907,14 @@ model Payable {
   parcelado           Boolean            @default(false)
   quantidadeParcelas  Int?
   parcelaAtual        Int?
+  /// Mesmo valor em TODAS as parcelas geradas juntas por um único lançamento parcelado (POST
+  /// `/api/financeiro/pagar` com `parcelado=true` e `quantidadeParcelas>1`), para poder
+  /// identificar/agrupar depois quais boletos são parcelas da MESMA compra — nulo para lançamentos
+  /// não parcelados (todo o histórico antes deste campo, e qualquer lançamento avulso). Gerado em
+  /// código (randomUUID), não é FK: não existe uma tabela "cabeçalho" de parcelamento, cada parcela
+  /// já é um `Payable` completo e independente (editável/pagável isoladamente), só com esta marca em
+  /// comum. Ver `splitInstallments` em `src/lib/finance.ts`.
+  installmentGroupId  String?
   observacoes         String?
   status              FinanceEntryStatus @default(EM_ABERTO)
   recurringTemplateId String?
@@ -3942,6 +3950,7 @@ model Payable {
   @@index([empresaId, dataCompetencia])
   @@index([invoiceId])
   @@index([employeeId])
+  @@index([installmentGroupId])
 }
 
 model Receivable {

@@ -1030,7 +1030,14 @@ export function ContasPagarClient({
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id} className="border-b border-nord-border/50 hover:bg-white/5">
-                <td className="py-2 pr-4 text-nord-gray">{p.number}</td>
+                <td className="py-2 pr-4 text-nord-gray">
+                  {p.number}
+                  {p.parcelado && p.quantidadeParcelas ? (
+                    <div className="mt-0.5">
+                      <Badge tone="default">{p.parcelaAtual ?? "?"}/{p.quantidadeParcelas}</Badge>
+                    </div>
+                  ) : null}
+                </td>
                 <td className="py-2 pr-4 text-white">
                   {p.fornecedor}
                   {p.employee && (
@@ -1268,6 +1275,12 @@ export function ContasPagarClient({
           </Field>
           <Field label="Valor (R$)">
             <input required type="number" min="0.01" step="0.01" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} className="input" />
+            {!editing && form.parcelado && (
+              <p className="mt-1 text-[11px] text-nord-gray">
+                Valor TOTAL da compra — o sistema divide automaticamente entre as {form.quantidadeParcelas || "N"} parcelas
+                (a última absorve a diferença de centavos do arredondamento).
+              </p>
+            )}
           </Field>
           <Field label="Data de Competência">
             <input type="date" value={form.dataCompetencia} onChange={(e) => setForm({ ...form, dataCompetencia: e.target.value })} className="input" />
@@ -1331,27 +1344,44 @@ export function ContasPagarClient({
               ))}
             </select>
           </Field>
-          <div className="flex items-center gap-2 pt-6">
-            <input
-              type="checkbox"
-              id="parcelado"
-              checked={form.parcelado}
-              onChange={(e) => setForm({ ...form, parcelado: e.target.checked })}
-              className="accent-nord-blue"
-            />
-            <label htmlFor="parcelado" className="text-xs text-nord-gray">
-              Parcelado
-            </label>
-          </div>
+          {/* Parcelamento não pode ser alterado depois de criado (ver validação no PATCH): ao editar
+              uma conta que já NÃO é parcelada, nem mostra a opção — nada a decidir aqui depois do
+              fato. Ao editar uma parcela já existente, mostra só a posição dela, sem poder editar. */}
+          {(!editing || form.parcelado) && (
+            <div className="flex items-center gap-2 pt-6">
+              <input
+                type="checkbox"
+                id="parcelado"
+                checked={form.parcelado}
+                disabled={!!editing}
+                title={editing ? "Parcelamento não pode ser alterado depois que a conta é criada." : undefined}
+                onChange={(e) =>
+                  setForm({ ...form, parcelado: e.target.checked, quantidadeParcelas: e.target.checked ? form.quantidadeParcelas : "" })
+                }
+                className="accent-nord-blue disabled:opacity-50"
+              />
+              <label htmlFor="parcelado" className="text-xs text-nord-gray">
+                Parcelado
+              </label>
+            </div>
+          )}
           {form.parcelado && (
-            <>
+            editing ? (
+              <Field label="Parcela">
+                <input type="text" value={`${form.parcelaAtual || "1"} de ${form.quantidadeParcelas || "1"}`} disabled className="input opacity-60" />
+              </Field>
+            ) : (
               <Field label="Qtd. parcelas">
-                <input type="number" value={form.quantidadeParcelas} onChange={(e) => setForm({ ...form, quantidadeParcelas: e.target.value })} className="input" />
+                <input
+                  type="number"
+                  min={2}
+                  step={1}
+                  value={form.quantidadeParcelas}
+                  onChange={(e) => setForm({ ...form, quantidadeParcelas: e.target.value })}
+                  className="input"
+                />
               </Field>
-              <Field label="Parcela atual">
-                <input type="number" value={form.parcelaAtual} onChange={(e) => setForm({ ...form, parcelaAtual: e.target.value })} className="input" />
-              </Field>
-            </>
+            )
           )}
           <CompraItensEditor
             items={drafts}

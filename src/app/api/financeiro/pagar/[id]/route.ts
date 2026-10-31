@@ -108,6 +108,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // Parcelamento (se é parcelado, quantidade de parcelas, qual é esta parcela) é decidido só na
+  // criação — ver `POST /api/financeiro/pagar`, que já gera as N parcelas de uma vez (valor
+  // dividido, vencimento mês a mês) com um `installmentGroupId` em comum. Esta rota edita sempre UMA
+  // parcela isolada (de propósito: a edição nunca deve re-gerar a série inteira), então não dá pra
+  // transformar um lançamento comum em parcelado (ou vice-versa) nem trocar a quantidade/posição
+  // por aqui sem deixar a série inconsistente com o que foi realmente criado no banco — exclua e
+  // cadastre de novo caso precise mudar o parcelamento. O form de edição sempre reenvia os três
+  // campos com o valor que já está salvo (mesmo sem o usuário ter tocado neles), então só bloqueamos
+  // quando o valor pedido é DIFERENTE do que já está gravado — reenviar o mesmo valor é um no-op.
+  const PARCELAMENTO_IMUTAVEL_ERROR =
+    "Parcelamento não pode ser alterado depois que a conta é criada (se é parcelado, quantidade de parcelas e qual parcela). Para corrigir, exclua esta conta e cadastre o parcelamento novamente.";
+  if (body.parcelado !== undefined && !!body.parcelado !== existingCheck.parcelado) {
+    return NextResponse.json({ error: PARCELAMENTO_IMUTAVEL_ERROR }, { status: 400 });
+  }
+  if (body.quantidadeParcelas !== undefined) {
+    const requested =
+      body.quantidadeParcelas === "" || body.quantidadeParcelas === null ? null : Number(body.quantidadeParcelas);
+    if (requested !== existingCheck.quantidadeParcelas) {
+      return NextResponse.json({ error: PARCELAMENTO_IMUTAVEL_ERROR }, { status: 400 });
+    }
+  }
+  if (body.parcelaAtual !== undefined) {
+    const requested = body.parcelaAtual === "" || body.parcelaAtual === null ? null : Number(body.parcelaAtual);
+    if (requested !== existingCheck.parcelaAtual) {
+      return NextResponse.json({ error: PARCELAMENTO_IMUTAVEL_ERROR }, { status: 400 });
+    }
+  }
+
   const nextStatusCheck: FinanceEntryStatus = body.status ?? existingCheck.status;
   const nextValorCheck = body.valor !== undefined ? Number(body.valor) : existingCheck.valor;
   const nextBankAccountIdCheck =
@@ -161,10 +189,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           dataPagamento,
           bankAccountId: body.bankAccountId !== undefined ? body.bankAccountId || null : undefined,
           formaPagamento: body.formaPagamento ?? undefined,
-          parcelado: body.parcelado ?? undefined,
-          quantidadeParcelas:
-            body.quantidadeParcelas !== undefined ? Number(body.quantidadeParcelas) : undefined,
-          parcelaAtual: body.parcelaAtual !== undefined ? Number(body.parcelaAtual) : undefined,
+          // `parcelado`/`quantidadeParcelas`/`parcelaAtual` NUNCA são escritos aqui de propósito —
+          // já foram validados acima como imutáveis depois da criação (ver bloco
+          // `PARCELAMENTO_IMUTAVEL_ERROR`): se chegou até aqui, ou não vieram no body, ou vieram
+          // iguais ao que já está salvo, então não há nada a regravar.
           observacoes: body.observacoes ?? undefined,
           status: nextStatus,
           codigoBarras,
