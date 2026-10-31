@@ -98,6 +98,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // Colaborador vinculado (opcional): ausente = não mexe; vazio/null = desvincula; valor novo =
+  // precisa pertencer à mesma loja do lançamento já existente (mesmo padrão de validação do
+  // `bankAccountId` abaixo).
+  if (body.employeeId !== undefined && body.employeeId !== null && String(body.employeeId).trim() !== "") {
+    const employee = await prisma.employee.findUnique({ where: { id: body.employeeId } });
+    if (!employee || employee.empresaId !== existingCheck.empresaId) {
+      return NextResponse.json({ error: "Colaborador inválido para esta loja." }, { status: 400 });
+    }
+  }
+
   const nextStatusCheck: FinanceEntryStatus = body.status ?? existingCheck.status;
   const nextValorCheck = body.valor !== undefined ? Number(body.valor) : existingCheck.valor;
   const nextBankAccountIdCheck =
@@ -144,6 +154,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           descricao: body.descricao ?? undefined,
           categoriaId: body.categoriaId ?? undefined,
           centroCusto: body.centroCusto ?? undefined,
+          employeeId: body.employeeId !== undefined ? body.employeeId || null : undefined,
           valor: body.valor !== undefined ? nextValor : undefined,
           dataCompetencia,
           dataVencimento,

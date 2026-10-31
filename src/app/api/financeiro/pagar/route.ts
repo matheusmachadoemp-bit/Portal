@@ -73,6 +73,7 @@ export async function GET(req: Request) {
       createdBy: { select: { name: true } },
       empresa: { select: { name: true } },
       invoice: { select: INVOICE_SUMMARY_SELECT },
+      employee: { select: { id: true, name: true } },
     },
   });
 
@@ -163,6 +164,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Categoria financeira não encontrada." }, { status: 400 });
   }
 
+  // Colaborador vinculado (opcional, ver comentário em `schema.prisma`): se enviado, precisa
+  // pertencer à mesma loja do lançamento (mesmo padrão de validação do `bankAccountId` abaixo).
+  let employeeId: string | null = null;
+  if (body.employeeId !== undefined && body.employeeId !== null && String(body.employeeId).trim() !== "") {
+    const employee = await prisma.employee.findUnique({ where: { id: body.employeeId } });
+    if (!employee || employee.empresaId !== empresa.id) {
+      return NextResponse.json({ error: "Colaborador inválido para esta loja." }, { status: 400 });
+    }
+    employeeId = employee.id;
+  }
+
   const status = body.status || "EM_ABERTO";
 
   const preDelta = balanceDelta(-1, status, valor);
@@ -186,6 +198,7 @@ export async function POST(req: Request) {
           descricao: body.descricao,
           categoriaId: body.categoriaId,
           centroCusto: body.centroCusto || null,
+          employeeId,
           empresaId: empresa.id,
           valor,
           dataCompetencia,

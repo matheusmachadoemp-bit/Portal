@@ -76,6 +76,11 @@ type PayableDTO = {
   codigoBarras: string | null;
   /** Resumo da compra (“o que foi comprado”) ligada à conta, se houver. */
   invoice: InvoiceSummary | null;
+  /** Colaborador (RH) vinculado a este lançamento, quando o pagamento é na verdade pra um
+   *  colaborador (folha, bonificação) em vez de fornecedor de insumo — ver `employeeId` em
+   *  `schema.prisma`. Opcional. */
+  employeeId: string | null;
+  employee: { id: string; name: string } | null;
 };
 
 type InvoiceSummary = {
@@ -126,6 +131,7 @@ const emptyForm = {
   observacoes: "",
   status: "EM_ABERTO",
   codigoBarras: "",
+  employeeId: "",
 };
 
 export function ContasPagarClient({
@@ -133,6 +139,7 @@ export function ContasPagarClient({
   categorias,
   contas,
   fornecedoresCadastrados,
+  employees = [],
   ingredients = [],
   canCreateSupplier = false,
   canCreate = true,
@@ -145,6 +152,8 @@ export function ContasPagarClient({
   contas: { id: string; name: string }[];
   /** Cadastro de fornecedores (Estoque > Fornecedores) — só alimenta a sugestão do campo "Fornecedor", ver `fornecedorSugestoes`. */
   fornecedoresCadastrados: { id: string; name: string }[];
+  /** Colaboradores ATIVOS (RH) para o select opcional "Colaborador vinculado" — ver `employeeId`. */
+  employees?: { id: string; name: string }[];
   /** Insumos da loja (Estoque) para escolher em “O que foi comprado”. */
   ingredients?: IngredientOption[];
   /** O perfil pode cadastrar fornecedor (Estoque) — habilita “Cadastrar como novo fornecedor” no formulário. */
@@ -514,6 +523,19 @@ export function ContasPagarClient({
     }
   }
 
+  /** Selecionou (ou desmarcou) um colaborador vinculado: ao selecionar, preenche o campo
+   *  "Fornecedor / Beneficiário" com o nome dele (reaproveitando `onFornecedorChange`, que também já
+   *  busca histórico/sugestão de fornecedor — raramente vai bater com um fornecedor cadastrado, mas
+   *  não custa manter o mesmo caminho) — o texto continua editável depois (ex. "Salário - João -
+   *  Outubro/2026"). Ao desmarcar, o texto já digitado no campo não é apagado. */
+  function onEmployeeChange(employeeId: string) {
+    setForm((f) => ({ ...f, employeeId }));
+    if (employeeId) {
+      const emp = employees.find((e) => e.id === employeeId);
+      if (emp) onFornecedorChange(emp.name);
+    }
+  }
+
   function openNewSupplierPanel() {
     setNewSupplier({ razaoSocial: form.fornecedor.trim(), cnpj: "", telefone: "" });
     setNewSupplierError(null);
@@ -651,6 +673,7 @@ export function ContasPagarClient({
       observacoes: p.observacoes ?? "",
       status: p.status,
       codigoBarras: p.codigoBarras ?? "",
+      employeeId: p.employeeId ?? "",
     });
     resetCompra();
     resetCodigoBarras();
@@ -787,6 +810,7 @@ export function ContasPagarClient({
         descricao: `${p.descricao} (cópia)`,
         categoriaId: p.categoriaId,
         centroCusto: p.centroCusto,
+        employeeId: p.employeeId,
         valor: p.valor,
         dataCompetencia: storedDayKey(p.dataCompetencia),
         dataVencimento: storedDayKey(p.dataVencimento),
@@ -1007,7 +1031,14 @@ export function ContasPagarClient({
             {filtered.map((p) => (
               <tr key={p.id} className="border-b border-nord-border/50 hover:bg-white/5">
                 <td className="py-2 pr-4 text-nord-gray">{p.number}</td>
-                <td className="py-2 pr-4 text-white">{p.fornecedor}</td>
+                <td className="py-2 pr-4 text-white">
+                  {p.fornecedor}
+                  {p.employee && (
+                    <div className="mt-0.5">
+                      <Badge tone="info">Colaborador: {p.employee.name}</Badge>
+                    </div>
+                  )}
+                </td>
                 <td className="py-2 pr-4 text-nord-gray">{p.categoria.name}</td>
                 <td className="py-2 pr-4 text-nord-gray">{p.empresa.name}</td>
                 <td className="py-2 pr-4 text-nord-gray">{formatCurrency(p.valor)}</td>
@@ -1095,11 +1126,11 @@ export function ContasPagarClient({
       <Modal open={showForm} onClose={closeForm} title={editing ? "Editar conta a pagar" : "Nova conta a pagar"} widthClass="max-w-5xl">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Field label="Fornecedor">
+            <Field label="Fornecedor / Beneficiário">
               <input
                 required
                 list="fornecedor-sugestoes"
-                placeholder="Digite ou escolha um fornecedor já cadastrado"
+                placeholder="Digite um fornecedor, colaborador ou outro beneficiário"
                 value={form.fornecedor}
                 onChange={(e) => onFornecedorChange(e.target.value)}
                 onBlur={() => loadHistory(form.fornecedor, supplierId)}
@@ -1127,6 +1158,19 @@ export function ContasPagarClient({
               ) : null}
             </div>
           </div>
+          <Field label="Colaborador vinculado (opcional)">
+            <select value={form.employeeId} onChange={(e) => onEmployeeChange(e.target.value)} className="input">
+              <option value="">— Nenhum (fornecedor ou outro beneficiário) —</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-nord-gray">
+              Ao escolher, preenche o campo acima com o nome dele (você pode complementar, ex. “Salário - João - Outubro/2026”).
+            </p>
+          </Field>
           {newSupplierOpen && (
             <div className="col-span-2 rounded-lg border border-nord-border bg-nord-panel/40 p-3 space-y-2">
               <p className="text-xs text-white font-medium">Cadastrar novo fornecedor</p>

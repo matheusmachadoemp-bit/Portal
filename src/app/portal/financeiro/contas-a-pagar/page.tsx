@@ -33,7 +33,7 @@ export default async function ContasAPagarPage() {
     MANAGER_ROLES.includes(session.user.role) &&
     (await hasModulePermission(session.user.id, "financeiro", "canDelete"));
 
-  const [payables, categorias, contas, fornecedoresCadastrados, ingredients, canCreateSupplier] = await Promise.all([
+  const [payables, categorias, contas, fornecedoresCadastrados, ingredients, canCreateSupplier, employees] = await Promise.all([
     prisma.payable.findMany({
       where: { empresaId: { in: empresaIds }, dataVencimento: { gte: subDays(new Date(), REFRESH_WINDOW_DAYS) } },
       orderBy: { dataVencimento: "asc" },
@@ -44,6 +44,7 @@ export default async function ContasAPagarPage() {
         // Só o que a tela usa: o registro inteiro da loja leva códigos de integração ao navegador.
         empresa: { select: { id: true, name: true, color: true } },
         invoice: { select: INVOICE_SUMMARY_SELECT },
+        employee: { select: { id: true, name: true } },
       },
     }),
     getActiveFinancialCategories(),
@@ -73,6 +74,15 @@ export default async function ContasAPagarPage() {
       : Promise.resolve([]),
     // Cadastrar fornecedor é uma ação do Estoque: só aparece o atalho para quem pode.
     canCreate ? hasModulePermission(session.user.id, "estoque", "canCreate") : Promise.resolve(false),
+    // Colaboradores ATIVOS (RH) para o select opcional "Colaborador" do formulário — usado quando o
+    // lançamento é na verdade um pagamento a colaborador (folha, bonificação), não fornecedor de
+    // insumo (ver `employeeId` em `schema.prisma`). Mesmo filtro `status: "ATIVO"` já usado em
+    // outros selects de colaborador do Portal (ex. `rh/escala-folgas/page.tsx`).
+    prisma.employee.findMany({
+      where: { empresaId: { in: empresaIds }, status: "ATIVO" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   const serialized = payables.map((p) => ({
@@ -90,6 +100,7 @@ export default async function ContasAPagarPage() {
           categorias={categorias}
           contas={contas}
           fornecedoresCadastrados={fornecedoresCadastrados.map((s) => ({ id: s.id, name: s.nomeFantasia ?? s.razaoSocial }))}
+          employees={employees}
           ingredients={ingredients}
           canCreateSupplier={canCreateSupplier}
           canCreate={canCreate}

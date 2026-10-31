@@ -1791,6 +1791,9 @@ model Employee {
   sales                   Sale[]
   importedGarcomItems     ImportedGarcomItem[]
   financeEntries          EmployeeFinanceEntry[]
+  /// Ponta inversa de `Payable.employeeId` — lançamentos de Contas a Pagar vinculados a este
+  /// colaborador (ver comentário completo em `Payable`).
+  payables                Payable[]
   timeEntries             TimeEntry[]
   vacations               Vacation[]
   uniformDeliveries       UniformDelivery[]
@@ -3900,6 +3903,16 @@ model Payable {
   status              FinanceEntryStatus @default(EM_ABERTO)
   recurringTemplateId String?
   recurringTemplate   RecurringTemplate? @relation(fields: [recurringTemplateId], references: [id])
+  /// Vínculo OPCIONAL com um colaborador (RH), para lançamentos de Contas a Pagar que na verdade são
+  /// pagamento a colaborador (folha, bonificação) em vez de fornecedor de insumo — `fornecedor`
+  /// continua sendo texto livre (não trocou por FK, ver comentário no campo e em
+  /// `contas-a-pagar/page.tsx`), este campo só permite ALÉM disso estruturar "quanto pagamos pro
+  /// fulano" para consultas futuras. A maioria dos lançamentos (fornecedor de verdade) nunca
+  /// preenche isso. `onDelete: SetNull` (não `Cascade`): nunca apaga um lançamento financeiro
+  /// histórico só porque o colaborador foi excluído — na prática nem deve acontecer, porque
+  /// desligar um colaborador só muda `Employee.status` para DESLIGADO, sem apagar a ficha.
+  employeeId          String?
+  employee            Employee?          @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   /// "O que foi comprado" neste boleto (itens, preço combinado × cobrado). Vários boletos (parcelas) da
   /// mesma nota apontam para a MESMA compra. Opcional: boletos sem itens continuam valendo.
   invoiceId           String?
@@ -3920,6 +3933,7 @@ model Payable {
   @@index([empresaId, status, dataVencimento])
   @@index([empresaId, dataCompetencia])
   @@index([invoiceId])
+  @@index([employeeId])
 }
 
 model Receivable {
