@@ -195,7 +195,11 @@ export function ConfirmDialog({
 }: {
   open: boolean;
   title: string;
-  message: string;
+  /** Normalmente uma frase só, mas aceita `ReactNode` pra casos que precisam listar vários itens
+   *  (ex.: aviso de cobertura mínima afetando vários colaboradores de um lote, Escala de Folgas) —
+   *  todo uso existente já passava `string`, que é um `ReactNode` válido, então isso não muda nada
+   *  pra quem já usa este componente. */
+  message: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
   confirmLabel?: string;
@@ -225,7 +229,12 @@ export function ConfirmDialog({
         className="relative z-10 w-full max-w-sm nord-card bg-nord-card shadow-2xl p-5"
       >
         <h3 id={titleId} className="text-white font-semibold mb-2">{title}</h3>
-        <p className="text-sm text-nord-gray mb-5">{message}</p>
+        {/* `<div>`, não `<p>`: `message` aceita `ReactNode` (ver comentário no tipo acima) e um
+            `message` com bloco próprio (ex.: lista de itens) dentro de um `<p>` é HTML inválido
+            (`<p>` não pode conter elemento de bloco, como outro `<p>` ou `<ul>`) — gera erro de
+            hidratação. `<div>` com as mesmas classes mantém a aparência idêntica pra toda
+            mensagem em texto puro (a grande maioria dos usos). */}
+        <div className="text-sm text-nord-gray mb-5">{message}</div>
         <div className="flex justify-end gap-2">
           <button
             onClick={onCancel}
