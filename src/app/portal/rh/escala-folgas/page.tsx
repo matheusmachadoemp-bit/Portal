@@ -98,6 +98,11 @@ export default async function EscalaFolgasPage() {
         })
       : [];
 
+  // Só pra identificar a imagem exportada pelo botão "Exportar como imagem" (cabeçalho da
+  // imagem baixada) — mesmo rótulo "Grupo Nord (consolidado)" já usado no seletor de loja do
+  // menu lateral (`store-switcher.tsx`) pro modo consolidado.
+  const empresaLabel = !ctx ? "" : ctx.mode === "single" ? ctx.empresa.name : "Grupo Nord (consolidado)";
+
   return (
     <PageContainer title="RH" subtitle="Escala de Folgas">
       <EscalaFolgasClient
@@ -110,6 +115,7 @@ export default async function EscalaFolgasPage() {
         canDelete={canDelete}
         canManageDayOffTypes={canManageDayOffTypes}
         employees={employees}
+        empresaLabel={empresaLabel}
       />
     </PageContainer>
   );

@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import Image from "next/image";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, DoorClosed, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, DoorClosed, ImageDown, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Section, ColorBadge } from "@/components/ui/stat-card";
 import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { MonthCalendar } from "@/components/ui/month-calendar";
@@ -101,6 +101,13 @@ function capitalize(s: string) {
   return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
+/** Remove acentos ("Março" -> "Marco") — só usado pra montar o nome do arquivo PNG exportado
+ *  (item "Exportar como imagem" abaixo), pra nunca depender do navegador/SO lidando bem com
+ *  acento em nome de arquivo baixado. */
+function stripDiacritics(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 /** Mensagem do `ConfirmDialog` de cobertura insuficiente (núcleo da Fase 2b) — mesmos números que
  *  a API devolveu em `coverage`, nunca recalculados aqui (só ela conhece o total de ativos e quem
  *  mais já está indisponível nesse dia). */
@@ -127,9 +134,36 @@ function initialsOf(name: string) {
     .toUpperCase();
 }
 
-function PersonAvatar({ person, size = 22 }: { person: IndisponivelDTO; size?: number }) {
+/** Primeiro nome — versão compacta de `employeeName` pra caber na célula estreita do calendário
+ *  (grade desktop, ~1/7 da largura do card). Usado só como rótulo visual; o nome completo continua
+ *  disponível no `title` (tooltip) e no modal de detalhe do dia. */
+function firstNameOf(name: string) {
+  return name.split(" ").filter(Boolean)[0] ?? name;
+}
+
+/** "Nome completo - Setor" — mesmo formato literal pedido pelo usuário (ex.: "Aline Souza - CQ"),
+ *  usado tanto no tooltip do avatar quanto na lista compacta de pessoas por dia. Mantém o tipo de
+ *  folga no final (info que já existia no tooltip antes deste ajuste), separado por "·". */
+function nameAndSetor(person: IndisponivelDTO) {
+  return `${person.employeeName} - ${person.setor}`;
+}
+
+function PersonAvatar({
+  person,
+  size = 22,
+  eager = false,
+}: {
+  person: IndisponivelDTO;
+  size?: number;
+  /** `true` só na grade "fantasma" usada pra exportar a imagem (ver `ExportCalendarCard` mais
+   *  abaixo): ela fica posicionada fora da tela (pra gerar sempre no layout desktop, mesmo com a
+   *  pessoa no celular), e o carregamento "lazy" padrão do `next/image` só dispara quando o
+   *  elemento entra na área visível — fora da tela, isso nunca aconteceria, e a foto sairia em
+   *  branco na imagem gerada. */
+  eager?: boolean;
+}) {
   const color = person.dayOffType.cor;
-  const title = `${person.employeeName} · ${person.dayOffType.nome}`;
+  const title = `${nameAndSetor(person)} · ${person.dayOffType.nome}`;
   if (person.photoUrl) {
     return (
       <Image
@@ -138,6 +172,7 @@ function PersonAvatar({ person, size = 22 }: { person: IndisponivelDTO; size?: n
         title={title}
         width={size}
         height={size}
+        loading={eager ? "eager" : "lazy"}
         className="rounded-full object-cover shrink-0"
         style={{ width: size, height: size, border: `2px solid ${color}` }}
       />
@@ -162,13 +197,23 @@ function PersonAvatar({ person, size = 22 }: { person: IndisponivelDTO; size?: n
 }
 
 /** Até `max` avatares sobrepostos + "+N" pro resto — resumo visual do dia (item 1 do pedido). */
-function AvatarStack({ people, max = 3, size = 20 }: { people: IndisponivelDTO[]; max?: number; size?: number }) {
+function AvatarStack({
+  people,
+  max = 3,
+  size = 20,
+  eager = false,
+}: {
+  people: IndisponivelDTO[];
+  max?: number;
+  size?: number;
+  eager?: boolean;
+}) {
   const shown = people.slice(0, max);
   const extra = people.length - shown.length;
   return (
     <div className="flex items-center -space-x-1.5">
       {shown.map((p) => (
-        <PersonAvatar key={`${p.fonte}-${p.sourceId}`} person={p} size={size} />
+        <PersonAvatar key={`${p.fonte}-${p.sourceId}`} person={p} size={size} eager={eager} />
       ))}
       {extra > 0 && (
         <span
@@ -178,6 +223,184 @@ function AvatarStack({ people, max = 3, size = 20 }: { people: IndisponivelDTO[]
           +{extra}
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Resumo de quem está de folga num dia, direto na célula do calendário (sem precisar abrir o
+ * modal) — item central deste ajuste. Com até 2 pessoas (o caso mais comum) mostra o nome + setor
+ * de cada uma, no formato pedido ("Aline Souza - CQ"); a partir de 3 pessoas não cabe mais texto
+ * sem quebrar a célula, então volta pro empilhamento de avatares + "+N" (`AvatarStack`) de sempre.
+ * `compact` encurta o nome pro primeiro nome só (grade desktop, célula bem estreita); a lista
+ * mobile tem mais largura disponível e usa o nome completo.
+ */
+function DayPeopleSummary({
+  people,
+  compact = false,
+  eager = false,
+}: {
+  people: IndisponivelDTO[];
+  compact?: boolean;
+  /** Repassado pra `PersonAvatar` — ver comentário lá. */
+  eager?: boolean;
+}) {
+  if (people.length > 2) {
+    return <AvatarStack people={people} size={compact ? 20 : 22} eager={eager} />;
+  }
+  // Desktop (`compact`): a célula é um bloco comum (não-flex), então `w-full` garante uma largura
+  // conhecida pro `truncate` interno funcionar. Mobile: o pai é uma linha flex (ao lado do dia e do
+  // badge "Loja fechada"), então `flex-1` divide o espaço disponível e `min-w-0` permite encolher
+  // sem empurrar o resto da linha pra fora — sem isso, texto com `white-space: nowrap` (de
+  // `truncate`) tenderia a reivindicar sua largura total mesmo truncando visualmente.
+  return (
+    <div className={`flex flex-col gap-0.5 min-w-0 ${compact ? "w-full" : "flex-1"}`}>
+      {people.map((p) => (
+        <div
+          key={`${p.fonte}-${p.sourceId}`}
+          className="flex items-center gap-1 min-w-0"
+          title={`${nameAndSetor(p)} · ${p.dayOffType.nome}`}
+        >
+          <PersonAvatar person={p} size={compact ? 13 : 18} eager={eager} />
+          <span className={`truncate flex-1 min-w-0 leading-tight text-white ${compact ? "text-[9px]" : "text-[11px]"}`}>
+            {compact ? firstNameOf(p.employeeName) : p.employeeName} - {p.setor}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Classes do wrapper de uma célula do calendário (dia do mês) — compartilhada entre o `<button>`
+ *  clicável de verdade (grade desktop) e o `<div>` estático da imagem exportada
+ *  (`ExportCalendarCard`), pra nunca os dois saírem visualmente diferentes um do outro.
+ *  `interactive` só controla o cursor/hover (a imagem exportada não tem nada clicável). */
+function dayCellClassName(isToday: boolean, inMonth: boolean, interactive: boolean): string {
+  return `w-full min-h-[92px] rounded-lg border p-1.5 text-left flex flex-col ${
+    isToday ? "border-nord-blue bg-nord-blue/10" : "border-nord-border/60 bg-nord-panel/40"
+  } ${inMonth ? "" : "opacity-40"} ${interactive ? "hover:border-nord-blue/60 cursor-pointer" : "cursor-default"}`;
+}
+
+/** Conteúdo de dentro de uma célula do calendário (número do dia, ícone de loja fechada, resumo
+ *  de quem está de folga) — mesmo motivo de `dayCellClassName` acima: compartilhado entre a
+ *  célula clicável de verdade e a célula estática da imagem exportada. */
+function DayCellContent({
+  day,
+  dia,
+  isToday,
+  eager = false,
+}: {
+  day: Date;
+  dia: CalendarioDiaDTO | undefined;
+  isToday: boolean;
+  eager?: boolean;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <span className={`text-[11px] font-semibold ${isToday ? "text-nord-blue-light" : "text-nord-gray"}`}>
+          {day.getDate()}
+        </span>
+        {dia && dia.lojasFechadas.length > 0 && (
+          <span title={dia.lojasFechadas.map((l) => l.empresaName).join(", ") || "Loja fechada"}>
+            <DoorClosed size={11} className="text-nord-warning shrink-0" aria-label="Loja fechada" />
+          </span>
+        )}
+      </div>
+      {dia && dia.indisponiveis.length > 0 && (
+        <div className="mt-auto pt-1.5 w-full">
+          <DayPeopleSummary people={dia.indisponiveis} compact eager={eager} />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Mesma matemática de grade (42 células, incluindo o rastro do mês anterior/seguinte) que
+ *  `MonthCalendar` já faz internamente pra desenhar a grade de verdade — duplicada aqui (poucas
+ *  linhas, estável) só pra montar a grade "fantasma" de exportação (`ExportCalendarCard`), que
+ *  não usa o `MonthCalendar` em si (não queremos os botões Anterior/Hoje/Próximo numa imagem
+ *  estática baixada). */
+function buildMonthGridDays(cursor: Date): Date[] {
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const startOffset = firstOfMonth.getDay();
+  const gridStart = new Date(year, month, 1 - startOffset);
+  return Array.from(
+    { length: 42 },
+    (_, i) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i)
+  );
+}
+
+/**
+ * Grade do mês pronta pra virar imagem (botão "Exportar como imagem") — sempre fora da área
+ * visível da tela (`position: fixed; left: -10000px`), nunca visível pra quem usa o Portal
+ * normalmente. Fica sempre montada (quando já há dado carregado) em vez de só durante o clique
+ * de exportar, pra não precisar esperar um ciclo de render extra antes de capturar.
+ *
+ * Decisão de design: gera SEMPRE no layout "desktop" (grade 7 colunas), mesmo quando quem clicou
+ * está no celular — uma grade de calendário é o formato mais reconhecível pra compartilhar (ex.
+ * no grupo do WhatsApp) do que uma lista vertical bem alta, e também é mais simples de manter (1
+ * layout de exportação só, em vez de replicar a lógica pra lista mobile também).
+ */
+function ExportCalendarCard({
+  innerRef,
+  empresaLabel,
+  cursor,
+  diasByDate,
+  legendTypes,
+  todayKey,
+}: {
+  innerRef: RefObject<HTMLDivElement | null>;
+  empresaLabel: string;
+  cursor: Date;
+  diasByDate: Map<string, CalendarioDiaDTO>;
+  legendTypes: DayOffTypeDTO[];
+  todayKey: string;
+}) {
+  const days = useMemo(() => buildMonthGridDays(cursor), [cursor]);
+  const month = cursor.getMonth();
+  const monthLabel = capitalize(format(cursor, "MMMM 'de' yyyy", { locale: ptBR }));
+
+  return (
+    <div style={{ position: "fixed", top: 0, left: -10000, pointerEvents: "none" }} aria-hidden="true">
+      <div ref={innerRef} className="nord-card p-6" style={{ width: 1040 }}>
+        <p className="text-white text-lg font-semibold">{empresaLabel}</p>
+        <p className="text-nord-gray text-sm mt-0.5">Escala de Folgas — {monthLabel}</p>
+
+        {legendTypes.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap mt-4 mb-4 pb-4 border-b border-nord-border/60">
+            <span className="text-xs text-nord-gray">Legenda:</span>
+            {legendTypes.map((t) => (
+              <ColorBadge key={t.key} color={t.cor}>
+                {t.nome}
+              </ColorBadge>
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-7 gap-1 mb-1.5 mt-4">
+          {WEEKDAY_SHORT.map((d, i) => (
+            <span key={i} className="text-center text-[11px] font-medium text-nord-gray py-1">
+              {d}
+            </span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {days.map((day) => {
+            const key = localDateKey(day);
+            const dia = diasByDate.get(key);
+            const isToday = key === todayKey;
+            const inMonth = day.getMonth() === month;
+            return (
+              <div key={key} className={dayCellClassName(isToday, inMonth, false)}>
+                <DayCellContent day={day} dia={dia} isToday={isToday} eager />
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -227,6 +450,7 @@ export function EscalaFolgasClient({
   canDelete,
   canManageDayOffTypes,
   employees,
+  empresaLabel,
 }: {
   /** Líder — a API já restringe o resultado ao próprio setor dele, então o filtro fica fixo. */
   isSupervisor: boolean;
@@ -251,6 +475,11 @@ export function EscalaFolgasClient({
   /** Colaboradores ATIVOS pro select de "Colaborador" do formulário — vazio quando `canCreate` é
    *  falso (o servidor só busca quando o formulário pode de fato ser usado). */
   employees: EmployeeOptionDTO[];
+  /** Nome da loja ativa ("Nord Pizza & Burger") ou "Grupo Nord (consolidado)" no modo
+   *  consolidado — só pra identificar a imagem exportada pelo botão "Exportar como imagem" (a
+   *  pessoa que recebe a imagem fora do Portal, ex. no WhatsApp, não tem outro jeito de saber de
+   *  qual loja é aquela escala). */
+  empresaLabel: string;
 }) {
   // Líder sem ficha de colaborador vinculada (setor desconhecido): a API sempre devolveria vazio
   // pra esse caso (ver `resolveOwnSetor`), então nem vale a pena buscar — a tela mostra a mensagem
@@ -298,6 +527,14 @@ export function EscalaFolgasClient({
   // Catálogo de tipos de folga pro select "Tipo de folga" — só busca quando o formulário pode
   // aparecer de verdade (criar OU editar), nunca pra quem só visualiza o calendário.
   const [dayOffTypes, setDayOffTypes] = useState<DayOffTypeCatalogItem[] | null>(null);
+
+  // Botão "Exportar como imagem" — captura o conteúdo de `exportRef` (grade "fantasma" do mês
+  // atual, sempre no layout desktop, ver `ExportCalendarCard` mais abaixo) com `html-to-image` e
+  // baixa como PNG. `exporting` só evita cliques repetidos enquanto a captura roda (pode levar um
+  // instante); `exportError` mostra uma mensagem amigável se a geração falhar, sem travar a tela.
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canCreate && !canEdit) return;
@@ -392,6 +629,43 @@ export function EscalaFolgasClient({
     setDias(newDias);
     setError(newError);
     setLoading(false);
+  }
+
+  /**
+   * Gera e baixa o PNG do calendário do mês visível (botão "Exportar como imagem", item deste
+   * ajuste). Importa `html-to-image` sob demanda (`import()` dinâmico) — só quem realmente clica
+   * em exportar paga o custo de baixar essa lib, o resto do carregamento da tela fica igual.
+   *
+   * Por que `html-to-image` e não `html2canvas` (mais conhecida): `html2canvas` reimplementa um
+   * parser de CSS próprio que não entende `color-mix()`/`oklch()` — exatamente o que o Tailwind
+   * v4 usa por baixo dos panos pra QUALQUER classe com opacidade (`bg-nord-blue/10`,
+   * `border-nord-border/60` etc., usadas o tempo todo nesta tela), o que sairia errado/preto na
+   * imagem. `html-to-image` serializa o DOM como SVG (`<foreignObject>`) e deixa o próprio
+   * motor de renderização do navegador desenhar — não precisa entender a cor, só mostrar o que o
+   * navegador já sabe renderizar.
+   */
+  async function handleExportImage() {
+    if (exporting || !exportRef.current) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { toPng } = await import("html-to-image");
+      const dataUrl = await toPng(exportRef.current, {
+        pixelRatio: 2,
+        backgroundColor: "#151a23",
+        cacheBust: true,
+      });
+      const monthSlug = stripDiacritics(format(cursor, "MMMM-yyyy", { locale: ptBR })).toLowerCase();
+      const link = document.createElement("a");
+      link.download = `escala-de-folgas-${monthSlug}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("[escala-folgas] Falha ao exportar o calendário como imagem:", err);
+      setExportError("Não foi possível gerar a imagem do calendário. Tente novamente em instantes.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   const diasByDate = useMemo(() => {
@@ -623,11 +897,27 @@ export function EscalaFolgasClient({
                 ))}
               </select>
             )}
+            <button
+              type="button"
+              onClick={handleExportImage}
+              disabled={exporting || dias === null}
+              aria-label="Exportar como imagem"
+              title="Baixar o calendário deste mês como imagem PNG (pra compartilhar, ex.: no WhatsApp)"
+              className="btn-outline text-xs px-2.5 py-1.5 flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {exporting ? <Loader2 size={14} className="animate-spin" /> : <ImageDown size={14} />}
+              <span className="hidden sm:inline">{exporting ? "Gerando..." : "Exportar como imagem"}</span>
+            </button>
           </div>
         }
       >
         {error && (
           <div className="mb-4 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</div>
+        )}
+        {exportError && (
+          <div className="mb-4 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+            {exportError}
+          </div>
         )}
 
         {dias === null ? (
@@ -682,25 +972,9 @@ export function EscalaFolgasClient({
                       type="button"
                       disabled={!clickable}
                       onClick={() => clickable && openDay(key)}
-                      className={`w-full min-h-[92px] rounded-lg border p-1.5 text-left flex flex-col ${
-                        isToday ? "border-nord-blue bg-nord-blue/10" : "border-nord-border/60 bg-nord-panel/40"
-                      } ${inMonth ? "" : "opacity-40"} ${clickable ? "hover:border-nord-blue/60 cursor-pointer" : "cursor-default"}`}
+                      className={dayCellClassName(isToday, inMonth, clickable)}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className={`text-[11px] font-semibold ${isToday ? "text-nord-blue-light" : "text-nord-gray"}`}>
-                          {day.getDate()}
-                        </span>
-                        {dia && dia.lojasFechadas.length > 0 && (
-                          <span title={dia.lojasFechadas.map((l) => l.empresaName).join(", ") || "Loja fechada"}>
-                            <DoorClosed size={11} className="text-nord-warning shrink-0" aria-label="Loja fechada" />
-                          </span>
-                        )}
-                      </div>
-                      {dia && dia.indisponiveis.length > 0 && (
-                        <div className="mt-auto pt-1.5">
-                          <AvatarStack people={dia.indisponiveis} />
-                        </div>
-                      )}
+                      <DayCellContent day={day} dia={dia} isToday={isToday} />
                     </button>
                   );
                 }}
@@ -738,7 +1012,7 @@ export function EscalaFolgasClient({
                           <span className="text-xs text-nord-gray">Sem indisponibilidades</span>
                         ) : (
                           <>
-                            {dia.indisponiveis.length > 0 && <AvatarStack people={dia.indisponiveis} size={22} />}
+                            {dia.indisponiveis.length > 0 && <DayPeopleSummary people={dia.indisponiveis} />}
                             {dia.lojasFechadas.length > 0 && (
                               <span className="flex items-center gap-1 text-[11px] text-nord-warning">
                                 <DoorClosed size={12} /> Loja fechada
@@ -756,6 +1030,15 @@ export function EscalaFolgasClient({
           </>
         )}
       </Section>
+
+      <ExportCalendarCard
+        innerRef={exportRef}
+        empresaLabel={empresaLabel}
+        cursor={cursor}
+        diasByDate={diasByDate}
+        legendTypes={legendTypes}
+        todayKey={todayKey}
+      />
 
       <Modal open={!!selectedDate} onClose={() => setSelectedDate(null)} title={dayModalTitle}>
         {selectedDia && dayModalView === "list" && (
@@ -806,12 +1089,10 @@ export function EscalaFolgasClient({
                       <PersonAvatar person={p} size={36} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm text-white font-medium truncate">{p.employeeName}</p>
+                          <p className="text-sm text-white font-medium truncate">{nameAndSetor(p)}</p>
                           <ColorBadge color={p.dayOffType.cor}>{p.dayOffType.nome}</ColorBadge>
                         </div>
-                        <p className="text-xs text-nord-gray mt-0.5">
-                          {p.cargo} · {p.setor}
-                        </p>
+                        <p className="text-xs text-nord-gray mt-0.5">{p.cargo}</p>
                         {p.observacao && <p className="text-xs text-nord-gray italic mt-1">&ldquo;{p.observacao}&rdquo;</p>}
                       </div>
                       {manageable && (canEdit || canDelete) && (
