@@ -47,8 +47,11 @@ export default async function FeriasPage() {
       orderBy: { periodoAquisitivoInicio: "desc" },
       include: { employee: { select: { name: true, setor: true } } },
     }),
+    // `status: { not: "DESLIGADO" }` só no seletor de "escolher colaborador" para um NOVO período
+    // de férias (mesmo racional de ../ponto-eletronico/page.tsx) — as férias HISTÓRICAS de quem já
+    // foi demitido (`vacations` acima) continuam intactas e visíveis.
     prisma.employee.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, status: { not: "DESLIGADO" } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, setor: true },
     }),

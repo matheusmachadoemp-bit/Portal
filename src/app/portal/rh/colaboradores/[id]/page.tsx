@@ -20,6 +20,11 @@ import { computeFinanceMonthlyChart, computeFinanceTotals, computeOccurrenceCoun
 // Administrador/Gestor/Gerente/Supervisor por cargo, igual ao resto do RH.
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 
+// Demitir/Reativar (ver racional em `/api/rh/employees/[id]/demitir` e `/reativar`) ficam restritos
+// a ADMINISTRADOR/GESTOR — mais estreito que o MANAGER_ROLES acima, que só controla quem pode ABRIR
+// a ficha.
+const DISMISS_ROLES = ["ADMINISTRADOR", "GESTOR"];
+
 export default async function EmployeeProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) {
@@ -41,6 +46,7 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canManageRh = await hasModulePermission(session.user.id, "rh", "canCreate");
   const canCreate = ctx?.mode === "single" && canManageRh;
+  const canDismiss = canCreate && DISMISS_ROLES.includes(session.user.role);
 
   const employee = await prisma.employee.findFirst({
     where: { id, empresaId: { in: empresaIds } },
@@ -180,6 +186,7 @@ export default async function EmployeeProfilePage({ params }: { params: Promise<
         timeEntryTotals={timeEntryTotals}
         timeEntryChartData={timeEntryChartData}
         canCreate={canCreate}
+        canDismiss={canDismiss}
         isGrupoNordMode={ctx?.mode !== "single"}
       />
     </PageContainer>

@@ -43,8 +43,11 @@ export default async function UniformesPage() {
       orderBy: { dataEntrega: "desc" },
       include: { employee: { select: { name: true, setor: true } } },
     }),
+    // `status: { not: "DESLIGADO" }` só no seletor de "escolher colaborador" para uma NOVA entrega
+    // de uniforme (mesmo racional de ../ponto-eletronico/page.tsx) — as entregas HISTÓRICAS de
+    // quem já foi demitido (`deliveries` acima) continuam intactas e visíveis.
     prisma.employee.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, status: { not: "DESLIGADO" } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, setor: true },
     }),

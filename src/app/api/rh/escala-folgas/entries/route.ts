@@ -121,6 +121,31 @@ type BatchEntryResult = {
   | { status: "error"; error: string }
 );
 
+/**
+ * Valida `dayOffTypeId` (existe, ativo, `kind === "FOLGA"`) — extraído pra ser chamado em pontos
+ * diferentes da ordem de validação do modo legado vs. modo lote (ver comentário no `POST`, achado
+ * do Teulis sobre a ordem de validação mudar num caso de borda do modo legado). Devolve `null`
+ * quando válido, ou a `NextResponse` de erro já pronta pra devolver direto.
+ */
+async function validateDayOffType(dayOffTypeId: string): Promise<NextResponse | null> {
+  const dayOffType = await prisma.dayOffType.findUnique({ where: { id: dayOffTypeId } });
+  if (!dayOffType || !dayOffType.ativo) {
+    return NextResponse.json({ error: "Tipo de folga inválido." }, { status: 400 });
+  }
+  if (dayOffType.kind !== "FOLGA") {
+    return NextResponse.json(
+      {
+        error:
+          dayOffType.kind === "FERIAS"
+            ? "Férias são cadastradas em RH > Férias, não por aqui — o calendário da Escala de Folgas já lê de lá automaticamente."
+            : "Afastamentos são cadastrados pela rotina própria de Afastamentos (POST /api/rh/absences), não por aqui — o calendário da Escala de Folgas já lê de lá automaticamente.",
+      },
+      { status: 400 }
+    );
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -174,33 +199,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Informe ao menos um colaborador." }, { status: 400 });
   }
 
-  const dayOffType = await prisma.dayOffType.findUnique({ where: { id: dayOffTypeId } });
-  if (!dayOffType || !dayOffType.ativo) {
-    return NextResponse.json({ error: "Tipo de folga inválido." }, { status: 400 });
-  }
-  if (dayOffType.kind !== "FOLGA") {
-    return NextResponse.json(
-      {
-        error:
-          dayOffType.kind === "FERIAS"
-            ? "Férias são cadastradas em RH > Férias, não por aqui — o calendário da Escala de Folgas já lê de lá automaticamente."
-            : "Afastamentos são cadastrados pela rotina própria de Afastamentos (POST /api/rh/absences), não por aqui — o calendário da Escala de Folgas já lê de lá automaticamente.",
-      },
-      { status: 400 }
-    );
-  }
-
   // Líder só cadastra pro próprio setor (item 16) — Gerente/Administrador cadastram pra qualquer
   // setor da loja. Resolvido uma vez só (não depende do colaborador), reaproveitado pros dois modos.
   const ownSetor = session.user.role === "SUPERVISOR" ? await resolveOwnSetor(session.user.id) : null;
 
   // --- Modo LOTE: um resultado por colaborador, nunca tudo-ou-nada. ---
   if (employeeIdsBatch) {
+    const dayOffTypeError = await validateDayOffType(dayOffTypeId);
+    if (dayOffTypeError) return dayOffTypeError;
+
     const schedulePeriod = await resolveSchedulePeriod(empresa.id, dateKey);
     const results: BatchEntryResult[] = [];
 
+    // Busca todos os colaboradores do lote numa chamada só (em vez de um `findUnique` por
+    // iteração, achado da revisão do Teulis) — a checagem de cobertura de setor continua
+    // sequencial DENTRO do loop de propósito (precisa ler o banco de novo a cada iteração pra já
+    // contar a folga recém-criada do colega anterior do mesmo lote/setor).
+    const employees = await prisma.employee.findMany({ where: { id: { in: employeeIdsBatch } } });
+    const employeeById = new Map(employees.map((e) => [e.id, e]));
+
     for (const employeeId of employeeIdsBatch) {
-      const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+      const employee = employeeById.get(employeeId);
       if (!employee || employee.empresaId !== empresa.id) {
         results.push({ employeeId, employeeName: employee?.name ?? null, status: "error", error: "Colaborador inválido para a loja ativa." });
         continue;
@@ -267,6 +286,12 @@ export async function POST(req: Request) {
   }
 
   // --- Modo legado: um `employeeId` só, resposta no formato de sempre (inalterado). ---
+  // Ordem de validação restaurada pra ser idêntica a antes do modo lote existir (achado da
+  // revisão do Teulis): colaborador primeiro, tipo de folga depois — não o inverso (que é a ordem
+  // usada no modo lote acima, onde o tipo de folga é checado uma vez só antes do loop). Com os
+  // dois modos compartilhando o mesmo `validateDayOffType`, se `employeeId` E `dayOffTypeId`
+  // vierem inválidos juntos nesse modo, a resposta volta a ser "Colaborador inválido para a loja
+  // ativa." (não "Tipo de folga inválido.").
   const employeeId = legacyEmployeeId;
 
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
@@ -282,6 +307,9 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+
+  const dayOffTypeError = await validateDayOffType(dayOffTypeId);
+  if (dayOffTypeError) return dayOffTypeError;
 
   const coverage = await evaluateSectorCoverage({ empresaId: empresa.id, setor: employee.setor, employeeId, dateKey });
   if (coverage?.insuficiente && !confirmarApesarDoAviso) {
