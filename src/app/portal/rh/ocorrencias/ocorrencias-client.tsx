@@ -109,6 +109,23 @@ export function OcorrenciasClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
+  // `employees` já vem filtrado (sem DESLIGADO — ver ../page.tsx) pra não oferecer gente que já
+  // saiu numa ocorrência NOVA. Mas uma ocorrência HISTÓRICA pode ser de alguém já demitido — ao
+  // abrir "Editar" nessa ocorrência (`openEdit` abaixo seta `form.employeeId = o.employeeId`), sem
+  // esse colaborador na lista o `<select>` ficaria sem nenhuma `<option>` correspondente ao value
+  // atual (sem seleção visível) e, se alguém escolhesse outro nome achando que precisava
+  // preencher, reatribuiria silenciosamente a ocorrência pra outro colaborador (achado do Teulis).
+  // Mesmo padrão de "incluir o valor atual quando ele não está na lista filtrada" já usado em
+  // `cargoSelectOptions`/`setorSelectOptions` (employee-profile-client.tsx) — só entra quando
+  // `editing` aponta pra mesma ocorrência (nunca em "Nova ocorrência", onde `editing` é `null`).
+  const employeeSelectOptions = useMemo(
+    () =>
+      editing && form.employeeId === editing.employeeId && !employees.some((emp) => emp.id === editing.employeeId)
+        ? [{ id: editing.employeeId, name: editing.employee.name, setor: editing.employee.setor }, ...employees]
+        : employees,
+    [editing, form.employeeId, employees]
+  );
+
   // Só usado pra decidir o que a TABELA mostra (lista de "atividade recente", que já tem `take` —
   // isso é esperado, nunca foi o problema).
   const visible = useMemo(() => {
@@ -329,7 +346,7 @@ export function OcorrenciasClient({
             <div className="col-span-2">
               <Field label="Colaborador">
                 <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
-                  {employees.map((emp) => (
+                  {employeeSelectOptions.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name} — {emp.setor}
                     </option>

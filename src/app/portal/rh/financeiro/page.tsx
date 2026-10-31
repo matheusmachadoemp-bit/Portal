@@ -85,8 +85,11 @@ export default async function FinanceiroPage() {
       include: { employee: { select: { name: true, setor: true } } },
       take: FINANCE_ENTRIES_STORE_SAFETY_TAKE,
     }),
+    // `status: { not: "DESLIGADO" }` só no seletor de "escolher colaborador" para um NOVO
+    // lançamento financeiro (mesmo racional de ../ponto-eletronico/page.tsx) — os lançamentos
+    // HISTÓRICOS de quem já foi demitido (`entries` acima) continuam intactos e visíveis.
     prisma.employee.findMany({
-      where: { empresaId: { in: empresaIds } },
+      where: { empresaId: { in: empresaIds }, status: { not: "DESLIGADO" } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, setor: true },
     }),

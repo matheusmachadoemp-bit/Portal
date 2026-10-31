@@ -95,6 +95,22 @@ export function PontoEletronicoClient({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TimeEntryDTO | null>(null);
   const [form, setForm] = useState(emptyForm(fixedEmployeeId ?? employees[0]?.id ?? ""));
+  // `employees` já vem filtrado (sem DESLIGADO — ver ../page.tsx) pra não oferecer gente que já
+  // saiu num lançamento NOVO. Mas um registro HISTÓRICO pode ser de alguém já demitido — ao abrir
+  // "Editar" nesse registro (`openEdit` abaixo seta `form.employeeId = e.employeeId`), sem esse
+  // colaborador na lista o `<select>` ficaria sem nenhuma `<option>` correspondente ao value atual
+  // (sem seleção visível) e, se alguém escolhesse outro nome achando que precisava preencher,
+  // reatribuiria silenciosamente o lançamento pra outro colaborador (achado do Teulis). Mesmo
+  // padrão de "incluir o valor atual quando ele não está na lista filtrada" já usado em
+  // `cargoSelectOptions`/`setorSelectOptions` (employee-profile-client.tsx) — só entra quando
+  // `editing` aponta pro mesmo registro (nunca em "Novo registro", onde `editing` é `null`).
+  const employeeSelectOptions = useMemo(
+    () =>
+      editing && form.employeeId === editing.employeeId && !employees.some((emp) => emp.id === editing.employeeId)
+        ? [{ id: editing.employeeId, name: editing.employee.name, setor: editing.employee.setor }, ...employees]
+        : employees,
+    [editing, form.employeeId, employees]
+  );
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -464,7 +480,7 @@ export function PontoEletronicoClient({
             <div className="col-span-2">
               <Field label="Colaborador">
                 <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} className="input">
-                  {employees.map((emp) => (
+                  {employeeSelectOptions.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name} — {emp.setor}
                     </option>
