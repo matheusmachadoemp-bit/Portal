@@ -99,8 +99,17 @@ export const PURCHASE_STATUS_TONE: Record<string, "default" | "success" | "warni
  * (`/api/estoque/compras/[id]`) — achado do Teulis, 2026-10: o PATCH validava contra
  * `PAYMENT_METHOD_LABEL` (a lista CHEIA compartilhada com Vendas) em vez desta lista curada que a
  * própria tela já restringe, permitindo em tese salvar Voucher/Fiado/Pago Online numa compra.
+ *
+ * Reduzida a 6 opções a pedido do usuário, 2026-10 (pedido original: Pix, Crédito, Débito,
+ * Mumbuca, Boleto, Dinheiro — ordem do array usada pelo `.map()` das telas pra renderizar o
+ * `<select>`). MUMBUCA é moeda social/digital real (usada em Maricá-RJ, onde uma das lojas
+ * aceita/paga com ela — já existe "Conta Mumbuca - Nord" cadastrada como conta bancária), não um
+ * erro de digitação. TED/DOC/TRANSFERENCIA/CHEQUE/OUTRO saíram da lista de opções NOVAS, mas
+ * continuam em `PAYMENT_METHOD_LABEL` (`@/lib/vendas-analytics`) pra não quebrar lançamentos
+ * antigos que já tenham um desses valores salvos — ver tratamento de "valor legado" em
+ * `compras-client.tsx`, `contas-pagar-client.tsx` e no validador do PATCH de compras.
  */
-export const PURCHASE_PAYMENT_METHODS = ["PIX", "DINHEIRO", "CARTAO_DEBITO", "CARTAO_CREDITO", "TED", "DOC", "TRANSFERENCIA", "CHEQUE", "BOLETO", "OUTRO"] as const;
+export const PURCHASE_PAYMENT_METHODS = ["PIX", "CARTAO_CREDITO", "CARTAO_DEBITO", "MUMBUCA", "BOLETO", "DINHEIRO"] as const;
 
 // ---------------------------------------------------------------------------
 // Recebimento de mercadorias
