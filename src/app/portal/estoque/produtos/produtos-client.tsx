@@ -129,11 +129,22 @@ export function ProdutosClient({
   );
 
   const [categories, setCategories] = useState(initialCategories);
-  // Lista simples (id/nome/cor) usada pelos dois dropdowns de categoria desta aba (filtro da
-  // tabela e campo "Categoria" do formulário de produto) — derivada do mesmo estado acima que
-  // alimenta o grid de gerenciamento da aba "Categorias".
+  // Lista simples (id/nome/cor) usada no dropdown "Categoria" do formulário de criar/editar
+  // produto — inclui categorias inativas de propósito: um produto já classificado numa categoria
+  // desativada precisa continuar aparecendo com o nome certo e permitir reabrir o formulário sem
+  // perder essa associação (histórico). Derivada do mesmo estado que alimenta o grid de
+  // gerenciamento da aba "Categorias".
   const categoryOptions = useMemo(
     () => categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
+    [categories]
+  );
+  // Lista usada SÓ no filtro por categoria da listagem de Produtos — aqui categorias inativas não
+  // devem aparecer como opção pra filtrar (não tem por que oferecer "filtrar por uma categoria
+  // desativada"), diferente do dropdown do formulário acima. Produtos já classificados numa
+  // categoria desativada continuam na listagem normalmente (o filtro só esconde a OPÇÃO, não o
+  // produto — ver `filtered` abaixo, que não depende desta lista).
+  const activeCategoryOptions = useMemo(
+    () => categories.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name, color: c.color })),
     [categories]
   );
 
@@ -435,7 +446,7 @@ export function ProdutosClient({
             <input className="input w-56" placeholder="Buscar produto..." value={search} onChange={(e) => setSearch(e.target.value)} />
             <select className="input w-48" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
               <option value="">Todas as categorias</option>
-              {categoryOptions.map((c) => (
+              {activeCategoryOptions.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
