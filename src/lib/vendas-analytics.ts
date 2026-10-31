@@ -12,6 +12,9 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   PAGO_ONLINE: "Pago Online",
   FIADO: "Fiado",
   OUTRO: "Outros",
+  // Moeda social/digital real (usada em Maricá-RJ) — ver `PURCHASE_PAYMENT_METHODS` em
+  // `@/lib/estoque`, 2026-10.
+  MUMBUCA: "Mumbuca",
 };
 
 export const SALE_PAYMENT_METHODS = [
