@@ -3761,6 +3761,10 @@ enum PaymentMethod {
   PAGO_ONLINE
   FIADO
   OUTRO
+  /// Moeda social/digital real (usada em Maricá-RJ) — uma das lojas aceita/paga com ela (já existe
+  /// "Conta Mumbuca - Nord" cadastrada como conta bancária). Adicionada 2026-10 junto com a redução
+  /// de `PURCHASE_PAYMENT_METHODS` (`@/lib/estoque`) a 6 opções em Contas a Pagar/Estoque > Compras.
+  MUMBUCA
 }
 
 enum FinanceEntryStatus {

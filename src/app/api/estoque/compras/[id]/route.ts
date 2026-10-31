@@ -187,7 +187,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Lista curada de "pagar um fornecedor" (a mesma que a própria tela de edição já oferece como
   // opção), não a lista CHEIA compartilhada com Vendas (`PAYMENT_METHOD_LABEL`, que inclui
   // Voucher/Pago Online/Fiado — sem sentido pra pagamento a fornecedor). Achado do Teulis, 2026-10.
-  if (body.formaPagamento && !(PURCHASE_PAYMENT_METHODS as readonly string[]).includes(body.formaPagamento)) {
+  //
+  // `body.formaPagamento === existing.formaPagamento` também é aceito mesmo fora da lista atual:
+  // a lista foi reduzida de 10 para 6 opções em 2026-10 (saíram TED/DOC/TRANSFERENCIA/CHEQUE/OUTRO),
+  // mas compras antigas já salvas com um desses valores continuam reenviando o mesmo valor no PATCH
+  // quando o usuário edita outro campo sem tocar na forma de pagamento (a tela mostra o valor legado
+  // como opção extra no `<select>`, ver compras-client.tsx) — sem este caso, esse PATCH passaria a
+  // falhar só por reenviar, sem mudança, um valor que já estava salvo antes da lista encolher.
+  if (body.formaPagamento && body.formaPagamento !== existing.formaPagamento && !(PURCHASE_PAYMENT_METHODS as readonly string[]).includes(body.formaPagamento)) {
     return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
   }
 
