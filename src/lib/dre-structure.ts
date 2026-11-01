@@ -156,6 +156,7 @@ export const DRE_STRUCTURE: DreRowDef[] = [
       { key: "fiado-influencer", name: "Fiado - Influencer" },
       { key: "ads-online", name: "Ads Online" },
       { key: "acoes-offline", name: "Custos com Ações Offline" },
+      { key: "mkt", name: "MKT" },
     ],
   },
   {
