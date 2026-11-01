@@ -1379,8 +1379,10 @@ export function ContasPagarClient({
             ) : (
               <Field label="Qtd. parcelas">
                 <input
+                  required
                   type="number"
                   min={2}
+                  max={120}
                   step={1}
                   value={form.quantidadeParcelas}
                   onChange={(e) => setForm({ ...form, quantidadeParcelas: e.target.value })}

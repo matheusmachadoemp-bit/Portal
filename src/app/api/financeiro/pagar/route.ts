@@ -144,6 +144,21 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    // `splitInstallments` dá no mínimo 1 centavo pra cada parcela (ver comentário lá) — só é
+    // possível se o valor total tiver pelo menos `quantidadeParcelas` centavos. Sem esta checagem,
+    // um valor pequeno pra muitas parcelas geraria parcela(s) com valor ZERO, violando a mesma regra
+    // que todo `Payable` segue ("Valor é obrigatório e deve ser maior que zero", checada acima pro
+    // total, mas nunca pra cada parcela individual antes de existir este bloco).
+    const valorCentavos = Math.round(valor * 100);
+    if (valorCentavos < quantidadeParcelas) {
+      const minimo = (quantidadeParcelas / 100).toFixed(2).replace(".", ",");
+      return NextResponse.json(
+        {
+          error: `Valor total pequeno demais para ${quantidadeParcelas} parcelas: cada parcela precisa valer pelo menos R$ 0,01, então o mínimo para essa quantidade é R$ ${minimo}.`,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   // "O que foi comprado" (opcional): validado ANTES de gravar qualquer coisa.
@@ -362,19 +377,18 @@ export async function POST(req: Request) {
   }
 
   // Auditoria por lançamento (igual ao fluxo de sempre, 1 entrada por `Payable`), mesmo quando a
-  // chamada gerou várias parcelas de uma vez.
-  for (const row of created) {
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        empresaId: empresa.id,
-        action: "CREATE",
-        entityType: "Payable",
-        entityId: row.id,
-        after: JSON.stringify(row),
-      },
-    });
-  }
+  // chamada gerou várias parcelas de uma vez — 1 única chamada (`createMany`) em vez de um loop de
+  // `create` (até 120 round-trips ao banco, 1 por parcela, fora da transação principal).
+  await prisma.auditLog.createMany({
+    data: created.map((row) => ({
+      userId: session.user.id,
+      empresaId: empresa.id,
+      action: "CREATE",
+      entityType: "Payable",
+      entityId: row.id,
+      after: JSON.stringify(row),
+    })),
+  });
 
   // A tela (ver `submit()`/`duplicate()` em `contas-pagar-client.tsx`) só olha `payable.dataVencimento`
   // para avisar se o lançamento ficou fora da janela de 120 dias que `refresh()` busca — devolver a
