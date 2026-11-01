@@ -1298,6 +1298,12 @@ export function ContasPagarClient({
           </Field>
           <Field label="Forma de Pagamento">
             <select value={form.formaPagamento} onChange={(e) => setForm({ ...form, formaPagamento: e.target.value })} className="input">
+              {/* Valor legado (ex.: TED/DOC/Transferência/Cheque/Outros) que esta conta já tinha
+                  salva antes da lista ser reduzida a 6 opções (2026-10) — mostra como opção extra
+                  pra não esconder o dado real nem forçar troca só por abrir a edição. */}
+              {form.formaPagamento && !(PAYMENT_METHODS as readonly string[]).includes(form.formaPagamento) && (
+                <option value={form.formaPagamento}>{PAYMENT_METHOD_LABEL[form.formaPagamento] ?? form.formaPagamento}</option>
+              )}
               {PAYMENT_METHODS.map((m) => (
                 <option key={m} value={m}>
                   {PAYMENT_METHOD_LABEL[m]}

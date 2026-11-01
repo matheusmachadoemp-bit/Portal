@@ -574,6 +574,12 @@ export function ComprasClient({
                 <span className="block text-xs text-nord-gray mb-1">Forma de pagamento</span>
                 <select className="input" value={editForm.formaPagamento} onChange={(e) => setEditForm({ ...editForm, formaPagamento: e.target.value })}>
                   <option value="">Selecione...</option>
+                  {/* Valor legado (ex.: TED/DOC/Transferência/Cheque/Outros) que esta compra já tinha
+                      salvo antes da lista ser reduzida a 6 opções (2026-10) — mostra como opção extra
+                      pra não esconder o dado real nem forçar troca só por abrir a edição. */}
+                  {editForm.formaPagamento && !(PURCHASE_PAYMENT_METHODS as readonly string[]).includes(editForm.formaPagamento) && (
+                    <option value={editForm.formaPagamento}>{PAYMENT_METHOD_LABEL[editForm.formaPagamento] ?? editForm.formaPagamento}</option>
+                  )}
                   {PURCHASE_PAYMENT_METHODS.map((m) => (
                     <option key={m} value={m}>{PAYMENT_METHOD_LABEL[m]}</option>
                   ))}
