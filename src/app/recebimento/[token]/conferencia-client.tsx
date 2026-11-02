@@ -8,7 +8,12 @@ import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/stat-card";
 import { formatCurrency, formatNumber } from "@/lib/calc";
 import { sanitizeFileName } from "@/lib/upload";
-import { RECEIVING_ITEM_DIVERGENCE_LABEL, RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO } from "@/lib/estoque";
+import {
+  RECEIVING_ITEM_DIVERGENCE_LABEL,
+  RECEIVING_ITEM_DIVERGENCE_REQUIRES_PHOTO,
+  RECEIVING_ITEM_STATUS_LABEL,
+  RECEIVING_ITEM_STATUS_TONE,
+} from "@/lib/estoque";
 
 type Conferencia = {
   status: string;
@@ -455,18 +460,8 @@ export function ConferenciaClient({ token, purchase, empresaName }: { token: str
             <div key={item.id} className="nord-card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-white font-medium text-sm">{item.nome}</span>
-                <Badge
-                  tone={
-                    c.status === "CONFERIDO" ? "success" : c.status === "NAO_CONFERIDO" ? "default" : "danger"
-                  }
-                >
-                  {c.status === "NAO_CONFERIDO"
-                    ? "Não conferido"
-                    : c.status === "CONFERIDO"
-                      ? "Conferido"
-                      : c.status === "NAO_RECEBIDO"
-                        ? "Não recebido"
-                        : "Divergência"}
+                <Badge tone={RECEIVING_ITEM_STATUS_TONE[c.status] ?? "default"}>
+                  {RECEIVING_ITEM_STATUS_LABEL[c.status] ?? c.status}
                 </Badge>
               </div>
               <p className="text-xs text-nord-gray">
