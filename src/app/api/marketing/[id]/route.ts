@@ -45,6 +45,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body[f] !== undefined) data[f] = Number(body[f]) || 0;
   }
 
+  // Edição manual de investimento/receita marca o lançamento como MANUAL,
+  // pra `syncMarketingEntryFromMetaAds` (src/lib/meta-ads-sync.ts) parar de
+  // sobrescrever esses dois campos no próximo sync do Meta Ads (achado
+  // #173 — antes, a correção manual "sumia" no cron do dia seguinte).
+  //
+  // Importante: compara o valor FINAL já calculado em `data` (não só a
+  // presença da chave no body) contra o valor atual do registro. O
+  // formulário da tela (`openEdit` em trafego-pago-client.tsx) sempre
+  // pré-popula e reenvia todos os campos no PATCH, mesmo quando o gestor só
+  // editou "Observações" ou outro campo qualquer — checar só `!== undefined`
+  // marcaria MANUAL (e congelaria investimento/receita pra sempre) em
+  // qualquer edição, mesmo sem o gestor ter tocado nesses dois campos
+  // (achado do Teulis na revisão).
+  const investimentoMudou = data.investimentoTrafego !== undefined && data.investimentoTrafego !== existing.investimentoTrafego;
+  const receitaMudou = data.receitaTrafego !== undefined && data.receitaTrafego !== existing.receitaTrafego;
+  if (investimentoMudou || receitaMudou) {
+    data.source = "MANUAL";
+  }
+
   const entry = await prisma.marketingEntry.update({ where: { id }, data });
   return NextResponse.json({ entry });
 }
