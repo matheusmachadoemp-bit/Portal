@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Bell } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
@@ -47,8 +47,9 @@ function monthRange(cursor: Date): { dateFrom: string; dateTo: string } {
  * "Visão Geral" (duas seções client component independentes, cada uma com seu próprio fetch,
  * numa página só; ver `src/app/portal/reservas/visao-geral/page.tsx` +
  * `relatorios-periodo-client.tsx`). Continua 100% autocontido (próprio estado de mês/dia
- * selecionado, próprio fetch de `GET /api/reservas/reservas`/`GET /api/reservas/resumo`) — não
- * está acoplado ao filtro de data/status da lista abaixo nem vice-versa.
+ * selecionado, próprio fetch de `GET /api/reservas/reservas` — inclusive a capacidade total dos
+ * ambientes, ver `totalCapacity`/`includeCapacity` abaixo) — não está acoplado ao filtro de
+ * data/status da lista abaixo nem vice-versa.
  *
  * Única ponte entre as duas seções: `reservationsVersion` (ver `reservas-client.tsx`) — um
  * contador que o pai incrementa depois de um PATCH de status bem-sucedido na Lista. Achado do
@@ -77,35 +78,22 @@ export function CalendarioSection({
   const [selectedDay, setSelectedDay] = useState<string>(todayKey);
 
   // Capacidade total (soma de `ReservationEnvironment.capacity` dos ambientes ativos da loja/lojas
-  // ativas) para o denominador do badge de ocupação de cada dia (ver `renderDay` abaixo) — vem de
-  // `GET /api/reservas/resumo` (mesma agregação já usada pela "Visão Geral", ver
-  // `src/lib/reservas-resumo.ts`: `occupancy.totalCapacity`), em vez de reimplementar essa soma
-  // aqui. Não varia por dia da semana/mês (o schema não tem capacidade específica por dia — só
+  // ativas) para o denominador do badge de ocupação de cada dia (ver `renderDay` abaixo). Não
+  // varia por dia da semana/mês (o schema não tem capacidade específica por dia — só
   // `ReservationWeekdayHours.open`/horário, ver comentário completo no relatório da tarefa), então
   // basta buscar 1x quando a loja ativa é definida, nunca 1x por dia nem por mês.
+  //
+  // Achado #166 (revisão geral, Nina): antes vinha de um fetch PRÓPRIO a `GET /api/reservas/resumo`
+  // — endpoint pesado (calcula `todayCount`, `pendingConfirmation`, `noShow` etc., ver
+  // `src/lib/reservas-resumo.ts`) só pra extrair `occupancy.totalCapacity`, nada do resto usado
+  // aqui. Agora é só mais um campo (`includeCapacity=1`, ver JSDoc de
+  // `src/app/api/reservas/reservas/route.ts`) pedido no MESMO fetch do mês que este componente já
+  // faz abaixo — nenhum fetch extra. `capacityRequestedRef` garante que o parâmetro só é enviado
+  // na 1ª vez que o efeito abaixo roda após o componente montar (capacidade não muda por mês,
+  // continua valendo buscar 1x só) — nas trocas de mês/`reservationsVersion` seguintes, o mesmo
+  // fetch do mês roda sem o campo extra.
   const [totalCapacity, setTotalCapacity] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!hasEmpresa) return;
-    let cancelled = false;
-    async function loadCapacity() {
-      try {
-        const res = await fetch("/api/reservas/resumo");
-        const json = await res.json().catch(() => ({}));
-        if (cancelled || !res.ok) return;
-        const capacity = json?.resumo?.occupancy?.totalCapacity;
-        if (typeof capacity === "number") setTotalCapacity(capacity);
-      } catch {
-        // Sem capacidade carregada, o badge de ocupação simplesmente não aparece (ver renderDay) —
-        // não é um erro grave o bastante para mostrar outra mensagem além do que já existe pra
-        // `loadError` (reservas do mês).
-      }
-    }
-    loadCapacity();
-    return () => {
-      cancelled = true;
-    };
-  }, [hasEmpresa]);
+  const capacityRequestedRef = useRef(false);
 
   useEffect(() => {
     if (!hasEmpresa) return;
@@ -113,9 +101,11 @@ export function CalendarioSection({
     async function load() {
       setLoading(true);
       setLoadError(null);
+      const needsCapacity = !capacityRequestedRef.current;
       try {
         const { dateFrom, dateTo } = monthRange(cursor);
         const params = new URLSearchParams({ dateFrom, dateTo });
+        if (needsCapacity) params.set("includeCapacity", "1");
         const res = await fetch(`/api/reservas/reservas?${params.toString()}`);
         const json = await res.json().catch(() => ({}));
         if (cancelled) return;
@@ -124,6 +114,10 @@ export function CalendarioSection({
           return;
         }
         setReservations(json.reservations ?? []);
+        if (needsCapacity) {
+          capacityRequestedRef.current = true;
+          if (typeof json.totalCapacity === "number") setTotalCapacity(json.totalCapacity);
+        }
       } catch {
         if (!cancelled) setLoadError("Falha de conexão. Verifique sua internet e tente novamente.");
       } finally {
@@ -136,8 +130,9 @@ export function CalendarioSection({
     };
     // `reservationsVersion` entra na dependência só para refazer este MESMO fetch (mês atual,
     // `cursor` inalterado) quando a Lista muda o status de uma reserva — ver comentário da prop
-    // acima. Não reagimos a `totalCapacity`/`loadCapacity` aqui porque a mudança de status de uma
-    // reserva nunca altera a capacidade total dos ambientes, só a ocupação.
+    // acima. Não reagimos a `totalCapacity` aqui porque a mudança de status de uma reserva nunca
+    // altera a capacidade total dos ambientes, só a ocupação (e `capacityRequestedRef` já garante
+    // que a capacidade não é pedida de novo nessas re-execuções).
   }, [hasEmpresa, cursor, reservationsVersion]);
 
   const byDay = useMemo(() => {
