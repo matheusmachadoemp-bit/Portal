@@ -137,3 +137,20 @@ export const RESERVATION_WAITLIST_STATUS_LABEL: Record<string, string> = {
 };
 
 export const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_STATUS_LABEL);
+
+/** Status "vivos" (ainda na fila, aguardando vaga ou retorno do cliente) — usados pra numerar a
+ * posição na fila e mostrar o cronômetro ao vivo. Os demais (`CONTATADO` incluído aqui também,
+ * ver abaixo) entram na seção "Histórico" da tela, sem posição/cronômetro.
+ *
+ * Nota: `CONTATADO` ainda ocupa um lugar na fila de verdade (o cliente não saiu, só já foi
+ * avisado) — por isso soma aqui junto com `AGUARDANDO` pra fins de posição/cronômetro; a
+ * diferença visual entre os dois é só o badge de status. */
+export const RESERVATION_WAITLIST_ACTIVE_STATUSES = ["AGUARDANDO", "CONTATADO"];
+
+/** Status que a UI/API ainda permitem definir manualmente a partir do redesign da Fila de Espera
+ * (ver comentário no `prisma/schema.prisma` acima do enum `ReservationWaitlistStatus`):
+ * `CONVERTIDO_EM_RESERVA` saiu de propósito — a Fila de Espera não tem mais nenhuma ação em
+ * direção a criar uma Reserva. */
+export const RESERVATION_WAITLIST_SETTABLE_STATUSES = RESERVATION_WAITLIST_STATUSES.filter(
+  (status) => status !== "CONVERTIDO_EM_RESERVA"
+);
