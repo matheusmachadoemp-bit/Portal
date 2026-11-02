@@ -163,6 +163,19 @@ function startOfMonthUtc(date: Date): Date {
  * Tráfego Pago (investimento, receita, pedidos, visitas, conversões,
  * alcance e impressões) a partir dos insights do Meta Ads já salvos,
  * agregando por mês de referência.
+ *
+ * `investimentoTrafego`/`receitaTrafego` NÃO são sobrescritos quando o
+ * lançamento está marcado como `source: MANUAL` (achado #173): antes disso,
+ * toda rodada do cron das 9h apagava silenciosamente qualquer correção
+ * manual do gerente nesses dois campos, porque o `update()` sempre
+ * forçava `source: "META_ADS"`. Agora, `PATCH /api/marketing/[id]` marca o
+ * lançamento como `MANUAL` sempre que um desses dois campos é editado à
+ * mão, e o sync passa a respeitar essa marcação — igual já acontecia com
+ * seguidores/curtidas/comentários/observações, que o sync nunca tenta
+ * escrever. Os demais campos de campanha (pedidos, visitas, conversões,
+ * alcance, impressões) continuam sincronizando normalmente mesmo num
+ * lançamento MANUAL, já que o achado é especificamente sobre os dois
+ * campos financeiros.
  */
 async function syncMarketingEntryFromMetaAds(empresaId: string, range: { start: Date; end: Date }) {
   const insights = await prisma.metaAdsInsight.findMany({
@@ -200,14 +213,21 @@ async function syncMarketingEntryFromMetaAds(empresaId: string, range: { start: 
       { spend: 0, purchaseValue: 0, purchases: 0, landingPageViews: 0, reach: 0, impressions: 0 }
     );
 
-    const data = {
-      investimentoTrafego: totals.spend,
-      receitaTrafego: totals.purchaseValue,
+    // Campos de campanha que sempre refletem o Meta Ads, independente de o
+    // lançamento estar marcado como MANUAL ou não (o achado #173 é só sobre
+    // os dois campos financeiros abaixo).
+    const campaignFields = {
       pedidosCampanha: totals.purchases,
       visitasSite: totals.landingPageViews,
       conversoes: totals.purchases,
       alcance: totals.reach,
       impressoes: totals.impressions,
+    };
+    // Campos financeiros: só sincronizam do Meta Ads enquanto ninguém editou
+    // o lançamento manualmente (ver docstring da função).
+    const financialFields = {
+      investimentoTrafego: totals.spend,
+      receitaTrafego: totals.purchaseValue,
     };
 
     const existing = await prisma.marketingEntry.findFirst({
@@ -216,9 +236,17 @@ async function syncMarketingEntryFromMetaAds(empresaId: string, range: { start: 
     });
 
     if (existing) {
-      await prisma.marketingEntry.update({ where: { id: existing.id }, data: { ...data, source: "META_ADS" } });
+      const preserveManualFinancials = existing.source === "MANUAL";
+      await prisma.marketingEntry.update({
+        where: { id: existing.id },
+        data: preserveManualFinancials
+          ? campaignFields
+          : { ...campaignFields, ...financialFields, source: "META_ADS" },
+      });
     } else {
-      await prisma.marketingEntry.create({ data: { empresaId, date: month, source: "META_ADS", ...data } });
+      await prisma.marketingEntry.create({
+        data: { empresaId, date: month, source: "META_ADS", ...campaignFields, ...financialFields },
+      });
     }
   }
 }
