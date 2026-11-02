@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, LayoutGrid, List as ListIcon, History } from "lucide-react";
+import { Plus, LayoutGrid, List as ListIcon, History, Download } from "lucide-react";
 import {
   DndContext,
   DragEndEvent,
@@ -73,6 +73,8 @@ export function TasksClient({
   const [editingTask, setEditingTask] = useState<TaskDTO | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const sensors = useDndSensors();
 
@@ -102,6 +104,33 @@ export function TasksClient({
       return true;
     });
   }, [tasks, filter]);
+
+  // Baixa o CSV de tarefas já gerado pela rota /api/marketing/export (checagem de
+  // permissão feita lá mesmo) — a rota existia pronta sem nenhum botão que a chamasse.
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await fetch("/api/marketing/export?type=tarefas");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setExportError(data.error ?? "Não foi possível exportar as tarefas.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `marketing-tarefas-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("Não foi possível exportar as tarefas.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function openNew() {
     setEditingTask(null);
@@ -177,6 +206,13 @@ export function TasksClient({
               <ListIcon size={14} />
             </button>
           </div>
+          <button
+            onClick={exportCsv}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Download size={13} /> {exporting ? "Exportando..." : "Exportar CSV"}
+          </button>
           {canCreate && (
             <button
               onClick={openNew}
@@ -189,6 +225,7 @@ export function TasksClient({
       </div>
 
       <FormError message={dragError} />
+      <FormError message={exportError} />
 
       {view === "kanban" ? (
         // `id` fixo: só existe uma instância de DndContext nesta tela hoje, mas fixar

@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Download } from "lucide-react";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { classifyKpi, formatCurrency, formatNumber, formatPercent, growth, pct, safeDiv } from "@/lib/calc";
@@ -98,6 +98,8 @@ export function TrafegoPagoClient({
   const [form, setForm] = useState(emptyForm);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const current = entries[0];
   const previous = entries[1];
@@ -191,6 +193,33 @@ export function TrafegoPagoClient({
     refresh();
   }
 
+  // Baixa o CSV dos lançamentos (KPIs) já gerado pela rota /api/marketing/export —
+  // a rota existia pronta sem nenhum botão que a chamasse.
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await fetch("/api/marketing/export?type=kpis");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setExportError(data.error ?? "Não foi possível exportar os lançamentos.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `marketing-kpis-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("Não foi possível exportar os lançamentos.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const fields: [string, keyof typeof emptyForm][] = [
     ["Investimento em tráfego (R$)", "investimentoTrafego"],
     ["Receita gerada (R$)", "receitaTrafego"],
@@ -233,16 +262,24 @@ export function TrafegoPagoClient({
             : "Seu perfil de permissão não permite lançar ou editar dados neste módulo."}
         </p>
       )}
-      {canCreate && (
-        <div className="flex justify-end">
+      <FormError message={exportError} />
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={exportCsv}
+          disabled={exporting}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-nord-border text-nord-gray hover:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <Download size={13} /> {exporting ? "Exportando..." : "Exportar CSV"}
+        </button>
+        {canCreate && (
           <button
             onClick={openNew}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-nord-blue hover:bg-nord-blue-light text-white font-medium"
           >
             <Plus size={13} /> Novo período de marketing
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <div className="nord-card p-4">
