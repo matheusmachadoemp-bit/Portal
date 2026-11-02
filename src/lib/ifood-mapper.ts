@@ -1,5 +1,5 @@
 import type { PaymentMethod, SaleChannel } from "@prisma/client";
-import type { IfoodSaleRecord } from "@/lib/ifood-client";
+import type { IfoodSaleRecord, IfoodReviewRecord } from "@/lib/ifood-client";
 
 // AVISO DE CONFIANÇA (ver cabeçalho de `ifood-client.ts`): os nomes de campo
 // usados abaixo (`orderType`, `salesChannel`, `payments[].method`,
@@ -138,6 +138,106 @@ export function toIfoodOrderData(empresaId: string, merchantId: string, record: 
     formaPagamento: mapIfoodPaymentMethod(record),
     valorTotal: Number(record.saleGrossValue ?? 0),
     cancelado: isIfoodOrderCanceled(record),
+    raw: record as object,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// AVALIAÇÕES — mapeamento do payload cru da Review API v2 (ver AVISO DE CONFIANÇA no topo
+// deste arquivo e o cabeçalho da seção "AVALIAÇÕES" em `src/lib/ifood-client.ts`: mesma
+// metodologia, mesma falta de acesso a um payload real ainda — leitura sempre tolerante, nunca
+// um acesso direto que quebra se o campo vier com um nome diferente do esperado).
+// ---------------------------------------------------------------------------
+
+/** Status do ciclo de vida da avaliação na API do iFood — ver cabeçalho de `ifood-client.ts`. */
+export type IfoodReviewLifecycleStatus = "CREATED" | "NOT_REPLIED" | "REPLIED" | "PUBLISHED" | "DISCARDED" | "UNKNOWN";
+
+const KNOWN_REVIEW_STATUSES = new Set<string>(["CREATED", "NOT_REPLIED", "REPLIED", "PUBLISHED", "DISCARDED"]);
+
+export function mapIfoodReviewLifecycleStatus(record: IfoodReviewRecord): IfoodReviewLifecycleStatus {
+  const raw = typeof record.status === "string" ? record.status.toUpperCase().trim() : "";
+  if (KNOWN_REVIEW_STATUSES.has(raw)) return raw as IfoodReviewLifecycleStatus;
+
+  // [MELHOR ESFORÇO] fallback para os campos booleanos documentados na v1/página de detalhes
+  // (discarded/moderated/published) — só usado se `status` (campo v2) não vier preenchido.
+  if (record.discarded) return "DISCARDED";
+  if (record.published) return "PUBLISHED";
+  return "UNKNOWN";
+}
+
+/**
+ * Texto da resposta do PARCEIRO (merchant) já publicada, se existir — tolerante a `answer`
+ * (objeto único) ou `answers` (array; quando mais de uma entrada, prioriza a que identifica a
+ * origem como "MERCHANT" — ver comentário no cabeçalho de `ifood-client.ts` sobre o campo
+ * `from`; sem essa informação, assume a primeira entrada).
+ */
+export function extractIfoodMerchantReplyText(record: IfoodReviewRecord): { text: string; createdAt: Date | null } | null {
+  if (record.answer?.text) {
+    const createdAt = record.answer.createdAt ? new Date(record.answer.createdAt) : null;
+    return { text: record.answer.text, createdAt: createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : null };
+  }
+
+  const answers = Array.isArray(record.answers) ? record.answers : [];
+  if (answers.length === 0) return null;
+  const merchantAnswer = answers.find((a) => !a.from || a.from.toUpperCase() === "MERCHANT") ?? answers[0];
+  if (!merchantAnswer?.text) return null;
+  const createdAt = merchantAnswer.createdAt ? new Date(merchantAnswer.createdAt) : null;
+  return { text: merchantAnswer.text, createdAt: createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : null };
+}
+
+/**
+ * Monta os dados "de base" de uma avaliação do iFood pra gravar em `Review` (campos que nunca
+ * dependem da decisão de negócio de resposta automática — `status`/`generatedReply`/
+ * `postedReply`/`repliedAt`/`errorMessage` são decididos por `src/lib/review-sync.ts`, não
+ * aqui). Assim como `toIfoodOrderData` acima, o identificador e a data não têm fallback
+ * razoável — falham alto (capturado por quem chama) em vez de gravar um registro inválido
+ * silenciosamente.
+ */
+export function toReviewBaseData(empresaId: string, record: IfoodReviewRecord) {
+  const externalReviewId = record.id;
+  if (typeof externalReviewId !== "string" || !externalReviewId) {
+    throw new Error("Uma avaliação retornada pelo iFood não tem o campo id — não é possível identificá-la.");
+  }
+
+  const rawDate = record.createdAt;
+  const reviewDate = typeof rawDate === "string" ? new Date(rawDate) : null;
+  if (!reviewDate || Number.isNaN(reviewDate.getTime())) {
+    throw new Error(
+      `Avaliação ${externalReviewId} do iFood veio sem uma data válida (campo createdAt, recebido: ${JSON.stringify(rawDate)}).`
+    );
+  }
+
+  // [CONFIRMADO] `score`: double de 1.0 a 5.0 — na prática o iFood só usa valores inteiros de
+  // estrela; arredondado defensivamente (`rating` nunca deve divergir de um inteiro de 1 a 5,
+  // mas um `score` fracionário real quebraria `Review.rating`, que é `Int`, sem este
+  // arredondamento). `rating` é tentado como alternativa só por tolerância a um nome de campo
+  // diferente do documentado.
+  const rawScore = record.score ?? record.rating;
+  const scoreNum = Number(rawScore);
+  if (!Number.isFinite(scoreNum)) {
+    throw new Error(
+      `Avaliação ${externalReviewId} do iFood veio sem uma nota válida (campos tentados: score/rating, recebido: ${JSON.stringify(rawScore)}).`
+    );
+  }
+  const rating = Math.min(5, Math.max(1, Math.round(scoreNum)));
+
+  // [MELHOR ESFORÇO — nome do campo não confirmado com 100% de certeza na documentação pública
+  // no momento desta implementação]: tenta `customerName` (nome mais comum entre scrapers/
+  // integrações de terceiros) e, por tolerância, `customer.name`/`consumer.name`.
+  const customerName =
+    (typeof record.customerName === "string" && record.customerName.trim()) ||
+    record.customer?.name?.trim() ||
+    record.consumer?.name?.trim() ||
+    null;
+
+  return {
+    empresaId,
+    platform: "IFOOD" as const,
+    externalReviewId,
+    rating,
+    comment: typeof record.comment === "string" && record.comment.trim() ? record.comment.trim() : null,
+    customerName: customerName || null,
+    reviewDate,
     raw: record as object,
   };
 }

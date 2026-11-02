@@ -255,28 +255,28 @@ model ModulePermission {
 // ---------------------------------------------------------------------------
 
 model Empresa {
-  id                        String    @id @default(cuid())
-  key                       String    @unique
-  name                      String
-  logo                      String?
-  color                     String    @default("#2952E3")
-  active                    Boolean   @default(true)
-  order                     Int       @default(0)
-  driveFolderUrl            String?
-  taxaIfoodPadrao           Float     @default(30)
-  metaCmvPercent            Float     @default(30)
-  saiposApiToken            String?
-  saiposLojaId              String?
-  saiposSyncEnabled         Boolean   @default(false)
-  saiposLastSyncAt          DateTime?
-  metaAdsAccessToken        String?
-  metaAdsAdAccountId        String?
-  metaAdsAdAccountName      String?
-  metaAdsGraphVersion       String    @default("v21.0")
-  metaAdsSyncEnabled        Boolean   @default(false)
-  metaAdsLastSyncAt         DateTime?
-  metaAdsInstagramAccountId String?
-  metaAdsInstagramUsername  String?
+  id                         String    @id @default(cuid())
+  key                        String    @unique
+  name                       String
+  logo                       String?
+  color                      String    @default("#2952E3")
+  active                     Boolean   @default(true)
+  order                      Int       @default(0)
+  driveFolderUrl             String?
+  taxaIfoodPadrao            Float     @default(30)
+  metaCmvPercent             Float     @default(30)
+  saiposApiToken             String?
+  saiposLojaId               String?
+  saiposSyncEnabled          Boolean   @default(false)
+  saiposLastSyncAt           DateTime?
+  metaAdsAccessToken         String?
+  metaAdsAdAccountId         String?
+  metaAdsAdAccountName       String?
+  metaAdsGraphVersion        String    @default("v21.0")
+  metaAdsSyncEnabled         Boolean   @default(false)
+  metaAdsLastSyncAt          DateTime?
+  metaAdsInstagramAccountId  String?
+  metaAdsInstagramUsername   String?
   /// Credenciais OAuth2 (client_credentials) da API de Parceiro do iFood — ver
   /// `src/lib/ifood-client.ts`. Diferente da Saipos/Meta Ads (um único token
   /// colado pelo usuário), o iFood exige um par clientId/clientSecret: o
@@ -288,14 +288,25 @@ model Empresa {
   /// deixa explícito, só pelo nome da coluna, que o conteúdo é criptografado
   /// (`encryptSecret`/`decryptSecret` de `src/lib/vault.ts`, igual
   /// `saiposApiToken`/`metaAdsAccessToken`) — nunca gravar texto puro aqui.
-  ifoodClientId             String?
-  ifoodClientSecretCipher   String?
-  ifoodMerchantId           String?
-  ifoodMerchantName         String?
-  ifoodSyncEnabled          Boolean   @default(false)
-  ifoodLastSyncAt           DateTime?
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  ifoodClientId              String?
+  ifoodClientSecretCipher    String?
+  ifoodMerchantId            String?
+  ifoodMerchantName          String?
+  ifoodSyncEnabled           Boolean   @default(false)
+  ifoodLastSyncAt            DateTime?
+  /// Rede de segurança do módulo "Avaliações" (resposta automática às avaliações do iFood —
+  /// Fase 1; Google fica para uma fase futura — ver bloco "AVALIAÇÕES" no final deste arquivo).
+  /// Decisão do Matheus foi que a IA publica a resposta sozinha, SEM aprovação humana por
+  /// avaliação individual — mas default FALSE aqui mesmo assim: um interruptor geral único por
+  /// loja, que nasce DESLIGADO até alguém ativar conscientemente depois de ver como as
+  /// respostas geradas pela IA ficam, é uma rede de segurança básica de qualquer automação que
+  /// publica conteúdo público em nome do negócio. Isso não contraria o pedido original (não é
+  /// aprovação por avaliação, é um "liga a torneira" uma única vez por loja). Mesmo com este
+  /// campo em true, `src/lib/review-risk.ts` ainda pode desviar uma avaliação específica para
+  /// revisão manual (2ª rede de segurança, independente desta).
+  avaliacoesAutoReplyEnabled Boolean   @default(false)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   userAccess                         UserEmpresaAccess[]
   suppliers                          Supplier[]
@@ -428,6 +439,9 @@ model Empresa {
   // empresa única) — `onDelete: SetNull` lá para excluir uma empresa não arrastar o histórico
   // de conversa inteiro, só desvincular.
   aiConversations                    AiConversation[]
+  // Avaliações — Fase 1 (só iFood; ver bloco "AVALIAÇÕES" no final deste arquivo para o
+  // racional completo das duas redes de segurança).
+  reviews                            Review[]
 }
 
 model UserEmpresaAccess {
@@ -6612,42 +6626,42 @@ model ReservationSettings {
   // (src/lib/reservas-disponibilidade.ts) soma/subtrai direto em milissegundos, sem precisar de
   // parsing de string como `openTime`/`closeTime` acima.
   /// Duração padrão de uma reserva, do início ao fim (sugestão do documento: 90 minutos).
-  durationMinutes        Int      @default(90)
+  durationMinutes       Int @default(90)
   /// Tempo de limpeza/reorganização da mesa depois que uma reserva termina, antes de ela poder
   /// receber a próxima — o motor soma isto ao fim de cada reserva existente antes de considerar a
   /// mesa livre de novo (sem sugestão numérica no documento original; 15 minutos é o default desta
   /// implementação, ajustável na tela de Configurações).
-  cleaningMinutes        Int      @default(15)
+  cleaningMinutes       Int @default(15)
   /// Tolerância de atraso: quanto tempo depois do horário combinado o cliente ainda pode chegar
   /// sem a mesa ser liberada para outra reserva (sugestão do documento: 15 minutos). Só a
   /// configuração em si nesta etapa — a liberação automática por no-show é de etapa futura
   /// (dashboard operacional).
-  lateToleranceMinutes   Int      @default(15)
+  lateToleranceMinutes  Int @default(15)
   /// Antecedência mínima, em minutos, para reservar um horário (ex.: não deixar reservar para
   /// daqui a 10 minutos). Sem sugestão numérica no documento original; 60 minutos é o default
   /// desta implementação.
-  minAdvanceMinutes      Int      @default(60)
+  minAdvanceMinutes     Int @default(60)
   /// Prazo máximo, em dias, no futuro para reservar. Sem sugestão numérica no documento original;
   /// 60 dias é o default desta implementação.
-  maxAdvanceDays         Int      @default(60)
+  maxAdvanceDays        Int @default(60)
   /// Quantidade de pessoas a partir da qual o grupo é considerado "especial" (sugestão do
   /// documento: acima de 10 pessoas, ou seja, `partySize > specialGroupThreshold`). Só o campo de
   /// configuração nesta etapa — o processo de solicitação diferenciado para grupos especiais é de
   /// etapa futura; o motor de disponibilidade desta etapa NÃO usa este campo para bloquear nada
   /// ainda (ver `src/lib/reservas-disponibilidade.ts`).
-  specialGroupThreshold  Int      @default(10)
+  specialGroupThreshold Int @default(10)
   /// Intervalo entre horários oferecidos na grade que a página pública vai consumir (etapa
   /// futura) — 15 ou 30 minutos conforme o documento original; 30 é o default desta
   /// implementação.
-  slotIntervalMinutes    Int      @default(30)
+  slotIntervalMinutes   Int @default(30)
 
   weekdayHours ReservationWeekdayHours[]
 }
 
 model ReservationWeekdayHours {
-  id         String               @id @default(cuid())
+  id         String              @id @default(cuid())
   settingsId String
-  settings   ReservationSettings  @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  settings   ReservationSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
   /// 0 = Domingo ... 6 = Sábado — mesma convenção de `ProductionWeekdayWeight.weekday` e de
   /// `WEEKDAY_LABEL` (src/lib/producao.ts), reaproveitada aqui para não inventar uma segunda
   /// convenção de índice de dia da semana no mesmo schema.
@@ -6655,14 +6669,14 @@ model ReservationWeekdayHours {
   /// Terça-feira já nasce com `open: false` por padrão (seed inicial) — decisão do Matheus
   /// confirmada no pedido original desta etapa. Os demais dias nascem abertos. Tudo ajustável
   /// depois na tela de Configurações.
-  open       Boolean              @default(true)
+  open       Boolean             @default(true)
   /// "HH:mm", sempre America/Sao_Paulo — mesma convenção de `TaskRecurrence.releaseTime`/
   /// `ChecklistTemplate.horarioLiberacao` (ver src/lib/timezone.ts para o restante do schema que
   /// grava DIA como instante; aqui é só HORA do dia, sem data, por isso string simples em vez de
   /// `DateTime`).
-  openTime   String               @default("18:00")
-  closeTime  String               @default("23:00")
-  updatedAt  DateTime             @updatedAt
+  openTime   String              @default("18:00")
+  closeTime  String              @default("23:00")
+  updatedAt  DateTime            @updatedAt
 
   @@unique([settingsId, dayOfWeek])
 }
@@ -6762,23 +6776,23 @@ enum ReservationTableStatus {
 }
 
 model ReservationTable {
-  id            String                 @id @default(cuid())
-  environmentId String
-  environment   ReservationEnvironment @relation(fields: [environmentId], references: [id])
+  id                      String                 @id @default(cuid())
+  environmentId           String
+  environment             ReservationEnvironment @relation(fields: [environmentId], references: [id])
   /// Número/identificação da mesa (ex.: "Mesa 01", "Varanda 3") — texto livre porque algumas
   /// casas numeram, outras nomeiam por posição; único dentro do mesmo ambiente.
-  identificacao String
-  capacityMin   Int
-  capacityMax   Int
-  status        ReservationTableStatus @default(DISPONIVEL)
+  identificacao           String
+  capacityMin             Int
+  capacityMax             Int
+  status                  ReservationTableStatus @default(DISPONIVEL)
   /// Cadastrada e com status DISPONIVEL, mas temporariamente fora da oferta de reservas (ex.:
   /// reservada para uso exclusivo de walk-in num evento) — flag de NEGÓCIO, separada do status
   /// OPERACIONAL acima de propósito: uma mesa pode estar fisicamente OK (`DISPONIVEL`) e mesmo
   /// assim fora da oferta de reservas por decisão da casa (`availableForReservation = false`).
-  availableForReservation Boolean @default(true)
-  order         Int                    @default(0)
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  availableForReservation Boolean                @default(true)
+  order                   Int                    @default(0)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
 
   assignments            ReservationTableAssignment[]
   combinationMemberships ReservationTableCombinationMember[]
@@ -6805,11 +6819,11 @@ model ReservationTableCombination {
 }
 
 model ReservationTableCombinationMember {
-  id            String                       @id @default(cuid())
+  id            String                      @id @default(cuid())
   combinationId String
-  combination   ReservationTableCombination  @relation(fields: [combinationId], references: [id], onDelete: Cascade)
+  combination   ReservationTableCombination @relation(fields: [combinationId], references: [id], onDelete: Cascade)
   tableId       String
-  table         ReservationTable             @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  table         ReservationTable            @relation(fields: [tableId], references: [id], onDelete: Cascade)
 
   @@unique([combinationId, tableId])
   @@index([tableId])
@@ -6834,18 +6848,18 @@ enum ReservationStatus {
 /// `src/lib/reservas-publico.ts`) acrescentou os campos de contato/código abaixo — o resto do
 /// model continua o schema mínimo da Etapa 2 para o motor de disponibilidade.
 model Reservation {
-  id            String                       @id @default(cuid())
-  empresaId     String
-  empresa       Empresa                      @relation(fields: [empresaId], references: [id])
-  environmentId String
-  environment   ReservationEnvironment       @relation(fields: [environmentId], references: [id])
-  clienteId     String?
-  cliente       Cliente?                     @relation(fields: [clienteId], references: [id])
+  id               String                 @id @default(cuid())
+  empresaId        String
+  empresa          Empresa                @relation(fields: [empresaId], references: [id])
+  environmentId    String
+  environment      ReservationEnvironment @relation(fields: [environmentId], references: [id])
+  clienteId        String?
+  cliente          Cliente?               @relation(fields: [clienteId], references: [id])
   /// Código curto (6 caracteres, alfabeto sem 0/O/1/I para não confundir por telefone) mostrado
   /// ao cliente na tela de confirmação da Etapa 3 — muito mais fácil de informar de volta pro
   /// estabelecimento do que o `id` (cuid, 25 caracteres). Gerado e garantido único dentro de
   /// `reserveTablesTransacted` (retry em caso de colisão, ver `src/lib/reservas-disponibilidade.ts`).
-  confirmationCode String                    @unique
+  confirmationCode String                 @unique
   /// Contato de quem fez a reserva pelo fluxo público — ver o comentário acima de
   /// `Cliente.reservations` (prisma/schema.prisma): a ligação "de verdade" com o CRM (histórico,
   /// VIP) é de etapa futura, então este fluxo NÃO força a criação de um `Cliente` completo.
@@ -6855,15 +6869,15 @@ model Reservation {
   /// `customerEmail` é opcional de verdade. Quando `customerPhone` já bate com um `Cliente`
   /// existente da mesma loja (`Cliente.empresaId_telefone`), `clienteId` é preenchido também como
   /// bônus de cross-reference — mas nenhum `Cliente` novo é criado a partir daqui.
-  customerName  String?
-  customerPhone String?
-  customerEmail String?
+  customerName     String?
+  customerPhone    String?
+  customerEmail    String?
   /// DIA da reserva, meia-noite America/Sao_Paulo (`spStartOfDay`) — mesma convenção do resto do
   /// schema (ver `src/lib/timezone.ts`). Redundante com `startTime` de propósito: filtrar "todas
   /// as reservas do dia X" por uma coluna de DIA pura é mais simples/barato do que teria que
   /// recalcular o dia a partir de um instante toda vez (mesmo racional de outras colunas DIA +
   /// instante já convivendo no schema, ex. `Payable.dataCompetencia` vs. os `createdAt`).
-  date          DateTime
+  date             DateTime
   /// Início e fim como INSTANTE completo (data + hora, UTC) — não só a hora do dia como
   /// `ReservationWeekdayHours.openTime` — porque o motor de disponibilidade precisa comparar
   /// intervalos de datas/horas completos para achar conflito de ocupação (ver
@@ -6871,12 +6885,12 @@ model Reservation {
   /// `startTime` + `ReservationSettings.durationMinutes` calculado on-the-fly) porque a duração
   /// configurada pode mudar depois da reserva já criada — a reserva sempre lembra a duração que
   /// valia no momento em que foi feita.
-  startTime     DateTime
-  endTime       DateTime
-  partySize     Int
-  status        ReservationStatus            @default(PENDENTE)
-  createdAt     DateTime                     @default(now())
-  updatedAt     DateTime                     @updatedAt
+  startTime        DateTime
+  endTime          DateTime
+  partySize        Int
+  status           ReservationStatus      @default(PENDENTE)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
   tables ReservationTableAssignment[]
 
@@ -6887,12 +6901,12 @@ model Reservation {
 /// Join Reserva <-> Mesa (ver ponto 2 do comentário no topo deste bloco) — N:N mesmo para
 /// reserva de mesa única (1 linha aqui).
 model ReservationTableAssignment {
-  id            String      @id @default(cuid())
+  id            String           @id @default(cuid())
   reservationId String
-  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservation   Reservation      @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   tableId       String
   table         ReservationTable @relation(fields: [tableId], references: [id])
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime         @default(now())
 
   @@unique([reservationId, tableId])
   @@index([tableId])
@@ -7035,8 +7049,125 @@ model AiMessage {
   /// schema para campos de texto longo sem limite, ex. `FeedbackReport.descricao` — o projeto
   /// não usa a anotação `@db.Text` em nenhum outro lugar, já que ela é redundante com o
   /// mapeamento padrão do Prisma para `String` no provider postgresql).
-  content   String
-  createdAt DateTime @default(now())
+  content        String
+  createdAt      DateTime       @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// AVALIAÇÕES — Fase 1 (só iFood; ver prompt da tarefa "avaliacoes-ifood-fase1"). Resposta
+// automática, gerada por IA (Claude — ver `src/lib/review-ai.ts`, mesmo padrão de integração já
+// usado pelo Nord AI em `src/lib/nord-ai.ts`), às avaliações recebidas no iFood (Review API v2,
+// `merchant-api.ifood.com.br/review/v2.0` — ver `src/lib/ifood-client.ts`) — publicada SOZINHA,
+// sem aprovação humana por avaliação individual (decisão explícita do Matheus), atrás de DUAS
+// redes de segurança independentes:
+//   1. `Empresa.avaliacoesAutoReplyEnabled` (default FALSE) — interruptor geral por loja.
+//   2. Palavra-chave de risco (`src/lib/review-risk.ts`) — mesmo com o toggle ligado, uma
+//      avaliação com indício de problema sério (intoxicação, objeto estranho, hospital, etc.)
+//      nunca publica sozinha, cai em `PRECISA_REVISAO_MANUAL`.
+//
+// `platform` modelado como enum (`ReviewPlatform`) de propósito genérico por plataforma, com
+// `GOOGLE` já previsto para uma Fase 2 futura — mas esta fase NÃO implementa nada do lado
+// Google: o Matheus ainda não tem credencial/projeto aprovado pela Google Business Profile API
+// (aprovação da própria Google, fora do controle do time, pode levar tempo) — implementar sem
+// poder testar contra a API real seria código morto e arriscado. Nenhum código desta fase
+// cria/lê um `Review` com `platform = GOOGLE`; o valor só existe para a Fase 2 não precisar
+// redesenhar o modelo de dados (migração de schema nova, sem dado nenhum pra migrar).
+// ---------------------------------------------------------------------------
+
+enum ReviewPlatform {
+  IFOOD
+  /// Previsto para a Fase 2 (Google Business Profile) — ver comentário do bloco acima. NENHUM
+  /// código desta fase cria ou lê um `Review` com este valor.
+  GOOGLE
+}
+
+enum ReviewStatus {
+  /// Avaliação com status `NOT_REPLIED` na API de origem, ainda não processada por este módulo
+  /// (acabou de ser sincronizada, ou está esperando a próxima execução do cron).
+  PENDENTE
+  /// Resposta gerada pela IA publicada com sucesso na plataforma de origem.
+  RESPONDIDA
+  /// Nunca publicada sozinha — porque o toggle da loja está desligado, ou porque a avaliação
+  /// bateu em uma palavra-chave de risco (ver `src/lib/review-risk.ts`), ou porque a geração/
+  /// publicação automática falhou de um jeito que não é seguro simplesmente tentar de novo sem
+  /// revisão (ex. resposta gerada fora do tamanho aceito pela plataforma). Aguarda um humano
+  /// revisar/editar o texto e confirmar a publicação (`PATCH /api/avaliacoes/reviews/[id]`).
+  PRECISA_REVISAO_MANUAL
+  /// Nota 5 ou avaliação sem comentário: o iFood publica sozinho, imediatamente, sem passar por
+  /// `NOT_REPLIED` e sem nenhuma possibilidade de resposta — este módulo só registra para
+  /// histórico/auditoria, nunca tenta responder.
+  AUTO_PUBLICADA_SEM_RESPOSTA
+  /// Passou o prazo de 5 dias que o iFood dá para responder sem que este módulo conseguisse
+  /// publicar a tempo — o iFood publica a avaliação sozinho, sem resposta, depois disso.
+  EXPIRADA
+  /// Falha ao gerar (IA) ou publicar (API da plataforma) a resposta — ver `errorMessage`. Uma
+  /// avaliação em ERRO é reprocessada pela próxima sincronização (se ainda estiver
+  /// `NOT_REPLIED` na origem) ou pode ser respondida manualmente via
+  /// `PATCH /api/avaliacoes/reviews/[id]`.
+  ERRO
+  /// Resultado do modo "Simular" (botão em Avaliações > Configurações, ver parâmetro `mode` em
+  /// `src/lib/review-sync.ts`): a IA gerou a resposta e ela passou pela checagem de
+  /// palavra-chave de risco normalmente, mas NUNCA foi publicada no iFood — `postedReply` e
+  /// `repliedAt` ficam nulos. Serve só para o usuário ver como as respostas ficariam antes de
+  /// ligar `Empresa.avaliacoesAutoReplyEnabled` de vez para uma loja (decisão do Matheus depois
+  /// de notar que, sem isso, a única forma de "ver como as respostas ficam" seria ligar o
+  /// toggle de verdade, que já publica). Uma sincronização REAL subsequente (toggle ligado)
+  /// reprocessa a mesma avaliação do zero (upsert por `externalReviewId`) e decide o status
+  /// final de verdade — nenhum tratamento especial precisa saber que o registro já esteve aqui.
+  SIMULADA
+}
+
+/// Uma avaliação de cliente importada da plataforma de origem + o ciclo de vida da resposta
+/// automática. Ver comentário do bloco acima para o racional completo de design e das duas
+/// redes de segurança.
+model Review {
+  id        String         @id @default(cuid())
+  empresaId String
+  empresa   Empresa        @relation(fields: [empresaId], references: [id])
+  platform  ReviewPlatform
+
+  /// Id da avaliação na API de origem (campo `id` da Review API v2 do iFood — ver
+  /// `src/lib/ifood-client.ts`). Único por empresa+plataforma: por cautela inclui `empresaId`
+  /// mesmo sabendo que duas lojas do grupo nunca compartilham o mesmo `merchantId` no iFood —
+  /// mesmo padrão defensivo já usado em `IfoodOrder.ifoodOrderId`.
+  externalReviewId String
+  /// Nota de 1 a 5. A API do iFood documenta um `score` double (1.0–5.0), mas na prática só usa
+  /// valores inteiros de estrela — arredondado defensivamente ao mapear (ver
+  /// `src/lib/ifood-mapper.ts`).
+  rating           Int
+  /// Nulo quando a avaliação não tem comentário (caso em que, se a nota também for 5, o iFood
+  /// publica sozinho sem jamais oferecer `NOT_REPLIED` — ver `AUTO_PUBLICADA_SEM_RESPOSTA`).
+  comment          String?
+  /// Nome do cliente, quando a API devolve (campo não confirmado com 100% de certeza na
+  /// documentação pública do iFood no momento desta implementação — ver comentário
+  /// [MELHOR ESFORÇO] em `src/lib/ifood-client.ts`); nullable porque pode vir ausente.
+  customerName     String?
+  reviewDate       DateTime
+
+  status ReviewStatus @default(PENDENTE)
+
+  /// Texto gerado pela IA (Claude) — preservado mesmo que `postedReply` termine diferente (ex.
+  /// revisão manual editou antes de confirmar a publicação), para auditoria de como a IA
+  /// respondeu.
+  generatedReply String?
+  /// Texto de fato publicado na plataforma de origem — igual a `generatedReply` na publicação
+  /// automática, ou editado manualmente via `PATCH /api/avaliacoes/reviews/[id]`.
+  postedReply    String?
+  repliedAt      DateTime?
+  /// Preenchido só quando `status = ERRO` — sempre uma mensagem amigável já tratada (nunca
+  /// expõe segredo/token/corpo bruto de erro da API), mesmo padrão de
+  /// `IfoodSyncLog.errorMessage`.
+  errorMessage   String?
+  /// Payload cru devolvido pela API de avaliações da plataforma de origem — auditoria/debug,
+  /// mesmo padrão de `IfoodOrder.raw`.
+  raw            Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, platform, externalReviewId])
+  @@index([empresaId, status])
+  @@index([empresaId, reviewDate])
 }

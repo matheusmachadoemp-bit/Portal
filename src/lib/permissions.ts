@@ -26,6 +26,7 @@ export const MODULES = [
   { key: "satisfacao-cliente", label: "Satisfação do Cliente" },
   { key: "fechamento-dia", label: "Fechamento do Dia" },
   { key: "reservas", label: "Reservas" },
+  { key: "avaliacoes", label: "Avaliações" },
   { key: "configuracoes", label: "Configurações" },
   { key: "usuarios", label: "Usuários" },
 ] as const;
