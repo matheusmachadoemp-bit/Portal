@@ -89,6 +89,16 @@ function serializeReservation(r: ReservationWithRelations) {
  * - `status`: um ou mais valores do enum `ReservationStatus`, separados por vírgula.
  * - `environmentId`: uma reserva de um ambiente específico.
  * - `q`: busca livre (nome do cliente, telefone ou código de confirmação), case-insensitive.
+ * - `includeCapacity`: quando `"1"`, a resposta ganha `totalCapacity` (soma de
+ *   `ReservationEnvironment.capacity` dos ambientes ativos da(s) loja(s) do contexto) — achado
+ *   #166 da revisão geral (Nina): a seção "Calendário" (`CalendarioSection`, ver
+ *   `calendario-section.tsx`) precisava só desse número pro denominador do badge de ocupação do
+ *   dia, mas buscava o endpoint pesado `GET /api/reservas/resumo` (que também calcula
+ *   `todayCount`, `pendingConfirmation`, `noShow` etc., nada disso usado pelo Calendário) só por
+ *   causa desse campo. Em vez de um endpoint dedicado, a mesma consulta do mês que o Calendário
+ *   já faz aqui ganha mais uma query barata (`select: { capacity: true }`, sem relação nenhuma
+ *   com o filtro de data/status da lista) só quando pedida — nunca roda sem este parâmetro, pra
+ *   não pesar a Lista (que também consome esta rota) sem necessidade.
  *
  * Paginação opt-in (`page`/`pageSize`, 1-indexado, `pageSize` 1-200, padrão 50) — mesmo padrão de
  * `src/app/api/tarefas/route.ts`/`src/app/api/rh/time-entries/route.ts`: só ativa quando a chamada
@@ -122,6 +132,7 @@ export async function GET(req: Request) {
   const statusParam = searchParams.get("status");
   const environmentId = searchParams.get("environmentId");
   const q = searchParams.get("q")?.trim();
+  const includeCapacity = searchParams.get("includeCapacity") === "1";
 
   let dateFromKey: string | null = null;
   let dateToKey: string | null = null;
@@ -179,7 +190,7 @@ export async function GET(req: Request) {
   const page = parsePositiveInt(pageParam, 1);
   const pageSize = parsePositiveInt(pageSizeParam, 50, 200);
 
-  const [reservations, total] = await Promise.all([
+  const [reservations, total, capacityEnvironments] = await Promise.all([
     prisma.reservation.findMany({
       where: { AND: and },
       orderBy: { startTime: "asc" },
@@ -188,16 +199,28 @@ export async function GET(req: Request) {
       take: paginar ? pageSize : SAFETY_TAKE,
     }),
     paginar ? prisma.reservation.count({ where: { AND: and } }) : null,
+    // Ver `includeCapacity` no JSDoc acima — nenhuma relação com os filtros de data/status/texto
+    // da lista, só a mesma soma que `getReservasResumo` (`src/lib/reservas-resumo.ts`) já faz.
+    includeCapacity
+      ? prisma.reservationEnvironment.findMany({
+          where: { empresaId: { in: empresaIds }, active: true },
+          select: { capacity: true },
+        })
+      : null,
   ]);
 
+  const totalCapacity = capacityEnvironments?.reduce((sum, e) => sum + e.capacity, 0);
+  const capacityField = includeCapacity ? { totalCapacity: totalCapacity ?? 0 } : {};
+
   if (!paginar) {
-    return NextResponse.json({ reservations: reservations.map(serializeReservation) });
+    return NextResponse.json({ reservations: reservations.map(serializeReservation), ...capacityField });
   }
 
   const totalCount = total ?? 0;
   return NextResponse.json({
     reservations: reservations.map(serializeReservation),
     pagination: { page, pageSize, total: totalCount, totalPages: Math.max(1, Math.ceil(totalCount / pageSize)) },
+    ...capacityField,
   });
 }
 

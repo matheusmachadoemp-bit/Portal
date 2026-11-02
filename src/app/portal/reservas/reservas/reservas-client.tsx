@@ -125,6 +125,22 @@ export function ReservasClient({
   // um PATCH bem-sucedido (ver `changeStatus` abaixo) e o Calendário reage a ele no mesmo efeito
   // que já reage à troca de mês (ver `calendario-section.tsx`) — as duas seções continuam sem
   // conhecer os detalhes internas uma da outra.
+  //
+  // Decisão (tarefa #167, item 1 — achado da revisão geral da Nina): esta Lista e o
+  // `CalendarioSection` acima buscam `GET /api/reservas/reservas` do mês atual de forma
+  // independente ao montar a tela — 2 requisições pro mesmo dado na carga inicial (quando o
+  // filtro de data da Lista e o mês visível do Calendário coincidem, o que é o caso só no
+  // primeiro render). Avaliado e decidido NÃO unificar essa busca num fetch só do componente pai:
+  // o filtro de data/status/texto da Lista muda independente do mês navegado no Calendário (ex.
+  // usuário filtra por "Hoje" ou por status enquanto navega o calendário pra um mês futuro), então
+  // a maior parte do tempo os dois precisam de dados DIFERENTES mesmo (não é só a carga inicial
+  // que se repete) — um fetch único no pai exigiria ou (a) o pai saber refiltrar/recortar o
+  // resultado pra cada seção (reacoplando a lógica de cada seção no componente pai, exatamente o
+  // que `reservationsVersion` acima foi criado pra evitar) ou (b) manter 2 fetches mesmo assim
+  // nos casos em que os filtros divergem, sem eliminar a duplicação real. O ganho (1 request mais
+  // leve, já economizado pela tarefa #166 ao remover o fetch de `GET /api/reservas/resumo` do
+  // Calendário) não compensa o risco de reintroduzir o acoplamento que o achado do Teulis (acima)
+  // já tinha corrigido. Mantido como 2 fetches independentes.
   const [reservationsVersion, setReservationsVersion] = useState(0);
 
   // ---------------------------------------------------------------------------
@@ -213,15 +229,31 @@ export function ReservasClient({
   }
 
   function clearFilters() {
-    setQ("");
-    setStatus("");
     // "Limpar filtros" volta pro mesmo padrão de quando a tela abre sem filtro na URL (mês atual
     // — ver comentário de `dateFrom`/`dateTo` acima), não pro "hoje" do botão "Hoje" (que é uma
     // ação explícita diferente, ver `handleToday`).
     const range = currentMonthRange(todayKey);
+    // Achado do Teulis (tarefa #167, item 2): `setDateFrom`/`setDateTo`/`setStatus` abaixo já
+    // disparam o `useEffect` acima (que reage a mudança de `dateFrom`/`dateTo`/`status`) — chamar
+    // `load()` manualmente TAMBÉM, sempre, resultava em 2 GETs quase simultâneos a cada clique.
+    // Mas não dá pra simplesmente confiar só no efeito: ele não tem `q` como dependência de
+    // propósito (busca por texto é só ao enviar o formulário, ver `handleSearchSubmit` — colocar
+    // `q` nas deps faria a lista recarregar a cada tecla digitada) — então se o usuário já tinha
+    // submetido uma busca por texto (`q` não vazio) e as datas/status já estavam no padrão (nada
+    // muda nessas 3 dependências), o efeito não dispararia nenhum fetch, e a lista continuaria
+    // mostrando o resultado filtrado por texto mesmo com o campo de busca já limpo na tela.
+    // Por isso: só chama `load()` manualmente quando dateFrom/dateTo/status já estão no valor que
+    // estamos definindo (ou seja, o efeito automático não vai disparar por conta própria) — nos
+    // demais casos, o próprio efeito garante o único fetch, já lendo `q` (que `setQ("")` abaixo
+    // já deixou "" antes do efeito rodar, graças ao batching do React nesse mesmo evento).
+    const autoEffectWontFire = dateFrom === range.dateFrom && dateTo === range.dateTo && status === "";
+    setQ("");
+    setStatus("");
     setDateFrom(range.dateFrom);
     setDateTo(range.dateTo);
-    load({ dateFrom: range.dateFrom, dateTo: range.dateTo, status: "", q: "" });
+    if (autoEffectWontFire) {
+      load({ dateFrom: range.dateFrom, dateTo: range.dateTo, status: "", q: "" });
+    }
   }
 
   function handleSearchSubmit(e: FormEvent) {
