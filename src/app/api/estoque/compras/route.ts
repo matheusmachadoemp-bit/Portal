@@ -10,7 +10,7 @@ import {
 } from "@/lib/empresa";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { parseDayInput, spDateKey, spStartOfDay } from "@/lib/timezone";
-import { RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { PURCHASE_PAYMENT_METHODS, RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 import { hasModulePermission } from "@/lib/authz";
 import { resolveRollingPeriod, type RollingPeriodKey } from "@/lib/periods";
 
@@ -144,6 +144,15 @@ export async function POST(req: Request) {
   }
   if (supplier.empresaId !== empresa.id) {
     return NextResponse.json({ error: "Esse fornecedor não pertence a esta loja." }, { status: 400 });
+  }
+
+  // Lista curada de "pagar um fornecedor" (mesma validação do PATCH em [id]/route.ts) — opcional
+  // (campo nullable), então ausência/null continua aceita normalmente; só um valor PRESENTE e fora
+  // da lista (ou inexistente no enum PaymentMethod do Postgres, o que também cai aqui por não estar
+  // na lista) é rejeitado. Achado do Teulis, 2026-11: sem isso, essa rota de criação dependia 100%
+  // do front pra restringir e um valor fora do enum caía num 500 cru do Prisma.
+  if (body.formaPagamento && !(PURCHASE_PAYMENT_METHODS as readonly string[]).includes(body.formaPagamento)) {
+    return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
   }
 
   // Dias gravados à meia-noite de São Paulo (03:00Z). Sem data no corpo (nenhuma tela faz isso): hoje em SP.

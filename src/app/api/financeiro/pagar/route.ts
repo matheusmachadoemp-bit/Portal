@@ -11,6 +11,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 import { normalizeScannedCode } from "@/lib/boleto-barcode";
 import { findPayableDuplicate, formatDuplicateMessage } from "@/lib/boleto-barcode-server";
+import { PURCHASE_PAYMENT_METHODS } from "@/lib/estoque";
 import {
   CompraError,
   INVOICE_SUMMARY_SELECT,
@@ -126,6 +127,15 @@ export async function POST(req: Request) {
   const valor = Number(body.valor);
   if (!body.valor || !Number.isFinite(valor) || valor <= 0) {
     return NextResponse.json({ error: "Valor é obrigatório e deve ser maior que zero." }, { status: 400 });
+  }
+
+  // Lista curada de "pagar um fornecedor" (a mesma de Estoque > Compras — `PURCHASE_PAYMENT_METHODS`,
+  // a mesma que a própria tela de Contas a Pagar já usa no `<select>`, ver `contas-pagar-client.tsx`).
+  // Campo opcional (nullable): ausência/null continua aceita normalmente; só um valor PRESENTE fora
+  // da lista (inclusive um que nem exista no enum PaymentMethod do Postgres) é rejeitado aqui, em vez
+  // de cair num 500 cru do Prisma na hora de gravar. Achado do Teulis, 2026-11.
+  if (body.formaPagamento && !(PURCHASE_PAYMENT_METHODS as readonly string[]).includes(body.formaPagamento)) {
+    return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
   }
 
   // Parcelamento: quando marcado, a quantidade de parcelas é obrigatória e define quantos
