@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
+import { Bell } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { MonthCalendar } from "@/components/ui/month-calendar";
 import { storedDayKey } from "@/lib/timezone";
@@ -166,6 +167,18 @@ export function CalendarioSection({
     return map;
   }, [byDay]);
 
+  // Dias com pelo menos uma reserva PENDENTE (ainda aguardando aprovação) — só para desenhar o
+  // sininho de alerta no card do dia (ver `renderDay` abaixo), nenhum cálculo de ocupação envolvido
+  // aqui (diferente de `confirmedPartySizeByDay` acima, que exclui PENDENTE de propósito). Mesmo
+  // padrão de agregação em memória a partir de `byDay`, sem fetch extra.
+  const hasPendingByDay = useMemo(() => {
+    const set = new Set<string>();
+    for (const [key, list] of byDay) {
+      if (list.some((r) => r.status === "PENDENTE")) set.add(key);
+    }
+    return set;
+  }, [byDay]);
+
   const selectedReservations = byDay.get(selectedDay) ?? [];
 
   if (!hasEmpresa) {
@@ -185,13 +198,14 @@ export function CalendarioSection({
           renderDay={(day, { inMonth, isToday }) => {
             const key = localDateKey(day);
             const confirmedPartySize = confirmedPartySizeByDay.get(key) ?? 0;
+            const hasPending = hasPendingByDay.has(key);
             const isSelected = selectedDay === key;
             return (
               <button
                 type="button"
                 onClick={() => setSelectedDay(key)}
                 disabled={!inMonth}
-                className={`w-full h-16 rounded-lg border p-1.5 flex flex-col items-start justify-between gap-1 text-left transition-colors ${
+                className={`relative w-full h-16 rounded-lg border p-1.5 flex flex-col items-start justify-between overflow-hidden text-left transition-colors ${
                   !inMonth
                     ? "border-transparent opacity-30 cursor-default"
                     : isSelected
@@ -204,7 +218,39 @@ export function CalendarioSection({
                         : "border-nord-border/40 hover:border-nord-border"
                 }`}
               >
+                {/* Número do dia: sozinho na própria linha (sem dividir espaço com o sininho —
+                    ver histórico abaixo sobre por que isso importa). */}
                 <span className={`text-xs ${isToday ? "text-nord-blue-light font-semibold" : "text-white"}`}>{day.getDate()}</span>
+                {/* Sininho de alerta: dia com pelo menos uma reserva PENDENTE (solicitação ainda
+                    não analisada) — ver `hasPendingByDay` acima.
+                    Achado do Teulis (revisão desta tarefa): a tentativa anterior colocava o
+                    sininho ao lado do número, na mesma linha flex (`justify-between`) — medindo
+                    de verdade com `getBoundingClientRect()` (não só visualmente), a 320px um dia
+                    de 2 dígitos SOZINHO (ex. "20") já ocupa ~15,3px de um espaço útil de ~14,9px
+                    disponíveis na célula — ou seja, não sobra espaço nenhum pro sino do lado,
+                    nem encolhendo o ícone ao mínimo legível; o sino vazava pra fora da própria
+                    célula e cruzava a borda da célula vizinha (confirmado: ~8,4px de transbordo a
+                    320px, ~2,7px a 360px, ~0,6px a 375px). `gap-1`/`justify-between` só distribuem
+                    espaço quando sobra — não impedem transbordo quando o conteúdo excede a
+                    largura disponível, e não havia `overflow-hidden` contendo isso.
+                    Correção: o sino sai da linha do número (não compete mais por LARGURA com o
+                    número, que é o que realmente faltava a 320px) e vira `absolute`, ancorado por
+                    ALTURA — centralizado verticalmente entre a linha do número (topo) e a linha do
+                    badge de ocupação (base) via `top-1/2 -translate-y-1/2`, relativo à própria
+                    altura do ícone. Isso o mantém geometricamente dentro do botão (`relative`,
+                    `overflow-hidden` acima como segunda camada de proteção) em QUALQUER largura de
+                    celular e com QUALQUER quantidade de dígitos no número — validado medindo
+                    `getBoundingClientRect()` de verdade via Chromium headless, varrendo 280-500px
+                    (passo de 4px): sino nunca ultrapassa a borda da própria célula, nunca
+                    sobrepõe o número nem o badge, nunca vaza pra célula vizinha. */}
+                {inMonth && hasPending && (
+                  <Bell
+                    size={9}
+                    strokeWidth={2.5}
+                    className="absolute top-1/2 -translate-y-1/2 right-1 text-nord-warning"
+                    aria-label="Há reserva pendente de aprovação neste dia"
+                  />
+                )}
                 {/* Badge de ocupação do dia: círculo com pessoas confirmadas + "/capacidade" — só
                     aparece em dias do mês com capacidade carregada; `confirmedPartySize` pode ser 0
                     (dia aberto sem reserva confirmada ainda) e ainda assim é útil mostrar "0/44".

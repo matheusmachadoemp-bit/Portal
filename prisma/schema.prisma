@@ -6625,11 +6625,19 @@ model ReservationSettings {
   // (src/lib/reservas-disponibilidade.ts) soma/subtrai direto em milissegundos, sem precisar de
   // parsing de string como `openTime`/`closeTime` acima.
   /// Duração padrão de uma reserva, do início ao fim (sugestão do documento: 90 minutos).
+  /// REDESIGN (tarefa "reservas-slots-fixos"): deixou de influenciar a grade de horários
+  /// (`generateSlotStarts`) e o cálculo de capacidade/conflito (`occupiedCapacityFor`) — hoje
+  /// cada horário de início da grade tem capacidade independente, sem depender de quando a
+  /// reserva "termina". Usado só para estimar o `endTime` informativo gravado em cada
+  /// `Reservation` (ver `src/lib/reservas-disponibilidade.ts`).
   durationMinutes       Int @default(90)
   /// Tempo de limpeza/reorganização da mesa depois que uma reserva termina, antes de ela poder
-  /// receber a próxima — o motor soma isto ao fim de cada reserva existente antes de considerar a
-  /// mesa livre de novo (sem sugestão numérica no documento original; 15 minutos é o default desta
-  /// implementação, ajustável na tela de Configurações).
+  /// receber a próxima (sem sugestão numérica no documento original; 15 minutos é o default desta
+  /// implementação).
+  /// REDESIGN (tarefa "reservas-slots-fixos"): deixou de ter qualquer papel no motor de
+  /// disponibilidade (não influencia mais grade nem capacidade/conflito) — mantido no schema só
+  /// para não forçar uma migration numa tarefa que é só de lógica, e porque pode voltar a ter uso
+  /// numa etapa futura. Nunca foi exposto na tela de Configurações (`configuracoes-client.tsx`).
   cleaningMinutes       Int @default(15)
   /// Tolerância de atraso: quanto tempo depois do horário combinado o cliente ainda pode chegar
   /// sem a mesa ser liberada para outra reserva (sugestão do documento: 15 minutos). Só a

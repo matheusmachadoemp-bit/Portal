@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { format, parseISO } from "date-fns";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
@@ -7,6 +6,7 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { RESERVATION_STATUS_LABEL, RESERVATION_STATUS_TONE } from "@/lib/reservas";
 import { getReservasResumo } from "@/lib/reservas-resumo";
+import { spHours, spMinutes } from "@/lib/checklist";
 import { RelatoriosPeriodoSection } from "./relatorios-periodo-client";
 
 /**
@@ -113,22 +113,28 @@ export default async function ReservasVisaoGeralPage() {
           </p>
         ) : (
           <div className="space-y-1.5">
-            {resumo.upcomingToday.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center gap-3 rounded-lg border border-nord-border/60 p-2.5 flex-wrap"
-              >
-                <span className="text-sm text-white font-medium whitespace-nowrap">
-                  {format(parseISO(r.startTime), "HH:mm")}
-                </span>
-                <span className="text-sm text-white min-w-0 flex-1 truncate">{r.customerName ?? "—"}</span>
-                <span className="text-xs text-nord-gray whitespace-nowrap">{r.partySize} pessoas</span>
-                <span className="text-xs text-nord-gray whitespace-nowrap">{r.environment.name}</span>
-                <Badge tone={RESERVATION_STATUS_TONE[r.status] ?? "default"}>
-                  {RESERVATION_STATUS_LABEL[r.status] ?? r.status}
-                </Badge>
-              </div>
-            ))}
+            {resumo.upcomingToday.map((r) => {
+              // Horário sempre no fuso de São Paulo (`spHours`/`spMinutes`, em `@/lib/checklist`),
+              // nunca `.getHours()`/`format` puro num `Date`: o servidor (Vercel) roda em UTC, e
+              // ler a hora "crua" adiantaria 3h o que aparece aqui (mesmo cuidado já documentado
+              // em `buildReservationEmailDetails`, src/app/api/reservas/reservas/[id]/route.ts).
+              const start = new Date(r.startTime);
+              const hhmm = `${String(spHours(start)).padStart(2, "0")}:${String(spMinutes(start)).padStart(2, "0")}`;
+              return (
+                <div
+                  key={r.id}
+                  className="flex items-center gap-3 rounded-lg border border-nord-border/60 p-2.5 flex-wrap"
+                >
+                  <span className="text-sm text-white font-medium whitespace-nowrap">{hhmm}</span>
+                  <span className="text-sm text-white min-w-0 flex-1 truncate">{r.customerName ?? "—"}</span>
+                  <span className="text-xs text-nord-gray whitespace-nowrap">{r.partySize} pessoas</span>
+                  <span className="text-xs text-nord-gray whitespace-nowrap">{r.environment.name}</span>
+                  <Badge tone={RESERVATION_STATUS_TONE[r.status] ?? "default"}>
+                    {RESERVATION_STATUS_LABEL[r.status] ?? r.status}
+                  </Badge>
+                </div>
+              );
+            })}
           </div>
         )}
       </Section>

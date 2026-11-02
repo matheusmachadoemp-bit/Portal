@@ -119,7 +119,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
       endTime: new Date(slot.endTime),
       partySize,
       clienteId: existingCliente?.id ?? null,
-      cleaningMinutes: availability.settings.cleaningMinutes,
       customerName: nome,
       customerPhone: telefone,
       customerEmail: emailRaw,

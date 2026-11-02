@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import type { FinanceEntryStatus } from "@prisma/client";
 import { round2 } from "@/lib/compra-itens";
 
@@ -31,14 +30,6 @@ export function splitInstallments(valor: number, n: number): number[] {
   const base = Math.floor(totalCentavos / n);
   const resto = totalCentavos - base * n; // sempre 0 <= resto < n
   return Array.from({ length: n }, (_, i) => round2((i >= n - resto ? base + 1 : base) / 100));
-}
-
-export async function adjustBankBalance(bankAccountId: string | null | undefined, delta: number) {
-  if (!bankAccountId || !delta) return;
-  await prisma.bankAccount.update({
-    where: { id: bankAccountId },
-    data: { saldoAtual: { increment: delta } },
-  });
 }
 
 // direction: 1 para conta a receber (entrada), -1 para conta a pagar (saída)

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
+import { RESERVAS_MANAGER_ROLES } from "@/lib/reservas";
 import { AmbientesClient } from "./ambientes-client";
 
 /**
@@ -19,6 +20,11 @@ export default async function ReservasAmbientesPage() {
     redirect("/portal/inicio");
   }
 
+  // Trava dupla de cargo (igual à tela "Reservas", reservas/page.tsx): só os cargos de
+  // `RESERVAS_MANAGER_ROLES` administram o módulo por padrão, mesmo que `hasModulePermission`
+  // devolva `true` por algum `UserPermission` manual — ver comentário em `RESERVAS_MANAGER_ROLES`
+  // (src/lib/reservas.ts) sobre essa trava ser intencional e não redundante.
+  const isManagerRole = RESERVAS_MANAGER_ROLES.includes(session.user.role);
   const [canCreate, canEdit, empresa] = await Promise.all([
     hasModulePermission(session.user.id, "reservas", "canCreate"),
     hasModulePermission(session.user.id, "reservas", "canEdit"),
@@ -27,7 +33,7 @@ export default async function ReservasAmbientesPage() {
 
   return (
     <PageContainer title="Reservas" subtitle="Ambientes" backHref="/portal/reservas" backLabel="Reservas">
-      <AmbientesClient canCreate={canCreate} canEdit={canEdit} hasEmpresa={!!empresa} />
+      <AmbientesClient canCreate={isManagerRole && canCreate} canEdit={isManagerRole && canEdit} hasEmpresa={!!empresa} />
     </PageContainer>
   );
 }

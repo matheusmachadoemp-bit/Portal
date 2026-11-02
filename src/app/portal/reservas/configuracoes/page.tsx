@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/page-container";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
-import { RESERVATION_WEEKDAYS } from "@/lib/reservas";
+import { RESERVAS_MANAGER_ROLES, RESERVATION_WEEKDAYS } from "@/lib/reservas";
 import { storedDayKey } from "@/lib/timezone";
 import { ConfiguracoesClient } from "./configuracoes-client";
 
@@ -14,7 +14,12 @@ export default async function ReservasConfiguracoesPage() {
     redirect("/portal/inicio");
   }
 
-  const canManage = await hasModulePermission(session.user.id, "reservas", "canEdit");
+  // Trava dupla de cargo (igual à tela "Reservas", reservas/page.tsx): só os cargos de
+  // `RESERVAS_MANAGER_ROLES` administram o módulo por padrão, mesmo que `hasModulePermission`
+  // devolva `true` por algum `UserPermission` manual — ver comentário em `RESERVAS_MANAGER_ROLES`
+  // (src/lib/reservas.ts) sobre essa trava ser intencional e não redundante.
+  const isManagerRole = RESERVAS_MANAGER_ROLES.includes(session.user.role);
+  const canManage = isManagerRole && (await hasModulePermission(session.user.id, "reservas", "canEdit"));
   const empresa = await requireActiveSingleEmpresa();
 
   let weekdayHours: { dayOfWeek: number; open: boolean; openTime: string; closeTime: string }[] = [];

@@ -12,7 +12,6 @@ import { ptBR } from "date-fns/locale";
 import { type RollingPeriodKey } from "@/lib/periods";
 import {
   ResponsiveContainer,
-  BarChart,
   Bar,
   Line,
   ComposedChart,

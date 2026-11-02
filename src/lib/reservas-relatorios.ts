@@ -13,10 +13,11 @@ export type OcupacaoAmbiente = {
   totalPessoas: number;
   totalReservas: number;
   /** Pessoas reservadas ÷ (capacidade do ambiente × dias do período) × 100 — pode passar de 100%
-   * quando há mais de um giro de ocupação por dia (o motor de disponibilidade libera a
-   * capacidade de novo depois de `endTime` + tempo de limpeza, ver
-   * `ReservationSettings.cleaningMinutes`). Só conta reservas que de fato ocuparam capacidade
-   * (exclui `CANCELADA`/`NAO_COMPARECEU`). */
+   * quando há mais de um horário (slot) ocupado por dia: cada horário de início da grade tem
+   * capacidade independente (ver `src/lib/reservas-disponibilidade.ts`, tarefa
+   * "reservas-slots-fixos"), então o total de pessoas reservadas num dia pode somar mais de uma
+   * vez a capacidade do ambiente. Só conta reservas que de fato ocuparam capacidade (exclui
+   * `CANCELADA`/`NAO_COMPARECEU`). */
   ocupacaoPercent: number;
 };
 

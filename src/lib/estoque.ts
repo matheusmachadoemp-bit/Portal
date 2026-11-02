@@ -211,6 +211,7 @@ export const RECEBIMENTO_MANAGE_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "
 // ---------------------------------------------------------------------------
 
 export const TRANSFER_STATUS = ["SOLICITADA", "SEPARACAO", "ENVIADA", "RECEBIDA", "DIVERGENCIA"] as const;
+export type TransferStatusValue = (typeof TRANSFER_STATUS)[number];
 
 export const TRANSFER_STATUS_LABEL: Record<string, string> = {
   SOLICITADA: "Solicitada",

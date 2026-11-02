@@ -61,16 +61,6 @@ export const WEEKDAY_LABEL: Record<number, string> = {
   6: "Sábado",
 };
 
-export const WEEKDAY_SHORT_LABEL: Record<number, string> = {
-  0: "Dom",
-  1: "Seg",
-  2: "Ter",
-  3: "Qua",
-  4: "Qui",
-  5: "Sex",
-  6: "Sáb",
-};
-
 /** Uma ordem sem prazo cumprido, ainda não concluída, conta como atrasada — calculado ao vivo,
  * sem depender só do cron rodar (mesmo padrão de `isChamadoOverdue`/tarefas). */
 export function isProductionOrderOverdue(order: { prazo: string | Date; status: string }): boolean {
