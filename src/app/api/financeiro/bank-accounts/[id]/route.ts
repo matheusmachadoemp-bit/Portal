@@ -98,6 +98,53 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       { status: 403 }
     );
   }
+
+  // Mesmo padrão de `DELETE /api/financeiro/categorias/[id]` (conta payable/receivable/
+  // recurringTemplate) e `DELETE /api/estoque/fornecedores/[id]`/`/api/estoque/categorias/[id]`/
+  // `/api/producao/categorias/[id]`: várias FKs de BankAccount são `ON DELETE RESTRICT`
+  // (RecurringTemplate.bankAccountId, CashMovement.bankAccountId, BankTransaction.bankAccountId e
+  // BankReconciliationImport.bankAccountId — ver prisma/schema.prisma), então excluir uma conta em
+  // uso lançava P2003 não tratado, virando 500 genérico pro usuário. `Payable.bankAccountId`,
+  // `Receivable.bankAccountId` e `CashMovement.destinoId` são `ON DELETE SET NULL` (não bloqueiam
+  // o delete), mas contamos mesmo assim só pra avisar o usuário que esses lançamentos ficariam sem
+  // conta vinculada em vez de deixar isso acontecer silenciosamente. `CashMovement.destinoId` é o
+  // lado "conta de destino" de uma transferência de caixa (POST /api/financeiro/caixa, tipo
+  // TRANSFERENCIA) — achado do Teulis na revisão: uma conta que só aparecia como `destinoId`
+  // (nunca como `bankAccountId`) passava batido pelas contagens abaixo e a tela de Caixa da
+  // Empresa perdia silenciosamente a referência a ela no histórico. Achado original do Otavio
+  // (revisão geral, 2026-11-02).
+  const [
+    recurringCount,
+    cashMovementCount,
+    cashMovementDestinoCount,
+    bankTransactionCount,
+    reconciliationImportCount,
+    payableCount,
+    receivableCount,
+  ] = await Promise.all([
+    prisma.recurringTemplate.count({ where: { bankAccountId: id } }),
+    prisma.cashMovement.count({ where: { bankAccountId: id } }),
+    prisma.cashMovement.count({ where: { destinoId: id } }),
+    prisma.bankTransaction.count({ where: { bankAccountId: id } }),
+    prisma.bankReconciliationImport.count({ where: { bankAccountId: id } }),
+    prisma.payable.count({ where: { bankAccountId: id } }),
+    prisma.receivable.count({ where: { bankAccountId: id } }),
+  ]);
+  if (
+    recurringCount > 0 ||
+    cashMovementCount > 0 ||
+    cashMovementDestinoCount > 0 ||
+    bankTransactionCount > 0 ||
+    reconciliationImportCount > 0 ||
+    payableCount > 0 ||
+    receivableCount > 0
+  ) {
+    return NextResponse.json(
+      { error: "Esta conta bancária possui lançamentos vinculados e não pode ser excluída. Desative-a." },
+      { status: 400 }
+    );
+  }
+
   await prisma.bankAccount.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

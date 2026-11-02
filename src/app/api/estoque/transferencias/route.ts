@@ -61,6 +61,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "A loja de destino deve ser diferente da loja de origem." }, { status: 400 });
   }
 
+  // Cada item transferido precisa ser um insumo da loja de ORIGEM (quem está enviando, e
+  // cujo estoque será debitado ao confirmar o envio — ver PATCH [id]/route.ts) — mesmo padrão já
+  // usado em /api/estoque/movimentos e /api/estoque/perdas (ingredient.empresaId !== empresa.id →
+  // 400). Achado do Otavio (revisão geral, 2026-11-02): sem essa checagem, dava pra solicitar a
+  // transferência de um insumo de OUTRA loja, que nem está no estoque desta origem.
+  const ingredientIds = [...new Set((body.itens as { ingredientId: string }[]).map((it) => it.ingredientId))];
+  const ingredients = await prisma.ingredient.findMany({
+    where: { id: { in: ingredientIds } },
+    select: { id: true, empresaId: true },
+  });
+  if (ingredients.length !== ingredientIds.length || ingredients.some((i) => i.empresaId !== origem.id)) {
+    return NextResponse.json({ error: "Um ou mais insumos informados não pertencem à loja de origem." }, { status: 400 });
+  }
+
   const transfer = await prisma.transfer.create({
     data: {
       origemEmpresaId: origem.id,
