@@ -13,21 +13,12 @@ type Environment = { id: string; name: string; capacity: number };
 type DayStatus = "fechado" | "bloqueado" | "fora-do-prazo" | "sem-horario" | "disponivel";
 type DayAvailability = { dateKey: string; status: DayStatus; isSpecialGroup?: boolean };
 
-type AvailabilityOption = {
-  type: "mesa" | "combinacao";
-  id: string;
-  label: string;
-  tableIds: string[];
-  capacityMin: number;
-  capacityMax: number;
-};
 type AvailabilitySlot = {
   time: string;
   startTime: string;
   endTime: string;
   withinAdvanceWindow: boolean;
   available: boolean;
-  options: AvailabilityOption[];
 };
 type DayDetail =
   | { open: false; reason: "bloqueado" | "fechado" | "fora-do-prazo"; blockedReason?: string | null }
@@ -222,7 +213,7 @@ export function ReservarClient({
           <span className="w-3 h-3 rounded-full shrink-0" style={{ background: empresa.color }} />
         )}
         <span className="text-white font-semibold truncate">{empresa.name}</span>
-        <span className="text-nord-gray text-xs ml-auto">Reservar mesa</span>
+        <span className="text-nord-gray text-xs ml-auto">Fazer reserva</span>
       </header>
 
       {error && (

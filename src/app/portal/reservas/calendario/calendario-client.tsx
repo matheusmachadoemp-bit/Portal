@@ -212,7 +212,6 @@ export function CalendarioClient({
                 <p className="text-sm text-white mt-1 truncate">{r.customerName ?? r.cliente?.nome ?? "—"}</p>
                 <p className="text-xs text-nord-gray mt-0.5">
                   {r.partySize} pessoas — {r.environment.name}
-                  {r.tables.length > 0 && ` (${r.tables.map((t) => t.identificacao).join(" + ")})`}
                   {multiEmpresa && ` — ${r.empresa.name}`}
                 </p>
               </div>

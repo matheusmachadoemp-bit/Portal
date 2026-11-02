@@ -510,6 +510,12 @@ const CATEGORIES = [
     // própria deixaram de existir, restando 7 subcategorias abaixo. O catch-all genérico
     // (src/app/portal/reservas/[sub]/page.tsx) continua existindo como rede de segurança para
     // uma eventual subcategoria nova sem pasta própria ainda.
+    //
+    // "Mesas e Ambientes" foi renomeada para "Ambientes" na tarefa "reservas-remover-mesas" (ver
+    // prisma/migrations/20261102060000_reservas_remover_mesas e o comentário de redesign em
+    // `prisma/schema.prisma` acima de `model ReservationEnvironment`): o cadastro de mesas e
+    // combinações de mesas foi removido por completo, então a chave/nome da subcategoria
+    // passaram a refletir só o que sobrou (CRUD de Ambientes).
     key: "reservas",
     name: "Reservas",
     icon: "CalendarCheck",
@@ -519,7 +525,7 @@ const CATEGORIES = [
       { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "reservas", name: "Reservas", icon: "ClipboardList" },
       { key: "calendario", name: "Calendário", icon: "CalendarDays" },
-      { key: "mesas-ambientes", name: "Mesas e Ambientes", icon: "Armchair" },
+      { key: "ambientes", name: "Ambientes", icon: "Armchair" },
       { key: "fila-espera", name: "Fila de Espera", icon: "Hourglass" },
       { key: "clientes", name: "Clientes", icon: "Users" },
       { key: "configuracoes", name: "Configurações", icon: "Settings" },

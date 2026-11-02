@@ -8,10 +8,10 @@ import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 /**
  * Motor de disponibilidade de Reservas (Etapa 2) — ver prompt da tarefa "reservas-etapa2" (seção
  * 10 do documento original) e o bloco de comentário no `prisma/schema.prisma` acima de
- * `model ReservationEnvironment` para o racional de modelagem de Mesa/Ambiente/Combinação/
- * Reserva. Funciona por INTERVALO de horário (não soma diária): uma mesa ocupada das 18h às
- * 19h30 volta a ficar livre depois, respeitando `cleaningMinutes` (tempo de limpeza) configurado
- * em `ReservationSettings`.
+ * `model ReservationEnvironment` para o racional de modelagem de Ambiente/Reserva. Funciona por
+ * INTERVALO de horário (não soma diária): uma ocupação das 18h às 19h30 volta a liberar
+ * capacidade depois, respeitando `cleaningMinutes` (tempo de limpeza) configurado em
+ * `ReservationSettings`.
  *
  * Reaproveita os helpers de fuso horário já existentes no projeto: `parseDateKey`/`spStartOfDay`
  * (src/lib/timezone.ts) e `spDateTime`/`spWeekday` (src/lib/checklist.ts, que já combina
@@ -21,15 +21,23 @@ import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
  *
  * Etapa 3 (página pública `/reservar/[empresaKey]`) acrescentou `getMonthAvailability` (resumo de
  * disponibilidade por dia, para o calendário) e os campos de contato/código curto de confirmação
- * em `reserveTablesTransacted` — o resto do motor (incluindo `getAvailability`, já em produção
- * desde a Etapa 2) não mudou.
+ * em `reserveEnvironmentTransacted`.
+ *
+ * REDESIGN (tarefa "reservas-remover-mesas", posterior à Etapa 2/3/4): o motor deixou de
+ * controlar mesa/combinação de mesas específica — ver comentário no topo do bloco "RESERVAS —
+ * Etapa 2" do `prisma/schema.prisma`. A partir desta tarefa, disponibilidade = CAPACIDADE
+ * AGREGADA do ambiente: soma o `partySize` de todas as reservas que ocupam o ambiente num
+ * intervalo de horário e compara com `ReservationEnvironment.capacity`. Nenhuma reserva fica
+ * atrelada a mesa nenhuma — `reserveTablesTransacted` foi renomeada para
+ * `reserveEnvironmentTransacted` e não recebe mais `tableIds`.
  */
 
-/** Status de reserva que ainda OCUPA uma mesa (conta para conflito de horário). Finalizada,
- * Cancelada e Não compareceu liberam a mesa — uma reserva finalizada já terminou de verdade
- * (não precisa aguardar o fim do intervalo original), e as outras duas nunca ocuparam a mesa de
- * fato. Regras automáticas de transição entre status (ex.: liberar após o fim da tolerância de
- * atraso) são de etapa futura (dashboard operacional) — aqui só consultamos o status já gravado. */
+/** Status de reserva que ainda OCUPA capacidade do ambiente (conta para a soma de ocupação).
+ * Finalizada, Cancelada e Não compareceu liberam a capacidade — uma reserva finalizada já
+ * terminou de verdade (não precisa aguardar o fim do intervalo original), e as outras duas nunca
+ * ocuparam capacidade de fato. Regras automáticas de transição entre status (ex.: liberar após o
+ * fim da tolerância de atraso) são de etapa futura (dashboard operacional) — aqui só consultamos
+ * o status já gravado. */
 export const RESERVATION_OCCUPYING_STATUSES: ReservationStatus[] = [
   "PENDENTE",
   "CONFIRMADA",
@@ -61,7 +69,7 @@ export const DEFAULT_RESERVATION_SETTINGS: ReservationSettingsValues = {
 };
 
 export class ReservationConflictError extends Error {
-  constructor(message = "Uma ou mais mesas selecionadas já estão ocupadas nesse horário.") {
+  constructor(message = "Este ambiente não tem mais capacidade livre nesse horário.") {
     super(message);
     this.name = "ReservationConflictError";
   }
@@ -131,53 +139,13 @@ async function getReservationSettings(empresaId: string): Promise<ReservationSet
   };
 }
 
-type TableForEngine = {
-  id: string;
-  identificacao: string;
-  capacityMin: number;
-  capacityMax: number;
-};
+type OccupyingReservation = { start: Date; end: Date; partySize: number };
 
-type CombinationForEngine = {
-  id: string;
-  name: string | null;
-  tableIds: string[];
-};
-
-/** Mesas da loja que podem ser oferecidas em reservas (ambiente ativo, mesa com status
- * operacional DISPONIVEL e `availableForReservation` true) — mesas em manutenção/inativas, ou
- * temporariamente fora da oferta de reservas, nunca aparecem aqui. */
-async function getBookableTables(environmentId: string): Promise<TableForEngine[]> {
-  const tables = await prisma.reservationTable.findMany({
-    where: { environmentId, status: "DISPONIVEL", availableForReservation: true },
-    orderBy: { order: "asc" },
-    select: { id: true, identificacao: true, capacityMin: true, capacityMax: true },
-  });
-  return tables;
-}
-
-async function getActiveCombinations(empresaId: string, tableIds: Set<string>): Promise<CombinationForEngine[]> {
-  if (tableIds.size === 0) return [];
-  const combinations = await prisma.reservationTableCombination.findMany({
-    where: { empresaId, active: true },
-    include: { members: { select: { tableId: true } } },
-  });
-  // Só combinações cujas mesas-membro TODAS pertencem a este ambiente (uma combinação pode, em
-  // tese, ter sido cadastrada com mesas de ambientes diferentes se o ambiente de uma mesa mudar
-  // depois — a tela de cadastro não deixa misturar ambientes na criação, mas isso é uma segunda
-  // garantia defensiva aqui no motor).
-  return combinations
-    .map((c) => ({ id: c.id, name: c.name, tableIds: c.members.map((m) => m.tableId) }))
-    .filter((c) => c.tableIds.length > 0 && c.tableIds.every((id) => tableIds.has(id)));
-}
-
-type OccupiedInterval = { tableId: string; start: Date; end: Date };
-
-/** Busca as reservas (com mesas atribuídas) que podem colidir com QUALQUER horário do dia
- * pedido, já somando o tempo de limpeza ao fim de cada uma — janela de 1 dia antes até 1 dia
- * depois do `dateKey` para cobrir o caso raro de uma reserva do dia anterior (ex. 23h + limpeza)
- * invadir a madrugada, ou uma reserva deste dia ultrapassar a meia-noite. */
-async function getOccupiedIntervals(environmentId: string, dateKey: string, cleaningMinutes: number): Promise<OccupiedInterval[]> {
+/** Busca as reservas que podem colidir com QUALQUER horário do dia pedido, já somando o tempo de
+ * limpeza ao fim de cada uma — janela de 1 dia antes até 1 dia depois do `dateKey` para cobrir o
+ * caso raro de uma reserva do dia anterior (ex. 23h + limpeza) invadir a madrugada, ou uma
+ * reserva deste dia ultrapassar a meia-noite. */
+async function getOccupyingReservations(environmentId: string, dateKey: string, cleaningMinutes: number): Promise<OccupyingReservation[]> {
   const from = spStartOfDay(addDaysToDateKey(dateKey, -1));
   const to = spStartOfDay(addDaysToDateKey(dateKey, 2));
   const reservations = await prisma.reservation.findMany({
@@ -186,49 +154,41 @@ async function getOccupiedIntervals(environmentId: string, dateKey: string, clea
       status: { in: RESERVATION_OCCUPYING_STATUSES },
       date: { gte: from, lt: to },
     },
-    select: { startTime: true, endTime: true, tables: { select: { tableId: true } } },
+    select: { startTime: true, endTime: true, partySize: true },
   });
   const cleaningMs = cleaningMinutes * 60 * 1000;
-  const intervals: OccupiedInterval[] = [];
-  for (const r of reservations) {
-    const end = new Date(r.endTime.getTime() + cleaningMs);
-    for (const { tableId } of r.tables) {
-      intervals.push({ tableId, start: r.startTime, end });
-    }
-  }
-  return intervals;
+  return reservations.map((r) => ({
+    start: r.startTime,
+    end: new Date(r.endTime.getTime() + cleaningMs),
+    partySize: r.partySize,
+  }));
 }
 
-function isTableFree(tableId: string, slotStart: Date, slotEnd: Date, occupied: OccupiedInterval[]): boolean {
-  return !occupied.some((o) => o.tableId === tableId && o.start < slotEnd && o.end > slotStart);
+/** Soma de `partySize` de todas as reservas de `occupying` que colidem com o intervalo
+ * [`slotStart`, `slotEnd`). */
+function occupiedCapacityFor(slotStart: Date, slotEnd: Date, occupying: OccupyingReservation[]): number {
+  return occupying.reduce((sum, o) => (o.start < slotEnd && o.end > slotStart ? sum + o.partySize : sum), 0);
 }
-
-export type AvailabilityOption = {
-  /** "mesa": uma única mesa cobre o grupo. "combinacao": uma combinação pré-cadastrada de mesas
-   * (ver `ReservationTableCombination`) cobre o grupo — capacidade computada em código a partir
-   * da soma das mesas-membro (ver comentário de modelagem no schema). */
-  type: "mesa" | "combinacao";
-  id: string;
-  label: string;
-  tableIds: string[];
-  capacityMin: number;
-  capacityMax: number;
-};
 
 export type AvailabilitySlot = {
   time: string;
   startTime: string;
   endTime: string;
   /** Passa a regra de antecedência mínima/máxima (`minAdvanceMinutes`/`maxAdvanceDays`) — um
-   * horário pode ter mesa livre e ainda assim não ser oferecido por estar fora da janela de
+   * horário pode ter capacidade livre e ainda assim não ser oferecido por estar fora da janela de
    * antecedência permitida. */
   withinAdvanceWindow: boolean;
-  freeTables: number;
+  /** Pessoas já reservadas neste ambiente que ocupam este intervalo de horário (ver
+   * `RESERVATION_OCCUPYING_STATUSES`/`cleaningMinutes`). */
+  occupiedCapacity: number;
+  /** Capacidade total do ambiente (`ReservationEnvironment.capacity`) — repetida em cada slot por
+   * conveniência do consumidor (evita precisar ler de outro lugar). */
+  totalCapacity: number;
+  /** `totalCapacity - occupiedCapacity`, nunca negativa (pode ficar 0 quando já esgotada). */
   freeCapacity: number;
-  /** Há pelo menos uma opção (mesa única ou combinação) que comporta `partySize` E o horário
-   * está dentro da janela de antecedência. */
+  /** Cabe o `partySize` pedido (`occupiedCapacity + partySize <= totalCapacity`) E o horário está
+   * dentro da janela de antecedência. */
   available: boolean;
-  options: AvailabilityOption[];
 };
 
 export type AvailabilityResult =
@@ -258,7 +218,7 @@ export async function getAvailability(params: {
 
   const environment = await prisma.reservationEnvironment.findFirst({
     where: { id: environmentId, empresaId, active: true },
-    select: { id: true },
+    select: { id: true, capacity: true },
   });
   if (!environment) {
     return { open: false, reason: "fechado" };
@@ -293,10 +253,7 @@ export async function getAvailability(params: {
     ? [time]
     : generateSlotStarts(weekdayHours.openTime, weekdayHours.closeTime, settings.slotIntervalMinutes, settings.durationMinutes);
 
-  const tables = await getBookableTables(environmentId);
-  const tableIds = new Set(tables.map((t) => t.id));
-  const combinations = await getActiveCombinations(empresaId, tableIds);
-  const occupied = await getOccupiedIntervals(environmentId, dateKey, settings.cleaningMinutes);
+  const occupying = await getOccupyingReservations(environmentId, dateKey, settings.cleaningMinutes);
   const now = new Date();
   const minAdvanceMs = settings.minAdvanceMinutes * 60 * 1000;
   const openMinutes = timeToMinutes(weekdayHours.openTime);
@@ -309,41 +266,18 @@ export async function getAvailability(params: {
     const withinOperatingHours = slotMinutes >= openMinutes && slotMinutes + settings.durationMinutes <= closeMinutes;
     const withinAdvanceWindow = withinOperatingHours && startTime.getTime() - now.getTime() >= minAdvanceMs;
 
-    const freeTableList = tables.filter((t) => isTableFree(t.id, startTime, endTime, occupied));
-    const freeIds = new Set(freeTableList.map((t) => t.id));
-
-    const options: AvailabilityOption[] = [];
-    for (const t of freeTableList) {
-      if (partySize >= t.capacityMin && partySize <= t.capacityMax) {
-        options.push({ type: "mesa", id: t.id, label: t.identificacao, tableIds: [t.id], capacityMin: t.capacityMin, capacityMax: t.capacityMax });
-      }
-    }
-    for (const c of combinations) {
-      if (!c.tableIds.every((id) => freeIds.has(id))) continue;
-      const members = c.tableIds.map((id) => tables.find((t) => t.id === id)!).filter(Boolean);
-      const capacityMin = members.reduce((sum, m) => sum + m.capacityMin, 0);
-      const capacityMax = members.reduce((sum, m) => sum + m.capacityMax, 0);
-      if (partySize >= capacityMin && partySize <= capacityMax) {
-        options.push({
-          type: "combinacao",
-          id: c.id,
-          label: c.name ?? members.map((m) => m.identificacao).join(" + "),
-          tableIds: c.tableIds,
-          capacityMin,
-          capacityMax,
-        });
-      }
-    }
+    const occupiedCapacity = occupiedCapacityFor(startTime, endTime, occupying);
+    const freeCapacity = Math.max(0, environment.capacity - occupiedCapacity);
 
     return {
       time: hhmm,
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
       withinAdvanceWindow,
-      freeTables: freeTableList.length,
-      freeCapacity: freeTableList.reduce((sum, t) => sum + t.capacityMax, 0),
-      available: withinAdvanceWindow && options.length > 0,
-      options,
+      occupiedCapacity,
+      totalCapacity: environment.capacity,
+      freeCapacity,
+      available: withinAdvanceWindow && occupiedCapacity + partySize <= environment.capacity,
     };
   });
 
@@ -376,11 +310,11 @@ export type DayAvailability = {
  * disponibilidade duplicada aqui) — ver `src/app/api/reservar/[empresaKey]/disponibilidade/route.ts`.
  *
  * Custo: um dia fechado/bloqueado/fora-do-prazo sai barato (`getAvailability` retorna cedo, antes
- * de consultar mesas/combinações/ocupação); só dias efetivamente abertos E dentro da janela de
+ * de consultar a ocupação do ambiente); só dias efetivamente abertos E dentro da janela de
  * antecedência pagam o custo completo da consulta. Para uma loja com `maxAdvanceDays` grande e
- * tráfego alto, isso pode virar um ponto de otimização futura (ex.: uma versão que busca mesas/
- * combinações/ocupação do mês inteiro de uma vez e itera em memória) — não feito nesta etapa por
- * não ser necessário para o volume esperado de uma reserva de restaurante.
+ * tráfego alto, isso pode virar um ponto de otimização futura (ex.: uma versão que busca a
+ * ocupação do mês inteiro de uma vez e itera em memória) — não feito nesta etapa por não ser
+ * necessário para o volume esperado de uma reserva de restaurante.
  */
 export async function getMonthAvailability(params: {
   empresaId: string;
@@ -431,19 +365,17 @@ function isConfirmationCodeConflict(e: unknown): boolean {
 
 /**
  * Cria uma reserva de forma segura contra concorrência — motor interno consumido pela página
- * pública da Etapa 3 (`POST /api/reservar/[empresaKey]/reservas`, ver `src/lib/reservas-publico.ts`
- * para a seleção de mesa/combinação e validação de entrada feitas ANTES de chamar esta função).
- * Mesmo padrão de `pg_try_advisory_xact_lock` já usado em `syncBankTransactions`
- * (src/lib/bank-sync-server.ts): trava por ATRIBUIÇÃO DE RECURSO (aqui, o ambiente inteiro — todas
- * as mesas de um ambiente compartilham a mesma trava, já que uma combinação pode envolver qualquer
- * mesa dele) dentro de uma transação, revalida o conflito DEPOIS de obter a trava (a consulta de
- * disponibilidade feita antes de chamar esta função pode estar desatualizada no instante em que
- * duas requisições concorrentes chegam aqui) e só então grava a reserva + as atribuições de mesa.
+ * pública da Etapa 3 (`POST /api/reservar/[empresaKey]/reservas`, ver `src/lib/reservas-publico.ts`)
+ * e pela criação manual (`POST /api/reservas/reservas`). Mesmo padrão de `pg_try_advisory_xact_lock`
+ * já usado em `syncBankTransactions` (src/lib/bank-sync-server.ts): trava por ATRIBUIÇÃO DE
+ * RECURSO (aqui, o ambiente inteiro) dentro de uma transação, revalida a capacidade agregada
+ * DEPOIS de obter a trava (a consulta de disponibilidade feita antes de chamar esta função pode
+ * estar desatualizada no instante em que duas requisições concorrentes chegam aqui) e só então
+ * grava a reserva — sem nenhuma mesa atribuída (ver comentário de redesign no topo do arquivo).
  */
-type ReserveTablesTransactedBaseParams = {
+type ReserveEnvironmentTransactedBaseParams = {
   empresaId: string;
   environmentId: string;
-  tableIds: string[];
   dateKey: string;
   startTime: Date;
   endTime: Date;
@@ -468,8 +400,8 @@ type ReserveTablesTransactedBaseParams = {
  * Overload sem `include` (fluxo público, `POST /api/reservar/[empresaKey]/reservas`): devolve só
  * `{ id, confirmationCode }`, igual sempre devolveu — esse consumidor nunca precisou das relações.
  */
-export async function reserveTablesTransacted(
-  params: ReserveTablesTransactedBaseParams & { include?: undefined },
+export async function reserveEnvironmentTransacted(
+  params: ReserveEnvironmentTransactedBaseParams & { include?: undefined },
 ): Promise<{ id: string; confirmationCode: string }>;
 /**
  * Overload com `include` (criação manual, `POST /api/reservas/reservas`, Etapa 4 — achado do
@@ -477,16 +409,15 @@ export async function reserveTablesTransacted(
  * da própria transação de criação — evita o `findUnique` extra que a rota fazia depois de chamar
  * esta função só para buscar as relações e serializar a resposta.
  */
-export async function reserveTablesTransacted<Include extends Prisma.ReservationInclude>(
-  params: ReserveTablesTransactedBaseParams & { include: Include },
+export async function reserveEnvironmentTransacted<Include extends Prisma.ReservationInclude>(
+  params: ReserveEnvironmentTransactedBaseParams & { include: Include },
 ): Promise<Prisma.ReservationGetPayload<{ include: Include }>>;
-export async function reserveTablesTransacted(
-  params: ReserveTablesTransactedBaseParams & { include?: Prisma.ReservationInclude },
+export async function reserveEnvironmentTransacted(
+  params: ReserveEnvironmentTransactedBaseParams & { include?: Prisma.ReservationInclude },
 ): Promise<{ id: string; confirmationCode: string } | Prisma.ReservationGetPayload<{ include: Prisma.ReservationInclude }>> {
   const {
     empresaId,
     environmentId,
-    tableIds,
     dateKey,
     startTime,
     endTime,
@@ -499,7 +430,6 @@ export async function reserveTablesTransacted(
     status = "PENDENTE",
     include,
   } = params;
-  if (tableIds.length === 0) throw new Error("Informe ao menos uma mesa.");
 
   // Retry da TRANSAÇÃO INTEIRA em caso de colisão do código curto (ver `isConfirmationCodeConflict`
   // e o comentário do alfabeto acima) — nunca só da query de `create` dentro da MESMA transação já
@@ -520,9 +450,16 @@ export async function reserveTablesTransacted(
         `;
         if (!locked) throw new ReservationBusyError();
 
-        // Revalida o conflito DENTRO da trava — a consulta de disponibilidade usada para decidir
-        // `tableIds` pode ter ficado desatualizada entre o momento em que foi feita e agora (ex.:
-        // outra reserva concorrente acabou de ocupar uma dessas mesas).
+        // Revalida a capacidade agregada DENTRO da trava — a consulta de disponibilidade usada
+        // para decidir que este horário cabia pode ter ficado desatualizada entre o momento em
+        // que foi feita e agora (ex.: outra reserva concorrente acabou de ocupar parte da
+        // capacidade deste ambiente).
+        const environment = await tx.reservationEnvironment.findUnique({
+          where: { id: environmentId },
+          select: { capacity: true },
+        });
+        if (!environment) throw new Error("Ambiente não encontrado.");
+
         const cleaningMs = cleaningMinutes * 60 * 1000;
         const from = spStartOfDay(addDaysToDateKey(dateKey, -1));
         const to = spStartOfDay(addDaysToDateKey(dateKey, 2));
@@ -531,16 +468,15 @@ export async function reserveTablesTransacted(
             environmentId,
             status: { in: RESERVATION_OCCUPYING_STATUSES },
             date: { gte: from, lt: to },
-            tables: { some: { tableId: { in: tableIds } } },
           },
-          select: { startTime: true, endTime: true, tables: { select: { tableId: true } } },
+          select: { startTime: true, endTime: true, partySize: true },
         });
-        const hasConflict = candidates.some((r) => {
+        const occupiedCapacity = candidates.reduce((sum, r) => {
           const occupiedEnd = new Date(r.endTime.getTime() + cleaningMs);
           const overlaps = r.startTime < endTime && occupiedEnd > startTime;
-          return overlaps && r.tables.some((t) => tableIds.includes(t.tableId));
-        });
-        if (hasConflict) throw new ReservationConflictError();
+          return overlaps ? sum + r.partySize : sum;
+        }, 0);
+        if (occupiedCapacity + partySize > environment.capacity) throw new ReservationConflictError();
 
         const data = {
           empresaId,
@@ -555,7 +491,6 @@ export async function reserveTablesTransacted(
           endTime,
           partySize,
           status,
-          tables: { create: tableIds.map((tableId) => ({ tableId })) },
         };
         // Com `include`, pede pro próprio `create` já devolver as relações pedidas — mesma
         // query de escrita, sem round-trip extra (`findUnique` depois) pro chamador montar a
@@ -571,12 +506,11 @@ export async function reserveTablesTransacted(
       // Esgotou as tentativas de verdade (todas colidiram) — erro semântico específico (503 na
       // rota), não o erro cru do Prisma (P2002) nem um 500 genérico.
       if (attempt === CONFIRMATION_CODE_MAX_ATTEMPTS) throw new ReservationCodeExhaustedError();
-      // Colisão de código: a transação inteira já foi revertida pelo Prisma (nenhuma mesa foi
-      // "gasta") — tenta de novo do zero, com um código novo, no próximo giro do loop.
+      // Colisão de código: a transação inteira já foi revertida pelo Prisma (nenhuma capacidade
+      // foi "gasta") — tenta de novo do zero, com um código novo, no próximo giro do loop.
     }
   }
   // Inalcançável (o loop acima sempre retorna ou relança no último attempt) — só para o TypeScript
   // entender que a função nunca "cai pro fim" sem devolver nada.
   throw new ReservationCodeExhaustedError();
 }
-

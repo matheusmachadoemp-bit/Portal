@@ -1,7 +1,7 @@
 import { GenericModulePage } from "@/components/generic-module/generic-module-page";
 
 // Catch-all pra SUBCATEGORIA de "reservas" sem pasta física própria — com a Etapa 4 completa,
-// as 7 subcategorias atuais (visao-geral, reservas, calendario, mesas-ambientes, fila-espera,
+// as 7 subcategorias atuais (visao-geral, reservas, calendario, ambientes, fila-espera,
 // clientes, configuracoes) já têm pasta própria e por isso nunca caem aqui; isto fica como rede
 // de segurança para uma subcategoria nova sem tela própria ainda. ("relatorios" existiu como
 // subcategoria/pasta própria até a tarefa "reservas-unificar-visao-relatorios", que a mesclou

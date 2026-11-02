@@ -10,7 +10,7 @@ import { RESERVAS_MANAGER_ROLES, isPositiveInt } from "@/lib/reservas";
  * `src/app/api/reservas/ambientes/route.ts`). Sem DELETE de propósito — ambiente vira inativo em
  * vez de apagado, mesmo padrão já usado em `CustomerSurveyQuestion` (perguntas de Satisfação do
  * Cliente): nunca existe exclusão de verdade de um cadastro que pode já ter histórico associado
- * (mesas, e futuramente reservas). */
+ * (reservas). */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -10,7 +10,7 @@ import { ClientesReservasClient } from "./clientes-client";
  * toda reserva tem um `Cliente` formal do CRM vinculado, ver comentário em
  * `src/lib/reservas-clientes.ts`), com histórico de reservas por cliente. Só um shell de
  * servidor: a lista em si vem de `GET /api/reservas/clientes`, consumida pelo client component
- * abaixo — mesmo padrão de `src/app/portal/reservas/mesas-ambientes/page.tsx`.
+ * abaixo — mesmo padrão de `src/app/portal/reservas/ambientes/page.tsx`.
  */
 export default async function ReservasClientesPage() {
   const session = await auth();
