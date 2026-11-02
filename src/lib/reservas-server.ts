@@ -1,5 +1,4 @@
 import type { ReservationWaitlistEntry } from "@prisma/client";
-import { storedDayKey } from "@/lib/timezone";
 
 // Reservas — Etapa 4 (Fila de Espera). Helpers compartilhados entre as duas rotas de API
 // (src/app/api/reservas/fila-espera/route.ts e .../[id]/route.ts) que dependem do Prisma Client
@@ -13,8 +12,6 @@ export function serializeWaitlistEntry(entry: ReservationWaitlistEntry) {
     customerName: entry.customerName,
     customerPhone: entry.customerPhone,
     partySize: entry.partySize,
-    desiredDate: storedDayKey(entry.desiredDate),
-    desiredTime: entry.desiredTime,
     status: entry.status,
     notes: entry.notes,
     createdAt: entry.createdAt.toISOString(),

@@ -4,11 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { RESERVAS_MANAGER_ROLES, RESERVATION_WAITLIST_STATUSES, isPositiveInt, isValidHHMM, onlyDigits } from "@/lib/reservas";
+import { RESERVAS_MANAGER_ROLES, RESERVATION_WAITLIST_SETTABLE_STATUSES, isPositiveInt, onlyDigits } from "@/lib/reservas";
 import { serializeWaitlistEntry } from "@/lib/reservas-server";
-import { parseDateKey, spStartOfDay } from "@/lib/timezone";
 
-const STATUSES = RESERVATION_WAITLIST_STATUSES as ReservationWaitlistStatus[];
+const SETTABLE_STATUSES = RESERVATION_WAITLIST_SETTABLE_STATUSES as ReservationWaitlistStatus[];
 const NAME_MAX_LENGTH = 120;
 const NOTES_MAX_LENGTH = 500;
 
@@ -16,10 +15,10 @@ async function loadOwnedEntry(id: string, empresaId: string) {
   return prisma.reservationWaitlistEntry.findFirst({ where: { id, empresaId } });
 }
 
-/** Edita campos e/ou muda o status de uma entrada da fila de espera. `CONVERTIDO_EM_RESERVA` é
- * só um status marcado manualmente pelo atendente — ver comentário no `prisma/schema.prisma`
- * acima de `model ReservationWaitlistEntry` (sem criação automática de `Reservation` nesta
- * etapa). */
+/** Edita campos e/ou muda o status de uma entrada da fila de espera. `CONVERTIDO_EM_RESERVA`
+ * saiu da lista de status que esta rota aceita definir a partir do redesign — ver comentário no
+ * `prisma/schema.prisma` acima do enum `ReservationWaitlistStatus` ("REDESIGN"): a Fila de
+ * Espera não tem mais nenhuma ação em direção a criar uma Reserva. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -46,8 +45,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     customerName?: string;
     customerPhone?: string;
     partySize?: number;
-    desiredDate?: Date;
-    desiredTime?: string | null;
     notes?: string | null;
     status?: ReservationWaitlistStatus;
   } = {};
@@ -74,28 +71,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data.partySize = body.partySize;
   }
 
-  if (body.desiredDate !== undefined) {
-    const dateKey = parseDateKey(body.desiredDate);
-    if (!dateKey) return NextResponse.json({ error: "Informe uma data desejada válida (AAAA-MM-DD)." }, { status: 400 });
-    data.desiredDate = spStartOfDay(dateKey);
-  }
-
-  if (body.desiredTime !== undefined) {
-    if (body.desiredTime === null || body.desiredTime === "") {
-      data.desiredTime = null;
-    } else if (!isValidHHMM(body.desiredTime)) {
-      return NextResponse.json({ error: "Horário desejado inválido." }, { status: 400 });
-    } else {
-      data.desiredTime = body.desiredTime;
-    }
-  }
-
   if (body.notes !== undefined) {
     data.notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim().slice(0, NOTES_MAX_LENGTH) : null;
   }
 
   if (body.status !== undefined) {
-    if (!STATUSES.includes(body.status)) return NextResponse.json({ error: "Status inválido." }, { status: 400 });
+    if (!SETTABLE_STATUSES.includes(body.status)) {
+      return NextResponse.json(
+        {
+          error:
+            body.status === "CONVERTIDO_EM_RESERVA"
+              ? "Este status não é mais definido pela Fila de Espera. Crie a reserva na tela de Reservas e, se quiser, cancele ou exclua esta entrada."
+              : "Status inválido.",
+        },
+        { status: 400 }
+      );
+    }
     data.status = body.status;
   }
 

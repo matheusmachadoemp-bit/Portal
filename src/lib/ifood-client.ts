@@ -274,3 +274,196 @@ export async function fetchIfoodSales(
 
   return { ok: true, sales: allSales };
 }
+
+// ---------------------------------------------------------------------------
+// AVALIAÇÕES (Review API v2, "módulo review") — Fase 1 do módulo "Avaliações" (ver prompt da
+// tarefa "avaliacoes-ifood-fase1" e o bloco de comentário "AVALIAÇÕES" em prisma/schema.prisma).
+// Pesquisado via busca na documentação pública (developer.ifood.com.br — o fetch direto da
+// página não foi possível neste ambiente de desenvolvimento, por restrição de rede do sandbox;
+// a pesquisa foi feita via busca na web, que indexa o conteúdo da página) para esta tarefa —
+// mesma metodologia e os mesmos selos de confiança já usados no cabeçalho deste arquivo
+// ([CONFIRMADO]/[MELHOR ESFORÇO]), sem acesso a credencial real do iFood pra testar contra a
+// API de verdade ainda (mesma limitação já documentada acima para Vendas).
+//
+// Autenticação: MESMO token OAuth2 client_credentials já usado pelo módulo de Vendas acima
+// (`getIfoodAccessToken`) — o pedido de token do iFood não tem um parâmetro de "scope" (o corpo
+// é só grantType/clientId/clientSecret, ver `getIfoodAccessToken`); o que determina quais
+// módulos um token pode acessar é a configuração do aplicativo (`ifoodClientId`) no Portal do
+// Parceiro do iFood, não algo escolhido na hora de pedir o token. [MELHOR ESFORÇO — A CONFIRMAR
+// no primeiro teste real]: se o módulo "Avaliações"/"Reviews" não estiver habilitado pra esse
+// aplicativo (o mesmo já usado por Vendas), as chamadas abaixo devem devolver 401/403 — nesse
+// caso o Matheus precisa habilitar esse módulo pro aplicativo no Portal do Parceiro antes deste
+// código funcionar (não é uma correção de código, é configuração do lado do iFood).
+//
+// Status (v2) documentados: CREATED (avaliação recebida, ainda em validação — nunca aparece
+// como NOT_REPLIED enquanto estiver aqui), NOT_REPLIED (pronta para receber resposta do
+// parceiro — SÓ este status aceita `postIfoodReviewAnswer`), REPLIED (parceiro respondeu,
+// aguardando publicação), PUBLISHED (publicada — com ou sem resposta do parceiro, dependendo
+// se era nota 5/sem comentário, que o iFood publica sozinho sem jamais passar por
+// NOT_REPLIED), DISCARDED (removida da contagem de score do v1 "flag discarded", substituída
+// por este status no v2 — não aceita nem exige ação do parceiro).
+const IFOOD_REVIEW_API_BASE = "https://merchant-api.ifood.com.br/review/v2.0";
+
+// [CONFIRMADO] GET /merchants/{merchantId}/reviews — lista avaliações de uma loja, com filtro
+// de data (`dateFrom`/`dateTo` — um dos formatos documentados é `YYYY-MM-DD`, o outro
+// `dd/mm/yyyy`; usamos o primeiro, mesmo formato de `formatIfoodDate` já usado por Vendas acima)
+// e paginação (`page`/`pageSize`). `pageSize` máximo [CONFIRMADO] em 50 — acima disso a API
+// devolve 400 Bad Request.
+function ifoodReviewsUrl(merchantId: string): string {
+  return `${IFOOD_REVIEW_API_BASE}/merchants/${encodeURIComponent(merchantId)}/reviews`;
+}
+
+// [CONFIRMADO] GET /merchants/{merchantId}/reviews/{reviewId} — uma avaliação específica. Usado
+// pelo fallback manual (`PATCH /api/avaliacoes/reviews/[id]`) para confirmar o status ATUAL
+// antes de tentar publicar uma resposta editada manualmente — evita mandar uma resposta para
+// uma avaliação que já não está mais `NOT_REPLIED` (já respondida, publicada ou expirada).
+function ifoodReviewUrl(merchantId: string, reviewId: string): string {
+  return `${IFOOD_REVIEW_API_BASE}/merchants/${encodeURIComponent(merchantId)}/reviews/${encodeURIComponent(reviewId)}`;
+}
+
+// [CONFIRMADO] POST /merchants/{merchantId}/reviews/{reviewId}/answers — responde a uma
+// avaliação. Corpo `{ "text": string }`, limite [CONFIRMADO] de 10 a 300 caracteres (fora
+// dessa faixa a API devolve 400). Só aceita se a avaliação estiver com status `NOT_REPLIED` —
+// devolve 409 caso contrário (ex. já respondida, publicada sozinha, ou alguém respondeu pelo
+// próprio app do iFood entre a sincronização e esta chamada). A resposta pode ser editada em
+// até 10 minutos depois de enviada [CONFIRMADO] — não usado nesta fase (ver prompt da tarefa).
+function ifoodReviewAnswerUrl(merchantId: string, reviewId: string): string {
+  return `${IFOOD_REVIEW_API_BASE}/merchants/${encodeURIComponent(merchantId)}/reviews/${encodeURIComponent(reviewId)}/answers`;
+}
+
+// Máximo [CONFIRMADO] por página (ver `ifoodReviewsUrl` acima) — bem menor que o `PAGE_SIZE` de
+// 100 já usado por Vendas/Lojas acima, por isso uma constante própria.
+const REVIEW_PAGE_SIZE = 50;
+
+export type IfoodReviewRecord = {
+  id?: string;
+  comment?: string | null;
+  score?: number;
+  rating?: number;
+  createdAt?: string;
+  status?: string;
+  discarded?: boolean;
+  moderated?: boolean;
+  published?: boolean;
+  customerName?: string;
+  customer?: { name?: string };
+  consumer?: { name?: string };
+  order?: { id?: string };
+  answer?: { text?: string; createdAt?: string };
+  answers?: { text?: string; createdAt?: string; from?: string }[];
+  [key: string]: unknown;
+};
+
+export type IfoodReviewsResult = { ok: true; reviews: IfoodReviewRecord[] } | { ok: false; error: string };
+
+/**
+ * Busca avaliações de uma loja (merchant) no período informado, paginando automaticamente.
+ * [MELHOR ESFORÇO] no formato exato do envelope de resposta — um caso de teste documentado
+ * mostra `{ reviews: [], total: 0 }` para uma loja sem avaliação; assumimos `{ reviews: [...] }`
+ * como formato principal, com o mesmo fallback tolerante (`data`/`content`/array puro) já usado
+ * pelos outros endpoints deste arquivo, caso o formato real divirja.
+ */
+export async function fetchIfoodReviews(
+  accessToken: string,
+  merchantId: string,
+  range: { start: Date; end: Date }
+): Promise<IfoodReviewsResult> {
+  const allReviews: IfoodReviewRecord[] = [];
+  // [MELHOR ESFORÇO — A CONFIRMAR no primeiro teste real]: não há confirmação se a paginação do
+  // módulo de Avaliações é 0 ou 1-indexada — mesmo ponto de partida já usado por
+  // `fetchIfoodMerchants`/`fetchIfoodSales` acima. Se o primeiro teste real devolver uma lista
+  // vazia para uma loja com avaliações conhecidas, confira isso antes de qualquer outra coisa.
+  let page = 1;
+
+  while (true) {
+    const url = new URL(ifoodReviewsUrl(merchantId));
+    url.searchParams.set("dateFrom", formatIfoodDate(range.start));
+    url.searchParams.set("dateTo", formatIfoodDate(range.end));
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("pageSize", String(REVIEW_PAGE_SIZE));
+
+    const attempt = await fetchWithRetry(url.toString(), {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    });
+    if (!attempt.ok) return { ok: false, error: attempt.error };
+
+    const res = attempt.res;
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: `Erro ${res.status} na API de Avaliações do iFood. ${text}`.trim() };
+    }
+
+    const data = await res.json().catch(() => null);
+    const pageItems: IfoodReviewRecord[] = Array.isArray(data) ? data : (data?.reviews ?? data?.data ?? data?.content ?? []);
+    allReviews.push(...pageItems);
+
+    if (pageItems.length < REVIEW_PAGE_SIZE) break;
+    page += 1;
+  }
+
+  return { ok: true, reviews: allReviews };
+}
+
+export type IfoodReviewResult = { ok: true; review: IfoodReviewRecord } | { ok: false; error: string };
+
+/** Busca o estado ATUAL de uma avaliação específica — ver comentário de `ifoodReviewUrl` acima. */
+export async function fetchIfoodReview(accessToken: string, merchantId: string, reviewId: string): Promise<IfoodReviewResult> {
+  const attempt = await fetchWithRetry(ifoodReviewUrl(merchantId, reviewId), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+  if (!attempt.ok) return { ok: false, error: attempt.error };
+
+  const res = attempt.res;
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, error: `Erro ${res.status} ao buscar a avaliação no iFood. ${text}`.trim() };
+  }
+
+  const review = (await res.json().catch(() => null)) as IfoodReviewRecord | null;
+  if (!review) return { ok: false, error: "A API do iFood não devolveu os dados da avaliação." };
+  return { ok: true, review };
+}
+
+export type IfoodPostAnswerResult = { ok: true } | { ok: false; error: string; conflict?: boolean };
+
+/**
+ * Publica uma resposta para uma avaliação. [CONFIRMADO] corpo `{ text }`, limite de 10 a 300
+ * caracteres — quem chama (`src/lib/review-ai.ts`/`src/lib/review-sync.ts`) é responsável por
+ * validar o tamanho ANTES de chamar esta função, para nunca gastar uma chamada de API só para
+ * descobrir um 400 evitável.
+ *
+ * Um 409 é tratado como "conflito" (`conflict: true`) em vez de erro genérico: significa que a
+ * avaliação não está mais em `NOT_REPLIED` (já foi respondida por outro canal, publicada
+ * sozinha, ou expirou) — quem chama deve re-sincronizar o status real em vez de insistir.
+ */
+export async function postIfoodReviewAnswer(
+  accessToken: string,
+  merchantId: string,
+  reviewId: string,
+  text: string
+): Promise<IfoodPostAnswerResult> {
+  const attempt = await fetchWithRetry(ifoodReviewAnswerUrl(merchantId, reviewId), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!attempt.ok) return { ok: false, error: attempt.error };
+
+  const res = attempt.res;
+  if (res.ok) return { ok: true };
+
+  const bodyText = await res.text().catch(() => "");
+  if (res.status === 409) {
+    return {
+      ok: false,
+      error: "A avaliação não está mais disponível para resposta (já foi respondida, publicada ou expirou).",
+      conflict: true,
+    };
+  }
+  if (res.status === 400) {
+    return { ok: false, error: `O iFood rejeitou o texto da resposta (formato ou tamanho inválido). ${bodyText}`.trim() };
+  }
+  return { ok: false, error: `Erro ${res.status} ao publicar a resposta no iFood. ${bodyText}`.trim() };
+}

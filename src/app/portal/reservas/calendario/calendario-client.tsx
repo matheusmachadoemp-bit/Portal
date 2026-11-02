@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { MonthCalendar } from "@/components/ui/month-calendar";
 import { storedDayKey } from "@/lib/timezone";
-import { RESERVATION_STATUS_LABEL, RESERVATION_STATUS_TONE } from "@/lib/reservas";
+import { RESERVATION_STATUS_LABEL, RESERVATION_STATUS_TONE, RESERVATION_DAY_OCCUPANCY_STATUSES } from "@/lib/reservas";
 import type { ReservationDTO } from "../reservas/reservas-client";
 
 /** "YYYY-MM-DD" a partir dos componentes LOCAIS do `Date` (ano/mês/dia) — nunca
@@ -51,6 +51,37 @@ export function CalendarioClient({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string>(todayKey);
 
+  // Capacidade total (soma de `ReservationEnvironment.capacity` dos ambientes ativos da loja/lojas
+  // ativas) para o denominador do badge de ocupação de cada dia (ver `renderDay` abaixo) — vem de
+  // `GET /api/reservas/resumo` (mesma agregação já usada pela "Visão Geral", ver
+  // `src/lib/reservas-resumo.ts`: `occupancy.totalCapacity`), em vez de reimplementar essa soma
+  // aqui. Não varia por dia da semana/mês (o schema não tem capacidade específica por dia — só
+  // `ReservationWeekdayHours.open`/horário, ver comentário completo no relatório da tarefa), então
+  // basta buscar 1x quando a loja ativa é definida, nunca 1x por dia nem por mês.
+  const [totalCapacity, setTotalCapacity] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!hasEmpresa) return;
+    let cancelled = false;
+    async function loadCapacity() {
+      try {
+        const res = await fetch("/api/reservas/resumo");
+        const json = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        const capacity = json?.resumo?.occupancy?.totalCapacity;
+        if (typeof capacity === "number") setTotalCapacity(capacity);
+      } catch {
+        // Sem capacidade carregada, o badge de ocupação simplesmente não aparece (ver renderDay) —
+        // não é um erro grave o bastante para mostrar outra mensagem além do que já existe pra
+        // `loadError` (reservas do mês).
+      }
+    }
+    loadCapacity();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasEmpresa]);
+
   useEffect(() => {
     if (!hasEmpresa) return;
     let cancelled = false;
@@ -92,6 +123,21 @@ export function CalendarioClient({
     return map;
   }, [reservations]);
 
+  // Numerador do badge de ocupação: soma de `partySize` das reservas do dia com status que conta
+  // como "ocupação confirmada" (ver `RESERVATION_DAY_OCCUPANCY_STATUSES`, src/lib/reservas.ts) —
+  // agregado em memória a partir das reservas do mês JÁ carregadas por `byDay` acima (mesma busca
+  // de `GET /api/reservas/reservas` com o range do mês, nenhuma query extra por dia).
+  const confirmedPartySizeByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [key, list] of byDay) {
+      const sum = list
+        .filter((r) => RESERVATION_DAY_OCCUPANCY_STATUSES.includes(r.status))
+        .reduce((total, r) => total + r.partySize, 0);
+      map.set(key, sum);
+    }
+    return map;
+  }, [byDay]);
+
   const selectedReservations = byDay.get(selectedDay) ?? [];
 
   if (!hasEmpresa) {
@@ -110,27 +156,37 @@ export function CalendarioClient({
           }}
           renderDay={(day, { inMonth, isToday }) => {
             const key = localDateKey(day);
-            const count = byDay.get(key)?.length ?? 0;
+            const confirmedPartySize = confirmedPartySizeByDay.get(key) ?? 0;
             const isSelected = selectedDay === key;
             return (
               <button
                 type="button"
                 onClick={() => setSelectedDay(key)}
                 disabled={!inMonth}
-                className={`w-full h-16 rounded-lg border p-1.5 flex flex-col items-start gap-1 text-left transition-colors ${
+                className={`w-full h-16 rounded-lg border p-1.5 flex flex-col items-start justify-between gap-1 text-left transition-colors ${
                   !inMonth
                     ? "border-transparent opacity-30 cursor-default"
                     : isSelected
                       ? "border-nord-blue bg-nord-blue/10"
                       : isToday
-                        ? "border-nord-blue/50 hover:border-nord-blue"
+                        // Dia atual: fundo diferente dos demais (ver prompt da tarefa), mesmo sem
+                        // estar selecionado — sutil o bastante pra não parecer selecionado de
+                        // verdade (`bg-white/5`, bem mais claro que `bg-nord-blue/10` do selecionado).
+                        ? "border-nord-blue/50 bg-white/5 hover:border-nord-blue"
                         : "border-nord-border/40 hover:border-nord-border"
                 }`}
               >
                 <span className={`text-xs ${isToday ? "text-nord-blue-light font-semibold" : "text-white"}`}>{day.getDate()}</span>
-                {count > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-nord-blue/20 text-nord-blue-light font-medium">
-                    {count} {count === 1 ? "reserva" : "reservas"}
+                {/* Badge de ocupação do dia: círculo vermelho com pessoas confirmadas + "/capacidade"
+                    em laranja (ver prompt da tarefa) — só aparece em dias do mês com capacidade
+                    carregada; `confirmedPartySize` pode ser 0 (dia aberto sem reserva confirmada
+                    ainda) e ainda assim é útil mostrar "0/44". */}
+                {inMonth && totalCapacity !== null && totalCapacity > 0 && (
+                  <span className="flex items-center gap-1 self-start">
+                    <span className="w-5 h-5 shrink-0 rounded-full bg-nord-danger text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                      {confirmedPartySize}
+                    </span>
+                    <span className="text-[10px] font-semibold text-amber-400 leading-none">/{totalCapacity}</span>
                   </span>
                 )}
               </button>

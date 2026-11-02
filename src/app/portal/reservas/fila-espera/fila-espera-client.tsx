@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { Plus, Pencil, Trash2, PhoneCall, XCircle, Clock, Users } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { Modal, FormError, ConfirmDialog } from "@/components/ui/modal";
 import { apiRequest } from "@/lib/api-client";
-import { RESERVATION_WAITLIST_STATUS_LABEL, RESERVATION_WAITLIST_STATUSES } from "@/lib/reservas";
+import {
+  RESERVATION_WAITLIST_STATUS_LABEL,
+  RESERVATION_WAITLIST_ACTIVE_STATUSES,
+  RESERVATION_WAITLIST_SETTABLE_STATUSES,
+} from "@/lib/reservas";
 
 type WaitlistStatus = "AGUARDANDO" | "CONTATADO" | "CONVERTIDO_EM_RESERVA" | "CANCELADO" | "EXPIRADO";
 
@@ -14,8 +18,6 @@ type WaitlistEntryDTO = {
   customerName: string;
   customerPhone: string;
   partySize: number;
-  desiredDate: string; // "AAAA-MM-DD"
-  desiredTime: string | null;
   status: WaitlistStatus;
   notes: string | null;
   createdAt: string;
@@ -26,25 +28,48 @@ type EntryForm = {
   customerName: string;
   customerPhone: string;
   partySize: string;
-  desiredDate: string;
-  desiredTime: string;
   notes: string;
   status: WaitlistStatus;
 };
 
-function emptyEntryForm(): EntryForm {
-  return { customerName: "", customerPhone: "", partySize: "", desiredDate: "", desiredTime: "", notes: "", status: "AGUARDANDO" };
-}
+const ACTIVE_STATUSES = RESERVATION_WAITLIST_ACTIVE_STATUSES as WaitlistStatus[];
+// `CONVERTIDO_EM_RESERVA` não entra mais aqui — ver comentário no `prisma/schema.prisma` acima
+// do enum `ReservationWaitlistStatus` ("REDESIGN"): a Fila de Espera não oferece mais nenhuma
+// ação em direção a criar uma Reserva, então esse status nunca é escolhido pela tela.
+const EDITABLE_STATUS_OPTIONS = RESERVATION_WAITLIST_SETTABLE_STATUSES as WaitlistStatus[];
 
-function formatDateBR(dateKey: string): string {
-  if (!dateKey) return "";
-  return new Date(`${dateKey}T00:00:00`).toLocaleDateString("pt-BR");
+function emptyEntryForm(): EntryForm {
+  return { customerName: "", customerPhone: "", partySize: "", notes: "", status: "AGUARDANDO" };
 }
 
 function formatPhoneBR(digits: string): string {
   if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   return digits;
+}
+
+/** "H:MM:SS" (ou "M:SS" enquanto durar menos de uma hora, caso mais comum numa fila de espera de
+ * balcão) a partir de uma duração em milissegundos — mesmo espírito do cronômetro vermelho da
+ * referência que o Matheus mostrou ("1:21:04"), sem segundos fracionados. */
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${minutes}:${ss}`;
+}
+
+/** Destaque visual do cronômetro conforme o tempo de espera cresce — sem nenhuma ciência exata
+ * por trás (o Matheus só pediu "mais forte/vermelho depois de alguns minutos"): abaixo de 15min
+ * fica neutro, 15-30min vira alerta (amarelo), 30min+ vira vermelho — mesmo padrão de cor de
+ * `Badge` (`tone="warning"`/`tone="danger"`, `src/components/ui/stat-card.tsx`). */
+function elapsedTone(ms: number): string {
+  const minutes = ms / 60000;
+  if (minutes >= 30) return "text-nord-danger";
+  if (minutes >= 15) return "text-nord-warning";
+  return "text-white";
 }
 
 const STATUS_TONE: Record<WaitlistStatus, "default" | "success" | "warning" | "danger" | "info" | "purple"> = {
@@ -72,9 +97,6 @@ export function FilaEsperaClient({
   const [loading, setLoading] = useState(hasEmpresa);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [dateFilter, setDateFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<WaitlistStatus | "">("");
-
   const [rowError, setRowError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -85,17 +107,22 @@ export function FilaEsperaClient({
   const [formError, setFormError] = useState<string | null>(null);
 
   const [deleting, setDeleting] = useState<WaitlistEntryDTO | null>(null);
-  const [converting, setConverting] = useState<WaitlistEntryDTO | null>(null);
+  const [cancelling, setCancelling] = useState<WaitlistEntryDTO | null>(null);
+
+  // Relógio compartilhado por toda a lista (um único `setInterval`, em vez de um por card) —
+  // cada card só recalcula a própria duração (`nowTs - createdAt`) a cada re-render disparado
+  // por este tick, o que mantém o cronômetro "ao vivo" sem precisar recarregar a página.
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function load() {
     setLoading(true);
     setLoadError(null);
     try {
-      const params = new URLSearchParams();
-      if (dateFilter) params.set("date", dateFilter);
-      if (statusFilter) params.set("status", statusFilter);
-      const query = params.toString();
-      const res = await fetch(`/api/reservas/fila-espera${query ? `?${query}` : ""}`);
+      const res = await fetch("/api/reservas/fila-espera");
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setLoadError(json.error ?? "Não foi possível carregar a fila de espera.");
@@ -111,17 +138,20 @@ export function FilaEsperaClient({
 
   useEffect(() => {
     if (!hasEmpresa) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega a lista no mount e a cada troca de filtro
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega a lista no mount
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasEmpresa, dateFilter, statusFilter]);
+  }, [hasEmpresa]);
 
-  const sortedEntries = useMemo(
+  // A própria API já devolve as entradas ordenadas por `createdAt` ascendente (ver
+  // `src/app/api/reservas/fila-espera/route.ts`), então as "ativas" (AGUARDANDO/CONTATADO) já
+  // chegam na ordem de chegada — a posição numerada é só o índice dentro deste filtro.
+  const activeEntries = useMemo(() => entries.filter((e) => ACTIVE_STATUSES.includes(e.status)), [entries]);
+  // Histórico (resolvidas hoje): mais recente primeiro, por quando o status mudou por último.
+  const historyEntries = useMemo(
     () =>
-      [...entries].sort((a, b) => {
-        if (a.desiredDate !== b.desiredDate) return a.desiredDate < b.desiredDate ? -1 : 1;
-        return (a.desiredTime ?? "99:99").localeCompare(b.desiredTime ?? "99:99");
-      }),
+      entries
+        .filter((e) => !ACTIVE_STATUSES.includes(e.status))
+        .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
     [entries]
   );
 
@@ -137,8 +167,6 @@ export function FilaEsperaClient({
       customerName: entry.customerName,
       customerPhone: entry.customerPhone,
       partySize: String(entry.partySize),
-      desiredDate: entry.desiredDate,
-      desiredTime: entry.desiredTime ?? "",
       notes: entry.notes ?? "",
       status: entry.status,
     });
@@ -162,10 +190,6 @@ export function FilaEsperaClient({
       setFormError("Informe a quantidade de pessoas (inteiro maior que zero).");
       return;
     }
-    if (!form.desiredDate) {
-      setFormError("Informe a data desejada.");
-      return;
-    }
     setSaving(true);
     setFormError(null);
     try {
@@ -173,8 +197,6 @@ export function FilaEsperaClient({
         customerName,
         customerPhone: form.customerPhone,
         partySize,
-        desiredDate: form.desiredDate,
-        desiredTime: form.desiredTime || null,
         notes: form.notes.trim() || null,
         ...(editing ? { status: form.status } : {}),
       };
@@ -192,6 +214,27 @@ export function FilaEsperaClient({
     }
   }
 
+  async function quickSetStatus(entry: WaitlistEntryDTO, status: WaitlistStatus) {
+    setRowError(null);
+    setBusyId(entry.id);
+    try {
+      const result = await apiRequest(`/api/reservas/fila-espera/${entry.id}`, "PATCH", { status });
+      if (!result.ok) {
+        setRowError(result.error);
+        return;
+      }
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function confirmCancel() {
+    if (!cancelling) return;
+    await quickSetStatus(cancelling, "CANCELADO");
+    setCancelling(null);
+  }
+
   async function confirmDelete() {
     if (!deleting) return;
     setRowError(null);
@@ -206,25 +249,6 @@ export function FilaEsperaClient({
     } finally {
       setBusyId(null);
       setDeleting(null);
-    }
-  }
-
-  async function confirmConvert() {
-    if (!converting) return;
-    setRowError(null);
-    setBusyId(converting.id);
-    try {
-      const result = await apiRequest(`/api/reservas/fila-espera/${converting.id}`, "PATCH", {
-        status: "CONVERTIDO_EM_RESERVA",
-      });
-      if (!result.ok) {
-        setRowError(result.error);
-        return;
-      }
-      await load();
-    } finally {
-      setBusyId(null);
-      setConverting(null);
     }
   }
 
@@ -256,100 +280,129 @@ export function FilaEsperaClient({
           )
         }
       >
-        <div className="flex flex-wrap items-end gap-3 mb-4">
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Filtrar por data desejada</span>
-            <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="input" />
-          </label>
-          <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">Filtrar por status</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as WaitlistStatus | "")}
-              className="input"
-            >
-              <option value="">Todos</option>
-              {RESERVATION_WAITLIST_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {RESERVATION_WAITLIST_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
-          </label>
-          {(dateFilter || statusFilter) && (
-            <button
-              onClick={() => {
-                setDateFilter("");
-                setStatusFilter("");
-              }}
-              className="text-xs text-nord-gray hover:text-white"
-            >
-              Limpar filtros
-            </button>
-          )}
-        </div>
-
         {loading ? (
           <div className="p-8 text-center text-sm text-nord-gray">Carregando...</div>
         ) : loadError ? (
           <div className="p-8 text-center text-sm text-nord-danger">{loadError}</div>
-        ) : sortedEntries.length === 0 ? (
-          <p className="text-sm text-nord-gray py-2">Nenhuma entrada na fila de espera.</p>
         ) : (
-          <div className="space-y-2">
-            {sortedEntries.map((entry) => {
-              const canAct = entry.status === "AGUARDANDO" || entry.status === "CONTATADO";
-              return (
-                <div
-                  key={entry.id}
-                  className="flex flex-wrap items-center gap-3 rounded-lg border border-nord-border/60 p-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-white font-medium">{entry.customerName}</p>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                      <Badge tone="default">{formatPhoneBR(entry.customerPhone)}</Badge>
-                      <Badge tone="default">
-                        {entry.partySize} {entry.partySize === 1 ? "pessoa" : "pessoas"}
-                      </Badge>
-                      <Badge tone="info">
-                        {formatDateBR(entry.desiredDate)}
-                        {entry.desiredTime ? ` às ${entry.desiredTime}` : " (sem horário fixo)"}
-                      </Badge>
-                      <Badge tone={STATUS_TONE[entry.status]}>{RESERVATION_WAITLIST_STATUS_LABEL[entry.status]}</Badge>
-                    </div>
-                    {entry.notes && <p className="text-xs text-nord-gray mt-1.5">{entry.notes}</p>}
-                  </div>
-                  {canEdit && (
-                    <div className="flex items-center gap-2 shrink-0">
-                      {canAct && (
-                        <button
-                          onClick={() => setConverting(entry)}
-                          disabled={busyId === entry.id}
-                          className="text-nord-gray hover:text-nord-success flex items-center gap-1 text-xs disabled:opacity-50"
-                          title="Marcar como convertido em reserva"
-                        >
-                          <CheckCircle2 size={12} /> Converter em reserva
-                        </button>
+          <>
+            {activeEntries.length === 0 ? (
+              <p className="text-sm text-nord-gray py-6 text-center">
+                Nenhum cliente esperando agora. Clique em &quot;Nova entrada&quot; quando alguém chegar sem mesa disponível.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeEntries.map((entry, index) => {
+                  const elapsed = nowTs - new Date(entry.createdAt).getTime();
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex flex-wrap items-center gap-3 rounded-lg border border-nord-border/60 p-3"
+                    >
+                      <div className="shrink-0 w-9 h-9 rounded-full bg-nord-danger text-white flex items-center justify-center font-bold text-xs">
+                        {index + 1}º
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-white font-medium">{entry.customerName}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <Badge tone="default">{formatPhoneBR(entry.customerPhone)}</Badge>
+                          <Badge tone="default">
+                            <Users size={11} className="inline -mt-0.5 mr-1" />
+                            {entry.partySize} {entry.partySize === 1 ? "pessoa" : "pessoas"}
+                          </Badge>
+                          {entry.status === "CONTATADO" && <Badge tone="info">Contatado</Badge>}
+                        </div>
+                        {entry.notes && <p className="text-xs text-nord-gray mt-1.5">{entry.notes}</p>}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className={`flex items-center justify-end gap-1 font-mono text-base font-semibold ${elapsedTone(elapsed)}`}>
+                          <Clock size={14} />
+                          {formatElapsed(elapsed)}
+                        </div>
+                        <p className="text-[10px] text-nord-gray mt-0.5">esperando</p>
+                      </div>
+                      {canEdit && (
+                        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                          {entry.status === "AGUARDANDO" && (
+                            <button
+                              onClick={() => quickSetStatus(entry, "CONTATADO")}
+                              disabled={busyId === entry.id}
+                              className="text-nord-gray hover:text-nord-blue-light flex items-center gap-1 text-xs disabled:opacity-50"
+                              title="Marcar como contatado"
+                            >
+                              <PhoneCall size={12} /> Contatado
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setCancelling(entry)}
+                            disabled={busyId === entry.id}
+                            className="text-nord-gray hover:text-nord-danger flex items-center gap-1 text-xs disabled:opacity-50"
+                            title="Cancelar entrada"
+                          >
+                            <XCircle size={12} /> Cancelar
+                          </button>
+                          <button onClick={() => openEdit(entry)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">
+                            <Pencil size={12} /> Editar
+                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => setDeleting(entry)}
+                              disabled={busyId === entry.id}
+                              className="text-nord-gray hover:text-nord-danger disabled:opacity-50"
+                              title="Excluir entrada"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
                       )}
-                      <button onClick={() => openEdit(entry)} className="text-nord-gray hover:text-white flex items-center gap-1 text-xs">
-                        <Pencil size={12} /> Editar
-                      </button>
-                      {canDelete && (
-                        <button
-                          onClick={() => setDeleting(entry)}
-                          disabled={busyId === entry.id}
-                          className="text-nord-gray hover:text-nord-danger disabled:opacity-50"
-                          title="Excluir entrada"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
                     </div>
-                  )}
+                  );
+                })}
+              </div>
+            )}
+
+            {historyEntries.length > 0 && (
+              <div className="mt-6">
+                <h4 className="text-xs font-medium text-nord-gray uppercase tracking-wide mb-2">Histórico de hoje</h4>
+                <div className="space-y-1.5">
+                  {historyEntries.map((entry) => {
+                    const waited = new Date(entry.updatedAt).getTime() - new Date(entry.createdAt).getTime();
+                    return (
+                      <div
+                        key={entry.id}
+                        className="flex flex-wrap items-center gap-3 rounded-lg border border-nord-border/40 p-2.5 opacity-75"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-white">
+                            {entry.customerName}{" "}
+                            <span className="text-xs text-nord-gray">
+                              · {formatPhoneBR(entry.customerPhone)} · {entry.partySize} {entry.partySize === 1 ? "pessoa" : "pessoas"}
+                            </span>
+                          </p>
+                          {entry.notes && <p className="text-xs text-nord-gray mt-1">{entry.notes}</p>}
+                        </div>
+                        <Badge tone={STATUS_TONE[entry.status]}>{RESERVATION_WAITLIST_STATUS_LABEL[entry.status]}</Badge>
+                        <span className="text-[11px] text-nord-gray shrink-0">esperou {formatElapsed(waited)}</span>
+                        {canEdit && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button onClick={() => openEdit(entry)} className="text-nord-gray hover:text-white" title="Editar">
+                              <Pencil size={12} />
+                            </button>
+                            {canDelete && (
+                              <button onClick={() => setDeleting(entry)} className="text-nord-gray hover:text-nord-danger" title="Excluir">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </Section>
 
@@ -386,26 +439,6 @@ export function FilaEsperaClient({
               className="input"
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Data desejada</span>
-              <input
-                type="date"
-                value={form.desiredDate}
-                onChange={(e) => setForm({ ...form, desiredDate: e.target.value })}
-                className="input"
-              />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-nord-gray mb-1">Horário desejado (opcional)</span>
-              <input
-                type="time"
-                value={form.desiredTime}
-                onChange={(e) => setForm({ ...form, desiredTime: e.target.value })}
-                className="input"
-              />
-            </label>
-          </div>
           {editing && (
             <label className="block">
               <span className="block text-xs text-nord-gray mb-1">Status</span>
@@ -414,7 +447,7 @@ export function FilaEsperaClient({
                 onChange={(e) => setForm({ ...form, status: e.target.value as WaitlistStatus })}
                 className="input"
               >
-                {RESERVATION_WAITLIST_STATUSES.map((s) => (
+                {EDITABLE_STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
                     {RESERVATION_WAITLIST_STATUS_LABEL[s]}
                   </option>
@@ -443,6 +476,16 @@ export function FilaEsperaClient({
       </Modal>
 
       <ConfirmDialog
+        open={!!cancelling}
+        title="Cancelar entrada"
+        message={`Marcar a entrada de "${cancelling?.customerName}" como cancelada? Ela sai da fila ativa e passa para o histórico de hoje.`}
+        confirmLabel="Cancelar entrada"
+        danger
+        onConfirm={confirmCancel}
+        onCancel={() => setCancelling(null)}
+      />
+
+      <ConfirmDialog
         open={!!deleting}
         title="Excluir entrada"
         message={`Tem certeza que deseja excluir a entrada de "${deleting?.customerName}" da fila de espera? Essa ação não pode ser desfeita.`}
@@ -450,23 +493,6 @@ export function FilaEsperaClient({
         danger
         onConfirm={confirmDelete}
         onCancel={() => setDeleting(null)}
-      />
-
-      <ConfirmDialog
-        open={!!converting}
-        title="Converter em reserva"
-        message={
-          converting
-            ? `Crie a reserva de "${converting.customerName}" (${converting.partySize} ${
-                converting.partySize === 1 ? "pessoa" : "pessoas"
-              }, ${formatDateBR(converting.desiredDate)}${
-                converting.desiredTime ? ` às ${converting.desiredTime}` : ""
-              }, telefone ${formatPhoneBR(converting.customerPhone)}) na tela de Reservas e confirme aqui para marcar esta entrada como convertida. Esta ação ainda não cria a reserva automaticamente — é só um registro manual do status.`
-            : ""
-        }
-        confirmLabel="Marcar como convertido"
-        onConfirm={confirmConvert}
-        onCancel={() => setConverting(null)}
       />
     </div>
   );

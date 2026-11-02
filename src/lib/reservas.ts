@@ -73,6 +73,12 @@ export function isValidEmail(value: string): boolean {
   return EMAIL_PATTERN.test(value);
 }
 
+/** Limites de tamanho do nome/e-mail do cliente de uma reserva — compartilhados entre o fluxo
+ * público (`POST /api/reservar/[empresaKey]/reservas`) e a criação manual pelo funcionário
+ * (`POST /api/reservas/reservas`, Etapa 4) para não duplicar o mesmo número em dois arquivos. */
+export const RESERVATION_CUSTOMER_NAME_MAX_LENGTH = 120;
+export const RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH = 180;
+
 // Reservas — Etapa 4 (telas administrativas: Visão Geral, Reservas, Calendário). Constantes
 // compartilhadas entre as rotas de API (src/app/api/reservas/reservas/**,
 // src/app/api/reservas/resumo) e as telas (src/app/portal/reservas/{reservas,visao-geral,
@@ -137,3 +143,35 @@ export const RESERVATION_WAITLIST_STATUS_LABEL: Record<string, string> = {
 };
 
 export const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_STATUS_LABEL);
+
+/** Status "vivos" (ainda na fila, aguardando vaga ou retorno do cliente) — usados pra numerar a
+ * posição na fila e mostrar o cronômetro ao vivo. Os demais (`CONTATADO` incluído aqui também,
+ * ver abaixo) entram na seção "Histórico" da tela, sem posição/cronômetro.
+ *
+ * Nota: `CONTATADO` ainda ocupa um lugar na fila de verdade (o cliente não saiu, só já foi
+ * avisado) — por isso soma aqui junto com `AGUARDANDO` pra fins de posição/cronômetro; a
+ * diferença visual entre os dois é só o badge de status. */
+export const RESERVATION_WAITLIST_ACTIVE_STATUSES = ["AGUARDANDO", "CONTATADO"];
+
+/** Status que a UI/API ainda permitem definir manualmente a partir do redesign da Fila de Espera
+ * (ver comentário no `prisma/schema.prisma` acima do enum `ReservationWaitlistStatus`):
+ * `CONVERTIDO_EM_RESERVA` saiu de propósito — a Fila de Espera não tem mais nenhuma ação em
+ * direção a criar uma Reserva. */
+export const RESERVATION_WAITLIST_SETTABLE_STATUSES = RESERVATION_WAITLIST_STATUSES.filter(
+  (status) => status !== "CONVERTIDO_EM_RESERVA"
+);
+
+// Reservas — ajuste "Criar reserva manual + ocupação no Calendário" (ver prompt da tarefa
+// "reservas-criar-manual-calendario"). Fica neste arquivo (em vez de
+// `reservas-disponibilidade.ts`, que já tem `RESERVATION_OCCUPYING_STATUSES`) pelo mesmo motivo
+// do resto deste arquivo: usado pelo componente client do Calendário (`"use client"`, não pode
+// puxar o Prisma Client pro bundle do navegador).
+
+/** Status que contam como "ocupação confirmada" do dia no badge do Calendário — diferente de
+ * `RESERVATION_OCCUPYING_STATUSES` (que inclui PENDENTE, porque aquele conjunto decide se uma
+ * MESA está ocupada para o motor de disponibilidade não oferecer conflito). Aqui o objetivo é
+ * outro: mostrar quantas pessoas a loja já tem CONFIRMADAS para aquele dia — uma reserva ainda
+ * PENDENTE (cliente só pediu, loja não confirmou) não deveria inflar esse número, mas uma reserva
+ * já FINALIZADA (atendimento já terminou) continua contando como "aconteceu" naquele dia.
+ * CANCELADA e NAO_COMPARECEU nunca contam (não ocuparam/não ocupam mesa de fato). */
+export const RESERVATION_DAY_OCCUPANCY_STATUSES = ["CONFIRMADA", "CLIENTE_CHEGOU", "ACOMODADO", "FINALIZADA"];
