@@ -25,6 +25,10 @@ import type { MetaAdsCampaignPerformance, MetaAdsInsightSummary } from "@/lib/me
 type MarketingEntryDTO = {
   id: string;
   date: string;
+  /** "MANUAL" quando investimento/receita foram editados à mão — nesse caso
+   * o sync do Meta Ads (cron das 9h) para de sobrescrever esses dois campos
+   * nesse lançamento (ver src/lib/meta-ads-sync.ts). */
+  source: "MANUAL" | "META_ADS";
   investimentoTrafego: number;
   receitaTrafego: number;
   pedidosCampanha: number;
@@ -337,7 +341,16 @@ export function TrafegoPagoClient({
               {entries.map((e) => (
                 <tr key={e.id} className="border-b border-nord-border/50 hover:bg-white/5">
                   <td className="py-2 pr-4 text-white">{format(new Date(e.date), "MM/yyyy")}</td>
-                  <td className="py-2 pr-4 text-nord-gray">{formatCurrency(e.investimentoTrafego)}</td>
+                  <td className="py-2 pr-4 text-nord-gray">
+                    <span className="inline-flex items-center gap-1.5">
+                      {formatCurrency(e.investimentoTrafego)}
+                      {e.source === "MANUAL" && (
+                        <span title="Editado manualmente — não é sobrescrito pela sincronização automática do Meta Ads.">
+                          <Badge tone="info">Manual</Badge>
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="py-2 pr-4 text-nord-gray">{formatCurrency(e.receitaTrafego)}</td>
                   <td className="py-2 pr-4 text-nord-gray">
                     {formatNumber(safeDiv(e.receitaTrafego, e.investimentoTrafego), 2)}x

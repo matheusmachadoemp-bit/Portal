@@ -84,6 +84,26 @@ export async function POST(req: Request) {
 
   const ingredientes: IngredienteInput[] = Array.isArray(body.ingredientes) ? body.ingredientes : [];
 
+  // Tanto o vínculo opcional do próprio produto (`body.ingredientId`) quanto cada item da receita
+  // (`ingredientes[].ingredientId`) precisam ser insumos desta mesma loja — mesmo padrão já usado
+  // em /api/estoque/movimentos e /api/estoque/perdas (ingredient.empresaId !== empresa.id → 400).
+  // Achado do Otavio (revisão geral, 2026-11-02): sem essa checagem, dava pra montar um produto de
+  // produção referenciando insumo de OUTRA loja.
+  const ingredientIdsToCheck = [
+    ...(body.ingredientId ? [body.ingredientId as string] : []),
+    ...ingredientes.map((ing) => ing.ingredientId),
+  ];
+  if (ingredientIdsToCheck.length > 0) {
+    const uniqueIds = [...new Set(ingredientIdsToCheck)];
+    const foundIngredients = await prisma.ingredient.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, empresaId: true },
+    });
+    if (foundIngredients.length !== uniqueIds.length || foundIngredients.some((i) => i.empresaId !== empresa.id)) {
+      return NextResponse.json({ error: "Um ou mais insumos informados não pertencem a esta loja." }, { status: 400 });
+    }
+  }
+
   const item = await prisma.$transaction(async (tx) => {
     const created = await tx.productionItem.create({
       data: {

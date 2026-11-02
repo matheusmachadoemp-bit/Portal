@@ -155,6 +155,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
   }
 
+  // Cada insumo do pedido precisa pertencer a esta mesma loja — mesmo padrão já usado em
+  // /api/estoque/movimentos e /api/estoque/perdas (ingredient.empresaId !== empresa.id → 400).
+  // Achado do Otavio (revisão geral, 2026-11-02): sem essa checagem, um pedido de compra da loja
+  // ativa podia dar entrada no estoque de um insumo de OUTRA loja.
+  const ingredientIds = [...new Set((body.itens as { ingredientId: string }[]).map((it) => it.ingredientId))];
+  const ingredients = await prisma.ingredient.findMany({
+    where: { id: { in: ingredientIds } },
+    select: { id: true, empresaId: true },
+  });
+  if (ingredients.length !== ingredientIds.length || ingredients.some((i) => i.empresaId !== empresa.id)) {
+    return NextResponse.json({ error: "Um ou mais insumos informados não pertencem a esta loja." }, { status: 400 });
+  }
+
   // Dias gravados à meia-noite de São Paulo (03:00Z). Sem data no corpo (nenhuma tela faz isso): hoje em SP.
   const dataCompra = body.data ? parseDayInput(body.data) : spStartOfDay(spDateKey());
   const previsaoEntrega = body.previsaoEntrega ? parseDayInput(body.previsaoEntrega) : null;

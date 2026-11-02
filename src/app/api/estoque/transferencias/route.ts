@@ -18,9 +18,17 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
   const empresaIds = empresaIdsForContext(ctx);
 
+  // Sem filtro de data nem paginação (a tela "Movimentações" sempre busca tudo de uma vez — ver
+  // movimentacoes-client.tsx), então aplicamos o mesmo teto de segurança (`SAFETY_TAKE`) já usado
+  // em outras rotas sem paginação de verdade (`/api/reservas/reservas`, `/api/rh/time-entries`)
+  // contra o histórico de transferências crescer sem fim (achado de revisão, tarefa #180) — nenhum
+  // uso real de hoje chega perto disso.
+  const SAFETY_TAKE = 2000;
+
   const transfers = await prisma.transfer.findMany({
     where: { OR: [{ origemEmpresaId: { in: empresaIds } }, { destinoEmpresaId: { in: empresaIds } }] },
     orderBy: { createdAt: "desc" },
+    take: SAFETY_TAKE,
     include: {
       origemEmpresa: { select: { id: true, name: true, color: true } },
       destinoEmpresa: { select: { id: true, name: true, color: true } },
@@ -51,6 +59,20 @@ export async function POST(req: Request) {
   }
   if (body.destinoEmpresaId === origem.id) {
     return NextResponse.json({ error: "A loja de destino deve ser diferente da loja de origem." }, { status: 400 });
+  }
+
+  // Cada item transferido precisa ser um insumo da loja de ORIGEM (quem está enviando, e
+  // cujo estoque será debitado ao confirmar o envio — ver PATCH [id]/route.ts) — mesmo padrão já
+  // usado em /api/estoque/movimentos e /api/estoque/perdas (ingredient.empresaId !== empresa.id →
+  // 400). Achado do Otavio (revisão geral, 2026-11-02): sem essa checagem, dava pra solicitar a
+  // transferência de um insumo de OUTRA loja, que nem está no estoque desta origem.
+  const ingredientIds = [...new Set((body.itens as { ingredientId: string }[]).map((it) => it.ingredientId))];
+  const ingredients = await prisma.ingredient.findMany({
+    where: { id: { in: ingredientIds } },
+    select: { id: true, empresaId: true },
+  });
+  if (ingredients.length !== ingredientIds.length || ingredients.some((i) => i.empresaId !== origem.id)) {
+    return NextResponse.json({ error: "Um ou mais insumos informados não pertencem à loja de origem." }, { status: 400 });
   }
 
   const transfer = await prisma.transfer.create({

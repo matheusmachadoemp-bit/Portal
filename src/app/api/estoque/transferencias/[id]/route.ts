@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import type { TransferStatusValue } from "@/lib/estoque";
 
 // Mesmo critério de normalização de nome usado em outras comparações do sistema (ex.
 // `src/app/api/vendas/importar-itens/route.ts`, `src/lib/saipos-mapper.ts`): remove acento,
@@ -45,7 +46,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const novoStatus = body.status as string | undefined;
+  const novoStatus = body.status as TransferStatusValue | undefined;
   // Exige o estado ANTERIOR específico (não só "não é já RECEBIDA/ENVIADA"), porque a rota
   // aceita qualquer valor do enum em `status` sem validar a transição — um PATCH pra um status
   // qualquer no meio do caminho (ex.: de volta pra "SOLICITADA") reabriria a checagem antiga e
@@ -360,7 +361,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     prisma.transfer.update({
       where: { id },
       data: {
-        status: (novoStatus ?? undefined) as never,
+        status: novoStatus ?? undefined,
         responsavelRecebimento: body.responsavelRecebimento ?? undefined,
         dataEnvio: novoStatus === "ENVIADA" ? new Date() : undefined,
         dataRecebimento: novoStatus === "RECEBIDA" ? new Date() : undefined,
