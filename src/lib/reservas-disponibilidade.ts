@@ -8,10 +8,7 @@ import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 /**
  * Motor de disponibilidade de Reservas (Etapa 2) — ver prompt da tarefa "reservas-etapa2" (seção
  * 10 do documento original) e o bloco de comentário no `prisma/schema.prisma` acima de
- * `model ReservationEnvironment` para o racional de modelagem de Ambiente/Reserva. Funciona por
- * INTERVALO de horário (não soma diária): uma ocupação das 18h às 19h30 volta a liberar
- * capacidade depois, respeitando `cleaningMinutes` (tempo de limpeza) configurado em
- * `ReservationSettings`.
+ * `model ReservationEnvironment` para o racional de modelagem de Ambiente/Reserva.
  *
  * Reaproveita os helpers de fuso horário já existentes no projeto: `parseDateKey`/`spStartOfDay`
  * (src/lib/timezone.ts) e `spDateTime`/`spWeekday` (src/lib/checklist.ts, que já combina
@@ -27,17 +24,35 @@ import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
  * controlar mesa/combinação de mesas específica — ver comentário no topo do bloco "RESERVAS —
  * Etapa 2" do `prisma/schema.prisma`. A partir desta tarefa, disponibilidade = CAPACIDADE
  * AGREGADA do ambiente: soma o `partySize` de todas as reservas que ocupam o ambiente num
- * intervalo de horário e compara com `ReservationEnvironment.capacity`. Nenhuma reserva fica
+ * determinado horário e compara com `ReservationEnvironment.capacity`. Nenhuma reserva fica
  * atrelada a mesa nenhuma — `reserveTablesTransacted` foi renomeada para
  * `reserveEnvironmentTransacted` e não recebe mais `tableIds`.
+ *
+ * REDESIGN (tarefa "reservas-slots-fixos", posterior ao redesign acima): o motor deixou de
+ * funcionar por INTERVALO de horário (início/fim com sobreposição) e passou a funcionar por
+ * SLOT FIXO — cada horário de início da grade (`generateSlotStarts`) tem sua própria capacidade
+ * independente, contando só reservas com o MESMO horário de início EXATO (comparação de
+ * igualdade de instante, não mais sobreposição `[start, end+limpeza)`). Motivo: a versão anterior
+ * fazia uma reserva das 18h "contaminar" os slots seguintes (18h30, 19h, ...) enquanto a duração
+ * configurada (`durationMinutes`) não tivesse terminado — o Matheus pediu para cada horário da
+ * grade ter capacidade própria, sem isso. Consequência: `durationMinutes`/`cleaningMinutes`
+ * deixaram de ter qualquer papel no cálculo de disponibilidade/conflito — ver comentário em
+ * `ReservationSettingsValues` abaixo para o que cada um ainda faz (ou não faz) depois desta
+ * mudança.
  */
 
 /** Status de reserva que ainda OCUPA capacidade do ambiente (conta para a soma de ocupação).
  * Finalizada, Cancelada e Não compareceu liberam a capacidade — uma reserva finalizada já
  * terminou de verdade (não precisa aguardar o fim do intervalo original), e as outras duas nunca
- * ocuparam capacidade de fato. Regras automáticas de transição entre status (ex.: liberar após o
- * fim da tolerância de atraso) são de etapa futura (dashboard operacional) — aqui só consultamos
- * o status já gravado. */
+ * ocuparam capacidade de fato.
+ *
+ * IMPORTANTE (intencional, confirmado na tarefa "reservas-slots-fixos"): não existe NENHUMA
+ * liberação automática por tempo/tolerância aqui — uma reserva ocupa capacidade enquanto o status
+ * gravado estiver nesta lista, ponto, independente de quanto tempo já passou do horário marcado.
+ * `ReservationSettings.lateToleranceMinutes` continua existindo (configuração de quanto atraso a
+ * loja tolera antes de considerar não-comparecimento), mas é só informativo nesta etapa — a
+ * liberação automática por no-show/atraso (mudar o status sozinho depois de X minutos) é de etapa
+ * futura (dashboard operacional). Mudar o status é sempre uma ação manual de quem opera a loja. */
 export const RESERVATION_OCCUPYING_STATUSES: ReservationStatus[] = [
   "PENDENTE",
   "CONFIRMADA",
@@ -46,8 +61,22 @@ export const RESERVATION_OCCUPYING_STATUSES: ReservationStatus[] = [
 ];
 
 export type ReservationSettingsValues = {
+  /** Desde "reservas-slots-fixos", NÃO é mais usado para gerar a grade de horários
+   * (`generateSlotStarts`) nem para calcular conflito/capacidade (`occupiedCapacityFor`) — ver
+   * comentário de redesign no topo do arquivo. O único uso restante é informativo: estimar o
+   * `endTime` gravado em cada `Reservation` (exibido como "até às X" para o atendente/cliente),
+   * calculado uma vez no momento da criação e congelado dali pra frente. */
   durationMinutes: number;
+  /** Desde "reservas-slots-fixos", NÃO é mais usado para nada no motor de disponibilidade (nem
+   * para gerar grade, nem para calcular capacidade, nem para o `endTime` estimado — ver
+   * `durationMinutes` acima). Mantido no schema/settings só para não forçar uma migration nesta
+   * tarefa (é lógica, não modelo de dado) e porque pode voltar a ter uso numa etapa futura (ex.:
+   * se o Matheus decidir reintroduzir um tempo de giro entre reservas de verdade). A tela de
+   * Configurações (`configuracoes-client.tsx`) nunca expôs este campo para edição — nenhuma
+   * mudança de UI necessária aqui. */
   cleaningMinutes: number;
+  /** Só a configuração em si — ver comentário em `RESERVATION_OCCUPYING_STATUSES` acima: não
+   * aciona nenhuma liberação automática de capacidade. */
   lateToleranceMinutes: number;
   minAdvanceMinutes: number;
   maxAdvanceDays: number;
@@ -106,17 +135,39 @@ function minutesToTime(total: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-/** Horários de início possíveis dentro do expediente, respeitando a duração da reserva (o
- * horário final sempre precisa caber antes do fechamento) e o intervalo entre horários
- * configurado (`slotIntervalMinutes`). */
-function generateSlotStarts(openTime: string, closeTime: string, slotIntervalMinutes: number, durationMinutes: number): string[] {
+/** Horários de início possíveis dentro do expediente: todo horário de início dentro da janela
+ * [`openTime`, `closeTime`], espaçados por `slotIntervalMinutes` — independente da duração
+ * configurada da reserva (mudança "reservas-slots-fixos", ver comentário de redesign no topo do
+ * arquivo). Inclui de propósito `t === close` (loop com `t <= close`): um horário exatamente
+ * igual ao fechamento é um horário de início válido (ex.: abertura 18:00, fechamento 19:30,
+ * intervalo 30min → gera exatamente [18:00, 18:30, 19:00, 19:30], os quatro) — pedir uma mesa
+ * bem na hora de fechar é uma decisão de negócio válida; a loja controla isso ajustando o próprio
+ * horário de fechamento, não por um corte implícito de "duração que não cabe". */
+function generateSlotStarts(openTime: string, closeTime: string, slotIntervalMinutes: number): string[] {
   const open = timeToMinutes(openTime);
   const close = timeToMinutes(closeTime);
   const slots: string[] = [];
-  for (let t = open; t + durationMinutes <= close; t += Math.max(slotIntervalMinutes, 1)) {
+  for (let t = open; t <= close; t += Math.max(slotIntervalMinutes, 1)) {
     slots.push(minutesToTime(t));
   }
   return slots;
+}
+
+/** True se `time` corresponde EXATAMENTE a um dos horários de início que `generateSlotStarts`
+ * geraria para esta janela/intervalo — nunca "está dentro do expediente" de forma aproximada (ex.:
+ * "18:17" entre abertura 18:00 e fechamento 19:30 NÃO é válido se o intervalo é 30min; só os
+ * múltiplos exatos do intervalo a partir da abertura são). Usado por `getAvailability` abaixo para
+ * nunca tratar um horário arbitrário fora da grade (passado via parâmetro `time`, que vem direto do
+ * cliente/rota) como um "slot" próprio com capacidade independente dos horários oficiais — achado
+ * do Teulis na revisão desta tarefa ("reservas-slots-fixos"): sem esta checagem, um horário fora da
+ * grade (ex.: "18:17") só disputava capacidade com OUTRAS reservas no mesmo horário arbitrário
+ * "18:17", nunca com as reservas dos horários reais da grade (ex.: "18:00", "18:30"), permitindo
+ * sobrevenda de capacidade por qualquer cliente externo (rota pública, sem sessão) bastando enviar
+ * um horário que não é nenhum dos oferecidos na tela. Exportado (não só uso interno) como ponto
+ * único de verdade sobre "o que é um horário de início válido" — evita qualquer rota precisar
+ * reimplementar/duplicar esta lista literal no futuro. */
+export function isValidSlotTime(openTime: string, closeTime: string, slotIntervalMinutes: number, time: string): boolean {
+  return generateSlotStarts(openTime, closeTime, slotIntervalMinutes).includes(time);
 }
 
 function addDaysToDateKey(dateKey: string, delta: number): string {
@@ -139,35 +190,40 @@ async function getReservationSettings(empresaId: string): Promise<ReservationSet
   };
 }
 
-type OccupyingReservation = { start: Date; end: Date; partySize: number };
+type OccupyingReservation = { start: Date; partySize: number };
 
-/** Busca as reservas que podem colidir com QUALQUER horário do dia pedido, já somando o tempo de
- * limpeza ao fim de cada uma — janela de 1 dia antes até 1 dia depois do `dateKey` para cobrir o
- * caso raro de uma reserva do dia anterior (ex. 23h + limpeza) invadir a madrugada, ou uma
- * reserva deste dia ultrapassar a meia-noite. */
-async function getOccupyingReservations(environmentId: string, dateKey: string, cleaningMinutes: number): Promise<OccupyingReservation[]> {
-  const from = spStartOfDay(addDaysToDateKey(dateKey, -1));
-  const to = spStartOfDay(addDaysToDateKey(dateKey, 2));
+/** Busca as reservas que ocupam capacidade no dia pedido (qualquer status de
+ * `RESERVATION_OCCUPYING_STATUSES`) — usado para montar, em memória, a ocupação de CADA slot do
+ * dia (`occupiedCapacityFor`) sem precisar de uma query por slot. Só precisa de `startTime`/
+ * `partySize`: desde "reservas-slots-fixos" a ocupação é por horário de início EXATO, não mais
+ * por sobreposição de intervalo, então `endTime`/tempo de limpeza não entram nesta conta (ver
+ * comentário de redesign no topo do arquivo). Janela de busca é só o próprio dia — os horários de
+ * funcionamento (`ReservationWeekdayHours.openTime/closeTime`) nunca cruzam a meia-noite (ver
+ * `generateSlotStarts`), então o início de qualquer reserva de um dia cai sempre dentro do
+ * próprio dia; não precisa mais da margem de dia anterior/seguinte que a versão antiga usava para
+ * cobrir o caso de limpeza empurrando o fim de uma reserva para a madrugada. */
+async function getOccupyingReservations(environmentId: string, dateKey: string): Promise<OccupyingReservation[]> {
+  const from = spStartOfDay(dateKey);
+  const to = spStartOfDay(addDaysToDateKey(dateKey, 1));
   const reservations = await prisma.reservation.findMany({
     where: {
       environmentId,
       status: { in: RESERVATION_OCCUPYING_STATUSES },
       date: { gte: from, lt: to },
     },
-    select: { startTime: true, endTime: true, partySize: true },
+    select: { startTime: true, partySize: true },
   });
-  const cleaningMs = cleaningMinutes * 60 * 1000;
-  return reservations.map((r) => ({
-    start: r.startTime,
-    end: new Date(r.endTime.getTime() + cleaningMs),
-    partySize: r.partySize,
-  }));
+  return reservations.map((r) => ({ start: r.startTime, partySize: r.partySize }));
 }
 
-/** Soma de `partySize` de todas as reservas de `occupying` que colidem com o intervalo
- * [`slotStart`, `slotEnd`). */
-function occupiedCapacityFor(slotStart: Date, slotEnd: Date, occupying: OccupyingReservation[]): number {
-  return occupying.reduce((sum, o) => (o.start < slotEnd && o.end > slotStart ? sum + o.partySize : sum), 0);
+/** Soma de `partySize` das reservas de `occupying` com o MESMO horário de início EXATO de
+ * `slotStart` (comparação de igualdade de instante). Mudança "reservas-slots-fixos": cada horário
+ * da grade tem capacidade independente — uma reserva das 18h ocupa só o slot das 18h, nunca os
+ * seguintes (18h30, 19h, ...), mesmo que a duração configurada "avançasse" por cima deles na
+ * versão anterior (que comparava sobreposição de intervalo, não igualdade de início). */
+function occupiedCapacityFor(slotStart: Date, occupying: OccupyingReservation[]): number {
+  const slotStartMs = slotStart.getTime();
+  return occupying.reduce((sum, o) => (o.start.getTime() === slotStartMs ? sum + o.partySize : sum), 0);
 }
 
 export type AvailabilitySlot = {
@@ -178,8 +234,8 @@ export type AvailabilitySlot = {
    * horário pode ter capacidade livre e ainda assim não ser oferecido por estar fora da janela de
    * antecedência permitida. */
   withinAdvanceWindow: boolean;
-  /** Pessoas já reservadas neste ambiente que ocupam este intervalo de horário (ver
-   * `RESERVATION_OCCUPYING_STATUSES`/`cleaningMinutes`). */
+  /** Pessoas já reservadas neste ambiente com o MESMO horário de início exato deste slot (ver
+   * `RESERVATION_OCCUPYING_STATUSES`/`occupiedCapacityFor`). */
   occupiedCapacity: number;
   /** Capacidade total do ambiente (`ReservationEnvironment.capacity`) — repetida em cada slot por
    * conveniência do consumidor (evita precisar ler de outro lugar). */
@@ -249,11 +305,19 @@ export async function getAvailability(params: {
     return { open: false, reason: "fechado" };
   }
 
+  // Quando `time` é informado (rotas de criação — ver `POST /api/reservar/[empresaKey]/reservas`
+  // e `POST /api/reservas/reservas`), só o tratamos como um slot de verdade se ele realmente
+  // pertence à grade gerada por `generateSlotStarts` (`isValidSlotTime`) — nunca aceitamos um
+  // horário arbitrário do cliente como "slot próprio". Achado do Teulis: sem este filtro, um
+  // horário fora da grade virava seu próprio slot com capacidade independente dos horários
+  // oficiais (ver JSDoc de `isValidSlotTime` acima). Quando inválido, `slotTimes` fica vazio —
+  // `slots` sai `[]` abaixo e o chamador não encontra nenhum `slot` correspondente ao horário
+  // pedido, rejeitando a reserva (409) do mesmo jeito que rejeitaria falta de capacidade.
   const slotTimes = time
-    ? [time]
-    : generateSlotStarts(weekdayHours.openTime, weekdayHours.closeTime, settings.slotIntervalMinutes, settings.durationMinutes);
+    ? (isValidSlotTime(weekdayHours.openTime, weekdayHours.closeTime, settings.slotIntervalMinutes, time) ? [time] : [])
+    : generateSlotStarts(weekdayHours.openTime, weekdayHours.closeTime, settings.slotIntervalMinutes);
 
-  const occupying = await getOccupyingReservations(environmentId, dateKey, settings.cleaningMinutes);
+  const occupying = await getOccupyingReservations(environmentId, dateKey);
   const now = new Date();
   const minAdvanceMs = settings.minAdvanceMinutes * 60 * 1000;
   const openMinutes = timeToMinutes(weekdayHours.openTime);
@@ -261,12 +325,17 @@ export async function getAvailability(params: {
 
   const slots: AvailabilitySlot[] = slotTimes.map((hhmm) => {
     const startTime = spDateTime(dateKey, hhmm);
+    // `endTime` aqui é só uma ESTIMATIVA informativa (ex.: exibir "até às X" na reserva) —
+    // `durationMinutes` não influencia mais a grade de horários nem o cálculo de capacidade (ver
+    // `generateSlotStarts`/`occupiedCapacityFor` e o comentário de redesign no topo do arquivo).
     const endTime = new Date(startTime.getTime() + settings.durationMinutes * 60 * 1000);
     const slotMinutes = timeToMinutes(hhmm);
-    const withinOperatingHours = slotMinutes >= openMinutes && slotMinutes + settings.durationMinutes <= closeMinutes;
+    // Mesmo critério de `generateSlotStarts`: um horário de início é válido até (e incluindo) o
+    // próprio fechamento, sem depender da duração.
+    const withinOperatingHours = slotMinutes >= openMinutes && slotMinutes <= closeMinutes;
     const withinAdvanceWindow = withinOperatingHours && startTime.getTime() - now.getTime() >= minAdvanceMs;
 
-    const occupiedCapacity = occupiedCapacityFor(startTime, endTime, occupying);
+    const occupiedCapacity = occupiedCapacityFor(startTime, occupying);
     const freeCapacity = Math.max(0, environment.capacity - occupiedCapacity);
 
     return {
@@ -372,6 +441,9 @@ function isConfirmationCodeConflict(e: unknown): boolean {
  * DEPOIS de obter a trava (a consulta de disponibilidade feita antes de chamar esta função pode
  * estar desatualizada no instante em que duas requisições concorrentes chegam aqui) e só então
  * grava a reserva — sem nenhuma mesa atribuída (ver comentário de redesign no topo do arquivo).
+ * Revalida pelo MESMO critério de `occupiedCapacityFor` (slot fixo, horário de início exato) —
+ * desde "reservas-slots-fixos" não recebe mais `cleaningMinutes` (deixou de ter qualquer papel
+ * no cálculo de conflito, ver comentário de redesign no topo do arquivo).
  */
 type ReserveEnvironmentTransactedBaseParams = {
   empresaId: string;
@@ -381,7 +453,6 @@ type ReserveEnvironmentTransactedBaseParams = {
   endTime: Date;
   partySize: number;
   clienteId?: string | null;
-  cleaningMinutes: number;
   /** Contato de quem fez a reserva (Etapa 3) — ver comentário em `Reservation.customerName` no
    * schema. Sempre informados pelo fluxo público; opcionais aqui só para não travar uma eventual
    * chamada futura (fora de escopo desta etapa) que não tenha esse contato em mãos. */
@@ -423,7 +494,6 @@ export async function reserveEnvironmentTransacted(
     endTime,
     partySize,
     clienteId,
-    cleaningMinutes,
     customerName,
     customerPhone,
     customerEmail,
@@ -453,29 +523,30 @@ export async function reserveEnvironmentTransacted(
         // Revalida a capacidade agregada DENTRO da trava — a consulta de disponibilidade usada
         // para decidir que este horário cabia pode ter ficado desatualizada entre o momento em
         // que foi feita e agora (ex.: outra reserva concorrente acabou de ocupar parte da
-        // capacidade deste ambiente).
+        // capacidade deste ambiente). Mesmo critério de `occupiedCapacityFor`: só reservas com o
+        // MESMO horário de início EXATO de `startTime` contam (slot fixo, não sobreposição de
+        // intervalo — ver comentário de redesign no topo do arquivo).
         const environment = await tx.reservationEnvironment.findUnique({
           where: { id: environmentId },
           select: { capacity: true },
         });
         if (!environment) throw new Error("Ambiente não encontrado.");
 
-        const cleaningMs = cleaningMinutes * 60 * 1000;
-        const from = spStartOfDay(addDaysToDateKey(dateKey, -1));
-        const to = spStartOfDay(addDaysToDateKey(dateKey, 2));
+        const from = spStartOfDay(dateKey);
+        const to = spStartOfDay(addDaysToDateKey(dateKey, 1));
         const candidates = await tx.reservation.findMany({
           where: {
             environmentId,
             status: { in: RESERVATION_OCCUPYING_STATUSES },
             date: { gte: from, lt: to },
           },
-          select: { startTime: true, endTime: true, partySize: true },
+          select: { startTime: true, partySize: true },
         });
-        const occupiedCapacity = candidates.reduce((sum, r) => {
-          const occupiedEnd = new Date(r.endTime.getTime() + cleaningMs);
-          const overlaps = r.startTime < endTime && occupiedEnd > startTime;
-          return overlaps ? sum + r.partySize : sum;
-        }, 0);
+        const startTimeMs = startTime.getTime();
+        const occupiedCapacity = candidates.reduce(
+          (sum, r) => (r.startTime.getTime() === startTimeMs ? sum + r.partySize : sum),
+          0,
+        );
         if (occupiedCapacity + partySize > environment.capacity) throw new ReservationConflictError();
 
         const data = {
