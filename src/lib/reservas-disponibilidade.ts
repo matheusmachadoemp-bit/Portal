@@ -456,6 +456,12 @@ export async function reserveTablesTransacted(params: {
   customerName?: string | null;
   customerPhone?: string | null;
   customerEmail?: string | null;
+  /** Status inicial da reserva — default `PENDENTE` (fluxo público, Etapa 3: o cliente só está
+   * pedindo, a loja ainda confirma depois). `POST /api/reservas/reservas` (Etapa 4 — criação
+   * manual pelo funcionário) passa `CONFIRMADA` explicitamente: quando é a própria loja que está
+   * atendendo o telefone e cadastrando a reserva na hora, não existe o mesmo "aguardando
+   * confirmação" do fluxo público — ela já nasce confirmada. */
+  status?: ReservationStatus;
 }): Promise<{ id: string; confirmationCode: string }> {
   const {
     empresaId,
@@ -470,6 +476,7 @@ export async function reserveTablesTransacted(params: {
     customerName,
     customerPhone,
     customerEmail,
+    status = "PENDENTE",
   } = params;
   if (tableIds.length === 0) throw new Error("Informe ao menos uma mesa.");
 
@@ -527,7 +534,7 @@ export async function reserveTablesTransacted(params: {
             startTime,
             endTime,
             partySize,
-            status: "PENDENTE",
+            status,
             tables: { create: tableIds.map((tableId) => ({ tableId })) },
           },
         });

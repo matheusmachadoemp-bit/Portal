@@ -26,10 +26,11 @@ export default async function ReservasListaPage({
   // Mudar status é uma escrita (igual mesas/ambientes/combinações) — só permitida com uma loja
   // única ativa, nunca em modo Grupo Nord consolidado (ver `requireActiveSingleEmpresa` na rota
   // `PATCH /api/reservas/reservas/[id]`).
-  const canEdit =
-    ctx?.mode === "single" &&
-    RESERVAS_MANAGER_ROLES.includes(session.user.role) &&
-    (await hasModulePermission(session.user.id, "reservas", "canEdit"));
+  const isManagerRole = RESERVAS_MANAGER_ROLES.includes(session.user.role);
+  const canEdit = ctx?.mode === "single" && isManagerRole && (await hasModulePermission(session.user.id, "reservas", "canEdit"));
+  // Criar reserva manualmente (`POST /api/reservas/reservas`) é escopada igual: mesma dupla
+  // trava de cargo + permissão de módulo das demais escritas de Reservas, só com loja única ativa.
+  const canCreate = ctx?.mode === "single" && isManagerRole && (await hasModulePermission(session.user.id, "reservas", "canCreate"));
 
   const { status, dateFrom, dateTo } = await searchParams;
 
@@ -37,6 +38,7 @@ export default async function ReservasListaPage({
     <PageContainer title="Reservas" subtitle="Reservas" backHref="/portal/reservas" backLabel="Reservas">
       <ReservasClient
         canEdit={canEdit}
+        canCreate={canCreate}
         hasEmpresa={!!ctx}
         multiEmpresa={ctx?.mode === "grupo"}
         todayKey={spDateKey()}

@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseDateKey } from "@/lib/timezone";
-import { isPositiveInt, isValidHHMM, onlyDigits, isValidEmail } from "@/lib/reservas";
+import {
+  isPositiveInt,
+  isValidHHMM,
+  onlyDigits,
+  isValidEmail,
+  RESERVATION_CUSTOMER_NAME_MAX_LENGTH,
+  RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH,
+} from "@/lib/reservas";
 import {
   ReservationBusyError,
   ReservationCodeExhaustedError,
@@ -10,9 +17,6 @@ import {
   reserveTablesTransacted,
 } from "@/lib/reservas-disponibilidade";
 import { checkReservarCriarRateLimit, pickBestOption, resolveEmpresaByKey } from "@/lib/reservas-publico";
-
-const NOME_MAX_LENGTH = 120;
-const EMAIL_MAX_LENGTH = 180;
 
 /**
  * Cria a reserva de fato (Etapa 3, sem sessão) — `POST /api/reservar/[empresaKey]/reservas`.
@@ -60,7 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
 
   const nome = typeof body?.nome === "string" ? body.nome.trim() : "";
   if (!nome) return NextResponse.json({ error: "Informe seu nome." }, { status: 400 });
-  if (nome.length > NOME_MAX_LENGTH) return NextResponse.json({ error: "Nome muito longo." }, { status: 400 });
+  if (nome.length > RESERVATION_CUSTOMER_NAME_MAX_LENGTH) return NextResponse.json({ error: "Nome muito longo." }, { status: 400 });
 
   const telefone = onlyDigits(typeof body?.telefone === "string" ? body.telefone : "");
   if (telefone.length < 10 || telefone.length > 11) {
@@ -68,7 +72,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
   }
 
   const emailRaw = typeof body?.email === "string" ? body.email.trim() : "";
-  if (emailRaw && (emailRaw.length > EMAIL_MAX_LENGTH || !isValidEmail(emailRaw))) {
+  if (emailRaw && (emailRaw.length > RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH || !isValidEmail(emailRaw))) {
     return NextResponse.json({ error: "Informe um e-mail válido." }, { status: 400 });
   }
 
