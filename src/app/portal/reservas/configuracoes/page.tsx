@@ -62,6 +62,7 @@ export default async function ReservasConfiguracoesPage() {
         blockedDates={blockedDates}
         canManage={canManage && !!empresa}
         hasEmpresa={!!empresa}
+        empresaKey={empresa?.key ?? null}
       />
     </PageContainer>
   );
