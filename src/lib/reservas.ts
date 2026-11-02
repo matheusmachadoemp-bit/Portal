@@ -140,6 +140,7 @@ export const RESERVATION_WAITLIST_STATUS_LABEL: Record<string, string> = {
   CONVERTIDO_EM_RESERVA: "Convertido em reserva",
   CANCELADO: "Cancelado",
   EXPIRADO: "Expirado",
+  ATENDIDO: "Sentou",
 };
 
 export const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_STATUS_LABEL);
@@ -150,7 +151,9 @@ export const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_ST
  *
  * Nota: `CONTATADO` ainda ocupa um lugar na fila de verdade (o cliente não saiu, só já foi
  * avisado) — por isso soma aqui junto com `AGUARDANDO` pra fins de posição/cronômetro; a
- * diferença visual entre os dois é só o badge de status. */
+ * diferença visual entre os dois é só o badge de status. `ATENDIDO` (cliente sentou) fica de
+ * fora de propósito — uma vez atendido, o cliente já ganhou mesa e sai da fila ativa, igual
+ * `CANCELADO`/`EXPIRADO`. */
 export const RESERVATION_WAITLIST_ACTIVE_STATUSES = ["AGUARDANDO", "CONTATADO"];
 
 /** Status que a UI/API ainda permitem definir manualmente a partir do redesign da Fila de Espera

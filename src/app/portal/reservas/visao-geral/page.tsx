@@ -7,13 +7,23 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { RESERVATION_STATUS_LABEL, RESERVATION_STATUS_TONE } from "@/lib/reservas";
 import { getReservasResumo } from "@/lib/reservas-resumo";
+import { RelatoriosPeriodoSection } from "./relatorios-periodo-client";
 
 /**
  * "Visão Geral" (Etapa 4 do módulo Reservas) — resumo do dia pra quem abre a tela de manhã:
  * quantas reservas hoje, quantas ainda aguardam confirmação, ocupação do dia (pessoas reservadas
- * / capacidade dos ambientes ativos) e taxa de no-show recente. Sem gráfico/elaboração extra de
- * propósito (ver prompt da tarefa) — 100% server component, sem estado de cliente: reabrir a
- * página já atualiza os números (igual o resto do app faz pra dashboards simples equivalentes).
+ * / capacidade dos ambientes ativos) e taxa de no-show recente. 100% server component pra esse
+ * bloco de cima, sem estado de cliente: reabrir a página já atualiza os números (igual o resto do
+ * app faz pra dashboards simples equivalentes).
+ *
+ * A partir da tarefa "reservas-unificar-visao-relatorios" (pedido do usuário: juntar a
+ * subcategoria "Relatórios" com "Visão Geral" — ver prisma/migrations/
+ * 20261102030000_remove_relatorios_subcategoria_reservas), esta mesma tela também mostra, abaixo
+ * do resumo do dia, a seção "Relatório por período" (agregados sobre `Reservation` num intervalo
+ * de datas — total de reservas, taxa de no-show/cancelamento, ocupação por ambiente, horários de
+ * pico) que antes vivia em `/portal/reservas/relatorios` (rota removida). Essa seção é client
+ * component (`RelatoriosPeriodoSection`, em "./relatorios-periodo-client") porque depende do
+ * filtro de período controlado pelo usuário; o resumo do dia continua puramente server-rendered.
  */
 export default async function ReservasVisaoGeralPage() {
   const session = await auth();
@@ -31,6 +41,11 @@ export default async function ReservasVisaoGeralPage() {
   }
 
   const resumo = await getReservasResumo(empresaIdsForContext(ctx));
+  // O relatório por período (GET /api/reservas/relatorios) só é calculado pra UMA loja
+  // específica, nunca em modo "Grupo Nord" consolidado (mesma regra de sempre dessa rota —
+  // ver `requireActiveSingleEmpresa` em src/lib/empresa.ts) — mesmo que o resumo do dia acima
+  // funcione normalmente agregando várias lojas.
+  const hasSingleEmpresa = ctx.mode === "single";
 
   return (
     <PageContainer title="Reservas" subtitle="Visão Geral" backHref="/portal/reservas" backLabel="Reservas">
@@ -120,6 +135,12 @@ export default async function ReservasVisaoGeralPage() {
           </div>
         )}
       </Section>
+
+      <div className="flex items-center gap-3 pt-2">
+        <h2 className="text-white font-semibold text-base whitespace-nowrap">Relatório por período</h2>
+        <div className="h-px flex-1 bg-nord-border/60" />
+      </div>
+      <RelatoriosPeriodoSection hasEmpresa={hasSingleEmpresa} />
     </PageContainer>
   );
 }
