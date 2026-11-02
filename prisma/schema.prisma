@@ -6951,6 +6951,12 @@ enum ReservationWaitlistStatus {
   /// Ninguém deu continuidade dentro de um tempo razoável — marcado manualmente; sem expiração
   /// automática por tempo nesta etapa.
   EXPIRADO
+  /// Cliente sentou (ganhou mesa, foi atendido) — ajuste pós-redesign (tarefa
+  /// "reservas-fila-espera-ajustes2"). Distinto de CANCELADO/EXPIRADO: aqui o cliente
+  /// efetivamente chegou a sentar, não desistiu/foi esquecido. Sai da fila ativa (não entra em
+  /// `RESERVATION_WAITLIST_ACTIVE_STATUSES`, src/lib/reservas.ts) e alimenta o card "Clientes
+  /// sentaram" + "Tempo médio na fila" da tela.
+  ATENDIDO
 }
 
 model ReservationWaitlistEntry {

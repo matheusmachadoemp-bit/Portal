@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, PhoneCall, XCircle, Clock, Users } from "lucide-react";
-import { Section, Badge } from "@/components/ui/stat-card";
+import { Plus, Pencil, Trash2, PhoneCall, XCircle, Clock, Users, CheckCircle2 } from "lucide-react";
+import { StatCard, Section, Badge } from "@/components/ui/stat-card";
 import { Modal, FormError, ConfirmDialog } from "@/components/ui/modal";
 import { apiRequest } from "@/lib/api-client";
 import {
@@ -11,7 +11,7 @@ import {
   RESERVATION_WAITLIST_SETTABLE_STATUSES,
 } from "@/lib/reservas";
 
-type WaitlistStatus = "AGUARDANDO" | "CONTATADO" | "CONVERTIDO_EM_RESERVA" | "CANCELADO" | "EXPIRADO";
+type WaitlistStatus = "AGUARDANDO" | "CONTATADO" | "CONVERTIDO_EM_RESERVA" | "CANCELADO" | "EXPIRADO" | "ATENDIDO";
 
 type WaitlistEntryDTO = {
   id: string;
@@ -78,7 +78,19 @@ const STATUS_TONE: Record<WaitlistStatus, "default" | "success" | "warning" | "d
   CONVERTIDO_EM_RESERVA: "success",
   CANCELADO: "default",
   EXPIRADO: "danger",
+  ATENDIDO: "success",
 };
+
+/** Formata minutos (número com decimais) como "Xmin" (ou "Yh Zmin" acima de 1h) — usado só no
+ * card de resumo "Tempo médio na fila" (valores curtos, raramente passam de 1h numa fila de
+ * balcão, mas o tratamento de hora fica aqui por segurança). */
+function formatMinutes(totalMinutes: number): string {
+  const rounded = Math.round(totalMinutes);
+  if (rounded < 60) return `${rounded}min`;
+  const hours = Math.floor(rounded / 60);
+  const minutes = rounded % 60;
+  return minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`;
+}
 
 export function FilaEsperaClient({
   canCreate,
@@ -154,6 +166,30 @@ export function FilaEsperaClient({
         .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
     [entries]
   );
+
+  // Cards de resumo do topo da tela: calculados a partir do mesmo `historyEntries` acima (sem
+  // rota nova) — a API (`GET /api/reservas/fila-espera`) já devolve toda entrada ativa + toda
+  // entrada CRIADA hoje, independente do status (ver comentário na rota). Como uma entrada da
+  // fila de espera não deveria viver mais que algumas horas (é "a partir de agora", nunca um
+  // agendamento futuro — ver comentário de redesign no schema), criada hoje ≈ resolvida hoje na
+  // prática; por isso `historyEntries` já serve de proxy razoável pra "resolvida hoje" sem
+  // precisar de outro filtro/rota. `EXPIRADO` fica de fora do card "Clientes cancelados" de
+  // propósito — é um status conceitualmente diferente (ninguém deu retorno, não necessariamente
+  // desistência) e já aparece separado, com o próprio badge, no histórico abaixo.
+  const todayStats = useMemo(() => {
+    const atendidos = historyEntries.filter((e) => e.status === "ATENDIDO");
+    const cancelados = historyEntries.filter((e) => e.status === "CANCELADO");
+    const avgWaitMinutes =
+      atendidos.length > 0
+        ? atendidos.reduce(
+            (sum, e) => sum + (new Date(e.updatedAt).getTime() - new Date(e.createdAt).getTime()),
+            0
+          ) /
+          atendidos.length /
+          60000
+        : null;
+    return { atendidosCount: atendidos.length, canceladosCount: cancelados.length, avgWaitMinutes };
+  }, [historyEntries]);
 
   function openCreate() {
     setEditing(null);
@@ -270,6 +306,35 @@ export function FilaEsperaClient({
 
       <FormError message={rowError} />
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          label="Tempo médio na fila"
+          value={
+            loading
+              ? "—"
+              : todayStats.avgWaitMinutes !== null
+                ? formatMinutes(todayStats.avgWaitMinutes)
+                : "—"
+          }
+          icon="Clock"
+          hint="Hoje, até sentar"
+        />
+        <StatCard
+          label="Clientes sentaram"
+          value={loading ? "—" : String(todayStats.atendidosCount)}
+          icon="CheckCircle2"
+          color="#2ecc71"
+          hint="Hoje"
+        />
+        <StatCard
+          label="Clientes cancelados"
+          value={loading ? "—" : String(todayStats.canceladosCount)}
+          icon="XCircle"
+          color="#e5484d"
+          hint="Hoje"
+        />
+      </div>
+
       <Section
         title="Fila de espera"
         action={
@@ -306,20 +371,31 @@ export function FilaEsperaClient({
                         <p className="text-sm text-white font-medium">{entry.customerName}</p>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           <Badge tone="default">{formatPhoneBR(entry.customerPhone)}</Badge>
-                          <Badge tone="default">
-                            <Users size={11} className="inline -mt-0.5 mr-1" />
+                          {/* Badge com mais destaque que o resto (telefone/status): é a informação
+                              operacional mais importante do card — quantas pessoas estão esperando.
+                              Tamanho/peso maiores e cor roxa distinta (não usada em mais nada nesta
+                              tela) em vez do `Badge tone="default"` genérico usado acima. */}
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300">
+                            <Users size={13} className="inline -mt-0.5" />
                             {entry.partySize} {entry.partySize === 1 ? "pessoa" : "pessoas"}
-                          </Badge>
+                          </span>
                           {entry.status === "CONTATADO" && <Badge tone="info">Contatado</Badge>}
                         </div>
                         {entry.notes && <p className="text-xs text-nord-gray mt-1.5">{entry.notes}</p>}
                       </div>
-                      <div className="shrink-0 text-right">
-                        <div className={`flex items-center justify-end gap-1 font-mono text-base font-semibold ${elapsedTone(elapsed)}`}>
-                          <Clock size={14} />
-                          {formatElapsed(elapsed)}
+                      {/* Cronômetro no meio da linha do card (entre o nome/badges e as ações) — em
+                          telas largas, `sm:flex-1` divide o espaço restante com o bloco do nome
+                          (que também é `flex-1`) e centraliza o conteúdo nessa zona, em vez de
+                          ficar colado nas ações à direita; em telas estreitas (`flex-wrap`), ocupa
+                          a própria linha, centralizado. */}
+                      <div className="w-full sm:w-auto sm:flex-1 flex justify-center">
+                        <div className="text-center">
+                          <div className={`flex items-center justify-center gap-1 font-mono text-base font-semibold ${elapsedTone(elapsed)}`}>
+                            <Clock size={14} />
+                            {formatElapsed(elapsed)}
+                          </div>
+                          <p className="text-[10px] text-nord-gray mt-0.5">esperando</p>
                         </div>
-                        <p className="text-[10px] text-nord-gray mt-0.5">esperando</p>
                       </div>
                       {canEdit && (
                         <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
@@ -333,6 +409,14 @@ export function FilaEsperaClient({
                               <PhoneCall size={12} /> Contatado
                             </button>
                           )}
+                          <button
+                            onClick={() => quickSetStatus(entry, "ATENDIDO")}
+                            disabled={busyId === entry.id}
+                            className="text-nord-gray hover:text-nord-success flex items-center gap-1 text-xs disabled:opacity-50"
+                            title="Marcar como sentou (atendido)"
+                          >
+                            <CheckCircle2 size={12} /> Sentou
+                          </button>
                           <button
                             onClick={() => setCancelling(entry)}
                             disabled={busyId === entry.id}
