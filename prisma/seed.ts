@@ -554,6 +554,26 @@ const CATEGORIES = [
     contentType: "nord-ai",
     subs: [{ key: "painel", name: "Painel", icon: "Bot" }],
   },
+  {
+    // Avaliações — Fase 1 (só iFood; ver prompt da tarefa "avaliacoes-ifood-fase1" e o bloco de
+    // comentário "AVALIAÇÕES" em prisma/schema.prisma para o racional completo: resposta
+    // automática via IA, publicada sozinha, atrás de duas redes de segurança — toggle por loja
+    // default desligado + palavra-chave de risco). "Respostas" (lista de avaliações com status/
+    // resposta gerada/publicada + ação de revisar manualmente as que precisarem — ver
+    // src/app/portal/avaliacoes/respostas/) e "Configurações" (toggle de ativar/desativar
+    // resposta automática por loja — ver src/app/portal/avaliacoes/configuracoes/) já têm
+    // página própria nesta fase. Ver prisma/migrations/*_avaliacoes_ifood_fase1_menu para o
+    // equivalente de produção (deploy automático nunca roda este seed).
+    key: "avaliacoes",
+    name: "Avaliações",
+    icon: "Star",
+    order: 22,
+    contentType: "avaliacoes",
+    subs: [
+      { key: "respostas", name: "Respostas", icon: "MessageSquareReply" },
+      { key: "configuracoes", name: "Configurações", icon: "Settings" },
+    ],
+  },
 ];
 
 // Perfis de permissão com acesso automático ao módulo "reservas" (ver prompt da tarefa
@@ -565,6 +585,13 @@ const CATEGORIES = [
 // disponíveis pra liberação manual na tela de Permissões. Mesmo racional replicado em
 // prisma/migrations/20261026041000_reservas_etapa1_menu_permissao para produção.
 const RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS = new Set(["administrador", "gestor", "gerente"]);
+
+// Mesmo racional/conjunto de perfis de "reservas" acima — módulo "avaliacoes" também é
+// sensível (configura um toggle que libera publicação automática de texto em nome do negócio,
+// sem aprovação por avaliação individual), então só Administrador/Gestor/Gerente ganham acesso
+// automático; os demais 5 perfis nascem em NENHUM, disponíveis pra liberação manual na tela de
+// Permissões. Mesmo racional replicado em prisma/migrations/*_avaliacoes_ifood_fase1_menu.
+const AVALIACOES_DEFAULT_ACCESS_PROFILE_KEYS = new Set(["administrador", "gestor", "gerente"]);
 
 async function main() {
   console.log("Seeding database...");
@@ -771,9 +798,11 @@ async function main() {
       const modFlags =
         mod.key === "reservas" && !RESERVAS_DEFAULT_ACCESS_PROFILE_KEYS.has(profile.key)
           ? ACCESS_LEVEL_TO_MODULE_FLAGS.NENHUM
-          : mod.key === "rh" && profile.key === "financeiro"
-            ? { ...flags, canDelete: true }
-            : flags;
+          : mod.key === "avaliacoes" && !AVALIACOES_DEFAULT_ACCESS_PROFILE_KEYS.has(profile.key)
+            ? ACCESS_LEVEL_TO_MODULE_FLAGS.NENHUM
+            : mod.key === "rh" && profile.key === "financeiro"
+              ? { ...flags, canDelete: true }
+              : flags;
       await prisma.modulePermission.upsert({
         where: { profileId_moduleKey: { profileId: record.id, moduleKey: mod.key } },
         update: {},
