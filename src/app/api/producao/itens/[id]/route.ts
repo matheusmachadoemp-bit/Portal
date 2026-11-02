@@ -88,6 +88,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const ingredientes: IngredienteInput[] | undefined = Array.isArray(body.ingredientes) ? body.ingredientes : undefined;
 
+  // Mesmo padrão do POST em ../route.ts (ver comentário lá) — aqui a loja de referência é a do
+  // próprio produto já existente (`existing.empresaId`), já que esta rota não passa por
+  // `requireActiveSingleEmpresa()`.
+  const ingredientIdsToCheck = [
+    ...(body.ingredientId ? [body.ingredientId as string] : []),
+    ...(ingredientes ?? []).map((ing) => ing.ingredientId),
+  ];
+  if (ingredientIdsToCheck.length > 0) {
+    const uniqueIds = [...new Set(ingredientIdsToCheck)];
+    const foundIngredients = await prisma.ingredient.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, empresaId: true },
+    });
+    if (foundIngredients.length !== uniqueIds.length || foundIngredients.some((i) => i.empresaId !== existing.empresaId)) {
+      return NextResponse.json({ error: "Um ou mais insumos informados não pertencem a esta loja." }, { status: 400 });
+    }
+  }
+
   const item = await prisma.$transaction(async (tx) => {
     const updated = await tx.productionItem.update({
       where: { id },
