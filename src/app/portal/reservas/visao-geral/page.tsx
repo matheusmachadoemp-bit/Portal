@@ -46,7 +46,11 @@ export default async function ReservasVisaoGeralPage() {
           value={String(resumo.pendingConfirmation)}
           icon="Hourglass"
           color="#f0b429"
-          href="/portal/reservas/reservas?status=PENDENTE"
+          // `pendingConfirmation` conta PENDENTE de hoje em diante, sem teto de data (ver
+          // `getReservasResumo`) — manda `dateFrom` (sem `dateTo`) pra tela de Reservas abrir com
+          // o mesmo intervalo aberto, em vez de cair no padrão "só hoje" dela e esconder pendente
+          // de dia futuro sem aviso nenhum (achado confirmado pelo Teulis).
+          href={`/portal/reservas/reservas?status=PENDENTE&dateFrom=${resumo.dateKey}`}
         />
         <StatCard
           label="Ocupação hoje"

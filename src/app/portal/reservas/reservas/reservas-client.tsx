@@ -54,8 +54,15 @@ export function ReservasClient({
   const [rowError, setRowError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [dateFrom, setDateFrom] = useState(initialDateFrom || todayKey);
-  const [dateTo, setDateTo] = useState(initialDateTo || todayKey);
+  // Padrão "hoje-hoje" só quando a tela é aberta SEM nenhum filtro de data na URL (visita normal,
+  // ex. clique no menu) — nunca lista o histórico inteiro sem filtro nenhum. Mas se a URL já trouxe
+  // um dos dois (ex. link do card "Pendentes de confirmação" da Visão Geral, que manda só
+  // `dateFrom`), respeita o intervalo pedido como veio — inclusive deixando o outro lado em aberto
+  // (sem teto de data) — em vez de forçar o lado que faltou pra "hoje" e esconder reservas de dias
+  // futuros sem nenhum aviso (achado confirmado pelo Teulis).
+  const noDateFilterInUrl = !initialDateFrom && !initialDateTo;
+  const [dateFrom, setDateFrom] = useState(initialDateFrom || (noDateFilterInUrl ? todayKey : ""));
+  const [dateTo, setDateTo] = useState(initialDateTo || (noDateFilterInUrl ? todayKey : ""));
   const [status, setStatus] = useState(initialStatus);
   const [q, setQ] = useState("");
 
