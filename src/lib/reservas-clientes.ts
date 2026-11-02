@@ -57,6 +57,24 @@ export type ClienteReservasSummary = {
  * grupo (mesmo clienteId), então não há diferença prática em usar sempre a primeira ocorrência.
  */
 export async function loadClientesReservas(empresaId: string): Promise<ClienteReservasSummary[]> {
+  // Teto de segurança (mesmo padrão/valor de `GET /api/reservas/reservas`, achado do Teulis,
+  // tarefa #140 — ver `SAFETY_TAKE` em `src/app/api/reservas/reservas/route.ts`): sem ele, esta
+  // consulta buscava o histórico INTEIRO de `Reservation` da loja, sem filtro de data nenhum, e o
+  // risco só cresce conforme o módulo acumula reservas com o tempo. Como a ordenação já é por
+  // `startTime` desc, aplicar `take` aqui mantém as `SAFETY_TAKE` reservas mais RECENTES de toda a
+  // loja — exatamente o que a tela "Clientes" quer mostrar primeiro (clientes ativos/recorrentes);
+  // só histórico muito antigo de clientes que não voltam há muito tempo pode ficar incompleto
+  // nesse cenário raro de teto atingido, mesmo trade-off já aceito pelo teto da outra rota.
+  //
+  // Decisão (não implementar paginação completa agora): esta tela consome a lista inteira de uma
+  // vez para montar cartões agregados por cliente (accordion com histórico), não uma lista plana
+  // navegável por página — paginar de verdade exigiria paginar POR CLIENTE AGREGADO (não por
+  // `Reservation`), o que é um formato de API diferente (cursor sobre os grupos, não sobre as
+  // linhas da query) e está fora do escopo deste achado. O teto de segurança já resolve o risco
+  // real reportado (consulta sem limite); reavaliar paginação de verdade só se a tela de Clientes
+  // crescer a ponto do teto de 2000 reservas passar a cortar clientes ativos de verdade na prática.
+  const SAFETY_TAKE = 2000;
+
   const reservations = await prisma.reservation.findMany({
     where: { empresaId },
     select: {
@@ -74,6 +92,7 @@ export async function loadClientesReservas(empresaId: string): Promise<ClienteRe
       environment: { select: { name: true } },
     },
     orderBy: { startTime: "desc" },
+    take: SAFETY_TAKE,
   });
 
   const groups = new Map<string, ClienteReservasSummary>();
