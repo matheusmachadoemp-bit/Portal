@@ -13,6 +13,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/integracoes/avaliacoes/ifood-sync",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/checklist/escalations/run",
       "schedule": "*/5 * * * *"
     },
