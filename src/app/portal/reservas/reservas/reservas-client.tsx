@@ -5,14 +5,61 @@ import { format, parseISO } from "date-fns";
 import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
 import { Toolbar } from "@/components/ui/toolbar";
-import { FormError } from "@/components/ui/modal";
+import { Modal, FormError } from "@/components/ui/modal";
 import { apiRequest } from "@/lib/api-client";
+import { onlyDigits } from "@/lib/reservas";
 import {
   RESERVATION_STATUS_LABEL,
   RESERVATION_STATUS_TONE,
   RESERVATION_STATUS_TRANSITIONS,
   RESERVATION_STATUSES,
 } from "@/lib/reservas";
+
+type Environment = { id: string; name: string; capacity: number; active: boolean };
+
+type AvailabilityOption = {
+  type: "mesa" | "combinacao";
+  id: string;
+  label: string;
+  tableIds: string[];
+  capacityMin: number;
+  capacityMax: number;
+};
+type AvailabilitySlot = {
+  time: string;
+  startTime: string;
+  endTime: string;
+  withinAdvanceWindow: boolean;
+  available: boolean;
+  options: AvailabilityOption[];
+};
+type DayDetail =
+  | { open: false; reason: "bloqueado" | "fechado" | "fora-do-prazo"; blockedReason?: string | null }
+  | { open: true; openTime: string; closeTime: string; isSpecialGroup: boolean; slots: AvailabilitySlot[] };
+
+type CreateForm = {
+  environmentId: string;
+  partySize: string;
+  date: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+};
+
+// Mesma formatação simples usada em `reservar-client.tsx` (fluxo público) e `avaliar-client.tsx`
+// — só visual, o backend recebe/valida os dígitos (`onlyDigits`); reimplementada aqui porque
+// este componente é "use client" e não pode puxar nada que importe o Prisma Client.
+function formatTelefone(value: string): string {
+  const digits = onlyDigits(value).slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function emptyCreateForm(todayKey: string): CreateForm {
+  return { environmentId: "", partySize: "2", date: todayKey, customerName: "", customerPhone: "", customerEmail: "" };
+}
 
 export type ReservationDTO = {
   id: string;
@@ -33,6 +80,7 @@ export type ReservationDTO = {
 
 export function ReservasClient({
   canEdit,
+  canCreate,
   hasEmpresa,
   multiEmpresa,
   todayKey,
@@ -41,6 +89,7 @@ export function ReservasClient({
   initialDateTo,
 }: {
   canEdit: boolean;
+  canCreate: boolean;
   hasEmpresa: boolean;
   multiEmpresa: boolean;
   todayKey: string;
@@ -53,6 +102,24 @@ export function ReservasClient({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Criar reserva manualmente (botão "Nova reserva" — ver prompt da tarefa
+  // "reservas-criar-manual-calendario"). Reaproveita o motor de disponibilidade já existente via
+  // as rotas autenticadas `GET /api/reservas/ambientes` (lista de ambientes) e `GET
+  // /api/reservas/disponibilidade` (grade de horários do dia) — nenhuma lógica de disponibilidade
+  // reimplementada no cliente.
+  // ---------------------------------------------------------------------------
+  const [createOpen, setCreateOpen] = useState(false);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [environmentsLoaded, setEnvironmentsLoaded] = useState(false);
+  const [environmentsError, setEnvironmentsError] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState<CreateForm>(emptyCreateForm(todayKey));
+  const [dayDetail, setDayDetail] = useState<DayDetail | null>(null);
+  const [loadingDay, setLoadingDay] = useState(false);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   // Padrão "hoje-hoje" só quando a tela é aberta SEM nenhum filtro de data na URL (visita normal,
   // ex. clique no menu) — nunca lista o histórico inteiro sem filtro nenhum. Mas se a URL já trouxe
@@ -144,6 +211,110 @@ export function ReservasClient({
     }
   }
 
+  // Carrega a lista de ambientes só quando o modal abre pela 1ª vez (nunca sem necessidade) —
+  // reaproveitado em toda reabertura do modal depois disso.
+  useEffect(() => {
+    if (!createOpen || environmentsLoaded) return;
+    let cancelled = false;
+    async function loadEnvironments() {
+      const res = await apiRequest<{ environments: Environment[] }>("/api/reservas/ambientes", "GET");
+      if (cancelled) return;
+      setEnvironmentsLoaded(true);
+      if (!res.ok) {
+        setEnvironmentsError(res.error);
+        return;
+      }
+      const active = res.data.environments.filter((e) => e.active);
+      setEnvironments(active);
+      setCreateForm((prev) => (prev.environmentId ? prev : { ...prev, environmentId: active[0]?.id ?? "" }));
+    }
+    loadEnvironments();
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, environmentsLoaded]);
+
+  // Recarrega a grade de horários do dia sempre que ambiente, data ou quantidade de pessoas
+  // mudam — mesmo padrão de `reservar-client.tsx` (fluxo público): a seleção de horário feita
+  // antes não vale mais sob um novo ambiente/data/pessoas. `keepSelectedTime` só é usado pelo
+  // reload manual depois de um 409 no envio (ver `submitCreate`) — aí sim queremos manter o
+  // horário escolhido visível (mesmo que ele apareça indisponível na grade recarregada).
+  async function reloadDaySlots(keepSelectedTime = false): Promise<void> {
+    const partySize = Number(createForm.partySize);
+    if (!createForm.environmentId || !createForm.date || !Number.isInteger(partySize) || partySize < 1) {
+      setDayDetail(null);
+      return;
+    }
+    setLoadingDay(true);
+    if (!keepSelectedTime) setSelectedTime(null);
+    const params = new URLSearchParams({
+      ambienteId: createForm.environmentId,
+      pessoas: String(partySize),
+      data: createForm.date,
+    });
+    const res = await apiRequest<DayDetail>(`/api/reservas/disponibilidade?${params.toString()}`, "GET");
+    setLoadingDay(false);
+    if (!res.ok) {
+      setCreateError(res.error);
+      setDayDetail(null);
+      return;
+    }
+    setDayDetail(res.data);
+  }
+
+  useEffect(() => {
+    if (!createOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarrega a grade de horários a cada troca de ambiente/data/pessoas enquanto o modal está aberto (mesmo padrão do efeito de `load()` da lista principal acima)
+    reloadDaySlots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `reloadDaySlots` lê `createForm` do closure mais recente; redeclarar a dependência completa (a função inteira) dispararia re-fetch a cada tecla digitada em campos que não afetam a disponibilidade (nome/telefone/e-mail)
+  }, [createOpen, createForm.environmentId, createForm.date, createForm.partySize]);
+
+  function openCreate() {
+    setCreateForm(emptyCreateForm(todayKey));
+    setDayDetail(null);
+    setSelectedTime(null);
+    setCreateError(null);
+    setCreateOpen(true);
+  }
+
+  async function submitCreate() {
+    if (creating) return;
+    setCreateError(null);
+    const partySize = Number(createForm.partySize);
+    const customerName = createForm.customerName.trim();
+    const phoneDigits = onlyDigits(createForm.customerPhone);
+    if (!createForm.environmentId) return setCreateError("Escolha o ambiente.");
+    if (!Number.isInteger(partySize) || partySize < 1) return setCreateError("Informe a quantidade de pessoas (inteiro maior que zero).");
+    if (!createForm.date) return setCreateError("Informe a data.");
+    if (!selectedTime) return setCreateError("Escolha um horário disponível.");
+    if (!customerName) return setCreateError("Informe o nome do cliente.");
+    if (phoneDigits.length < 10 || phoneDigits.length > 11) return setCreateError("Informe um telefone válido, com DDD.");
+
+    setCreating(true);
+    try {
+      const result = await apiRequest<{ reservation: ReservationDTO }>("/api/reservas/reservas", "POST", {
+        environmentId: createForm.environmentId,
+        date: createForm.date,
+        time: selectedTime,
+        partySize,
+        customerName,
+        customerPhone: phoneDigits,
+        customerEmail: createForm.customerEmail.trim() || undefined,
+      });
+      if (!result.ok) {
+        setCreateError(result.error);
+        // Disponibilidade pode ter ficado desatualizada entre a seleção e o envio — refaz a
+        // consulta do dia pra mostrar os horários realmente livres agora, igual o fluxo público.
+        await reloadDaySlots(true);
+        return;
+      }
+      setCreateOpen(false);
+      await load();
+    } finally {
+      setCreating(false);
+    }
+  }
+
   if (!hasEmpresa) {
     return <div className="nord-card p-8 text-center text-sm text-nord-gray">Selecione uma loja para ver as reservas.</div>;
   }
@@ -198,6 +369,8 @@ export function ReservasClient({
             </button>
           </>
         }
+        onAdd={canCreate ? openCreate : undefined}
+        addLabel="Nova reserva"
         exportFilename="reservas"
         exportSheetName="Reservas"
         exportRows={() =>
@@ -314,6 +487,137 @@ export function ReservasClient({
           </tbody>
         </table>
       </div>
+
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Nova reserva" closeDisabled={creating}>
+        <FormError message={createError} />
+        {environmentsError && <FormError message={environmentsError} />}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Ambiente</span>
+              <select
+                value={createForm.environmentId}
+                onChange={(e) => setCreateForm({ ...createForm, environmentId: e.target.value })}
+                className="input"
+                disabled={!environmentsLoaded}
+              >
+                {!environmentsLoaded && <option value="">Carregando...</option>}
+                {environmentsLoaded && environments.length === 0 && <option value="">Nenhum ambiente ativo cadastrado</option>}
+                {environments.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs text-nord-gray mb-1">Quantidade de pessoas</span>
+              <input
+                type="number"
+                min={1}
+                value={createForm.partySize}
+                onChange={(e) => setCreateForm({ ...createForm, partySize: e.target.value })}
+                className="input"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Data</span>
+            <input
+              type="date"
+              value={createForm.date}
+              onChange={(e) => setCreateForm({ ...createForm, date: e.target.value })}
+              className="input"
+            />
+          </label>
+
+          <div>
+            <span className="block text-xs text-nord-gray mb-1">Horário</span>
+            {loadingDay && <p className="text-xs text-nord-gray">Carregando horários...</p>}
+            {!loadingDay && dayDetail?.open && (
+              <>
+                {dayDetail.isSpecialGroup && (
+                  <p className="text-[11px] text-amber-400 mb-2">
+                    Grupo grande — a disponibilidade de horários pode ser mais limitada.
+                  </p>
+                )}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {dayDetail.slots.map((s) => (
+                    <button
+                      key={s.time}
+                      type="button"
+                      disabled={!s.available}
+                      onClick={() => setSelectedTime(s.time)}
+                      className={`py-1.5 rounded-lg text-xs font-medium border transition ${
+                        selectedTime === s.time
+                          ? "bg-nord-blue border-nord-blue text-white"
+                          : s.available
+                            ? "bg-transparent border-nord-border text-white hover:border-white/30"
+                            : "bg-transparent border-nord-border/40 text-nord-gray/30 line-through"
+                      }`}
+                    >
+                      {s.time}
+                    </button>
+                  ))}
+                </div>
+                {dayDetail.slots.every((s) => !s.available) && (
+                  <p className="text-nord-gray text-xs mt-1">Nenhum horário livre neste dia para esse ambiente/quantidade.</p>
+                )}
+              </>
+            )}
+            {!loadingDay && dayDetail && !dayDetail.open && (
+              <p className="text-nord-gray text-xs">
+                {dayDetail.reason === "bloqueado" && (dayDetail.blockedReason || "Esta data não está disponível para reservas.")}
+                {dayDetail.reason === "fechado" && "Fechado neste dia."}
+                {dayDetail.reason === "fora-do-prazo" && "Fora do prazo de antecedência configurado para reservas."}
+              </p>
+            )}
+            {!loadingDay && !dayDetail && (
+              <p className="text-nord-gray text-xs">Escolha ambiente, data e quantidade de pessoas para ver os horários.</p>
+            )}
+          </div>
+
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Nome do cliente</span>
+            <input
+              type="text"
+              value={createForm.customerName}
+              onChange={(e) => setCreateForm({ ...createForm, customerName: e.target.value })}
+              className="input"
+              placeholder="Ex.: Maria Silva"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">Telefone (com DDD)</span>
+            <input
+              type="text"
+              value={createForm.customerPhone}
+              onChange={(e) => setCreateForm({ ...createForm, customerPhone: formatTelefone(e.target.value) })}
+              className="input"
+              placeholder="(00) 00000-0000"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs text-nord-gray mb-1">E-mail (opcional)</span>
+            <input
+              type="email"
+              value={createForm.customerEmail}
+              onChange={(e) => setCreateForm({ ...createForm, customerEmail: e.target.value })}
+              className="input"
+              placeholder="cliente@exemplo.com"
+            />
+          </label>
+
+          <button
+            onClick={submitCreate}
+            disabled={creating}
+            className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5"
+          >
+            {creating ? "Criando..." : "Criar reserva"}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

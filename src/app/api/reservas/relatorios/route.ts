@@ -11,6 +11,14 @@ import { computeReservasReport } from "@/lib/reservas-relatorios";
  * portal — `STANDARD_PERIOD_OPTIONS`/`RollingPeriodKey`, ver src/lib/periods.ts — reaproveitado
  * em vez de reinventar o cálculo de janela de datas). Mesma permissão/requisito de loja única
  * das demais rotas do módulo — ver comentário equivalente em `GET /api/reservas/clientes`.
+ *
+ * Nome da rota não muda: a tela que consome esse endpoint se chamava "Relatórios"
+ * (`/portal/reservas/relatorios`) e, a pedido do usuário, foi mesclada dentro de "Visão Geral"
+ * (`/portal/reservas/visao-geral`, seção "Relatório por período" — ver
+ * `RelatoriosPeriodoSection` em src/app/portal/reservas/visao-geral/relatorios-periodo-client.tsx
+ * e prisma/migrations/20261102030000_remove_relatorios_subcategoria_reservas). Só agregação de
+ * leitura, sem nenhuma outra tela dependendo do path — manter o nome da rota evita um
+ * rename sem motivo funcional.
  */
 export async function GET(req: Request) {
   const session = await auth();
