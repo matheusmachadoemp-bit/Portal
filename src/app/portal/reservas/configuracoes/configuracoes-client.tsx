@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Copy, CheckCheck } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
 import { FormError } from "@/components/ui/modal";
 import { RESERVATION_WEEKDAY_LABEL, RESERVATION_WEEKDAYS } from "@/lib/reservas";
@@ -14,11 +14,13 @@ export function ConfiguracoesClient({
   blockedDates: initialBlockedDates,
   canManage,
   hasEmpresa,
+  empresaKey,
 }: {
   weekdayHours: WeekdayHourDTO[];
   blockedDates: BlockedDateDTO[];
   canManage: boolean;
   hasEmpresa: boolean;
+  empresaKey: string | null;
 }) {
   const [weekdayHours, setWeekdayHours] = useState<WeekdayHourDTO[]>(
     RESERVATION_WEEKDAYS.map(
@@ -41,6 +43,17 @@ export function ConfiguracoesClient({
   const [savingBlock, setSavingBlock] = useState(false);
   const [blockError, setBlockError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const [copied, setCopied] = useState(false);
+
+  async function copyLink() {
+    if (!empresaKey) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/reservar/${empresaKey}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  const linkPath = empresaKey ? `/reservar/${empresaKey}` : "";
 
   function updateDay(dayOfWeek: number, patch: Partial<WeekdayHourDTO>) {
     setWeekdayHours((hours) => hours.map((h) => (h.dayOfWeek === dayOfWeek ? { ...h, ...patch } : h)));
@@ -122,8 +135,31 @@ export function ConfiguracoesClient({
 
   return (
     <div className="space-y-6">
-      <Section title="Dias e horários de funcionamento">
+      <Section title="Link de reserva online">
+        {empresaKey ? (
+          <div className="space-y-3">
+            <p className="text-xs text-nord-gray">
+              Envie este link para o cliente fazer a própria reserva, sem precisar ligar ou falar com a loja. O
+              botão &quot;Copiar&quot; copia o endereço completo, mesmo que o campo abaixo mostre só o caminho.
+            </p>
+            <div className="flex items-center gap-2">
+              <input readOnly value={linkPath} className="input flex-1 text-xs" />
+              <button onClick={copyLink} className="btn-outline shrink-0">
+                {copied ? <CheckCheck size={13} /> : <Copy size={13} />} {copied ? "Copiado!" : "Copiar"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-nord-gray">Selecione uma loja específica para ver o link de reserva dessa loja.</p>
+        )}
+      </Section>
+
+      <Section title="Dias e horários de atendimento para Reservas">
         <FormError message={hoursError} />
+        <p className="text-xs text-nord-gray mb-3">
+          Define quando o sistema oferece horário disponível pra reserva (página pública e criação manual) — pode
+          ser diferente do horário geral de funcionamento da loja.
+        </p>
         {!canManage && <p className="text-xs text-nord-warning mb-3">Seu perfil de permissão só permite visualizar.</p>}
         <div className="space-y-2">
           {weekdayHours.map((w) => (
