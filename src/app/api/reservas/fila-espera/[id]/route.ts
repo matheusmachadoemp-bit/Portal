@@ -94,8 +94,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return NextResponse.json({ entry: serializeWaitlistEntry(entry) });
 }
 
-/** Remove de vez uma entrada da fila de espera — diferente de `ReservationTable` (que bloqueia a
- * exclusão quando já tem histórico vinculado), aqui não há nenhuma outra tabela referenciando a
+/** Remove de vez uma entrada da fila de espera — não há nenhuma outra tabela referenciando a
  * entrada, então excluir sempre é seguro; cancelar via `status: "CANCELADO"` (PATCH) é a opção
  * para manter o histórico, à escolha do atendente. */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {

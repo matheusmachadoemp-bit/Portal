@@ -28,7 +28,7 @@ export function RelatoriosCharts({
       <Section title="Ocupação média por ambiente">
         <p className="text-xs text-nord-gray mb-3">
           Pessoas reservadas (sem contar canceladas/não compareceu) em relação à capacidade do ambiente no
-          período — pode passar de 100% quando há mais de um giro de mesa por dia.
+          período — pode passar de 100% quando há mais de um giro de ocupação por dia.
         </p>
         {isChartDataEmpty(ocupacaoPorAmbiente, ["ocupacaoPercent"]) ? (
           <ChartEmptyState height={240} />

@@ -20,7 +20,6 @@ export type ReservaResumoUpcoming = {
   customerName: string | null;
   customerPhone: string | null;
   environment: { id: string; name: string };
-  tables: { id: string; identificacao: string }[];
 };
 
 export type ReservasResumo = {
@@ -56,7 +55,6 @@ export async function getReservasResumo(empresaIds: string[]): Promise<ReservasR
         customerName: true,
         customerPhone: true,
         environment: { select: { id: true, name: true } },
-        tables: { select: { table: { select: { id: true, identificacao: true } } } },
       },
       orderBy: { startTime: "asc" },
     }),
@@ -104,7 +102,6 @@ export async function getReservasResumo(empresaIds: string[]): Promise<ReservasR
       customerName: r.customerName,
       customerPhone: r.customerPhone,
       environment: r.environment,
-      tables: r.tables.map((t) => t.table),
     }));
 
   const noShowTotal = noShowWindow.length;

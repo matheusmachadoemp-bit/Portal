@@ -6,8 +6,10 @@ import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { RESERVAS_MANAGER_ROLES, isPositiveInt } from "@/lib/reservas";
 
-/** Ambientes (Etapa 2 — Mesas e Ambientes). Sem mapa visual: só CRUD de lista/formulário (ver
- * prompt da tarefa "reservas-etapa2"). */
+/** Ambientes (Etapa 2 — Ambientes; mesas/combinações de mesas removidas na tarefa
+ * "reservas-remover-mesas", ver comentário de redesign em `prisma/schema.prisma` acima de `model
+ * ReservationEnvironment`). Sem mapa visual: só CRUD de lista/formulário (ver prompt da tarefa
+ * "reservas-etapa2"). */
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,7 +25,6 @@ export async function GET() {
   const environments = await prisma.reservationEnvironment.findMany({
     where: { empresaId: empresa.id },
     orderBy: { order: "asc" },
-    include: { _count: { select: { tables: true } } },
   });
 
   return NextResponse.json({
@@ -33,7 +34,6 @@ export async function GET() {
       capacity: e.capacity,
       active: e.active,
       order: e.order,
-      tableCount: e._count.tables,
     })),
   });
 }

@@ -14,18 +14,19 @@ import {
   ReservationCodeExhaustedError,
   ReservationConflictError,
   getAvailability,
-  reserveTablesTransacted,
+  reserveEnvironmentTransacted,
 } from "@/lib/reservas-disponibilidade";
-import { checkReservarCriarRateLimit, pickBestOption, resolveEmpresaByKey } from "@/lib/reservas-publico";
+import { checkReservarCriarRateLimit, resolveEmpresaByKey } from "@/lib/reservas-publico";
 
 /**
  * Cria a reserva de fato (Etapa 3, sem sessão) — `POST /api/reservar/[empresaKey]/reservas`.
  * Reaproveita o motor já existente: revalida a disponibilidade com `getAvailability` (a seleção
  * feita pelo cliente na tela pode ter ficado desatualizada entre a consulta e o envio do
- * formulário), escolhe a mesa/combinação com `pickBestOption` (o cliente nunca escolhe mesa
- * específica — ver `src/lib/reservas-publico.ts`) e grava com `reserveTablesTransacted`, que já
- * revalida de novo DENTRO da trava por ambiente (proteção real contra concorrência, aprovada na
- * revisão da Etapa 2). Nenhuma lógica de disponibilidade/concorrência duplicada aqui.
+ * formulário) e grava com `reserveEnvironmentTransacted`, que já revalida a capacidade agregada
+ * de novo DENTRO da trava por ambiente (proteção real contra concorrência, aprovada na revisão da
+ * Etapa 2). Nenhuma lógica de disponibilidade/concorrência duplicada aqui. Desde a tarefa
+ * "reservas-remover-mesas", o cliente nunca escolhe (nem o sistema atribui) mesa nenhuma — só
+ * ambiente, data, horário e quantidade de pessoas.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ empresaKey: string }> }) {
   const { empresaKey } = await params;
@@ -93,10 +94,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
     if (!slot || !slot.available) {
       return NextResponse.json({ error: "Esse horário não está mais disponível. Escolha outro horário." }, { status: 409 });
     }
-    const option = pickBestOption(slot.options, partySize);
-    if (!option) {
-      return NextResponse.json({ error: "Esse horário não está mais disponível. Escolha outro horário." }, { status: 409 });
-    }
 
     // Cross-reference com um Cliente já cadastrado da loja pelo mesmo telefone — nunca cria um
     // Cliente novo a partir do fluxo público (ver comentário em `Reservation.customerName`/
@@ -106,10 +103,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
       select: { id: true },
     });
 
-    const reservation = await reserveTablesTransacted({
+    const reservation = await reserveEnvironmentTransacted({
       empresaId: empresa.id,
       environmentId,
-      tableIds: option.tableIds,
       dateKey,
       startTime: new Date(slot.startTime),
       endTime: new Date(slot.endTime),

@@ -17,21 +17,12 @@ import {
 
 type Environment = { id: string; name: string; capacity: number; active: boolean };
 
-type AvailabilityOption = {
-  type: "mesa" | "combinacao";
-  id: string;
-  label: string;
-  tableIds: string[];
-  capacityMin: number;
-  capacityMax: number;
-};
 type AvailabilitySlot = {
   time: string;
   startTime: string;
   endTime: string;
   withinAdvanceWindow: boolean;
   available: boolean;
-  options: AvailabilityOption[];
 };
 type DayDetail =
   | { open: false; reason: "bloqueado" | "fechado" | "fora-do-prazo"; blockedReason?: string | null }
@@ -75,7 +66,6 @@ export type ReservationDTO = {
   cliente: { id: string; nome: string } | null;
   empresa: { id: string; name: string; color: string };
   environment: { id: string; name: string };
-  tables: { id: string; identificacao: string }[];
 };
 
 export function ReservasClient({
@@ -382,7 +372,6 @@ export function ReservasClient({
             Telefone: r.customerPhone ?? "",
             Pessoas: r.partySize,
             Ambiente: r.environment.name,
-            Mesas: r.tables.map((t) => t.identificacao).join(" + "),
             Status: RESERVATION_STATUS_LABEL[r.status] ?? r.status,
             ...(multiEmpresa ? { Loja: r.empresa.name } : {}),
           }))
@@ -400,7 +389,7 @@ export function ReservasClient({
               <th className="py-2 px-3">Horário</th>
               <th className="py-2 px-3">Cliente</th>
               <th className="py-2 px-3">Pessoas</th>
-              <th className="py-2 px-3">Ambiente / Mesa(s)</th>
+              <th className="py-2 px-3">Ambiente</th>
               <th className="py-2 px-3">Status</th>
               {multiEmpresa && <th className="py-2 px-3">Loja</th>}
               {canEdit && <th className="py-2 px-3">Ações</th>}
@@ -439,12 +428,7 @@ export function ReservasClient({
                       {r.customerPhone && <p className="text-[11px] text-nord-gray">{r.customerPhone}</p>}
                     </td>
                     <td className="py-2 px-3 text-nord-gray">{r.partySize}</td>
-                    <td className="py-2 px-3 text-nord-gray">
-                      {r.environment.name}
-                      {r.tables.length > 0 && (
-                        <span className="text-[11px] text-nord-gray/80"> — {r.tables.map((t) => t.identificacao).join(" + ")}</span>
-                      )}
-                    </td>
+                    <td className="py-2 px-3 text-nord-gray">{r.environment.name}</td>
                     <td className="py-2 px-3">
                       <Badge tone={RESERVATION_STATUS_TONE[r.status] ?? "default"}>
                         {RESERVATION_STATUS_LABEL[r.status] ?? r.status}

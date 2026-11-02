@@ -12,7 +12,6 @@ const RESERVATION_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
   environment: { select: { id: true, name: true } },
   cliente: { select: { id: true, nome: true } },
-  tables: { select: { table: { select: { id: true, identificacao: true } } } },
 };
 
 function serialize(r: Awaited<ReturnType<typeof loadOwnedReservation>>) {
@@ -31,7 +30,6 @@ function serialize(r: Awaited<ReturnType<typeof loadOwnedReservation>>) {
     cliente: r.cliente,
     empresa: r.empresa,
     environment: r.environment,
-    tables: r.tables.map((t) => t.table),
   };
 }
 
@@ -42,19 +40,20 @@ async function loadOwnedReservation(id: string, empresaId: string) {
 }
 
 /**
- * Muda o status de uma reserva (Etapa 4 — tela "Reservas"). Nunca edita data/horário/mesas —
- * ajustar esses dados é fora de escopo desta etapa (a reserva precisaria passar pelo motor de
+ * Muda o status de uma reserva (Etapa 4 — tela "Reservas"). Nunca edita data/horário — ajustar
+ * esses dados é fora de escopo desta etapa (a reserva precisaria passar pelo motor de
  * disponibilidade de novo para não criar conflito; por ora, reagendar significa cancelar e criar
  * outra).
  *
- * Mesmo padrão de dupla trava de `src/app/api/reservas/mesas/[id]/route.ts` (cargo + permissão de
- * módulo) e mesmo padrão de empresa única ativa (sem Grupo Nord) dos outros `PATCH` de Reservas.
+ * Mesmo padrão de dupla trava de `src/app/api/reservas/ambientes/[id]/route.ts` (cargo +
+ * permissão de módulo) e mesmo padrão de empresa única ativa (sem Grupo Nord) dos outros `PATCH`
+ * de Reservas.
  *
- * Libera a(s) mesa(s) da reserva automaticamente ao mudar para um status terminal
- * (CANCELADA/NAO_COMPARECEU/FINALIZADA) — sem precisar apagar `ReservationTableAssignment`: o
- * motor de disponibilidade (`RESERVATION_OCCUPYING_STATUSES`, `src/lib/reservas-disponibilidade.
- * ts`) já considera só os status PENDENTE/CONFIRMADA/CLIENTE_CHEGOU/ACOMODADO como "ocupando"
- * mesa — mudar o status já é suficiente para a mesa voltar a aparecer livre pro motor.
+ * Libera a capacidade ocupada pela reserva automaticamente ao mudar para um status terminal
+ * (CANCELADA/NAO_COMPARECEU/FINALIZADA): o motor de disponibilidade
+ * (`RESERVATION_OCCUPYING_STATUSES`, `src/lib/reservas-disponibilidade.ts`) já considera só os
+ * status PENDENTE/CONFIRMADA/CLIENTE_CHEGOU/ACOMODADO como "ocupando" capacidade do ambiente —
+ * mudar o status já é suficiente para essa capacidade voltar a aparecer livre pro motor.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();

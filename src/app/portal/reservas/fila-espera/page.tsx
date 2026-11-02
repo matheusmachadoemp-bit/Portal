@@ -9,7 +9,7 @@ import { FilaEsperaClient } from "./fila-espera-client";
  * Fila de Espera (Etapa 4 do módulo Reservas) — CRUD administrativo de clientes aguardando uma
  * mesa (ver comentário de modelagem no `prisma/schema.prisma` acima de `model
  * ReservationWaitlistEntry`). Mesmo nível de acabamento das outras telas administrativas do
- * módulo (Configurações, Mesas e Ambientes): só um shell de servidor — a lista em si vem da rota
+ * módulo (Configurações, Ambientes): só um shell de servidor — a lista em si vem da rota
  * `/api/reservas/fila-espera`, consumida pelo client component abaixo.
  */
 export default async function ReservasFilaEsperaPage() {

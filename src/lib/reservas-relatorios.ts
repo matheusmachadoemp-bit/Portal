@@ -13,9 +13,10 @@ export type OcupacaoAmbiente = {
   totalPessoas: number;
   totalReservas: number;
   /** Pessoas reservadas ÷ (capacidade do ambiente × dias do período) × 100 — pode passar de 100%
-   * quando há mais de um giro de mesa por dia (o motor de disponibilidade libera a mesa de novo
-   * depois de `endTime` + tempo de limpeza, ver `ReservationSettings.cleaningMinutes`). Só conta
-   * reservas que de fato ocuparam mesa (exclui `CANCELADA`/`NAO_COMPARECEU`). */
+   * quando há mais de um giro de ocupação por dia (o motor de disponibilidade libera a
+   * capacidade de novo depois de `endTime` + tempo de limpeza, ver
+   * `ReservationSettings.cleaningMinutes`). Só conta reservas que de fato ocuparam capacidade
+   * (exclui `CANCELADA`/`NAO_COMPARECEU`). */
   ocupacaoPercent: number;
 };
 
@@ -39,9 +40,9 @@ function spHour(date: Date): number {
   return new Date(date.getTime() - SP_OFFSET_HOURS * 60 * 60 * 1000).getUTCHours();
 }
 
-/** Reservas que não representam uso real da mesa — excluídas do cálculo de ocupação por
- * ambiente (contá-las infla a ocupação com gente que nunca sentou). */
-const NAO_OCUPOU_MESA = new Set(["CANCELADA", "NAO_COMPARECEU"]);
+/** Reservas que não representam uso real da capacidade do ambiente — excluídas do cálculo de
+ * ocupação por ambiente (contá-las infla a ocupação com gente que nunca sentou). */
+const NAO_OCUPOU_CAPACIDADE = new Set(["CANCELADA", "NAO_COMPARECEU"]);
 
 /** Remove horas vazias nas pontas do array de 24h (mantendo 1h de contexto de cada lado) para o
  * gráfico de horários de pico não ficar poluído de barras zeradas fora do horário de
@@ -88,7 +89,7 @@ export async function computeReservasReport(empresaId: string, from: Date, to: D
 
   const porAmbiente = new Map<string, { totalPessoas: number; totalReservas: number }>();
   for (const r of reservations) {
-    if (NAO_OCUPOU_MESA.has(r.status)) continue;
+    if (NAO_OCUPOU_CAPACIDADE.has(r.status)) continue;
     const acc = porAmbiente.get(r.environmentId) ?? { totalPessoas: 0, totalReservas: 0 };
     acc.totalPessoas += r.partySize;
     acc.totalReservas += 1;
@@ -109,7 +110,7 @@ export async function computeReservasReport(empresaId: string, from: Date, to: D
 
   // Horários de pico: sinal de demanda (quando o cliente PEDIU aquele horário), por isso só
   // exclui `CANCELADA` — `NAO_COMPARECEU` continua contando (o pedido de horário existiu, só não
-  // foi honrado), diferente da ocupação acima (que mede uso real da mesa).
+  // foi honrado), diferente da ocupação acima (que mede uso real da capacidade do ambiente).
   const hourCounts = new Map<number, number>();
   for (const r of reservations) {
     if (r.status === "CANCELADA") continue;

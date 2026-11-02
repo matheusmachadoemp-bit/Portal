@@ -123,10 +123,7 @@ export default async function ReservasVisaoGeralPage() {
                 </span>
                 <span className="text-sm text-white min-w-0 flex-1 truncate">{r.customerName ?? "—"}</span>
                 <span className="text-xs text-nord-gray whitespace-nowrap">{r.partySize} pessoas</span>
-                <span className="text-xs text-nord-gray whitespace-nowrap">
-                  {r.environment.name}
-                  {r.tables.length > 0 && ` — ${r.tables.map((t) => t.identificacao).join(" + ")}`}
-                </span>
+                <span className="text-xs text-nord-gray whitespace-nowrap">{r.environment.name}</span>
                 <Badge tone={RESERVATION_STATUS_TONE[r.status] ?? "default"}>
                   {RESERVATION_STATUS_LABEL[r.status] ?? r.status}
                 </Badge>

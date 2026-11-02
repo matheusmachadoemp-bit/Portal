@@ -105,7 +105,7 @@ export function FilaEsperaClient({
 }) {
   const [entries, setEntries] = useState<WaitlistEntryDTO[]>([]);
   // Só começa "carregando" se houver loja selecionada — mesmo racional de
-  // `mesas-ambientes-client.tsx` (sem empresa ativa, a tela nem tenta buscar nada).
+  // `ambientes-client.tsx` (sem empresa ativa, a tela nem tenta buscar nada).
   const [loading, setLoading] = useState(hasEmpresa);
   const [loadError, setLoadError] = useState<string | null>(null);
 

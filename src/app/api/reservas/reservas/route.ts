@@ -20,9 +20,8 @@ import {
   ReservationCodeExhaustedError,
   ReservationConflictError,
   getAvailability,
-  reserveTablesTransacted,
+  reserveEnvironmentTransacted,
 } from "@/lib/reservas-disponibilidade";
-import { pickBestOption } from "@/lib/reservas-publico";
 
 const STATUSES = RESERVATION_STATUSES as ReservationStatus[];
 
@@ -40,7 +39,6 @@ const RESERVATION_LIST_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
   environment: { select: { id: true, name: true } },
   cliente: { select: { id: true, nome: true } },
-  tables: { select: { table: { select: { id: true, identificacao: true } } } },
 };
 
 type ReservationWithRelations = Prisma.ReservationGetPayload<{ include: typeof RESERVATION_LIST_INCLUDE }>;
@@ -64,7 +62,6 @@ function serializeReservation(r: ReservationWithRelations) {
     cliente: r.cliente,
     empresa: r.empresa,
     environment: r.environment,
-    tables: r.tables.map((t) => t.table),
   };
 }
 
@@ -204,16 +201,16 @@ export async function GET(req: Request) {
  * que não tem sessão e não exige cargo/permissão nenhuma.
  *
  * Reaproveita o MESMO motor de disponibilidade do fluxo público (`getAvailability` +
- * `pickBestOption` + `reserveTablesTransacted`) — nenhuma lógica de achar mesa livre/evitar
- * conflito duplicada aqui; a única diferença de verdade é o status inicial: `CONFIRMADA` em vez
- * de `PENDENTE` (ver comentário em `reserveTablesTransacted`, `src/lib/reservas-disponibilidade.
- * ts`) — decisão: quando é a própria loja que atende e cadastra, não existe o mesmo "aguardando
- * confirmação" do cliente pedindo pelo site; a reserva já nasce confirmada pelo atendente.
+ * `reserveEnvironmentTransacted`) — nenhuma lógica de capacidade/conflito duplicada aqui; a única
+ * diferença de verdade é o status inicial: `CONFIRMADA` em vez de `PENDENTE` (ver comentário em
+ * `reserveEnvironmentTransacted`, `src/lib/reservas-disponibilidade.ts`) — decisão: quando é a
+ * própria loja que atende e cadastra, não existe o mesmo "aguardando confirmação" do cliente
+ * pedindo pelo site; a reserva já nasce confirmada pelo atendente.
  *
  * Mesmo padrão de dupla trava (cargo + permissão de módulo) das demais rotas de ESCRITA de
- * Reservas (`POST /api/reservas/mesas`, `/ambientes`, `/combinacoes`) — `canCreate`, não
- * `canEdit` (criar é uma ação de criação, igual as outras). Só em loja única (nunca em modo Grupo
- * Nord), igual as demais escritas do módulo.
+ * Reservas (`POST /api/reservas/ambientes`) — `canCreate`, não `canEdit` (criar é uma ação de
+ * criação, igual as outras). Só em loja única (nunca em modo Grupo Nord), igual as demais
+ * escritas do módulo.
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -280,25 +277,21 @@ export async function POST(req: Request) {
     if (!slot || !slot.available) {
       return NextResponse.json({ error: "Esse horário não está disponível. Escolha outro horário." }, { status: 409 });
     }
-    const option = pickBestOption(slot.options, partySize);
-    if (!option) {
-      return NextResponse.json({ error: "Esse horário não está disponível. Escolha outro horário." }, { status: 409 });
-    }
 
     const existingCliente = await prisma.cliente.findFirst({
       where: { empresaId: empresa.id, telefone: customerPhone },
       select: { id: true },
     });
 
-    // `include` pede pro próprio `reserveTablesTransacted` já devolver a reserva com as relações
-    // de `RESERVATION_LIST_INCLUDE` carregadas de dentro da transação de criação — elimina o
-    // `findUnique` extra que esta rota fazia antes só para buscar essas relações e serializar a
-    // resposta (achado do Teulis, tarefa #147; o fluxo público, que não passa `include`, continua
-    // devolvendo só `{ id, confirmationCode }`, sem nenhuma mudança de comportamento).
-    const reservation = await reserveTablesTransacted({
+    // `include` pede pro próprio `reserveEnvironmentTransacted` já devolver a reserva com as
+    // relações de `RESERVATION_LIST_INCLUDE` carregadas de dentro da transação de criação —
+    // elimina o `findUnique` extra que esta rota fazia antes só para buscar essas relações e
+    // serializar a resposta (achado do Teulis, tarefa #147; o fluxo público, que não passa
+    // `include`, continua devolvendo só `{ id, confirmationCode }`, sem nenhuma mudança de
+    // comportamento).
+    const reservation = await reserveEnvironmentTransacted({
       empresaId: empresa.id,
       environmentId,
-      tableIds: option.tableIds,
       dateKey,
       startTime: new Date(slot.startTime),
       endTime: new Date(slot.endTime),

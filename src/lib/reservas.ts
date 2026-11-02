@@ -36,19 +36,14 @@ export function isValidHHMM(value: unknown): value is string {
   return typeof value === "string" && HHMM_PATTERN.test(value);
 }
 
-// Reservas — Etapa 2 (mesas, ambientes e motor de disponibilidade). Constantes compartilhadas
-// entre as rotas de API (src/app/api/reservas/{ambientes,mesas,combinacoes,disponibilidade}/**)
-// e a tela de Mesas e Ambientes (src/app/portal/reservas/mesas-ambientes/**).
+// Reservas — Etapa 2 (ambientes e motor de disponibilidade). Constantes compartilhadas entre as
+// rotas de API (src/app/api/reservas/{ambientes,disponibilidade}/**) e a tela de Ambientes
+// (src/app/portal/reservas/ambientes/**). Até a tarefa "reservas-remover-mesas" este bloco também
+// tinha `RESERVATION_TABLE_STATUS_LABEL`/`RESERVATION_TABLE_STATUSES` (status operacional de
+// mesa) — removidas junto com o resto do rastreamento de mesa (ver comentário de redesign em
+// `prisma/schema.prisma` acima de `model ReservationEnvironment`).
 
-export const RESERVATION_TABLE_STATUS_LABEL: Record<string, string> = {
-  DISPONIVEL: "Disponível",
-  MANUTENCAO: "Manutenção",
-  INATIVA: "Inativa",
-};
-
-export const RESERVATION_TABLE_STATUSES = Object.keys(RESERVATION_TABLE_STATUS_LABEL);
-
-/** Valida um inteiro positivo (capacidade de ambiente/mesa, quantidade de pessoas etc.) vindo de
+/** Valida um inteiro positivo (capacidade do ambiente, quantidade de pessoas etc.) vindo de
  * fora — `Number.isInteger` sozinho aceita `0`/negativo, por isso o `> 0` explícito. */
 export function isPositiveInt(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
@@ -117,9 +112,10 @@ export const RESERVATION_STATUS_TONE: Record<string, "default" | "success" | "wa
  * estas opções (nunca um "salto" livre entre quaisquer dois status), e a rota `PATCH
  * /api/reservas/reservas/[id]` recusa qualquer transição fora deste mapa (ver comentário na
  * rota). Os 3 status terminais (`FINALIZADA`/`CANCELADA`/`NAO_COMPARECEU`) não têm saída — uma
- * reserva encerrada não volta a ocupar mesa (ver `RESERVATION_OCCUPYING_STATUSES`,
- * `src/lib/reservas-disponibilidade.ts`); reabrir uma reserva encerrada está fora de escopo
- * desta etapa (criar uma nova reserva cobre o caso de "a pessoa voltou a querer a mesa"). */
+ * reserva encerrada não volta a ocupar capacidade do ambiente (ver
+ * `RESERVATION_OCCUPYING_STATUSES`, `src/lib/reservas-disponibilidade.ts`); reabrir uma reserva
+ * encerrada está fora de escopo desta etapa (criar uma nova reserva cobre o caso de "a pessoa
+ * voltou a querer reservar"). */
 export const RESERVATION_STATUS_TRANSITIONS: Record<string, string[]> = {
   PENDENTE: ["CONFIRMADA", "CANCELADA"],
   CONFIRMADA: ["CLIENTE_CHEGOU", "NAO_COMPARECEU", "CANCELADA"],
@@ -171,10 +167,11 @@ export const RESERVATION_WAITLIST_SETTABLE_STATUSES = RESERVATION_WAITLIST_STATU
 // puxar o Prisma Client pro bundle do navegador).
 
 /** Status que contam como "ocupação confirmada" do dia no badge do Calendário — diferente de
- * `RESERVATION_OCCUPYING_STATUSES` (que inclui PENDENTE, porque aquele conjunto decide se uma
- * MESA está ocupada para o motor de disponibilidade não oferecer conflito). Aqui o objetivo é
- * outro: mostrar quantas pessoas a loja já tem CONFIRMADAS para aquele dia — uma reserva ainda
- * PENDENTE (cliente só pediu, loja não confirmou) não deveria inflar esse número, mas uma reserva
- * já FINALIZADA (atendimento já terminou) continua contando como "aconteceu" naquele dia.
- * CANCELADA e NAO_COMPARECEU nunca contam (não ocuparam/não ocupam mesa de fato). */
+ * `RESERVATION_OCCUPYING_STATUSES` (que inclui PENDENTE, porque aquele conjunto decide se a
+ * capacidade do ambiente está ocupada para o motor de disponibilidade não oferecer conflito).
+ * Aqui o objetivo é outro: mostrar quantas pessoas a loja já tem CONFIRMADAS para aquele dia —
+ * uma reserva ainda PENDENTE (cliente só pediu, loja não confirmou) não deveria inflar esse
+ * número, mas uma reserva já FINALIZADA (atendimento já terminou) continua contando como
+ * "aconteceu" naquele dia. CANCELADA e NAO_COMPARECEU nunca contam (não ocuparam/não ocupam
+ * capacidade de fato). */
 export const RESERVATION_DAY_OCCUPANCY_STATUSES = ["CONFIRMADA", "CLIENTE_CHEGOU", "ACOMODADO", "FINALIZADA"];

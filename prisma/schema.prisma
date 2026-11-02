@@ -426,10 +426,9 @@ model Empresa {
   // próximas etapas, fora do escopo desta.
   reservationSettings                ReservationSettings?
   reservationBlockedDates            ReservationBlockedDate[]
-  // Reservas — Etapa 2 (mesas, ambientes e o motor de disponibilidade; ver bloco de comentário
-  // acima de `ReservationEnvironment`, no final deste arquivo, para o racional de modelagem):
+  // Reservas — Etapa 2 (ambientes e o motor de disponibilidade; ver bloco de comentário acima de
+  // `ReservationEnvironment`, no final deste arquivo, para o racional de modelagem):
   reservationEnvironments            ReservationEnvironment[]
-  reservationTableCombinations       ReservationTableCombination[]
   reservations                       Reservation[]
   // Reservas — Etapa 4 (Fila de Espera; ver bloco de comentário acima de
   // `ReservationWaitlistEntry`, no final deste arquivo, para o racional de modelagem).
@@ -6698,46 +6697,25 @@ model ReservationBlockedDate {
 }
 
 // ---------------------------------------------------------------------------
-// RESERVAS — Etapa 2 (mesas, ambientes e o motor de disponibilidade; ver prompt da tarefa
+// RESERVAS — Etapa 2 (ambientes e o motor de disponibilidade; ver prompt da tarefa
 // "reservas-etapa2"). Página pública, fluxo de criação de reserva pelo cliente, CRM/
 // notificações, fila de espera, dashboard operacional e relatórios continuam fora de escopo —
 // `Reservation` nasce aqui só com o schema mínimo necessário para o motor de disponibilidade
 // (src/lib/reservas-disponibilidade.ts) calcular ocupação; a tela de criar/listar reserva em si
 // é de etapa futura.
 //
-// DECISÕES DE MODELAGEM (ver relatório da tarefa para mais detalhes):
-//
-// 1) `ReservationTable` NÃO tem `empresaId` próprio — é escopada só por `environmentId`
-//    (`ReservationEnvironment.empresaId`), mesmo padrão já usado no schema para "item filho de
-//    uma tabela-pai já multi-loja" (ex.: `SaleItem` não tem `empresaId`, só `saleId` ->
-//    `Sale.empresaId`). Toda query de mesa por loja filtra via `environment: { empresaId }`.
-//    `Reservation`, por outro lado, GANHA `empresaId` próprio (redundante com
-//    `environment.empresaId`) porque é uma entidade transacional de primeiro nível que etapas
-//    futuras (CRM, relatórios, dashboard) vão consultar direto por loja o tempo todo — mesmo
-//    padrão de `Sale.empresaId` (que também tem uma FK de ambiente/mesa indireta via `SaleItem`/
-//    `mesaNumero`, mas guarda `empresaId` direto por conveniência de query e isolamento).
-//
-// 2) Relação Reserva <-> Mesa: N:N via tabela de associação (`ReservationTableAssignment`), não
-//    uma FK única em `Reservation`. Decisão: mesmo uma reserva de mesa única vira 1 linha nessa
-//    tabela — é mais simples que uma FK nullable "tableId" + uma segunda FK nullable
-//    "combinationId" convivendo no mesmo model (teria que decidir qual delas é a "oficial" e
-//    tratar os dois casos em todo lugar que lê `Reservation`). Com N:N, o motor de disponibilidade
-//    sempre lê "quais mesas este horário ocupa" da mesma forma, não importa se é 1 mesa ou uma
-//    combinação de 3.
-//
-// 3) Combinação de mesas: duas entidades SEPARADAS, de propósito.
-//    `ReservationTableCombination` (+ `ReservationTableCombinationMember`) é um CADASTRO —
-//    "este conjunto de mesas é uma combinação pré-aprovada/conhecida para grupos maiores" (ex.:
-//    "Mesa 01 + Mesa 02"), configurado na tela de Mesas e Ambientes, só para sugerir/validar
-//    combinações já pensadas pela casa. `ReservationTableAssignment` é o uso de fato: quais mesas
-//    ESTA reserva específica ocupa. Uma reserva pode ocupar um conjunto de mesas que bate com uma
-//    combinação cadastrada, ou um conjunto ad-hoc montado na hora (ex. operador decide combinar
-//    duas mesas que não estavam pré-cadastradas como combinação) — a tabela de cadastro não
-//    restringe o que `ReservationTableAssignment` pode registrar, só alimenta a sugestão da tela.
-//    Capacidade efetiva de uma combinação cadastrada é computada em código a partir da soma das
-//    mesas-membro (capacityMin somado, capacityMax somado) — não denormalizada em colunas na
-//    própria `ReservationTableCombination`, para nunca ficar desatualizada se a capacidade de uma
-//    mesa-membro mudar depois.
+// REDESIGN (tarefa "reservas-remover-mesas", posterior à etapa acima): o Matheus decidiu remover
+// por completo o rastreamento de mesa específica/combinação de mesas — o layout do salão muda com
+// frequência, então travar uma reserva numa mesa nunca funcionava de verdade na prática (ficava
+// sem horário livre quase sempre, porque o cadastro de mesas nunca cobria os casos reais). A
+// partir desta tarefa, o motor de disponibilidade controla só a CAPACIDADE TOTAL do AMBIENTE:
+// soma o `partySize` de todas as reservas que ocupam aquele ambiente num intervalo de horário e
+// compara com `ReservationEnvironment.capacity` — nenhuma reserva fica atrelada a mesa nenhuma.
+// Os models `ReservationTable`, `ReservationTableCombination` e
+// `ReservationTableCombinationMember` (+ o enum `ReservationTableStatus` e a tabela de junção
+// `ReservationTableAssignment`) que existiam aqui foram REMOVIDOS por completo (não só
+// desativados) — ver migration "reservas_remover_mesas" para o DROP TABLE/DROP TYPE em sequência
+// (respeitando FKs) e `src/lib/reservas-disponibilidade.ts` para o motor reescrito.
 // ---------------------------------------------------------------------------
 
 model ReservationEnvironment {
@@ -6745,88 +6723,23 @@ model ReservationEnvironment {
   empresaId String
   empresa   Empresa  @relation(fields: [empresaId], references: [id])
   name      String
-  /// Capacidade do ambiente como um todo (ex.: limite de pessoas no salão/varanda), informativa —
-  /// a soma das mesas é quem efetivamente limita o motor de disponibilidade (ver comentário no
-  /// topo deste bloco e `src/lib/reservas-disponibilidade.ts`).
+  /// Capacidade TOTAL do ambiente (ex.: limite de pessoas no salão/varanda) — é o único limite que
+  /// o motor de disponibilidade usa desde o redesign "reservas-remover-mesas" (ver comentário no
+  /// topo deste bloco e `src/lib/reservas-disponibilidade.ts`): soma de `partySize` das reservas
+  /// que ocupam o ambiente num intervalo de horário, comparada a este campo.
   capacity  Int
   active    Boolean  @default(true)
-  /// Ordem de exibição na tela de Mesas e Ambientes — mesmo padrão de "trocar `order` par a par"
-  /// já usado em `CustomerSurveyQuestion.ordem` (ver `src/app/api/satisfacao-cliente/perguntas/
-  /// [id]/route.ts`), sem drag-and-drop nesta etapa.
+  /// Ordem de exibição na tela de Ambientes — mesmo padrão de "trocar `order` par a par" já usado
+  /// em `CustomerSurveyQuestion.ordem` (ver `src/app/api/satisfacao-cliente/perguntas/[id]/
+  /// route.ts`), sem drag-and-drop nesta etapa.
   order     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tables       ReservationTable[]
   reservations Reservation[]
 
   @@unique([empresaId, name])
   @@index([empresaId, order])
-}
-
-enum ReservationTableStatus {
-  /// Mesa fisicamente pronta para uso normal.
-  DISPONIVEL
-  /// Fora de uso temporariamente (manutenção, conserto) — não deve ser oferecida em nenhuma
-  /// consulta de disponibilidade enquanto estiver neste status.
-  MANUTENCAO
-  /// Desativada (ex.: removida do salão) — mantida no cadastro por causa do histórico de
-  /// reservas já associadas a ela, mas nunca mais oferecida.
-  INATIVA
-}
-
-model ReservationTable {
-  id                      String                 @id @default(cuid())
-  environmentId           String
-  environment             ReservationEnvironment @relation(fields: [environmentId], references: [id])
-  /// Número/identificação da mesa (ex.: "Mesa 01", "Varanda 3") — texto livre porque algumas
-  /// casas numeram, outras nomeiam por posição; único dentro do mesmo ambiente.
-  identificacao           String
-  capacityMin             Int
-  capacityMax             Int
-  status                  ReservationTableStatus @default(DISPONIVEL)
-  /// Cadastrada e com status DISPONIVEL, mas temporariamente fora da oferta de reservas (ex.:
-  /// reservada para uso exclusivo de walk-in num evento) — flag de NEGÓCIO, separada do status
-  /// OPERACIONAL acima de propósito: uma mesa pode estar fisicamente OK (`DISPONIVEL`) e mesmo
-  /// assim fora da oferta de reservas por decisão da casa (`availableForReservation = false`).
-  availableForReservation Boolean                @default(true)
-  order                   Int                    @default(0)
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
-
-  assignments            ReservationTableAssignment[]
-  combinationMemberships ReservationTableCombinationMember[]
-
-  @@unique([environmentId, identificacao])
-  @@index([environmentId, order])
-}
-
-/// Cadastro de combinações pré-aprovadas de mesas (ver ponto 3 do comentário no topo deste
-/// bloco). `name` é opcional — se vazio, a tela monta um nome a partir das mesas-membro (ex.:
-/// "Mesa 01 + Mesa 02").
-model ReservationTableCombination {
-  id        String   @id @default(cuid())
-  empresaId String
-  empresa   Empresa  @relation(fields: [empresaId], references: [id])
-  name      String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  members ReservationTableCombinationMember[]
-
-  @@index([empresaId])
-}
-
-model ReservationTableCombinationMember {
-  id            String                      @id @default(cuid())
-  combinationId String
-  combination   ReservationTableCombination @relation(fields: [combinationId], references: [id], onDelete: Cascade)
-  tableId       String
-  table         ReservationTable            @relation(fields: [tableId], references: [id], onDelete: Cascade)
-
-  @@unique([combinationId, tableId])
-  @@index([tableId])
 }
 
 enum ReservationStatus {
@@ -6892,24 +6805,8 @@ model Reservation {
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
-  tables ReservationTableAssignment[]
-
   @@index([empresaId, date])
   @@index([environmentId, startTime, endTime])
-}
-
-/// Join Reserva <-> Mesa (ver ponto 2 do comentário no topo deste bloco) — N:N mesmo para
-/// reserva de mesa única (1 linha aqui).
-model ReservationTableAssignment {
-  id            String           @id @default(cuid())
-  reservationId String
-  reservation   Reservation      @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  tableId       String
-  table         ReservationTable @relation(fields: [tableId], references: [id])
-  createdAt     DateTime         @default(now())
-
-  @@unique([reservationId, tableId])
-  @@index([tableId])
 }
 
 // ---------------------------------------------------------------------------

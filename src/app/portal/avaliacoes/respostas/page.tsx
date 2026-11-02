@@ -11,7 +11,7 @@ import { RespostasClient } from "./respostas-client";
  * `PRECISA_REVISAO_MANUAL` ou `ERRO` (ver `PATCH /api/avaliacoes/reviews/[id]`). Só um shell de
  * servidor: a lista em si vem de `GET /api/avaliacoes/reviews`, consumida pelo client component
  * abaixo — mesmo padrão já usado por outras telas administrativas simples do projeto (ex.
- * `src/app/portal/reservas/mesas-ambientes/`).
+ * `src/app/portal/reservas/ambientes/`).
  */
 export default async function AvaliacoesRespostasPage() {
   const session = await auth();
