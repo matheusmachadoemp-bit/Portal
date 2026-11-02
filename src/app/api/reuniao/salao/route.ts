@@ -8,6 +8,8 @@ import {
   computeComentariosDestaque,
   loadReuniaoCustomIndicators,
   upsertReuniaoCustomIndicatorValues,
+  bulkUpsertSalaoProductGoals,
+  type SalaoProductGoalInput,
 } from "@/lib/reuniao-server";
 import { currentPeriodo } from "@/lib/reuniao";
 import { hasModulePermission } from "@/lib/authz";
@@ -84,9 +86,7 @@ export async function POST(req: Request) {
   const metrics = await computeSalaoMetrics(empresa.id, periodo);
   const melhorVendedor = await computeMelhorVendedor(empresa.id, periodo);
 
-  const produtoMetas: { produto: string; quantidade?: string; meta?: string; premiacao?: string }[] = Array.isArray(body.produtoMetas)
-    ? body.produtoMetas
-    : [];
+  const produtoMetas: SalaoProductGoalInput[] = Array.isArray(body.produtoMetas) ? body.produtoMetas : [];
 
   const data = {
     npsPercent: metrics.npsPercent,
@@ -108,16 +108,7 @@ export async function POST(req: Request) {
     create: { ...data, empresaId: empresa.id, periodo, createdById: session.user.id },
   });
 
-  for (const pm of produtoMetas) {
-    const quantidade = pm.quantidade !== undefined && pm.quantidade !== "" ? Number(pm.quantidade) : null;
-    const meta = Number(pm.meta) || 0;
-    const premiacao = Number(pm.premiacao) || 0;
-    await prisma.salaoProductGoal.upsert({
-      where: { meetingId_produto: { meetingId: meeting.id, produto: pm.produto } },
-      update: { quantidade, meta, premiacao },
-      create: { meetingId: meeting.id, produto: pm.produto, quantidade, meta, premiacao },
-    });
-  }
+  await bulkUpsertSalaoProductGoals(meeting.id, produtoMetas);
 
   // Lista de indicadores da seção "Fechamento do mês" (NPS Geral, Faturamento
   // do Salão, Ticket Médio migrados + qualquer um criado livremente) —

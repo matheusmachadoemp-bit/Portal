@@ -117,6 +117,19 @@ function onlyDigits(s: string): string {
   return s.replace(/\D/g, "");
 }
 
+// Normaliza telefone pra fins de dedupe (confirmado com teste ao vivo — task #177): um número
+// nacional válido (DDD + telefone) tem 10 ou 11 dígitos; com o DDI do Brasil ("+55") na frente,
+// vira 12 ou 13. Sem remover esse prefixo, "+55 21 98888-7777" (planilha nova, ex.: exportação do
+// Cardápio Web) e "21988887777" (cliente já cadastrado via lançamento manual de venda ou
+// importação anterior, nenhum dos dois acrescenta DDI) geram dois cadastros pra mesma pessoa em
+// vez de um só ser atualizado. Olha só o comprimento total (>= 12) antes de cortar — DDD 55
+// (Santa Maria/RS e região) sozinho já dá 11 dígitos com celular, então não teria DDI pra cortar.
+function normalizeTelefoneDedupe(raw: string): string {
+  const digits = onlyDigits(raw);
+  if (digits.length >= 12 && digits.startsWith("55")) return digits.slice(2);
+  return digits;
+}
+
 function rowsFromCsvText(text: string): string[][] {
   const delimiter = text.includes(";") ? ";" : ",";
   return text
@@ -248,7 +261,7 @@ export async function POST(req: Request) {
     parsed.push({
       line: i + 1,
       nome,
-      telefone: telefoneRaw ? onlyDigits(telefoneRaw) : "",
+      telefone: telefoneRaw ? normalizeTelefoneDedupe(telefoneRaw) : "",
       whatsapp: get("whatsapp") || null,
       email: get("email") || null,
       dataNascimento: nascimentoRaw !== "" ? parseDateFlexible(nascimentoRaw) : null,
@@ -269,7 +282,9 @@ export async function POST(req: Request) {
     where: { empresaId: empresa.id },
     select: { id: true, telefone: true },
   });
-  const byTelefone = new Map(existingClientes.filter((c) => c.telefone).map((c) => [onlyDigits(c.telefone!), c]));
+  const byTelefone = new Map(
+    existingClientes.filter((c) => c.telefone).map((c) => [normalizeTelefoneDedupe(c.telefone!), c])
+  );
 
   const toCreate = parsed.filter((r) => !(r.telefone && byTelefone.has(r.telefone)));
   const toUpdate = parsed.filter((r) => r.telefone && byTelefone.has(r.telefone));
@@ -304,7 +319,9 @@ export async function POST(req: Request) {
     where: { empresaId: empresa.id },
     select: { id: true, telefone: true },
   });
-  const clienteIdByTelefone = new Map(allClientes.filter((c) => c.telefone).map((c) => [onlyDigits(c.telefone!), c.id]));
+  const clienteIdByTelefone = new Map(
+    allClientes.filter((c) => c.telefone).map((c) => [normalizeTelefoneDedupe(c.telefone!), c.id])
+  );
 
   let updated = 0;
   await processInChunks(toUpdate, 15, async (r) => {

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { breakdownMovimentacoesNoPeriodo, cmvRealValor, snapshotEstoqueEm, valorEstoqueDeSnapshot } from "@/lib/cmv";
 import { safeDiv } from "@/lib/calc";
@@ -423,6 +424,58 @@ export async function upsertReuniaoCustomIndicatorValues(
         });
       })
   );
+}
+
+export type SalaoProductGoalInput = { produto: string; quantidade?: string; meta?: string; premiacao?: string };
+
+/**
+ * Upsert em lote das metas por produto do Salão (POST /api/reuniao/salao), numa única instrução
+ * SQL (INSERT ... ON CONFLICT DO UPDATE via UNNEST) — mesmo padrão já usado em
+ * `upsertMetaAdsInsightRows` (`meta-ads-sync.ts`) e `bulkUpdateSaiposSales` (`saipos-sync.ts`).
+ * A versão anterior fazia um `prisma.salaoProductGoal.upsert()` por item, dentro de um `for`
+ * sequencial (uma viagem ao banco por produto) — baixo risco hoje (a tela tem só um punhado fixo
+ * de produtos), mas o mesmo padrão que já causou timeout de sync em volumes maiores nos dois
+ * lugares acima; convertido preventivamente aqui antes que a lista de produtos cresça (ex.: menu
+ * com mais categorias) a ponto de repetir o mesmo problema.
+ */
+export async function bulkUpsertSalaoProductGoals(
+  meetingId: string,
+  produtoMetas: SalaoProductGoalInput[]
+): Promise<void> {
+  if (produtoMetas.length === 0) return;
+
+  // Se o body mandar o mesmo "produto" duas vezes (não deveria acontecer vindo da tela, mas o
+  // loop sequencial anterior tolerava isso sem erro — cada upsert era sua própria instrução,
+  // e a última ocorrência "ganhava"), o INSERT em lote quebraria com "ON CONFLICT DO UPDATE
+  // command cannot affect row a second time" (Postgres não permite 2 updates pro mesmo conflito
+  // dentro da mesma instrução). Mantém só a última ocorrência de cada produto antes de montar os
+  // arrays, reproduzindo o mesmo resultado final do loop sequencial.
+  const dedupedByProduto = new Map<string, SalaoProductGoalInput>();
+  for (const pm of produtoMetas) dedupedByProduto.set(pm.produto, pm);
+  const items = [...dedupedByProduto.values()];
+
+  const ids = items.map(() => randomUUID());
+  const meetingIds = new Array(items.length).fill(meetingId);
+  const produtos = items.map((pm) => pm.produto);
+  const quantidades = items.map((pm) =>
+    pm.quantidade !== undefined && pm.quantidade !== "" ? Number(pm.quantidade) : null
+  );
+  const metas = items.map((pm) => Number(pm.meta) || 0);
+  const premiacoes = items.map((pm) => Number(pm.premiacao) || 0);
+
+  await prisma.$executeRaw`
+    INSERT INTO "SalaoProductGoal" (id, "meetingId", produto, quantidade, meta, premiacao)
+    SELECT id, meeting_id, produto, quantidade, meta, premiacao
+    FROM UNNEST(
+      ${ids}::text[], ${meetingIds}::text[], ${produtos}::text[],
+      ${quantidades}::int[], ${metas}::int[], ${premiacoes}::float8[]
+    ) AS t(id, meeting_id, produto, quantidade, meta, premiacao)
+    ON CONFLICT ("meetingId", produto)
+    DO UPDATE SET
+      quantidade = EXCLUDED.quantidade,
+      meta = EXCLUDED.meta,
+      premiacao = EXCLUDED.premiacao
+  `;
 }
 
 export const REUNIAO_INDICATOR_UNIDADES = ["PERCENT", "CURRENCY", "NUMBER"] as const;
