@@ -93,7 +93,10 @@ export function ReservarClient({
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [confirmation, setConfirmation] = useState<{ confirmationCode: string } | null>(null);
+  // Achado #163 (revisão geral, Nina): o status vem da API (`POST .../reservas`) e decide a
+  // mensagem exibida no passo "confirmacao" abaixo — o fluxo público sempre cria a reserva como
+  // PENDENTE (aguardando confirmação da loja), nunca já CONFIRMADA.
+  const [confirmation, setConfirmation] = useState<{ confirmationCode: string; status: string } | null>(null);
 
   const selectedEnvironment = environments.find((e) => e.id === environmentId) ?? null;
 
@@ -175,7 +178,7 @@ export function ReservarClient({
     if (!isValidEmail(emailTrimmed)) return setError("Informe um e-mail válido.");
     if (submitting) return;
     setSubmitting(true);
-    const res = await apiRequest<{ reservation: { confirmationCode: string } }>(`/api/reservar/${empresaKey}/reservas`, "POST", {
+    const res = await apiRequest<{ reservation: { confirmationCode: string; status: string } }>(`/api/reservar/${empresaKey}/reservas`, "POST", {
       ambienteId: environmentId,
       data: selectedDateKey,
       horario: selectedTime,
@@ -193,7 +196,7 @@ export function ReservarClient({
       setStep("formulario");
       return;
     }
-    setConfirmation({ confirmationCode: res.data.reservation.confirmationCode });
+    setConfirmation({ confirmationCode: res.data.reservation.confirmationCode, status: res.data.reservation.status });
     setStep("confirmacao");
   }
 
@@ -413,10 +416,20 @@ export function ReservarClient({
       {step === "confirmacao" && confirmation && (
         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 py-10">
           <CheckCircle2 size={44} className="text-nord-success" />
-          <div>
-            <p className="text-white text-lg font-semibold">Reserva confirmada!</p>
-            <p className="text-nord-gray text-sm mt-1">Guarde o código abaixo — ele identifica sua reserva.</p>
-          </div>
+          {confirmation.status === "CONFIRMADA" ? (
+            <div>
+              <p className="text-white text-lg font-semibold">Reserva confirmada!</p>
+              <p className="text-nord-gray text-sm mt-1">Guarde o código abaixo — ele identifica sua reserva.</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-white text-lg font-semibold">Solicitação enviada!</p>
+              <p className="text-nord-gray text-sm mt-1">
+                Aguarde a confirmação da loja — você receberá um e-mail quando ela for aprovada ou recusada. Guarde o código
+                abaixo — ele identifica sua reserva.
+              </p>
+            </div>
+          )}
           <div className="bg-nord-panel border border-nord-border rounded-2xl px-6 py-3">
             <span className="text-2xl font-bold tracking-[0.3em] text-white">{confirmation.confirmationCode}</span>
           </div>
