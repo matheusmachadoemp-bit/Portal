@@ -146,20 +146,11 @@ export function ProdutosClient({
   );
 
   const [categories, setCategories] = useState(initialCategories);
-  // Lista simples (id/nome/cor) usada no dropdown "Categoria" do formulário de criar/editar
-  // produto — inclui categorias inativas de propósito: um produto já classificado numa categoria
-  // desativada precisa continuar aparecendo com o nome certo e permitir reabrir o formulário sem
-  // perder essa associação (histórico). Derivada do mesmo estado que alimenta o grid de
-  // gerenciamento da aba "Categorias".
-  const categoryOptions = useMemo(
-    () => categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
-    [categories]
-  );
-  // Lista usada SÓ no filtro por categoria da listagem de Produtos — aqui categorias inativas não
-  // devem aparecer como opção pra filtrar (não tem por que oferecer "filtrar por uma categoria
-  // desativada"), diferente do dropdown do formulário acima. Produtos já classificados numa
-  // categoria desativada continuam na listagem normalmente (o filtro só esconde a OPÇÃO, não o
-  // produto — ver `filtered` abaixo, que não depende desta lista).
+  // Lista usada no filtro por categoria da listagem de Produtos E como base do dropdown do
+  // formulário de criar/editar produto — categorias inativas não entram aqui (não tem por que
+  // oferecer "filtrar por" ou "classificar num" categoria desativada). Produtos já classificados
+  // numa categoria desativada continuam na listagem normalmente (o filtro só esconde a OPÇÃO, não
+  // o produto — ver `filtered` abaixo, que não depende desta lista).
   const activeCategoryOptions = useMemo(
     () => categories.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name, color: c.color })),
     [categories]
@@ -178,6 +169,21 @@ export function ProdutosClient({
   const [setorFilter, setSetorFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("ativo");
   const [form, setForm] = useState(emptyForm);
+
+  // Lista usada no dropdown "Categoria" do formulário de criar/editar produto — igual
+  // `activeCategoryOptions`, mas se o produto em edição já está classificado numa categoria que
+  // foi desativada depois (form.categoryId aponta pra ela), inclui SÓ essa categoria específica
+  // como opção extra no topo, pra não esconder a classificação real nem forçar trocar de
+  // categoria só por abrir o formulário. Ao criar um produto novo, form.categoryId começa vazio
+  // (emptyForm) e só pode ser preenchido com uma categoria ativa (as únicas oferecidas no
+  // dropdown), então nunca cai nesse caso extra. Mesmo padrão já usado para forma de pagamento
+  // legada em compras-client.tsx/contas-pagar-client.tsx.
+  const categoryOptions = useMemo(() => {
+    if (!form.categoryId) return activeCategoryOptions;
+    const current = categories.find((c) => c.id === form.categoryId);
+    if (!current || current.active) return activeCategoryOptions;
+    return [{ id: current.id, name: current.name, color: current.color }, ...activeCategoryOptions];
+  }, [categories, form.categoryId, activeCategoryOptions]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
