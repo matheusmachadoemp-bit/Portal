@@ -46,11 +46,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const conversation = await loadOwnedConversation(id, session.user.id, session.user.role);
   if (!conversation) return NextResponse.json({ error: "Conversa não encontrada." }, { status: 404 });
 
-  const messages = await prisma.aiMessage.findMany({
-    where: { conversationId: conversation.id },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, role: true, content: true, createdAt: true },
-  });
+  // `SAFETY_TAKE`: sem paginação nesta etapa — mesmo espírito do teto de `GET
+  // /api/nord-ai/conversations` (ver comentário lá) e de `/api/reservas/reservas`. Busca as
+  // `SAFETY_TAKE` mensagens mais RECENTES (`orderBy: createdAt desc` + `take`) em vez das mais
+  // antigas — numa conversa longa o que importa pro usuário reabrir é o fim da conversa, não o
+  // início — e devolve em ordem cronológica (`.reverse()`) pra UI continuar renderizando de cima
+  // pra baixo sem mudar nada no componente.
+  const SAFETY_TAKE = 500;
+
+  const messages = (
+    await prisma.aiMessage.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { createdAt: "desc" },
+      take: SAFETY_TAKE,
+      select: { id: true, role: true, content: true, createdAt: true },
+    })
+  ).reverse();
 
   return NextResponse.json({ conversation, messages });
 }

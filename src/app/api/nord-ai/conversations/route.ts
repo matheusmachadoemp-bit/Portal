@@ -33,9 +33,17 @@ export async function GET() {
     return NextResponse.json({ error: "Sem permissão para acessar o Nord AI." }, { status: 403 });
   }
 
+  // `SAFETY_TAKE`: sem paginação nesta etapa (a lista de conversas do próprio usuário é pequena
+  // no uso real de hoje) — mesmo espírito do teto já usado em `/api/reservas/reservas` e
+  // `/api/rh/time-entries`: sem limite nenhum, o histórico cresceria sem fim conforme o
+  // Administrador usa o Nord AI ao longo do tempo. `orderBy: updatedAt desc` já garante que, se
+  // o teto for atingido, sobram as conversas mais recentes (as relevantes), não as mais antigas.
+  const SAFETY_TAKE = 500;
+
   const conversations = await prisma.aiConversation.findMany({
     where: { userId: session.user.id },
     orderBy: { updatedAt: "desc" },
+    take: SAFETY_TAKE,
     select: {
       id: true,
       title: true,

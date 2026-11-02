@@ -9,11 +9,21 @@ import { NORD_AI_MAX_MESSAGE_LENGTH } from "./types";
 /** Perguntas de exemplo mostradas na tela de boas-vindas (nenhuma conversa selecionada ainda) —
  * só sugestões de UI, não têm nenhum efeito especial no backend: clicar nelas cria uma conversa
  * nova (igual o botão "Iniciar conversa") e já deixa a pergunta escrita no campo de mensagem,
- * pronta para o usuário revisar e enviar. */
+ * pronta para o usuário revisar e enviar.
+ *
+ * Achado #170 (revisão de limpeza): as 2 perguntas originais ("Quais os itens mais vendidos" e
+ * "Como está o CMV comparado com a meta") prometiam um dado que o CONTEXTO REAL desta etapa não
+ * calcula (`buildBusinessContext`, @/lib/nord-ai.ts, só cobre faturamento/pedidos de hoje e
+ * progresso da meta mensal) — o Nord AI respondia dizendo que não tinha esse dado ainda, uma
+ * primeira experiência ruim pra quem clicasse num exemplo do próprio produto. Decisão: trocar
+ * os exemplos por perguntas que o backend já responde de verdade agora, em vez de ampliar
+ * `buildBusinessContext` para calcular itens mais vendidos/CMV (escopo maior, fora desta tarefa
+ * de limpeza — ficaria para uma etapa futura do Nord AI, se o Matheus quiser esses dados no
+ * assistente). */
 const EXAMPLE_QUESTIONS = [
   "Como está o faturamento desse mês?",
-  "Quais os itens mais vendidos na última semana?",
-  "Como está o CMV comparado com a meta?",
+  "Quantos pedidos tivemos hoje?",
+  "Qual o progresso da meta mensal?",
 ];
 
 function EmpresaLabel({ empresa }: { empresa: NordAiConversation["empresa"] }) {

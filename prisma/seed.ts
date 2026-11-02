@@ -539,9 +539,9 @@ const CATEGORIES = [
     // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver prisma/migrations/
     // 20261031010000_nord_ai_fundacao_schema e 20261031011000_nord_ai_fundacao_menu para o
     // equivalente de produção, já que o deploy automático nunca roda este seed). Única
-    // subcategoria desta etapa é "Painel" (a conversa com o assistente em si) — sem pasta de
-    // rota física ainda (fundação = schema/menu/permissão/API, sem UI); cai no fallback
-    // genérico até Caio construir a tela de chat de verdade (ver migration de menu).
+    // subcategoria desta etapa é "Painel" (a conversa com o assistente em si) — já tem pasta/
+    // rota própria (src/app/portal/nord-ai/painel/, com chat-panel.tsx/conversation-list.tsx),
+    // construída pelo Caio consumindo as rotas de API abaixo; não cai mais no fallback genérico.
     //
     // A migration de produção dá a esta categoria/subcategoria a cor "#1464F4" (destaque do
     // Design System, mesma cor do botão de Bugs e Melhorias no Topbar e do default do color

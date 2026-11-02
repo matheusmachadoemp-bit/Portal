@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { formatNumber } from "@/lib/calc";
+import { RESERVATION_STATUS_LABEL, RESERVATION_STATUS_TONE } from "@/lib/reservas";
 
 type HistoryItem = {
   id: string;
@@ -26,26 +27,6 @@ type ClienteRow = {
   canceladaCount: number;
   ultimaReserva: string;
   reservations: HistoryItem[];
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  PENDENTE: "Pendente",
-  CONFIRMADA: "Confirmada",
-  CLIENTE_CHEGOU: "Cliente chegou",
-  ACOMODADO: "Acomodado",
-  FINALIZADA: "Finalizada",
-  CANCELADA: "Cancelada",
-  NAO_COMPARECEU: "Não compareceu",
-};
-
-const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info" | "purple"> = {
-  PENDENTE: "warning",
-  CONFIRMADA: "info",
-  CLIENTE_CHEGOU: "info",
-  ACOMODADO: "info",
-  FINALIZADA: "success",
-  CANCELADA: "danger",
-  NAO_COMPARECEU: "danger",
 };
 
 function formatDateTime(iso: string): string {
@@ -196,7 +177,7 @@ export function ClientesReservasClient({ hasEmpresa }: { hasEmpresa: boolean }) 
                             <span className="text-nord-gray">
                               {r.partySize} {r.partySize === 1 ? "pessoa" : "pessoas"}
                             </span>
-                            <Badge tone={STATUS_TONE[r.status] ?? "default"}>{STATUS_LABEL[r.status] ?? r.status}</Badge>
+                            <Badge tone={RESERVATION_STATUS_TONE[r.status] ?? "default"}>{RESERVATION_STATUS_LABEL[r.status] ?? r.status}</Badge>
                           </div>
                         </div>
                       ))}
