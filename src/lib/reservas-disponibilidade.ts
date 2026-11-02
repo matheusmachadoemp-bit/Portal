@@ -440,7 +440,7 @@ function isConfirmationCodeConflict(e: unknown): boolean {
  * disponibilidade feita antes de chamar esta função pode estar desatualizada no instante em que
  * duas requisições concorrentes chegam aqui) e só então grava a reserva + as atribuições de mesa.
  */
-export async function reserveTablesTransacted(params: {
+type ReserveTablesTransactedBaseParams = {
   empresaId: string;
   environmentId: string;
   tableIds: string[];
@@ -462,7 +462,27 @@ export async function reserveTablesTransacted(params: {
    * atendendo o telefone e cadastrando a reserva na hora, não existe o mesmo "aguardando
    * confirmação" do fluxo público — ela já nasce confirmada. */
   status?: ReservationStatus;
-}): Promise<{ id: string; confirmationCode: string }> {
+};
+
+/**
+ * Overload sem `include` (fluxo público, `POST /api/reservar/[empresaKey]/reservas`): devolve só
+ * `{ id, confirmationCode }`, igual sempre devolveu — esse consumidor nunca precisou das relações.
+ */
+export async function reserveTablesTransacted(
+  params: ReserveTablesTransactedBaseParams & { include?: undefined },
+): Promise<{ id: string; confirmationCode: string }>;
+/**
+ * Overload com `include` (criação manual, `POST /api/reservas/reservas`, Etapa 4 — achado do
+ * Teulis, tarefa #147): devolve a entidade já com as relações pedidas carregadas, lidas de dentro
+ * da própria transação de criação — evita o `findUnique` extra que a rota fazia depois de chamar
+ * esta função só para buscar as relações e serializar a resposta.
+ */
+export async function reserveTablesTransacted<Include extends Prisma.ReservationInclude>(
+  params: ReserveTablesTransactedBaseParams & { include: Include },
+): Promise<Prisma.ReservationGetPayload<{ include: Include }>>;
+export async function reserveTablesTransacted(
+  params: ReserveTablesTransactedBaseParams & { include?: Prisma.ReservationInclude },
+): Promise<{ id: string; confirmationCode: string } | Prisma.ReservationGetPayload<{ include: Prisma.ReservationInclude }>> {
   const {
     empresaId,
     environmentId,
@@ -477,6 +497,7 @@ export async function reserveTablesTransacted(params: {
     customerPhone,
     customerEmail,
     status = "PENDENTE",
+    include,
   } = params;
   if (tableIds.length === 0) throw new Error("Informe ao menos uma mesa.");
 
@@ -521,23 +542,28 @@ export async function reserveTablesTransacted(params: {
         });
         if (hasConflict) throw new ReservationConflictError();
 
-        const reservation = await tx.reservation.create({
-          data: {
-            empresaId,
-            environmentId,
-            clienteId: clienteId ?? null,
-            confirmationCode,
-            customerName: customerName ?? null,
-            customerPhone: customerPhone ?? null,
-            customerEmail: customerEmail ?? null,
-            date: spStartOfDay(dateKey),
-            startTime,
-            endTime,
-            partySize,
-            status,
-            tables: { create: tableIds.map((tableId) => ({ tableId })) },
-          },
-        });
+        const data = {
+          empresaId,
+          environmentId,
+          clienteId: clienteId ?? null,
+          confirmationCode,
+          customerName: customerName ?? null,
+          customerPhone: customerPhone ?? null,
+          customerEmail: customerEmail ?? null,
+          date: spStartOfDay(dateKey),
+          startTime,
+          endTime,
+          partySize,
+          status,
+          tables: { create: tableIds.map((tableId) => ({ tableId })) },
+        };
+        // Com `include`, pede pro próprio `create` já devolver as relações pedidas — mesma
+        // query de escrita, sem round-trip extra (`findUnique` depois) pro chamador montar a
+        // resposta. Sem `include`, mantém o retorno mínimo de sempre.
+        if (include) {
+          return await tx.reservation.create({ data, include });
+        }
+        const reservation = await tx.reservation.create({ data });
         return { id: reservation.id, confirmationCode: reservation.confirmationCode };
       });
     } catch (err) {
