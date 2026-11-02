@@ -81,6 +81,31 @@ export const RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH = 180;
 // `RESERVATION_OCCUPYING_STATUSES`) porque este arquivo não importa Prisma — os componentes
 // cliente das 3 telas (ex.: o `<select>` de mudança de status) precisam do label/transições sem
 // puxar o Prisma Client pro bundle do navegador, mesmo racional do resto deste arquivo.
+//
+// Nota (achado #169, revisão de limpeza; redação corrigida depois da revisão do Teulis — ver
+// abaixo): as migrations que removeram as subcategorias "relatorios" e "calendario" do menu de
+// Reservas (`20261102030000_remove_relatorios_subcategoria_reservas`,
+// `20261102070000_reservas_unificar_calendario_lista`) só apagam a linha de `Subcategory` — de
+// propósito NÃO tentam limpar `UserPermission`/`ModulePermission` com moduleKey
+// "reservas:relatorios"/"reservas:calendario". Decisão: sem ação necessária, mas não porque essa
+// linha "nunca pôde existir" — a tela Usuários > Permissões monta a lista de subcategorias de
+// cada módulo a partir de `getMenuCategories()` (banco, `Subcategory.active`), não da constante
+// `MODULES` (@/lib/permissions, que não declara `subcategories` pra "reservas") — ver
+// `src/app/portal/usuarios/page.tsx`. A migration `20261026041000_reservas_etapa1_menu_permissao`
+// criou "relatorios"/"calendario" como `active: true` por ~1 semana (26/10 a 02/11, já publicado
+// em produção) antes das duas migrations acima removê-las; nessa janela a tela de Permissões
+// EXIBIA de fato um `<select>` pra essas 2 subcategorias, e escolher um nível ali grava uma
+// `UserPermission` real com essa moduleKey (coluna string livre, sem FK/enum) — então é
+// tecnicamente possível que uma linha dessas exista hoje em produção, criada manualmente por um
+// Administrador/Gestor nessa janela. O que torna a limpeza desnecessária mesmo assim: mesmo que
+// essa linha órfã exista, ela é INERTE — `hasModulePermission` só considera a chave composta
+// `${moduleKey}:${subcategoryKey}` quando o chamador passa `subcategoryKey` explicitamente (ver
+// @/lib/authz), e nenhuma chamada de `hasModulePermission("reservas", ...)` hoje passa esse 4º
+// argumento (confirmado por busca no repositório) — logo a linha nunca é lida por nenhum código
+// atual. Por isso uma migration de limpeza (`DELETE`) não muda nenhum comportamento observável
+// hoje; e editar o `migration.sql` já aplicado só pra documentar isso quebraria o checksum que o
+// Prisma guarda em `_prisma_migrations` (próximo `migrate deploy` falharia por drift) — por isso
+// a decisão fica só aqui, nunca dentro de um `migration.sql` já publicado.
 
 /** Rótulo em português de cada valor do enum `ReservationStatus` (schema.prisma) — mesma
  * convenção de `RESERVATION_TABLE_STATUS_LABEL` acima. */
@@ -139,7 +164,7 @@ export const RESERVATION_WAITLIST_STATUS_LABEL: Record<string, string> = {
   ATENDIDO: "Sentou",
 };
 
-export const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_STATUS_LABEL);
+const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_STATUS_LABEL);
 
 /** Status "vivos" (ainda na fila, aguardando vaga ou retorno do cliente) — usados pra numerar a
  * posição na fila e mostrar o cronômetro ao vivo. Os demais (`CONTATADO` incluído aqui também,
