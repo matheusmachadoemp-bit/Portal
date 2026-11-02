@@ -72,3 +72,17 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function isValidEmail(value: string): boolean {
   return EMAIL_PATTERN.test(value);
 }
+
+// Reservas — Etapa 4 (Fila de Espera). Constantes compartilhadas entre as rotas de API
+// (src/app/api/reservas/fila-espera/**) e a tela (src/app/portal/reservas/fila-espera/**). Ver
+// comentário de modelagem no `prisma/schema.prisma` acima de `model ReservationWaitlistEntry`.
+
+export const RESERVATION_WAITLIST_STATUS_LABEL: Record<string, string> = {
+  AGUARDANDO: "Aguardando",
+  CONTATADO: "Contatado",
+  CONVERTIDO_EM_RESERVA: "Convertido em reserva",
+  CANCELADO: "Cancelado",
+  EXPIRADO: "Expirado",
+};
+
+export const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_STATUS_LABEL);
