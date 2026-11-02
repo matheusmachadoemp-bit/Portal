@@ -11,6 +11,12 @@ import { ReservasClient } from "./reservas-client";
  * Tela "Reservas" (Etapa 4 do módulo Reservas) — lista/gerenciamento das reservas da loja (ou
  * lojas, em modo Grupo Nord — só leitura nesse modo, ver `canEdit` abaixo) ativa. Só um shell de
  * servidor: a lista em si vem de `GET /api/reservas/reservas`, consumida pelo client component.
+ *
+ * A partir da tarefa "reservas-unificar-calendario" (itens #151/#152 do backlog: juntar a
+ * subcategoria "Calendário" com "Reservas" — ver prisma/migrations/
+ * 20261102070000_reservas_unificar_calendario_lista), o client component (`ReservasClient`)
+ * também renderiza, empilhada acima da lista, a seção "Calendário" (`CalendarioSection`, em
+ * "./calendario-section") que antes vivia em `/portal/reservas/calendario` (rota removida).
  */
 export default async function ReservasListaPage({
   searchParams,

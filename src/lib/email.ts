@@ -44,3 +44,104 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
     throw new Error(`Falha ao enviar e-mail via Resend: ${error.message}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reservas — notificação por e-mail ao cliente quando a loja aprova/recusa a solicitação inicial
+// (ver tarefa "reservas-unificar-calendario", item #5, e `PATCH /api/reservas/reservas/[id]`, que
+// chama as duas funções abaixo). Fluxo de negócio confirmado pelo Matheus: cliente manda
+// solicitação (PENDENTE) -> loja confere vaga -> aprova (CONFIRMADA) ou recusa (CANCELADA). Até
+// esta tarefa não existia NENHUM envio de e-mail no fluxo de Reservas (nem confirmação de
+// recebimento da solicitação) — funcionalidade nova, mesmo padrão simples (HTML inline) de
+// `sendPasswordResetEmail` acima, sem reaproveitar nada específico de Reservas (não havia nada).
+// ---------------------------------------------------------------------------
+
+export type ReservationEmailDetails = {
+  /** Nome do cliente (ou "cliente", se a reserva não tiver nome — nunca deveria faltar na
+   * prática, mas o campo é nullable no schema). Usado só pra saudação, não afeta o envio. */
+  customerName: string;
+  empresaName: string;
+  environmentName: string;
+  /** "DD/MM/AAAA", já formatado no fuso de São Paulo (ver `buildReservationEmailDetails`,
+   * `src/app/api/reservas/reservas/[id]/route.ts`) — este módulo não faz nenhuma conta de
+   * data/fuso por conta própria. */
+  dateBR: string;
+  /** "HH:mm", já formatado no fuso de São Paulo (mesma observação acima). */
+  timeHHMM: string;
+  partySize: number;
+};
+
+function reservationDetailsHtml(details: ReservationEmailDetails): string {
+  return `
+    <ul style="padding-left: 18px; margin: 12px 0;">
+      <li>Data: ${details.dateBR}</li>
+      <li>Horário: ${details.timeHHMM}</li>
+      <li>Ambiente: ${details.environmentName}</li>
+      <li>Pessoas: ${details.partySize}</li>
+    </ul>
+  `;
+}
+
+/** Enviado quando a loja aprova uma solicitação de reserva (PENDENTE -> CONFIRMADA). */
+export async function sendReservationAcceptedEmail(to: string, details: ReservationEmailDetails): Promise<void> {
+  const resend = getClient();
+  const from = process.env.EMAIL_FROM || DEFAULT_FROM;
+
+  const { error } = await resend.emails.send({
+    from,
+    to,
+    subject: `Reserva confirmada — ${details.empresaName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
+        <h2 style="margin-bottom: 8px;">Reserva confirmada!</h2>
+        <p>Olá, ${details.customerName}! Sua reserva na <strong>${details.empresaName}</strong> foi confirmada:</p>
+        ${reservationDetailsHtml(details)}
+        <p>Esperamos você!</p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(`Falha ao enviar e-mail via Resend: ${error.message}`);
+  }
+}
+
+/**
+ * Enviado quando a loja cancela uma reserva — tanto a recusa de uma solicitação ainda PENDENTE
+ * (caso principal pedido pelo Matheus) quanto o cancelamento de uma reserva JÁ CONFIRMADA
+ * (extensão de bom senso: quem já tinha recebido a confirmação merece saber que ela foi
+ * cancelada — ver decisão documentada em `PATCH /api/reservas/reservas/[id]`). `wasConfirmed`
+ * só muda o texto (nunca a estrutura/assunto do e-mail, que seguem o mesmo padrão simples).
+ */
+export async function sendReservationCancelledEmail(
+  to: string,
+  details: ReservationEmailDetails & { wasConfirmed: boolean }
+): Promise<void> {
+  const resend = getClient();
+  const from = process.env.EMAIL_FROM || DEFAULT_FROM;
+
+  const subject = details.wasConfirmed
+    ? `Reserva cancelada — ${details.empresaName}`
+    : `Não foi possível confirmar sua reserva — ${details.empresaName}`;
+
+  const intro = details.wasConfirmed
+    ? `Avisamos que sua reserva confirmada na <strong>${details.empresaName}</strong>, abaixo, foi cancelada:`
+    : `Infelizmente não foi possível atender sua solicitação de reserva na <strong>${details.empresaName}</strong>, abaixo:`;
+
+  const { error } = await resend.emails.send({
+    from,
+    to,
+    subject,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
+        <h2 style="margin-bottom: 8px;">${details.wasConfirmed ? "Reserva cancelada" : "Não foi possível confirmar sua reserva"}</h2>
+        <p>Olá, ${details.customerName}. ${intro}</p>
+        ${reservationDetailsHtml(details)}
+        <p style="color: #666; font-size: 13px;">Pedimos desculpas pelo inconveniente. Entre em contato com a loja para mais informações${details.wasConfirmed ? " ou para reagendar" : ""}.</p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(`Falha ao enviar e-mail via Resend: ${error.message}`);
+  }
+}

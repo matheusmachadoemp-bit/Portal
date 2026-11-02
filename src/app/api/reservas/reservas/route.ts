@@ -66,19 +66,26 @@ function serializeReservation(r: ReservationWithRelations) {
 }
 
 /**
- * Lista de reservas (Etapa 4 — telas "Reservas"/"Visão Geral"/"Calendário") — `GET` só, a
- * criação de reserva continua exclusiva do fluxo público (`POST
- * /api/reservar/[empresaKey]/reservas`, ver `src/lib/reservas-disponibilidade.ts`); esta rota
- * nunca cria nada, só consulta o que já existe para a loja (ou lojas, em modo Grupo Nord) ativa.
+ * Lista de reservas (Etapa 4 — telas "Reservas"/"Visão Geral") — `GET` só, a criação de reserva
+ * continua exclusiva do fluxo público (`POST /api/reservar/[empresaKey]/reservas`, ver
+ * `src/lib/reservas-disponibilidade.ts`); esta rota nunca cria nada, só consulta o que já existe
+ * para a loja (ou lojas, em modo Grupo Nord) ativa.
+ *
+ * Desde a tarefa "reservas-unificar-calendario", "Calendário" não é mais uma tela própria — é
+ * uma seção (`CalendarioSection`) dentro da tela "Reservas" (ver `reservas-client.tsx`), mas
+ * continua consumindo esta mesma rota do mesmo jeito (busca independente, mês inteiro).
  *
  * Filtros (todos via querystring, todos opcionais):
  * - `date`: um único dia ("YYYY-MM-DD"). Tem prioridade sobre `dateFrom`/`dateTo` se os três
  *   vierem juntos.
  * - `dateFrom`/`dateTo`: intervalo de dias (qualquer um dos dois pode vir solto, abrindo o
- *   intervalo só de um lado) — usado pelo Calendário (mês inteiro) e por filtros de período da
- *   tela "Reservas".
+ *   intervalo só de um lado) — usado pela seção Calendário (mês inteiro) e pelos filtros de
+ *   período da lista da tela "Reservas" (que, sem filtro na URL, já abre com o mês atual inteiro
+ *   — ver `currentMonthRange` em `reservas-client.tsx`).
  * - Sem nenhum dos três: assume HOJE (mesmo padrão de "Visão Geral", que sempre quer o dia
- *   atual) — nunca lista o histórico inteiro sem filtro nenhum.
+ *   atual) — nunca lista o histórico inteiro sem filtro nenhum. Na prática, a tela "Reservas"
+ *   sempre manda `dateFrom`/`dateTo` explícitos (ver acima), então este fallback só é alcançado
+ *   por uma chamada direta à API sem nenhum filtro de data.
  * - `status`: um ou mais valores do enum `ReservationStatus`, separados por vírgula.
  * - `environmentId`: uma reserva de um ambiente específico.
  * - `q`: busca livre (nome do cliente, telefone ou código de confirmação), case-insensitive.
@@ -260,8 +267,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Informe um telefone válido, com DDD." }, { status: 400 });
   }
 
+  // E-mail virou obrigatório na tarefa "reservas-unificar-calendario" (item #4) — é o canal usado
+  // pra notificar o cliente quando a loja aprova/recusa a reserva (ver `PATCH
+  // /api/reservas/reservas/[id]`); antes disso era opcional e várias reservas ficavam sem
+  // nenhum contato por e-mail, impossibilitando essa notificação. Mesma validação (vazio +
+  // formato) espelhada no cliente (`reservas-client.tsx`, `submitCreate`).
   const customerEmailRaw = typeof body?.customerEmail === "string" ? body.customerEmail.trim() : "";
-  if (customerEmailRaw && (customerEmailRaw.length > RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH || !isValidEmail(customerEmailRaw))) {
+  if (!customerEmailRaw) {
+    return NextResponse.json({ error: "Informe o e-mail do cliente." }, { status: 400 });
+  }
+  if (customerEmailRaw.length > RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH || !isValidEmail(customerEmailRaw)) {
     return NextResponse.json({ error: "Informe um e-mail válido." }, { status: 400 });
   }
 
@@ -300,7 +315,7 @@ export async function POST(req: Request) {
       cleaningMinutes: availability.settings.cleaningMinutes,
       customerName,
       customerPhone,
-      customerEmail: customerEmailRaw || null,
+      customerEmail: customerEmailRaw,
       status: "CONFIRMADA",
       include: RESERVATION_LIST_INCLUDE,
     });

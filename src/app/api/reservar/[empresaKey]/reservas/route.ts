@@ -72,8 +72,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
     return NextResponse.json({ error: "Informe um telefone válido, com DDD." }, { status: 400 });
   }
 
+  // E-mail virou obrigatório na tarefa "reservas-unificar-calendario" (item #4) — é o canal usado
+  // pra notificar o cliente quando a loja aprova/recusa a solicitação (ver `PATCH
+  // /api/reservas/reservas/[id]`); antes disso era opcional e várias solicitações ficavam sem
+  // nenhum contato por e-mail, impossibilitando essa notificação. Mesma validação (vazio +
+  // formato) espelhada no cliente (`reservar-client.tsx`, `confirmarReserva`).
   const emailRaw = typeof body?.email === "string" ? body.email.trim() : "";
-  if (emailRaw && (emailRaw.length > RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH || !isValidEmail(emailRaw))) {
+  if (!emailRaw) {
+    return NextResponse.json({ error: "Informe seu e-mail." }, { status: 400 });
+  }
+  if (emailRaw.length > RESERVATION_CUSTOMER_EMAIL_MAX_LENGTH || !isValidEmail(emailRaw)) {
     return NextResponse.json({ error: "Informe um e-mail válido." }, { status: 400 });
   }
 
@@ -114,7 +122,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
       cleaningMinutes: availability.settings.cleaningMinutes,
       customerName: nome,
       customerPhone: telefone,
-      customerEmail: emailRaw || null,
+      customerEmail: emailRaw,
     });
 
     return NextResponse.json({

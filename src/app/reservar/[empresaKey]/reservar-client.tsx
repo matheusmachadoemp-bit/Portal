@@ -6,7 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Users } from "lucide-react";
 import { MonthCalendar } from "@/components/ui/month-calendar";
 import { apiRequest } from "@/lib/api-client";
-import { onlyDigits } from "@/lib/reservas";
+import { onlyDigits, isValidEmail } from "@/lib/reservas";
 
 type Environment = { id: string; name: string; capacity: number };
 
@@ -167,6 +167,12 @@ export function ReservarClient({
     if (!nome.trim()) return setError("Informe seu nome.");
     const telefoneDigits = onlyDigits(telefone);
     if (telefoneDigits.length < 10) return setError("Informe um telefone válido, com DDD.");
+    // E-mail virou obrigatório (ver tarefa "reservas-unificar-calendario", item #4) — é o canal
+    // usado pra avisar se a reserva foi aceita ou recusada (ver item #5), então sem ele a loja
+    // não teria como notificar de volta.
+    const emailTrimmed = email.trim();
+    if (!emailTrimmed) return setError("Informe seu e-mail.");
+    if (!isValidEmail(emailTrimmed)) return setError("Informe um e-mail válido.");
     if (submitting) return;
     setSubmitting(true);
     const res = await apiRequest<{ reservation: { confirmationCode: string } }>(`/api/reservar/${empresaKey}/reservas`, "POST", {
@@ -176,7 +182,7 @@ export function ReservarClient({
       pessoas: partySize,
       nome: nome.trim(),
       telefone: telefoneDigits,
-      email: email.trim() || undefined,
+      email: emailTrimmed,
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -376,8 +382,15 @@ export function ReservarClient({
             />
           </label>
           <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">E-mail (opcional)</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" placeholder="seuemail@exemplo.com" />
+            <span className="block text-xs text-nord-gray mb-1">E-mail</span>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input"
+              placeholder="seuemail@exemplo.com"
+            />
           </label>
 
           <div className="flex items-center gap-2 pt-2">

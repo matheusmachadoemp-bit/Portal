@@ -506,8 +506,13 @@ const CATEGORIES = [
     // usuário — ver prisma/migrations/20261102030000_remove_relatorios_subcategoria_reservas —
     // mesmo padrão de hard delete já usado pra Financeiro/Manutenção/Universidade/Estoque/CRM):
     // a tela única de Visão Geral agora mostra o resumo do dia e, abaixo, os agregados por
-    // período que antes ficavam em Relatórios; a rota/pasta `relatorios/` e a subcategoria
-    // própria deixaram de existir, restando 7 subcategorias abaixo. O catch-all genérico
+    // período que antes ficavam em Relatórios. Na mesma leva (tarefa
+    // "reservas-unificar-calendario", itens #151/#152), "Calendário" foi mesclada dentro de
+    // "Reservas" (a lista) do mesmo jeito — ver prisma/migrations/
+    // 20261102070000_reservas_unificar_calendario_lista: a tela única de Reservas agora mostra o
+    // calendário do mês (com o resumo de ocupação por dia que já existia) empilhado acima da
+    // lista/filtros/criação manual que já existia; a rota/pasta `calendario/` e a subcategoria
+    // própria deixaram de existir. Restam as 6 subcategorias abaixo. O catch-all genérico
     // (src/app/portal/reservas/[sub]/page.tsx) continua existindo como rede de segurança para
     // uma eventual subcategoria nova sem pasta própria ainda.
     //
@@ -524,7 +529,6 @@ const CATEGORIES = [
     subs: [
       { key: "visao-geral", name: "Visão Geral", icon: "LayoutDashboard" },
       { key: "reservas", name: "Reservas", icon: "ClipboardList" },
-      { key: "calendario", name: "Calendário", icon: "CalendarDays" },
       { key: "ambientes", name: "Ambientes", icon: "Armchair" },
       { key: "fila-espera", name: "Fila de Espera", icon: "Hourglass" },
       { key: "clientes", name: "Clientes", icon: "Users" },

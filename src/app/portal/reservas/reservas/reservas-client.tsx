@@ -7,13 +7,14 @@ import { Badge } from "@/components/ui/stat-card";
 import { Toolbar } from "@/components/ui/toolbar";
 import { Modal, FormError } from "@/components/ui/modal";
 import { apiRequest } from "@/lib/api-client";
-import { onlyDigits } from "@/lib/reservas";
+import { onlyDigits, isValidEmail } from "@/lib/reservas";
 import {
   RESERVATION_STATUS_LABEL,
   RESERVATION_STATUS_TONE,
   RESERVATION_STATUS_TRANSITIONS,
   RESERVATION_STATUSES,
 } from "@/lib/reservas";
+import { CalendarioSection } from "./calendario-section";
 
 type Environment = { id: string; name: string; capacity: number; active: boolean };
 
@@ -50,6 +51,28 @@ function formatTelefone(value: string): string {
 
 function emptyCreateForm(todayKey: string): CreateForm {
   return { environmentId: "", partySize: "2", date: todayKey, customerName: "", customerPhone: "", customerEmail: "" };
+}
+
+/** Primeiro e último dia do mês de `todayKey` ("YYYY-MM-DD") — padrão de filtro de data quando a
+ * tela abre sem nenhum filtro na URL (ver tarefa "reservas-unificar-calendario", item #3: antes
+ * o padrão era "só hoje", o que escondia reservas PENDENTES de data futura dentro do mesmo mês da
+ * visão padrão, parecendo que a solicitação do cliente tinha "sumido" — achado real reportado
+ * pelo Matheus). Calculado só com manipulação de string + um `Date` usado apenas para contar
+ * quantos dias tem o mês (nunca para formatar o dateKey em si) — mesmo cuidado de
+ * `localDateKey`/`formatDateKeyBR` em `calendario-section.tsx`: um dateKey não tem hora real
+ * anexada, então ler `.toISOString()`/UTC aqui reintroduziria risco de cair no mês errado
+ * dependendo do fuso do navegador. `new Date(year, month, 0).getDate()` é seguro (só matemática
+ * de calendário local, não lê nenhum componente UTC) — mesma conta já usada em
+ * `monthRange`/`currentMonthRange` equivalentes deste módulo. */
+function currentMonthRange(todayKey: string): { dateFrom: string; dateTo: string } {
+  const [yearStr, monthStr] = todayKey.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr); // 1-12
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    dateFrom: `${yearStr}-${monthStr}-01`,
+    dateTo: `${yearStr}-${monthStr}-${String(lastDay).padStart(2, "0")}`,
+  };
 }
 
 export type ReservationDTO = {
@@ -93,6 +116,17 @@ export function ReservasClient({
   const [rowError, setRowError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Achado do Teulis (revisão da tarefa "reservas-unificar-calendario"): mudar o status de uma
+  // reserva aqui na Lista não avisava o `CalendarioSection` acima, que só refaz o fetch de
+  // ocupação quando o mês visível (`cursor`) muda — o badge de ocupação do dia ficava
+  // desatualizado até um reload manual da página. Em vez de acoplar a lógica interna de uma
+  // seção na outra (ex. o pai mexendo direto no estado `reservations` do calendário), levanta só
+  // um contador "última atualização de status" pro componente pai: a Lista incrementa depois de
+  // um PATCH bem-sucedido (ver `changeStatus` abaixo) e o Calendário reage a ele no mesmo efeito
+  // que já reage à troca de mês (ver `calendario-section.tsx`) — as duas seções continuam sem
+  // conhecer os detalhes internas uma da outra.
+  const [reservationsVersion, setReservationsVersion] = useState(0);
+
   // ---------------------------------------------------------------------------
   // Criar reserva manualmente (botão "Nova reserva" — ver prompt da tarefa
   // "reservas-criar-manual-calendario"). Reaproveita o motor de disponibilidade já existente via
@@ -111,15 +145,23 @@ export function ReservasClient({
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // Padrão "hoje-hoje" só quando a tela é aberta SEM nenhum filtro de data na URL (visita normal,
+  // Padrão "mês atual" só quando a tela é aberta SEM nenhum filtro de data na URL (visita normal,
   // ex. clique no menu) — nunca lista o histórico inteiro sem filtro nenhum. Mas se a URL já trouxe
   // um dos dois (ex. link do card "Pendentes de confirmação" da Visão Geral, que manda só
   // `dateFrom`), respeita o intervalo pedido como veio — inclusive deixando o outro lado em aberto
-  // (sem teto de data) — em vez de forçar o lado que faltou pra "hoje" e esconder reservas de dias
-  // futuros sem nenhum aviso (achado confirmado pelo Teulis).
+  // (sem teto de data) — em vez de forçar o lado que faltou pra um valor padrão e esconder
+  // reservas de dias futuros sem nenhum aviso (achado confirmado pelo Teulis).
+  //
+  // Até a tarefa "reservas-unificar-calendario" (item #3) o padrão sem filtro na URL era
+  // "hoje-hoje" — bug real reportado pelo Matheus: uma reserva PENDENTE de data futura dentro do
+  // mesmo mês ficava escondida da visão padrão (que só mostrava hoje), parecendo que a
+  // solicitação do cliente tinha "sumido" quando na verdade só não cabia no filtro padrão. Agora
+  // o padrão é o mês atual inteiro (`currentMonthRange`, definida acima) — a mesma janela que a
+  // seção Calendário (`CalendarioSection`, abaixo) sempre mostra.
   const noDateFilterInUrl = !initialDateFrom && !initialDateTo;
-  const [dateFrom, setDateFrom] = useState(initialDateFrom || (noDateFilterInUrl ? todayKey : ""));
-  const [dateTo, setDateTo] = useState(initialDateTo || (noDateFilterInUrl ? todayKey : ""));
+  const defaultRange = currentMonthRange(todayKey);
+  const [dateFrom, setDateFrom] = useState(initialDateFrom || (noDateFilterInUrl ? defaultRange.dateFrom : ""));
+  const [dateTo, setDateTo] = useState(initialDateTo || (noDateFilterInUrl ? defaultRange.dateTo : ""));
   const [status, setStatus] = useState(initialStatus);
   const [q, setQ] = useState("");
 
@@ -173,9 +215,13 @@ export function ReservasClient({
   function clearFilters() {
     setQ("");
     setStatus("");
-    setDateFrom(todayKey);
-    setDateTo(todayKey);
-    load({ dateFrom: todayKey, dateTo: todayKey, status: "", q: "" });
+    // "Limpar filtros" volta pro mesmo padrão de quando a tela abre sem filtro na URL (mês atual
+    // — ver comentário de `dateFrom`/`dateTo` acima), não pro "hoje" do botão "Hoje" (que é uma
+    // ação explícita diferente, ver `handleToday`).
+    const range = currentMonthRange(todayKey);
+    setDateFrom(range.dateFrom);
+    setDateTo(range.dateTo);
+    load({ dateFrom: range.dateFrom, dateTo: range.dateTo, status: "", q: "" });
   }
 
   function handleSearchSubmit(e: FormEvent) {
@@ -196,6 +242,10 @@ export function ReservasClient({
         return;
       }
       setReservations((prev) => prev.map((x) => (x.id === r.id ? result.data.reservation : x)));
+      // Avisa o Calendário (ver comentário de `reservationsVersion` acima) que o estado real das
+      // reservas mudou, pra ele refazer o fetch do mês e o badge de ocupação não ficar
+      // desatualizado.
+      setReservationsVersion((v) => v + 1);
     } finally {
       setBusyId(null);
     }
@@ -273,12 +323,19 @@ export function ReservasClient({
     const partySize = Number(createForm.partySize);
     const customerName = createForm.customerName.trim();
     const phoneDigits = onlyDigits(createForm.customerPhone);
+    const customerEmail = createForm.customerEmail.trim();
     if (!createForm.environmentId) return setCreateError("Escolha o ambiente.");
     if (!Number.isInteger(partySize) || partySize < 1) return setCreateError("Informe a quantidade de pessoas (inteiro maior que zero).");
     if (!createForm.date) return setCreateError("Informe a data.");
     if (!selectedTime) return setCreateError("Escolha um horário disponível.");
     if (!customerName) return setCreateError("Informe o nome do cliente.");
     if (phoneDigits.length < 10 || phoneDigits.length > 11) return setCreateError("Informe um telefone válido, com DDD.");
+    // E-mail virou obrigatório na tarefa "reservas-unificar-calendario" (item #4) — é o canal
+    // usado pra notificar o cliente quando a loja aprova/recusa a reserva (ver `changeStatus`
+    // abaixo e `PATCH /api/reservas/reservas/[id]`), então sem e-mail a notificação não teria
+    // como chegar a lugar nenhum. Mesma validação (vazio + formato) espelhada no servidor.
+    if (!customerEmail) return setCreateError("Informe o e-mail do cliente.");
+    if (!isValidEmail(customerEmail)) return setCreateError("Informe um e-mail válido.");
 
     setCreating(true);
     try {
@@ -289,7 +346,7 @@ export function ReservasClient({
         partySize,
         customerName,
         customerPhone: phoneDigits,
-        customerEmail: createForm.customerEmail.trim() || undefined,
+        customerEmail,
       });
       if (!result.ok) {
         setCreateError(result.error);
@@ -313,6 +370,28 @@ export function ReservasClient({
 
   return (
     <div className="space-y-4">
+      {/* Seção "Calendário" (ver tarefa "reservas-unificar-calendario", item #1) — empilhada
+          acima da lista/filtros/criação manual, mesmo padrão já usado pra juntar "Relatórios"
+          dentro de "Visão Geral" (duas seções client component independentes, cada uma com seu
+          próprio fetch, numa página só). Decisão de layout: empilhado verticalmente (calendário
+          primeiro, lista depois) em vez de lado a lado — é o padrão já estabelecido no projeto
+          pra esse tipo de junção, e o calendário já tem sua própria grade (mês inteiro) + painel
+          do dia selecionado, então colocar a TABELA inteira ao lado dele (em vez de abaixo)
+          deixaria a tela estreita demais pra qualquer uma das duas partes num monitor comum. As
+          duas seções não trocam estado entre si (filtro de data da lista é independente do mês
+          visível no calendário) — mesma independência já usada no precedente de Relatórios. */}
+      <CalendarioSection
+        hasEmpresa={hasEmpresa}
+        multiEmpresa={multiEmpresa}
+        todayKey={todayKey}
+        reservationsVersion={reservationsVersion}
+      />
+
+      <div className="flex items-center gap-3 pt-2">
+        <h2 className="text-white font-semibold text-base whitespace-nowrap">Lista de reservas</h2>
+        <div className="h-px flex-1 bg-nord-border/60" />
+      </div>
+
       {multiEmpresa && (
         <p className="text-xs text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2">
           Modo Grupo Nord: mostrando reservas de todas as lojas, somente leitura. Selecione uma loja específica para
@@ -443,7 +522,37 @@ export function ReservasClient({
                     )}
                     {canEdit && (
                       <td className="py-2 px-3">
-                        {nextStatuses.length > 0 ? (
+                        {r.status === "PENDENTE" ? (
+                          // Aprovação inicial (tarefa "reservas-unificar-calendario", item #2):
+                          // 2 botões diretos em vez do `<select>` genérico de transição — fluxo de
+                          // negócio confirmado pelo Matheus é sempre "a loja confere a vaga e
+                          // aprova ou recusa", não um menu de opções. As demais transições
+                          // (CONFIRMADA -> CLIENTE_CHEGOU/NAO_COMPARECEU/CANCELADA etc.) continuam
+                          // no `<select>` abaixo — não estendido pra botão de propósito: aquelas
+                          // têm 2-3 opções com semântica mais variada (não é um "aceitar/recusar"
+                          // binário), então o `<select>` continua sendo a UI mais direta ali.
+                          // `changeStatus` (PATCH /api/reservas/reservas/[id]) é o mesmo caminho
+                          // de sempre — é essa rota que dispara o e-mail de notificação ao
+                          // cliente (ver item #5), não os botões em si.
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={busyId === r.id}
+                              onClick={() => changeStatus(r, "CONFIRMADA")}
+                              className="text-xs px-2.5 py-1 rounded-lg bg-nord-success/15 text-nord-success hover:bg-nord-success/25 disabled:opacity-50"
+                            >
+                              {busyId === r.id ? "Salvando..." : "Aceitar"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyId === r.id}
+                              onClick={() => changeStatus(r, "CANCELADA")}
+                              className="text-xs px-2.5 py-1 rounded-lg bg-nord-danger/15 text-nord-danger hover:bg-nord-danger/25 disabled:opacity-50"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : nextStatuses.length > 0 ? (
                           <select
                             value=""
                             disabled={busyId === r.id}
@@ -583,9 +692,10 @@ export function ReservasClient({
             />
           </label>
           <label className="block">
-            <span className="block text-xs text-nord-gray mb-1">E-mail (opcional)</span>
+            <span className="block text-xs text-nord-gray mb-1">E-mail</span>
             <input
               type="email"
+              required
               value={createForm.customerEmail}
               onChange={(e) => setCreateForm({ ...createForm, customerEmail: e.target.value })}
               className="input"

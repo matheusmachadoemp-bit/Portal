@@ -6,7 +6,7 @@ import { Section, Badge } from "@/components/ui/stat-card";
 import { MonthCalendar } from "@/components/ui/month-calendar";
 import { storedDayKey } from "@/lib/timezone";
 import { RESERVATION_STATUS_LABEL, RESERVATION_STATUS_TONE, RESERVATION_DAY_OCCUPANCY_STATUSES } from "@/lib/reservas";
-import type { ReservationDTO } from "../reservas/reservas-client";
+import type { ReservationDTO } from "./reservas-client";
 
 /** "YYYY-MM-DD" a partir dos componentes LOCAIS do `Date` (ano/mês/dia) — nunca
  * `toISOString().slice(0, 10)`, que usa UTC e pode cair no dia errado dependendo do fuso do
@@ -36,14 +36,38 @@ function monthRange(cursor: Date): { dateFrom: string; dateTo: string } {
   };
 }
 
-export function CalendarioClient({
+/**
+ * Seção "Calendário" dentro da tela "Reservas" (ver `reservas-client.tsx`) — a partir da tarefa
+ * "reservas-unificar-calendario" (itens #151/#152 do backlog: unificar a extinta tela/rota
+ * `/portal/reservas/calendario` com a tela "Reservas", ver prisma/migrations/
+ * 20261102070000_reservas_unificar_calendario_lista), este componente (antes `CalendarioClient`,
+ * renderizado numa página própria) vira só uma seção no topo da tela "Reservas", empilhada acima
+ * da lista/filtros/criação manual — mesmo padrão já usado pra juntar "Relatórios" dentro de
+ * "Visão Geral" (duas seções client component independentes, cada uma com seu próprio fetch,
+ * numa página só; ver `src/app/portal/reservas/visao-geral/page.tsx` +
+ * `relatorios-periodo-client.tsx`). Continua 100% autocontido (próprio estado de mês/dia
+ * selecionado, próprio fetch de `GET /api/reservas/reservas`/`GET /api/reservas/resumo`) — não
+ * está acoplado ao filtro de data/status da lista abaixo nem vice-versa.
+ *
+ * Única ponte entre as duas seções: `reservationsVersion` (ver `reservas-client.tsx`) — um
+ * contador que o pai incrementa depois de um PATCH de status bem-sucedido na Lista. Achado do
+ * Teulis na revisão: sem isso, o badge de ocupação do dia ficava mostrando um número
+ * desatualizado até um reload manual da página, porque este componente só refazia o fetch quando
+ * o mês visível (`cursor`) mudava. Em vez de o pai manipular o estado interno (`reservations`)
+ * deste componente diretamente, ele só sinaliza "algo mudou" através da prop — este componente
+ * decide por conta própria como reagir (refazer o mesmo fetch do mês atual), mantendo as duas
+ * seções desacopladas uma da outra.
+ */
+export function CalendarioSection({
   hasEmpresa,
   multiEmpresa,
   todayKey,
+  reservationsVersion,
 }: {
   hasEmpresa: boolean;
   multiEmpresa: boolean;
   todayKey: string;
+  reservationsVersion: number;
 }) {
   const [cursor, setCursor] = useState(() => new Date());
   const [reservations, setReservations] = useState<ReservationDTO[]>([]);
@@ -109,7 +133,11 @@ export function CalendarioClient({
     return () => {
       cancelled = true;
     };
-  }, [hasEmpresa, cursor]);
+    // `reservationsVersion` entra na dependência só para refazer este MESMO fetch (mês atual,
+    // `cursor` inalterado) quando a Lista muda o status de uma reserva — ver comentário da prop
+    // acima. Não reagimos a `totalCapacity`/`loadCapacity` aqui porque a mudança de status de uma
+    // reserva nunca altera a capacidade total dos ambientes, só a ocupação.
+  }, [hasEmpresa, cursor, reservationsVersion]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, ReservationDTO[]>();
