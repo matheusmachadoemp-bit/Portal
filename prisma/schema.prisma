@@ -431,6 +431,9 @@ model Empresa {
   reservationEnvironments            ReservationEnvironment[]
   reservationTableCombinations       ReservationTableCombination[]
   reservations                       Reservation[]
+  // Reservas — Etapa 4 (Fila de Espera; ver bloco de comentário acima de
+  // `ReservationWaitlistEntry`, no final deste arquivo, para o racional de modelagem).
+  reservationWaitlistEntries         ReservationWaitlistEntry[]
   // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver model AiConversation no final deste
   // arquivo). Nullable do lado da conversa (uma conversa "consolidada"/Grupo Nord não tem
   // empresa única) — `onDelete: SetNull` lá para excluir uma empresa não arrastar o histórico
@@ -6907,6 +6910,58 @@ model ReservationTableAssignment {
 
   @@unique([reservationId, tableId])
   @@index([tableId])
+}
+
+// ---------------------------------------------------------------------------
+// RESERVAS — Etapa 4, Fila de Espera (ver prompt da tarefa "reservas-fila-espera"). Representa
+// um cliente que quer uma mesa num dia/horário em que não há disponibilidade — tela/CRUD
+// administrativo próprio (`src/app/portal/reservas/fila-espera/**`), sem nenhuma ligação
+// automática com `Reservation`: nesta etapa, "converter em reserva" é só um status manual
+// (`CONVERTIDO_EM_RESERVA`) que o atendente marca depois de criar a reserva de verdade na tela
+// de Reservas (de outra etapa/tarefa) — criar essa ligação automática (e decidir se
+// `ReservationWaitlistEntry` passa a guardar o id da reserva resultante) é escopo futuro, de
+// propósito fora desta etapa. Por isso o model não tem nenhuma FK para `Reservation` nem para
+// `Cliente` (mesmo racional de `Reservation.customerName`/`customerPhone` — texto livre, sem
+// forçar cadastro) — mantém esta etapa isolada de qualquer outro model em desenvolvimento em
+// paralelo no momento desta tarefa (Visão Geral/Reservas/Calendário e Clientes/Relatórios).
+// ---------------------------------------------------------------------------
+
+enum ReservationWaitlistStatus {
+  /// Entrou na fila, ainda aguardando contato ou vaga abrir — status inicial de toda entrada.
+  AGUARDANDO
+  /// Já entramos em contato com o cliente (ex.: avisando que abriu horário) — aguardando
+  /// confirmação dele antes de virar reserva de fato.
+  CONTATADO
+  /// Virou uma reserva de verdade — marcado manualmente pelo atendente depois de criar a
+  /// reserva na tela de Reservas (ver comentário no topo deste bloco: sem automação nesta etapa).
+  CONVERTIDO_EM_RESERVA
+  /// Cliente desistiu, ou o atendente cancelou a entrada por algum outro motivo.
+  CANCELADO
+  /// Ninguém deu continuidade dentro de um tempo razoável (ex.: data/horário desejado já passou
+  /// sem contato) — marcado manualmente; sem expiração automática por tempo nesta etapa.
+  EXPIRADO
+}
+
+model ReservationWaitlistEntry {
+  id            String                    @id @default(cuid())
+  empresaId     String
+  empresa       Empresa                   @relation(fields: [empresaId], references: [id])
+  customerName  String
+  customerPhone String
+  partySize     Int
+  /// DIA desejado, meia-noite America/Sao_Paulo (`spStartOfDay`) — mesma convenção de
+  /// `Reservation.date`/`ReservationBlockedDate.date` (ver `src/lib/timezone.ts`).
+  desiredDate   DateTime
+  /// "HH:mm" (ver `isValidHHMM`, src/lib/reservas.ts) — opcional: alguns clientes só indicam o
+  /// dia desejado, sem horário fixo dentro dele.
+  desiredTime   String?
+  status        ReservationWaitlistStatus @default(AGUARDANDO)
+  notes         String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@index([empresaId, desiredDate])
+  @@index([empresaId, status])
 }
 
 // ---------------------------------------------------------------------------

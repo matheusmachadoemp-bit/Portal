@@ -10,6 +10,7 @@ import { normalizeSupplierKey } from "@/lib/compra-itens";
 import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 import { normalizeScannedCode } from "@/lib/boleto-barcode";
 import { findPayableDuplicate, formatDuplicateMessage } from "@/lib/boleto-barcode-server";
+import { PURCHASE_PAYMENT_METHODS } from "@/lib/estoque";
 import {
   CompraError,
   deleteInvoiceIfOrphan,
@@ -87,6 +88,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       codigoBarras = normalized;
     }
+  }
+
+  // Lista curada de "pagar um fornecedor" (mesma validação do POST e do PATCH de
+  // /api/estoque/compras/[id]). `body.formaPagamento === existingCheck.formaPagamento` também é
+  // aceito mesmo fora da lista atual: a lista foi reduzida de 10 para 6 opções em 2026-10 (saíram
+  // TED/DOC/TRANSFERENCIA/CHEQUE/OUTRO), mas contas antigas já salvas com um desses valores
+  // continuam reenviando o mesmo valor neste PATCH quando o usuário edita outro campo sem tocar na
+  // forma de pagamento (a tela mostra o valor legado como opção extra no `<select>`, ver
+  // contas-pagar-client.tsx) — sem este caso, esse PATCH passaria a falhar só por reenviar, sem
+  // mudança, um valor que já estava salvo antes da lista encolher. Achado do Teulis, 2026-11.
+  if (
+    body.formaPagamento &&
+    body.formaPagamento !== existingCheck.formaPagamento &&
+    !(PURCHASE_PAYMENT_METHODS as readonly string[]).includes(body.formaPagamento)
+  ) {
+    return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
   }
 
   // FinancialCategory é cadastro global (sem empresaId, ver `compra-itens-server.ts`), então basta
@@ -188,7 +205,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           dataVencimento,
           dataPagamento,
           bankAccountId: body.bankAccountId !== undefined ? body.bankAccountId || null : undefined,
-          formaPagamento: body.formaPagamento ?? undefined,
+          // `?? undefined` tratava `""` (string vazia) como um valor a GRAVAR (só `null`/`undefined`
+          // caem no `??`) — o Prisma tentava escrever `""` na coluna do enum `PaymentMethod` e
+          // quebrava com 500 cru. Mesmo padrão de `|| null` de compras/[id]/route.ts: `""` agora
+          // normaliza para `null` (limpa o campo), igual ausência de valor em um campo opcional.
+          // Achado do Teulis, 2026-11.
+          formaPagamento: body.formaPagamento !== undefined ? body.formaPagamento || null : undefined,
           // `parcelado`/`quantidadeParcelas`/`parcelaAtual` NUNCA são escritos aqui de propósito —
           // já foram validados acima como imutáveis depois da criação (ver bloco
           // `PARCELAMENTO_IMUTAVEL_ERROR`): se chegou até aqui, ou não vieram no body, ou vieram

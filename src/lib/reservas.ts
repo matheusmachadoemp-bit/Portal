@@ -72,3 +72,68 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function isValidEmail(value: string): boolean {
   return EMAIL_PATTERN.test(value);
 }
+
+// Reservas — Etapa 4 (telas administrativas: Visão Geral, Reservas, Calendário). Constantes
+// compartilhadas entre as rotas de API (src/app/api/reservas/reservas/**,
+// src/app/api/reservas/resumo) e as telas (src/app/portal/reservas/{reservas,visao-geral,
+// calendario}/**). Fica neste arquivo (em vez de `reservas-disponibilidade.ts`, que já tem
+// `RESERVATION_OCCUPYING_STATUSES`) porque este arquivo não importa Prisma — os componentes
+// cliente das 3 telas (ex.: o `<select>` de mudança de status) precisam do label/transições sem
+// puxar o Prisma Client pro bundle do navegador, mesmo racional do resto deste arquivo.
+
+/** Rótulo em português de cada valor do enum `ReservationStatus` (schema.prisma) — mesma
+ * convenção de `RESERVATION_TABLE_STATUS_LABEL` acima. */
+export const RESERVATION_STATUS_LABEL: Record<string, string> = {
+  PENDENTE: "Pendente",
+  CONFIRMADA: "Confirmada",
+  CLIENTE_CHEGOU: "Cliente chegou",
+  ACOMODADO: "Acomodado",
+  FINALIZADA: "Finalizada",
+  CANCELADA: "Cancelada",
+  NAO_COMPARECEU: "Não compareceu",
+};
+
+export const RESERVATION_STATUSES = Object.keys(RESERVATION_STATUS_LABEL);
+
+/** Tom de `Badge` (src/components/ui/stat-card.tsx) para cada status — usado nas 3 telas pra
+ * colorir o status de forma consistente. */
+export const RESERVATION_STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" | "info" | "purple"> = {
+  PENDENTE: "warning",
+  CONFIRMADA: "info",
+  CLIENTE_CHEGOU: "purple",
+  ACOMODADO: "success",
+  FINALIZADA: "default",
+  CANCELADA: "danger",
+  NAO_COMPARECEU: "danger",
+};
+
+/** Transições de status permitidas a partir de cada status atual — a tela "Reservas" só oferece
+ * estas opções (nunca um "salto" livre entre quaisquer dois status), e a rota `PATCH
+ * /api/reservas/reservas/[id]` recusa qualquer transição fora deste mapa (ver comentário na
+ * rota). Os 3 status terminais (`FINALIZADA`/`CANCELADA`/`NAO_COMPARECEU`) não têm saída — uma
+ * reserva encerrada não volta a ocupar mesa (ver `RESERVATION_OCCUPYING_STATUSES`,
+ * `src/lib/reservas-disponibilidade.ts`); reabrir uma reserva encerrada está fora de escopo
+ * desta etapa (criar uma nova reserva cobre o caso de "a pessoa voltou a querer a mesa"). */
+export const RESERVATION_STATUS_TRANSITIONS: Record<string, string[]> = {
+  PENDENTE: ["CONFIRMADA", "CANCELADA"],
+  CONFIRMADA: ["CLIENTE_CHEGOU", "NAO_COMPARECEU", "CANCELADA"],
+  CLIENTE_CHEGOU: ["ACOMODADO", "CANCELADA"],
+  ACOMODADO: ["FINALIZADA"],
+  FINALIZADA: [],
+  CANCELADA: [],
+  NAO_COMPARECEU: [],
+};
+
+// Reservas — Etapa 4 (Fila de Espera). Constantes compartilhadas entre as rotas de API
+// (src/app/api/reservas/fila-espera/**) e a tela (src/app/portal/reservas/fila-espera/**). Ver
+// comentário de modelagem no `prisma/schema.prisma` acima de `model ReservationWaitlistEntry`.
+
+export const RESERVATION_WAITLIST_STATUS_LABEL: Record<string, string> = {
+  AGUARDANDO: "Aguardando",
+  CONTATADO: "Contatado",
+  CONVERTIDO_EM_RESERVA: "Convertido em reserva",
+  CANCELADO: "Cancelado",
+  EXPIRADO: "Expirado",
+};
+
+export const RESERVATION_WAITLIST_STATUSES = Object.keys(RESERVATION_WAITLIST_STATUS_LABEL);
