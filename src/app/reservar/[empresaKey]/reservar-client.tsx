@@ -251,6 +251,12 @@ export function ReservarClient({
                 min={1}
                 value={partySize}
                 onChange={(e) => setPartySize(Math.max(1, Number(e.target.value) || 1))}
+                // Tarefa #154: o campo já vem preenchido com um valor padrão (2) — sem isso, ao
+                // clicar e digitar o número desejado (ex. "8"), o cursor ia pro FINAL do valor
+                // existente em vez de selecioná-lo, e o resultado virava "28" em vez de "8"
+                // (achado reportado pelo Matheus). Selecionar tudo ao focar faz qualquer dígito
+                // novo substituir o valor inteiro.
+                onFocus={(e) => e.target.select()}
                 className="input"
               />
             </label>

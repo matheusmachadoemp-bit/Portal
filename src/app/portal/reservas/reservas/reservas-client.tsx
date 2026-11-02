@@ -610,6 +610,11 @@ export function ReservasClient({
                 min={1}
                 value={createForm.partySize}
                 onChange={(e) => setCreateForm({ ...createForm, partySize: e.target.value })}
+                // Mesmo achado da tarefa #154 (ver `reservar-client.tsx`, fluxo público): este
+                // campo também nasce pré-preenchido (`emptyCreateForm`: partySize "2"), então sem
+                // selecionar tudo ao focar o funcionário digitaria "28" em vez de "8" ao tentar
+                // substituir o valor padrão.
+                onFocus={(e) => e.target.select()}
                 className="input"
               />
             </label>
