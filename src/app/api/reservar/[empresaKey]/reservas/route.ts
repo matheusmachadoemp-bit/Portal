@@ -111,6 +111,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
       select: { id: true },
     });
 
+    // `include: {}` só pra essa chamada passar a devolver os campos escalares do registro criado
+    // (entre eles `status`) sem carregar nenhuma relação extra — ver overload com `include` em
+    // `reserveEnvironmentTransacted`.
     const reservation = await reserveEnvironmentTransacted({
       empresaId: empresa.id,
       environmentId,
@@ -122,12 +125,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
       customerName: nome,
       customerPhone: telefone,
       customerEmail: emailRaw,
+      include: {},
     });
 
     return NextResponse.json({
       reservation: {
         id: reservation.id,
         confirmationCode: reservation.confirmationCode,
+        // Achado #163 (revisão geral, Nina): o fluxo público sempre cria a reserva como PENDENTE
+        // (aguardando confirmação da loja) — o cliente final precisa saber disso pra não achar que
+        // a mesa já está garantida (ver mensagem diferenciada em `reservar-client.tsx`).
+        status: reservation.status,
         date: dateKey,
         time: horario,
         partySize,
