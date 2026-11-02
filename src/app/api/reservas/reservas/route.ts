@@ -290,7 +290,12 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    const created = await reserveTablesTransacted({
+    // `include` pede pro próprio `reserveTablesTransacted` já devolver a reserva com as relações
+    // de `RESERVATION_LIST_INCLUDE` carregadas de dentro da transação de criação — elimina o
+    // `findUnique` extra que esta rota fazia antes só para buscar essas relações e serializar a
+    // resposta (achado do Teulis, tarefa #147; o fluxo público, que não passa `include`, continua
+    // devolvendo só `{ id, confirmationCode }`, sem nenhuma mudança de comportamento).
+    const reservation = await reserveTablesTransacted({
       empresaId: empresa.id,
       environmentId,
       tableIds: option.tableIds,
@@ -304,14 +309,10 @@ export async function POST(req: Request) {
       customerPhone,
       customerEmail: customerEmailRaw || null,
       status: "CONFIRMADA",
-    });
-
-    const reservation = await prisma.reservation.findUnique({
-      where: { id: created.id },
       include: RESERVATION_LIST_INCLUDE,
     });
 
-    return NextResponse.json({ reservation: reservation ? serializeReservation(reservation) : null });
+    return NextResponse.json({ reservation: serializeReservation(reservation) });
   } catch (err) {
     if (err instanceof ReservationBusyError || err instanceof ReservationConflictError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
