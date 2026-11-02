@@ -205,16 +205,30 @@ export function CalendarioSection({
                 }`}
               >
                 <span className={`text-xs ${isToday ? "text-nord-blue-light font-semibold" : "text-white"}`}>{day.getDate()}</span>
-                {/* Badge de ocupação do dia: círculo vermelho com pessoas confirmadas + "/capacidade"
-                    em laranja (ver prompt da tarefa) — só aparece em dias do mês com capacidade
-                    carregada; `confirmedPartySize` pode ser 0 (dia aberto sem reserva confirmada
-                    ainda) e ainda assim é útil mostrar "0/44". */}
+                {/* Badge de ocupação do dia: círculo com pessoas confirmadas + "/capacidade" — só
+                    aparece em dias do mês com capacidade carregada; `confirmedPartySize` pode ser 0
+                    (dia aberto sem reserva confirmada ainda) e ainda assim é útil mostrar "0/44".
+                    Tarefa #153: dia sem nenhuma pessoa ocupando fica CINZA (mesmo tom neutro do
+                    tone "default" do `Badge`, ver DESIGN_SYSTEM.md: `bg-white/10 text-nord-gray`)
+                    em vez de vermelho/laranja — a cor de alerta só faz sentido quando há ocupação
+                    real (`confirmedPartySize > 0`), senão o dia vazio parecia alarmante sem motivo
+                    (achado reportado pelo Matheus). */}
                 {inMonth && totalCapacity !== null && totalCapacity > 0 && (
                   <span className="flex items-center gap-1 self-start">
-                    <span className="w-5 h-5 shrink-0 rounded-full bg-nord-danger text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    <span
+                      className={`w-5 h-5 shrink-0 rounded-full text-[10px] font-bold flex items-center justify-center leading-none ${
+                        confirmedPartySize > 0 ? "bg-nord-danger text-white" : "bg-white/10 text-nord-gray"
+                      }`}
+                    >
                       {confirmedPartySize}
                     </span>
-                    <span className="text-[10px] font-semibold text-amber-400 leading-none">/{totalCapacity}</span>
+                    <span
+                      className={`text-[10px] font-semibold leading-none ${
+                        confirmedPartySize > 0 ? "text-amber-400" : "text-nord-gray"
+                      }`}
+                    >
+                      /{totalCapacity}
+                    </span>
                   </span>
                 )}
               </button>
