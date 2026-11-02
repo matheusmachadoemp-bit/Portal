@@ -6,7 +6,7 @@ import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import type { RollingPeriodKey } from "@/lib/periods";
 import { formatNumber, formatPercent } from "@/lib/calc";
-import { RelatoriosCharts } from "./charts";
+import { RelatoriosCharts } from "./relatorios-periodo-charts";
 
 type OcupacaoAmbiente = {
   environmentId: string;
@@ -29,12 +29,18 @@ type ReportResponse = {
 };
 
 /**
- * Tela "Relatórios" do módulo Reservas (Etapa 4) — KPIs e gráficos agregados sobre `Reservation`
- * num período, consumidos de `GET /api/reservas/relatorios` (agregação server-side, sem N+1 —
- * ver src/lib/reservas-relatorios.ts). Filtro de período padrão do portal
- * (`PeriodFilterBar`/`STANDARD_PERIOD_OPTIONS`, default "Este mês").
+ * Seção "Relatório por período" da tela "Visão Geral" do módulo Reservas — KPIs e gráficos
+ * agregados sobre `Reservation` num período, consumidos de `GET /api/reservas/relatorios`
+ * (agregação server-side, sem N+1 — ver src/lib/reservas-relatorios.ts). Filtro de período padrão
+ * do portal (`PeriodFilterBar`/`STANDARD_PERIOD_OPTIONS`, default "Este mês").
+ *
+ * Até a tarefa "reservas-unificar-visao-relatorios" isso era a tela própria "Relatórios"
+ * (subcategoria separada no menu lateral); a pedido do usuário foi mesclada dentro de "Visão
+ * Geral" (uma única entrada no menu — ver prisma/migrations/
+ * 20261102030000_remove_relatorios_subcategoria_reservas) como uma seção abaixo do resumo do dia,
+ * mantendo o mesmo componente/rota de API, só renderizado em outro lugar da árvore.
  */
-export function RelatoriosReservasClient({ hasEmpresa }: { hasEmpresa: boolean }) {
+export function RelatoriosPeriodoSection({ hasEmpresa }: { hasEmpresa: boolean }) {
   const [periodo, setPeriodo] = useState<RollingPeriodKey>("mes-atual");
   const [data, setData] = useState<ReportResponse | null>(null);
   const [loading, setLoading] = useState(hasEmpresa);
@@ -69,10 +75,14 @@ export function RelatoriosReservasClient({ hasEmpresa }: { hasEmpresa: boolean }
   }, [hasEmpresa]);
 
   if (!hasEmpresa) {
+    // Sem título aqui de propósito: esta seção já é precedida, na página, por um divisor "Relatório
+    // por período" (h2) — usar `Section` (que desenha seu próprio h3 com o mesmo título) duplicaria o
+    // texto em sequência quando a loja ativa é o consolidado "Grupo Nord" (achado do Teulis). Mesmo
+    // padrão visual do card "Selecione uma loja para ver o resumo de reservas." no topo da página.
     return (
-      <Section title="Relatórios">
-        <p className="text-sm text-nord-gray">Selecione uma loja específica para ver os relatórios de Reservas.</p>
-      </Section>
+      <div className="nord-card p-8 text-center text-sm text-nord-gray">
+        Selecione uma loja específica para ver os relatórios de Reservas.
+      </div>
     );
   }
 

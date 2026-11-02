@@ -500,10 +500,16 @@ const CATEGORIES = [
     // 20261026040000_reservas_etapa1_schema e 20261026041000_reservas_etapa1_menu_permissao
     // para o equivalente de produção, já que o deploy automático nunca roda este seed).
     // Com a Etapa 4 completa (3 tarefas paralelas: Reservas/Visão Geral/Calendário, Fila de
-    // Espera, Clientes/Relatórios), todas as 8 subcategorias abaixo já têm página própria —
+    // Espera, Clientes/Relatórios), as 8 subcategorias originais já tinham página própria —
     // "Configurações" (desde a Etapa 1), "Mesas e Ambientes" (Etapa 2), e as demais 6 desde a
-    // Etapa 4. O catch-all genérico (src/app/portal/reservas/[sub]/page.tsx) continua existindo
-    // como rede de segurança para uma eventual subcategoria nova sem pasta própria ainda.
+    // Etapa 4. Depois disso, "Relatórios" foi mesclada dentro de "Visão Geral" (pedido do
+    // usuário — ver prisma/migrations/20261102030000_remove_relatorios_subcategoria_reservas —
+    // mesmo padrão de hard delete já usado pra Financeiro/Manutenção/Universidade/Estoque/CRM):
+    // a tela única de Visão Geral agora mostra o resumo do dia e, abaixo, os agregados por
+    // período que antes ficavam em Relatórios; a rota/pasta `relatorios/` e a subcategoria
+    // própria deixaram de existir, restando 7 subcategorias abaixo. O catch-all genérico
+    // (src/app/portal/reservas/[sub]/page.tsx) continua existindo como rede de segurança para
+    // uma eventual subcategoria nova sem pasta própria ainda.
     key: "reservas",
     name: "Reservas",
     icon: "CalendarCheck",
@@ -516,7 +522,6 @@ const CATEGORIES = [
       { key: "mesas-ambientes", name: "Mesas e Ambientes", icon: "Armchair" },
       { key: "fila-espera", name: "Fila de Espera", icon: "Hourglass" },
       { key: "clientes", name: "Clientes", icon: "Users" },
-      { key: "relatorios", name: "Relatórios", icon: "BarChart3" },
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
