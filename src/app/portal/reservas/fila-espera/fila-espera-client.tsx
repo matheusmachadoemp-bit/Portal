@@ -323,7 +323,7 @@ export function FilaEsperaClient({
           label="Clientes sentaram"
           value={loading ? "—" : String(todayStats.atendidosCount)}
           icon="CheckCircle2"
-          color="#2ecc71"
+          color="#22c55e"
           hint="Hoje"
         />
         <StatCard
