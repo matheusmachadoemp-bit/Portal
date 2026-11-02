@@ -26,6 +26,16 @@ import { pickBestOption } from "@/lib/reservas-publico";
 
 const STATUSES = RESERVATION_STATUSES as ReservationStatus[];
 
+/** Inteiro >= 1 (opcionalmente limitado a `max`) a partir de um parâmetro de query — mesmo
+ *  helper (duplicado de propósito, não existe um compartilhado ainda) já usado em
+ *  src/app/api/tarefas/route.ts, src/app/api/rh/time-entries/route.ts e outras rotas paginadas. */
+function parsePositiveInt(value: string | null, fallback: number, max?: number): number {
+  if (value === null) return fallback;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return fallback;
+  return max !== undefined ? Math.min(n, max) : n;
+}
+
 const RESERVATION_LIST_INCLUDE = {
   empresa: { select: { id: true, name: true, color: true } },
   environment: { select: { id: true, name: true } },
@@ -75,6 +85,20 @@ function serializeReservation(r: ReservationWithRelations) {
  * - `status`: um ou mais valores do enum `ReservationStatus`, separados por vírgula.
  * - `environmentId`: uma reserva de um ambiente específico.
  * - `q`: busca livre (nome do cliente, telefone ou código de confirmação), case-insensitive.
+ *
+ * Paginação opt-in (`page`/`pageSize`, 1-indexado, `pageSize` 1-200, padrão 50) — mesmo padrão de
+ * `src/app/api/tarefas/route.ts`/`src/app/api/rh/time-entries/route.ts`: só ativa quando a chamada
+ * manda pelo menos um dos dois na query string; nesse caso a resposta ganha `pagination: { page,
+ * pageSize, total, totalPages }` e `reservations` passa a conter só a página pedida. Sem nenhum
+ * dos dois, a rota mantém o formato de sempre (`{ reservations }`, lista inteira do filtro) — os
+ * dois consumidores de hoje (tela "Reservas", filtro de período que pode vir aberto de um lado só;
+ * e "Calendário", que busca o mês inteiro para calcular ocupação por dia) não têm paginação própria
+ * na UI, então mudar o formato por padrão quebraria as duas telas. Achado do Teulis (tarefa #140):
+ * sem nenhum teto, um filtro `dateFrom`/`dateTo` aberto de um só lado devolve o histórico inteiro
+ * de uma vez — por isso, no caminho sem paginação, aplica-se `SAFETY_TAKE` (teto de segurança bem
+ * mais alto que qualquer uso real de hoje, não literalmente ilimitado) em vez de um `findMany` sem
+ * `take` nenhum (mesmo espírito do `SAFETY_TAKE` de `/api/rh/time-entries` e do "teto alto" de
+ * `/api/estoque/compras`).
  */
 export async function GET(req: Request) {
   const session = await auth();
@@ -138,14 +162,38 @@ export async function GET(req: Request) {
     });
   }
 
-  const reservations = await prisma.reservation.findMany({
-    where: { AND: and },
-    orderBy: { startTime: "asc" },
-    include: RESERVATION_LIST_INCLUDE,
-  });
+  // Paginação opt-in — ver JSDoc acima. `SAFETY_TAKE`: nenhum uso real de hoje (tela "Reservas"
+  // com um período largo, ou o Calendário com o mês inteiro) chega perto disso; é só uma rede de
+  // segurança contra um filtro de data aberto de um só lado crescendo sem fim conforme o histórico
+  // do módulo aumenta (achado do Teulis, tarefa #140 — testado com 800 reservas históricas sem
+  // nenhum teto, 394KB/0,23s: sem risco prático hoje, mas sem limite nenhum o risco só cresce).
+  const SAFETY_TAKE = 2000;
 
+  const pageParam = searchParams.get("page");
+  const pageSizeParam = searchParams.get("pageSize");
+  const paginar = pageParam !== null || pageSizeParam !== null;
+  const page = parsePositiveInt(pageParam, 1);
+  const pageSize = parsePositiveInt(pageSizeParam, 50, 200);
+
+  const [reservations, total] = await Promise.all([
+    prisma.reservation.findMany({
+      where: { AND: and },
+      orderBy: { startTime: "asc" },
+      include: RESERVATION_LIST_INCLUDE,
+      skip: paginar ? (page - 1) * pageSize : undefined,
+      take: paginar ? pageSize : SAFETY_TAKE,
+    }),
+    paginar ? prisma.reservation.count({ where: { AND: and } }) : null,
+  ]);
+
+  if (!paginar) {
+    return NextResponse.json({ reservations: reservations.map(serializeReservation) });
+  }
+
+  const totalCount = total ?? 0;
   return NextResponse.json({
     reservations: reservations.map(serializeReservation),
+    pagination: { page, pageSize, total: totalCount, totalPages: Math.max(1, Math.ceil(totalCount / pageSize)) },
   });
 }
 
