@@ -4,19 +4,27 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { RESERVAS_MANAGER_ROLES, RESERVATION_WAITLIST_STATUSES, isPositiveInt, isValidHHMM, onlyDigits } from "@/lib/reservas";
+import { RESERVAS_MANAGER_ROLES, RESERVATION_WAITLIST_ACTIVE_STATUSES, isPositiveInt, onlyDigits } from "@/lib/reservas";
 import { serializeWaitlistEntry } from "@/lib/reservas-server";
-import { parseDateKey, spStartOfDay } from "@/lib/timezone";
+import { spDateKey, spStartOfDay } from "@/lib/timezone";
 
-const STATUSES = RESERVATION_WAITLIST_STATUSES as ReservationWaitlistStatus[];
 const NAME_MAX_LENGTH = 120;
 const NOTES_MAX_LENGTH = 500;
 
 /** Fila de Espera (Etapa 4 — ver bloco de comentário no `prisma/schema.prisma` acima de `model
- * ReservationWaitlistEntry`). Mesmo padrão de escopo/permissão do resto do módulo Reservas
- * (`src/app/api/reservas/ambientes/route.ts`): 1 loja por vez via `requireActiveSingleEmpresa`,
- * `hasModulePermission(..., "reservas", ...)` reaproveitando a mesma chave de módulo. */
-export async function GET(req: Request) {
+ * ReservationWaitlistEntry`, seção "REDESIGN"). Mesmo padrão de escopo/permissão do resto do
+ * módulo Reservas (`src/app/api/reservas/ambientes/route.ts`): 1 loja por vez via
+ * `requireActiveSingleEmpresa`, `hasModulePermission(..., "reservas", ...)` reaproveitando a
+ * mesma chave de módulo.
+ *
+ * Sem filtro de data/status vindo de fora a partir do redesign (não existe mais `desiredDate`,
+ * e a tela agrupa AGUARDANDO/CONTATADO — "na fila agora" — e o restante — "histórico" — no
+ * próprio client, a partir da mesma lista). Pra não devolver um histórico infinito de entradas
+ * resolvidas (CANCELADO/EXPIRADO/CONVERTIDO_EM_RESERVA) acumuladas ao longo de meses, a rota só
+ * devolve: (a) entradas ainda "vivas" (AGUARDANDO/CONTATADO), de qualquer data — não deveriam
+ * existir por mais de algumas horas, mas não corta por segurança; e (b) qualquer entrada criada
+ * HOJE (America/Sao_Paulo), independente do status — cobre o histórico do dia mostrado na tela. */
+export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await hasModulePermission(session.user.id, "reservas", "canView"))) {
@@ -28,27 +36,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Selecione uma loja específica para ver a fila de espera." }, { status: 400 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const where: Prisma.ReservationWaitlistEntryWhereInput = { empresaId: empresa.id };
-
-  const dateParam = searchParams.get("date");
-  if (dateParam) {
-    const dateKey = parseDateKey(dateParam);
-    if (!dateKey) return NextResponse.json({ error: "Data inválida (use AAAA-MM-DD)." }, { status: 400 });
-    where.desiredDate = spStartOfDay(dateKey);
-  }
-
-  const statusParam = searchParams.get("status");
-  if (statusParam) {
-    if (!STATUSES.includes(statusParam as ReservationWaitlistStatus)) {
-      return NextResponse.json({ error: "Status inválido." }, { status: 400 });
-    }
-    where.status = statusParam as ReservationWaitlistStatus;
-  }
+  const startOfToday = spStartOfDay(spDateKey());
+  const where: Prisma.ReservationWaitlistEntryWhereInput = {
+    empresaId: empresa.id,
+    OR: [
+      { status: { in: RESERVATION_WAITLIST_ACTIVE_STATUSES as ReservationWaitlistStatus[] } },
+      { createdAt: { gte: startOfToday } },
+    ],
+  };
 
   const entries = await prisma.reservationWaitlistEntry.findMany({
     where,
-    orderBy: [{ desiredDate: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ createdAt: "asc" }],
   });
 
   return NextResponse.json({ entries: entries.map(serializeWaitlistEntry) });
@@ -87,17 +86,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Informe a quantidade de pessoas (inteiro maior que zero)." }, { status: 400 });
   }
 
-  const dateKey = parseDateKey(body?.desiredDate);
-  if (!dateKey) return NextResponse.json({ error: "Informe uma data desejada válida (AAAA-MM-DD)." }, { status: 400 });
-
-  let desiredTime: string | null = null;
-  if (body?.desiredTime !== undefined && body?.desiredTime !== null && body?.desiredTime !== "") {
-    if (!isValidHHMM(body.desiredTime)) {
-      return NextResponse.json({ error: "Horário desejado inválido." }, { status: 400 });
-    }
-    desiredTime = body.desiredTime;
-  }
-
   const notes =
     typeof body?.notes === "string" && body.notes.trim() ? body.notes.trim().slice(0, NOTES_MAX_LENGTH) : null;
 
@@ -107,8 +95,6 @@ export async function POST(req: Request) {
       customerName,
       customerPhone,
       partySize: body.partySize,
-      desiredDate: spStartOfDay(dateKey),
-      desiredTime,
       notes,
     },
   });

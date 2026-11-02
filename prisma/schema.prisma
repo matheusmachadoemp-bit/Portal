@@ -6900,31 +6900,42 @@ model ReservationTableAssignment {
 
 // ---------------------------------------------------------------------------
 // RESERVAS — Etapa 4, Fila de Espera (ver prompt da tarefa "reservas-fila-espera"). Representa
-// um cliente que quer uma mesa num dia/horário em que não há disponibilidade — tela/CRUD
-// administrativo próprio (`src/app/portal/reservas/fila-espera/**`), sem nenhuma ligação
-// automática com `Reservation`: nesta etapa, "converter em reserva" é só um status manual
-// (`CONVERTIDO_EM_RESERVA`) que o atendente marca depois de criar a reserva de verdade na tela
-// de Reservas (de outra etapa/tarefa) — criar essa ligação automática (e decidir se
-// `ReservationWaitlistEntry` passa a guardar o id da reserva resultante) é escopo futuro, de
-// propósito fora desta etapa. Por isso o model não tem nenhuma FK para `Reservation` nem para
-// `Cliente` (mesmo racional de `Reservation.customerName`/`customerPhone` — texto livre, sem
-// forçar cadastro) — mantém esta etapa isolada de qualquer outro model em desenvolvimento em
-// paralelo no momento desta tarefa (Visão Geral/Reservas/Calendário e Clientes/Relatórios).
+// um cliente esperando mesa agora, no balcão — tela/CRUD administrativo próprio
+// (`src/app/portal/reservas/fila-espera/**`), sem nenhuma ligação automática com `Reservation`.
+// Por isso o model não tem nenhuma FK para `Reservation` nem para `Cliente` (mesmo racional de
+// `Reservation.customerName`/`customerPhone` — texto livre, sem forçar cadastro).
+//
+// REDESIGN (tarefa "reservas-fila-espera-redesign", posterior à etapa acima, já publicada no PR
+// #570): o Matheus pediu uma fila "ao vivo" (posição numerada + cronômetro de espera), e nessa
+// conversa confirmou duas simplificações:
+// 1. Removidos os campos `desiredDate`/`desiredTime` que existiam aqui: a fila de espera é
+//    sempre "a partir de agora" (no dia/hora em que a entrada é criada) — nunca um agendamento
+//    futuro. Quem precisa agendar pra um dia/horário específico usa a tela de Reservas, não a
+//    Fila de Espera. O cronômetro ao vivo da tela usa `createdAt` como referência de início.
+// 2. A ação "Converter em reserva" (e, com ela, o status `CONVERTIDO_EM_RESERVA`) saiu da UI e da
+//    API: a Fila de Espera não deve ter nenhuma ação em direção a criar uma Reserva. O valor
+//    `CONVERTIDO_EM_RESERVA` continua existindo no enum abaixo (removê-lo exigiria recriar o tipo
+//    inteiro no Postgres — `ALTER TYPE ... DROP VALUE` não existe — risco desproporcional ao
+//    benefício) mas é tratado como MORTO: a API (`PATCH /api/reservas/fila-espera/[id]`) recusa
+//    defini-lo a partir de agora, e a UI nunca oferece essa opção. Só sobrevive pra não quebrar
+//    nenhuma linha antiga que já tenha esse status gravado (nenhuma esperada em produção, já que
+//    a etapa anterior nunca teve uso real antes deste redesign, mas por segurança).
 // ---------------------------------------------------------------------------
 
 enum ReservationWaitlistStatus {
   /// Entrou na fila, ainda aguardando contato ou vaga abrir — status inicial de toda entrada.
   AGUARDANDO
-  /// Já entramos em contato com o cliente (ex.: avisando que abriu horário) — aguardando
-  /// confirmação dele antes de virar reserva de fato.
+  /// Já entramos em contato com o cliente (ex.: avisando que a mesa está pronta) — aguardando
+  /// confirmação dele antes de ocupar.
   CONTATADO
-  /// Virou uma reserva de verdade — marcado manualmente pelo atendente depois de criar a
-  /// reserva na tela de Reservas (ver comentário no topo deste bloco: sem automação nesta etapa).
+  /// MORTO (ver bloco de comentário acima do enum) — não é mais definido por nenhum fluxo da
+  /// aplicação a partir do redesign; mantido só para não quebrar linha antiga que já tenha esse
+  /// valor gravado.
   CONVERTIDO_EM_RESERVA
   /// Cliente desistiu, ou o atendente cancelou a entrada por algum outro motivo.
   CANCELADO
-  /// Ninguém deu continuidade dentro de um tempo razoável (ex.: data/horário desejado já passou
-  /// sem contato) — marcado manualmente; sem expiração automática por tempo nesta etapa.
+  /// Ninguém deu continuidade dentro de um tempo razoável — marcado manualmente; sem expiração
+  /// automática por tempo nesta etapa.
   EXPIRADO
 }
 
@@ -6935,19 +6946,15 @@ model ReservationWaitlistEntry {
   customerName  String
   customerPhone String
   partySize     Int
-  /// DIA desejado, meia-noite America/Sao_Paulo (`spStartOfDay`) — mesma convenção de
-  /// `Reservation.date`/`ReservationBlockedDate.date` (ver `src/lib/timezone.ts`).
-  desiredDate   DateTime
-  /// "HH:mm" (ver `isValidHHMM`, src/lib/reservas.ts) — opcional: alguns clientes só indicam o
-  /// dia desejado, sem horário fixo dentro dele.
-  desiredTime   String?
   status        ReservationWaitlistStatus @default(AGUARDANDO)
   notes         String?
+  /// Também serve de referência pro cronômetro de espera "ao vivo" da tela (ver comentário de
+  /// redesign acima do enum) — tempo de espera = agora - createdAt.
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
 
-  @@index([empresaId, desiredDate])
   @@index([empresaId, status])
+  @@index([empresaId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
