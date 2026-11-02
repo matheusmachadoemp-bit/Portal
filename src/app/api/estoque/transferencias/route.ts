@@ -18,9 +18,17 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: "Sem acesso a nenhuma loja." }, { status: 403 });
   const empresaIds = empresaIdsForContext(ctx);
 
+  // Sem filtro de data nem paginação (a tela "Movimentações" sempre busca tudo de uma vez — ver
+  // movimentacoes-client.tsx), então aplicamos o mesmo teto de segurança (`SAFETY_TAKE`) já usado
+  // em outras rotas sem paginação de verdade (`/api/reservas/reservas`, `/api/rh/time-entries`)
+  // contra o histórico de transferências crescer sem fim (achado de revisão, tarefa #180) — nenhum
+  // uso real de hoje chega perto disso.
+  const SAFETY_TAKE = 2000;
+
   const transfers = await prisma.transfer.findMany({
     where: { OR: [{ origemEmpresaId: { in: empresaIds } }, { destinoEmpresaId: { in: empresaIds } }] },
     orderBy: { createdAt: "desc" },
+    take: SAFETY_TAKE,
     include: {
       origemEmpresa: { select: { id: true, name: true, color: true } },
       destinoEmpresa: { select: { id: true, name: true, color: true } },

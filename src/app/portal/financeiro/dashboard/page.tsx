@@ -5,7 +5,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { PageContainer } from "@/components/page-container";
 import { Section, Badge } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { formatCurrency, formatNumber, formatPercent, growth, pct } from "@/lib/calc";
+import { formatCurrency, formatNumber, formatPercent, growth } from "@/lib/calc";
 import { computeDreFromRows, DRE_PAYABLE_SELECT, DRE_RECEIVABLE_SELECT } from "@/lib/dre";
 import {
   startOfDay,
