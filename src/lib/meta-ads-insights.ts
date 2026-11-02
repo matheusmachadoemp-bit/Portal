@@ -171,11 +171,21 @@ export async function loadActiveMetaAdsCampaigns(
   await Promise.all(
     empresas.map(async (empresa) => {
       if (!empresa.metaAdsAccessToken || !empresa.metaAdsAdAccountId) return;
-      const token = decryptSecret(empresa.metaAdsAccessToken);
-      const result = await fetchMetaAdsCampaigns(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion);
-      if (!result.ok) return;
-      for (const c of result.campaigns) {
-        statusByCampaignId.set(c.id, { name: c.name, status: c.status });
+      // Mesmo cuidado já tomado em meta-ads-sync.ts/saipos-sync.ts/ifood-sync.ts/
+      // review-sync.ts: um token salvo corrompido (ou qualquer outra falha
+      // inesperada) numa única loja não pode derrubar o Promise.all inteiro —
+      // isso quebraria a página de Tráfego Pago (e a API do seletor de período)
+      // para TODAS as lojas no modo Grupo Nord. Loga e pula só esta loja.
+      try {
+        const token = decryptSecret(empresa.metaAdsAccessToken);
+        const result = await fetchMetaAdsCampaigns(token, empresa.metaAdsAdAccountId, empresa.metaAdsGraphVersion);
+        if (!result.ok) return;
+        for (const c of result.campaigns) {
+          statusByCampaignId.set(c.id, { name: c.name, status: c.status });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Erro inesperado ao buscar campanhas do Meta Ads.";
+        console.error(`[meta-ads-insights] falha ao buscar campanhas da empresa ${empresa.id}:`, message);
       }
     })
   );
