@@ -5,6 +5,9 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { RESERVAS_MANAGER_ROLES, RESERVATION_STATUS_TRANSITIONS, RESERVATION_STATUSES } from "@/lib/reservas";
+import { storedDayKey } from "@/lib/timezone";
+import { spHours, spMinutes } from "@/lib/checklist";
+import { sendReservationAcceptedEmail, sendReservationCancelledEmail, type ReservationEmailDetails } from "@/lib/email";
 
 const STATUSES = RESERVATION_STATUSES as ReservationStatus[];
 
@@ -13,6 +16,70 @@ const RESERVATION_INCLUDE = {
   environment: { select: { id: true, name: true } },
   cliente: { select: { id: true, nome: true } },
 };
+
+/** Monta os detalhes formatados (BR/São Paulo) usados nos e-mails de notificação ao cliente (ver
+ * `notifyCustomerOfStatusChange` abaixo) a partir de uma reserva já carregada com
+ * `RESERVATION_INCLUDE`. Formata data/hora com `storedDayKey`/`spHours`/`spMinutes` (nunca
+ * `.getHours()`/`.toISOString()` puros) pelo mesmo motivo de sempre: o servidor roda em UTC, e
+ * ler a hora "crua" do `Date` daria um horário errado pro cliente (mesma causa raiz documentada
+ * em `src/lib/checklist.ts`). */
+function buildReservationEmailDetails(r: {
+  date: Date;
+  startTime: Date;
+  partySize: number;
+  customerName: string | null;
+  cliente: { nome: string } | null;
+  empresa: { name: string };
+  environment: { name: string };
+}): ReservationEmailDetails {
+  const dateKey = storedDayKey(r.date);
+  const [year, month, day] = dateKey.split("-");
+  return {
+    customerName: r.customerName ?? r.cliente?.nome ?? "cliente",
+    empresaName: r.empresa.name,
+    environmentName: r.environment.name,
+    dateBR: `${day}/${month}/${year}`,
+    timeHHMM: `${String(spHours(r.startTime)).padStart(2, "0")}:${String(spMinutes(r.startTime)).padStart(2, "0")}`,
+    partySize: r.partySize,
+  };
+}
+
+/**
+ * Notifica o cliente por e-mail quando a loja aprova/recusa a solicitação inicial de reserva, ou
+ * cancela uma reserva já confirmada (ver prompt da tarefa "reservas-unificar-calendario", item
+ * #5 — fluxo de negócio confirmado pelo Matheus: cliente manda solicitação PENDENTE -> loja
+ * confere vaga -> aprova CONFIRMADA ou recusa CANCELADA):
+ * - PENDENTE -> CONFIRMADA: e-mail de aprovação.
+ * - PENDENTE -> CANCELADA: e-mail de recusa (caso principal pedido).
+ * - CONFIRMADA -> CANCELADA: e-mail de cancelamento de reserva já confirmada — extensão de bom
+ *   senso (não é o caso principal pedido, mas quem já tinha recebido confirmação merece saber
+ *   que ela foi cancelada pela loja); texto próprio (`wasConfirmed: true`), nunca o mesmo texto
+ *   de "recusa de solicitação". Não estendido a outras origens de CANCELADA (ex.
+ *   CLIENTE_CHEGOU -> CANCELADA): esse caminho é raro na prática (cliente já chegou ao
+ *   estabelecimento) e normalmente é tratado como NAO_COMPARECEU, não CANCELADA — fora de
+ *   escopo desta tarefa.
+ *
+ * Nunca lança: a mudança de status já foi persistida no banco e é o dado principal da
+ * requisição — uma falha no envio do e-mail (ex. Resend fora do ar/chave inválida) não deve
+ * derrubar nem reverter essa resposta, só fica logada pra investigação.
+ */
+async function notifyCustomerOfStatusChange(
+  previousStatus: string,
+  newStatus: string,
+  reservation: Parameters<typeof buildReservationEmailDetails>[0] & { id: string; customerEmail: string | null }
+): Promise<void> {
+  if (!reservation.customerEmail) return; // reserva antiga, criada antes do e-mail ser obrigatório — ver schema.prisma
+  try {
+    const details = buildReservationEmailDetails(reservation);
+    if (previousStatus === "PENDENTE" && newStatus === "CONFIRMADA") {
+      await sendReservationAcceptedEmail(reservation.customerEmail, details);
+    } else if (newStatus === "CANCELADA" && (previousStatus === "PENDENTE" || previousStatus === "CONFIRMADA")) {
+      await sendReservationCancelledEmail(reservation.customerEmail, { ...details, wasConfirmed: previousStatus === "CONFIRMADA" });
+    }
+  } catch (err) {
+    console.error(`[PATCH /api/reservas/reservas/${reservation.id}] falha ao enviar e-mail de notificação:`, err);
+  }
+}
 
 function serialize(r: Awaited<ReturnType<typeof loadOwnedReservation>>) {
   if (!r) return null;
@@ -93,6 +160,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data: { status: status as ReservationStatus },
     include: RESERVATION_INCLUDE,
   });
+
+  // Notifica o cliente por e-mail (ver `notifyCustomerOfStatusChange` acima) — depois do UPDATE já
+  // confirmado no banco, nunca antes: a mudança de status é o dado principal e já está
+  // persistida neste ponto, então uma falha de envio (capturada e só logada dentro da própria
+  // função, nunca lançada) não pode impedir nem reverter essa resposta. `await` de propósito, em
+  // vez de "fire and forget": esta rota roda como função serverless (Vercel, ver
+  // `scripts/migrate-deploy.sh`), que pode congelar/matar o processo assim que a resposta HTTP é
+  // enviada — uma Promise disparada sem esperar correria o risco de nunca terminar de verdade
+  // (nem o e-mail seria enviado, nem o log de erro rodaria). O pequeno custo de latência aqui é
+  // aceitável: é uma ação administrativa pontual (clique num botão), não um caminho de alto
+  // volume.
+  await notifyCustomerOfStatusChange(existing.status, status, updated);
 
   return NextResponse.json({ reservation: serialize(updated) });
 }

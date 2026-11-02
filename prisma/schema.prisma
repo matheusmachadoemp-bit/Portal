@@ -6778,10 +6778,20 @@ model Reservation {
   /// VIP) é de etapa futura, então este fluxo NÃO força a criação de um `Cliente` completo.
   /// `customerName`/`customerPhone` são sempre preenchidos pelo formulário público (nunca null na
   /// prática, mas ficam nullable no schema para não travar uma eventual reserva futura criada
-  /// pelo próprio staff sem captura de contato do cliente — fora de escopo desta etapa);
-  /// `customerEmail` é opcional de verdade. Quando `customerPhone` já bate com um `Cliente`
-  /// existente da mesma loja (`Cliente.empresaId_telefone`), `clienteId` é preenchido também como
-  /// bônus de cross-reference — mas nenhum `Cliente` novo é criado a partir daqui.
+  /// pelo próprio staff sem captura de contato do cliente — fora de escopo desta etapa).
+  /// `customerEmail` ficou nullable no schema de propósito (reservas feitas ANTES da tarefa
+  /// "reservas-unificar-calendario" podem não ter e-mail — não há valor de verdade pra
+  /// retroativo/backfill, então nunca forçamos `NOT NULL` aqui), mas a partir dessa tarefa (item
+  /// #4) os dois pontos de ENTRADA (`POST /api/reservar/[empresaKey]/reservas` e `POST
+  /// /api/reservas/reservas`) passaram a exigir e-mail na validação — é o canal usado pra
+  /// notificar o cliente quando a loja aprova/recusa a reserva (ver `PATCH
+  /// /api/reservas/reservas/[id]` e `src/lib/email.ts`:
+  /// `sendReservationAcceptedEmail`/`sendReservationCancelledEmail`). Na prática, toda reserva
+  /// criada a partir de agora tem e-mail; só reservas antigas (já existentes antes da migration)
+  /// podem continuar sem — nesse caso a notificação simplesmente não é enviada (ver comentário no
+  /// `PATCH`). Quando `customerPhone` já bate com um `Cliente` existente da mesma loja
+  /// (`Cliente.empresaId_telefone`), `clienteId` é preenchido também como bônus de
+  /// cross-reference — mas nenhum `Cliente` novo é criado a partir daqui.
   customerName     String?
   customerPhone    String?
   customerEmail    String?
