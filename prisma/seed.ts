@@ -499,11 +499,11 @@ const CATEGORIES = [
     // Reservas — Etapa 1 (estrutura administrativa; ver prisma/migrations/
     // 20261026040000_reservas_etapa1_schema e 20261026041000_reservas_etapa1_menu_permissao
     // para o equivalente de produção, já que o deploy automático nunca roda este seed).
-    // "Configurações" (src/app/portal/reservas/configuracoes/page.tsx) e "Mesas e Ambientes"
-    // (src/app/portal/reservas/mesas-ambientes/page.tsx, desde a Etapa 2) têm página própria —
-    // as outras 6 subcategorias (visão geral, reservas, calendário, fila de espera, clientes,
-    // relatórios) caem no conteúdo genérico de fallback até ganharem tela própria nas próximas
-    // etapas.
+    // "Configurações" (src/app/portal/reservas/configuracoes/page.tsx), "Mesas e Ambientes"
+    // (src/app/portal/reservas/mesas-ambientes/page.tsx, desde a Etapa 2), "Fila de Espera"
+    // (src/app/portal/reservas/fila-espera/page.tsx), "Clientes" e "Relatórios" (ambas desde a
+    // Etapa 4) já têm página própria — "visão geral", "reservas" e "calendário" ainda caem no
+    // conteúdo genérico de fallback até a parte restante da Etapa 4 ser publicada.
     key: "reservas",
     name: "Reservas",
     icon: "CalendarCheck",
