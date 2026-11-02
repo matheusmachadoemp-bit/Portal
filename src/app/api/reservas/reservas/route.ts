@@ -312,7 +312,6 @@ export async function POST(req: Request) {
       endTime: new Date(slot.endTime),
       partySize,
       clienteId: existingCliente?.id ?? null,
-      cleaningMinutes: availability.settings.cleaningMinutes,
       customerName,
       customerPhone,
       customerEmail: customerEmailRaw,
