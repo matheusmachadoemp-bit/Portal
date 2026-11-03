@@ -194,7 +194,10 @@ export function AmbientesClient({
             {sortedEnvironments.map((e, index) => (
               <div
                 key={e.id}
-                className={`flex items-center gap-3 rounded-lg border p-3 ${e.active ? "border-nord-border/60" : "border-nord-border/30 opacity-60"}`}
+                // `flex-wrap` (+ `gap-y-2` pra dar respiro entre as linhas quando quebra): a 320px
+                // o bloco nome+badges, os botões de mover e os de Editar/Desativar não cabiam todos
+                // numa linha só e ficavam espremidos — agora podem quebrar em 2 linhas.
+                className={`flex items-center flex-wrap gap-x-3 gap-y-2 rounded-lg border p-3 ${e.active ? "border-nord-border/60" : "border-nord-border/30 opacity-60"}`}
               >
                 {canEdit && (
                   <div className="flex flex-col gap-0.5 shrink-0">

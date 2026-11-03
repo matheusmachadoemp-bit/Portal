@@ -109,12 +109,12 @@ export function RelatoriosPeriodoSection({ hasEmpresa }: { hasEmpresa: boolean }
         <>
           <SortableStatCards
             storageKey="reservas-relatorios-kpi-order"
-            className="grid grid-cols-2 md:grid-cols-4 gap-4"
+            className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
             cards={[
               { key: "total-reservas", label: "Total de reservas", value: formatNumber(data.totalReservas), icon: "ClipboardList" },
               {
                 key: "taxa-no-show",
-                label: "Taxa de não comparecimento",
+                label: "Taxa de no-show",
                 value: formatPercent(data.noShowRate),
                 hint: `${formatNumber(data.noShowCount)} reserva(s)`,
                 icon: "UserX",

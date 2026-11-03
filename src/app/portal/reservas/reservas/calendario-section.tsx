@@ -253,9 +253,20 @@ export function CalendarioSection({
                     tone "default" do `Badge`, ver DESIGN_SYSTEM.md: `bg-white/10 text-nord-gray`)
                     em vez de vermelho/laranja — a cor de alerta só faz sentido quando há ocupação
                     real (`confirmedPartySize > 0`), senão o dia vazio parecia alarmante sem motivo
-                    (achado reportado pelo Matheus). */}
+                    (achado reportado pelo Matheus).
+                    Achado da revisão visual (item #194, Caio): empilhado na VERTICAL (círculo em
+                    cima, "/capacidade" embaixo) em vez de lado a lado — a célula é estreita (chega
+                    a ~29px de largura útil a 320px, e segue quase tão apertada a 1024px, onde o
+                    calendário divide a linha com o painel "Reservas em DD/MM" ao lado — só a
+                    partir de telas bem largas a célula sobra espaço de sobra pra um layout
+                    horizontal), mas tem ALTURA de sobra (célula de 64px, só o número do dia ocupa a
+                    linha de cima). Medido com getBoundingClientRect(): o círculo sozinho (20px) já
+                    ocupava quase toda a largura útil da célula a 320px, sem sobrar espaço nenhum
+                    pro texto "/144" do lado — por isso ele cortava (texto saindo ~22px da própria
+                    célula, confirmado via Chromium headless). Empilhar aproveita a dimensão que
+                    sobra (altura) em vez da que falta (largura), em qualquer largura de tela. */}
                 {inMonth && totalCapacity !== null && totalCapacity > 0 && (
-                  <span className="flex items-center gap-1 self-start">
+                  <span className="flex flex-col items-start gap-0.5 self-start">
                     <span
                       className={`w-5 h-5 shrink-0 rounded-full text-[10px] font-bold flex items-center justify-center leading-none ${
                         confirmedPartySize > 0 ? "bg-nord-danger text-white" : "bg-white/10 text-nord-gray"
@@ -264,7 +275,7 @@ export function CalendarioSection({
                       {confirmedPartySize}
                     </span>
                     <span
-                      className={`text-[10px] font-semibold leading-none ${
+                      className={`text-[9px] font-semibold leading-none whitespace-nowrap ${
                         confirmedPartySize > 0 ? "text-amber-400" : "text-nord-gray"
                       }`}
                     >
