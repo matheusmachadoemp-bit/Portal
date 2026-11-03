@@ -63,6 +63,19 @@ export function ConfiguracoesClient({
     setSavingHours(true);
     setHoursError(null);
     setHoursSaved(false);
+    // Campo de horário pode ficar vazio se o usuário limpar o <input type="time"> manualmente —
+    // trata esse caso ANTES da checagem de "cruzando a meia-noite" abaixo: como string vazia
+    // compara como menor que qualquer "HH:mm", um dia com os dois campos vazios (ou só um deles)
+    // cairia na comparação `closeTime <= openTime` e mostraria a mensagem errada ("cruzando a
+    // meia-noite") quando o problema real é só horário em branco.
+    const diaComHorarioEmBranco = weekdayHours.find((w) => w.open && (!w.openTime || !w.closeTime));
+    if (diaComHorarioEmBranco) {
+      setHoursError(
+        `${RESERVATION_WEEKDAY_LABEL[diaComHorarioEmBranco.dayOfWeek]}: informe horário de abertura e fechamento — horário inválido.`
+      );
+      setSavingHours(false);
+      return;
+    }
     // Mesma regra validada pela API (PUT /api/reservas/configuracoes): comparação lexicográfica
     // de "HH:mm" (largura fixa) equivale à comparação numérica de minutos do dia. Confere aqui
     // antes de gastar um round-trip ao servidor — a API continua sendo a fonte da verdade.
@@ -154,7 +167,12 @@ export function ConfiguracoesClient({
               botão &quot;Copiar&quot; copia o endereço completo, mesmo que o campo abaixo mostre só o caminho.
             </p>
             <div className="flex items-center gap-2">
-              <input readOnly value={linkPath} className="input flex-1 text-xs" />
+              <input
+                readOnly
+                value={linkPath}
+                aria-label="Link da página de reserva pública"
+                className="input flex-1 text-xs"
+              />
               <button onClick={copyLink} className="btn-outline shrink-0">
                 {copied ? <CheckCheck size={13} /> : <Copy size={13} />} {copied ? "Copiado!" : "Copiar"}
               </button>
@@ -168,49 +186,54 @@ export function ConfiguracoesClient({
       <Section title="Dias e horários de atendimento para Reservas">
         <FormError message={hoursError} />
         <p className="text-xs text-nord-gray mb-3">
-          Define quando o sistema oferece horário disponível pra reserva (página pública e criação manual) — pode
+          Define quando o sistema oferece horário disponível para reserva (página pública e criação manual) — pode
           ser diferente do horário geral de funcionamento da loja.
         </p>
         {!canManage && <p className="text-xs text-nord-warning mb-3">Seu perfil de permissão só permite visualizar.</p>}
         <div className="space-y-2">
-          {weekdayHours.map((w) => (
-            <div
-              key={w.dayOfWeek}
-              className="flex flex-wrap items-center gap-3 px-3 py-2.5 rounded-lg border border-nord-border/50"
-            >
-              <label className="flex items-center gap-2 w-32 shrink-0 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="accent-nord-blue"
-                  checked={w.open}
-                  disabled={!canManage}
-                  onChange={(e) => updateDay(w.dayOfWeek, { open: e.target.checked })}
-                />
-                <span className="text-sm text-white">{RESERVATION_WEEKDAY_LABEL[w.dayOfWeek]}</span>
-              </label>
-              {w.open ? (
-                <div className="flex items-center gap-2">
+          {weekdayHours.map((w) => {
+            const dayLabel = RESERVATION_WEEKDAY_LABEL[w.dayOfWeek];
+            return (
+              <div
+                key={w.dayOfWeek}
+                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 py-2.5 rounded-lg border border-nord-border/50"
+              >
+                <label className="flex items-center gap-2 sm:w-32 shrink-0 cursor-pointer">
                   <input
-                    type="time"
-                    value={w.openTime}
+                    type="checkbox"
+                    className="accent-nord-blue"
+                    checked={w.open}
                     disabled={!canManage}
-                    onChange={(e) => updateDay(w.dayOfWeek, { openTime: e.target.value })}
-                    className="input w-32"
+                    onChange={(e) => updateDay(w.dayOfWeek, { open: e.target.checked })}
                   />
-                  <span className="text-nord-gray text-xs">até</span>
-                  <input
-                    type="time"
-                    value={w.closeTime}
-                    disabled={!canManage}
-                    onChange={(e) => updateDay(w.dayOfWeek, { closeTime: e.target.value })}
-                    className="input w-32"
-                  />
-                </div>
-              ) : (
-                <span className="text-xs text-nord-gray">Fechado</span>
-              )}
-            </div>
-          ))}
+                  <span className="text-sm text-white">{dayLabel}</span>
+                </label>
+                {w.open ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="time"
+                      value={w.openTime}
+                      disabled={!canManage}
+                      onChange={(e) => updateDay(w.dayOfWeek, { openTime: e.target.value })}
+                      aria-label={`Horário de abertura de ${dayLabel}`}
+                      className="input w-28 sm:w-32"
+                    />
+                    <span className="text-nord-gray text-xs">até</span>
+                    <input
+                      type="time"
+                      value={w.closeTime}
+                      disabled={!canManage}
+                      onChange={(e) => updateDay(w.dayOfWeek, { closeTime: e.target.value })}
+                      aria-label={`Horário de fechamento de ${dayLabel}`}
+                      className="input w-28 sm:w-32"
+                    />
+                  </div>
+                ) : (
+                  <span className="text-xs text-nord-gray">Fechado</span>
+                )}
+              </div>
+            );
+          })}
         </div>
         {canManage && (
           <button
