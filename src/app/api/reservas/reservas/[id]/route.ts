@@ -155,9 +155,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  const updated = await prisma.reservation.update({
-    where: { id },
+  // Lock otimista: a leitura de `existing` (em `loadOwnedReservation`, acima) e esta escrita não
+  // estão na mesma transação, então duas requisições PATCH concorrentes na mesma reserva (ex. um
+  // atendente confirmando, outro cancelando quase ao mesmo tempo) podem as duas passar a
+  // validação de `RESERVATION_STATUS_TRANSITIONS` acima — sem essa trava, as duas escreveriam com
+  // sucesso e quem escrevesse por último "venceria" silenciosamente no banco, mas a resposta HTTP
+  // de quem perdeu ainda mostraria sucesso com o status que ela pediu (e dispararia o e-mail de
+  // notificação errado). `updateMany` com `status: existing.status` na cláusula `where` só
+  // atualiza a linha se o status ainda for o mesmo que foi lido; `count === 0` significa que outra
+  // requisição já mudou o status entre a leitura e esta escrita.
+  const { count } = await prisma.reservation.updateMany({
+    where: { id, status: existing.status },
     data: { status: status as ReservationStatus },
+  });
+  if (count === 0) {
+    return NextResponse.json(
+      { error: "Esta reserva foi alterada por outra ação enquanto você revisava. Recarregue a página e tente de novo." },
+      { status: 409 }
+    );
+  }
+
+  const updated = await prisma.reservation.findUniqueOrThrow({
+    where: { id },
     include: RESERVATION_INCLUDE,
   });
 
