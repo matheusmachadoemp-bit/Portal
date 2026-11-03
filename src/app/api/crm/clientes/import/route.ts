@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
+import { normalizeTelefoneDedupe } from "@/lib/crm";
 
 // No plano Vercel Pro o teto real é de pelo menos 800s, sem precisar habilitar
 // nada em beta (bem acima do teto efetivo de 60s do plano Hobby anterior, que
@@ -111,23 +112,6 @@ function parseInteiro(raw: string | number): number | null {
 // inteiro — usa só o primeiro como endereço atual do cadastro.
 function primeiroEndereco(raw: string): string {
   return raw.split(";")[0].trim();
-}
-
-function onlyDigits(s: string): string {
-  return s.replace(/\D/g, "");
-}
-
-// Normaliza telefone pra fins de dedupe (confirmado com teste ao vivo — task #177): um número
-// nacional válido (DDD + telefone) tem 10 ou 11 dígitos; com o DDI do Brasil ("+55") na frente,
-// vira 12 ou 13. Sem remover esse prefixo, "+55 21 98888-7777" (planilha nova, ex.: exportação do
-// Cardápio Web) e "21988887777" (cliente já cadastrado via lançamento manual de venda ou
-// importação anterior, nenhum dos dois acrescenta DDI) geram dois cadastros pra mesma pessoa em
-// vez de um só ser atualizado. Olha só o comprimento total (>= 12) antes de cortar — DDD 55
-// (Santa Maria/RS e região) sozinho já dá 11 dígitos com celular, então não teria DDI pra cortar.
-function normalizeTelefoneDedupe(raw: string): string {
-  const digits = onlyDigits(raw);
-  if (digits.length >= 12 && digits.startsWith("55")) return digits.slice(2);
-  return digits;
 }
 
 function rowsFromCsvText(text: string): string[][] {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { normalizeTelefoneDedupe } from "@/lib/crm";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -24,7 +25,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
   const data: Record<string, unknown> = {};
   if ("nome" in body) data.nome = String(body.nome).trim();
-  if ("telefone" in body) data.telefone = body.telefone || null;
+  // Normaliza pra só dígitos (igual importação CSV e fluxo de Reservas, achado do Mylon, tarefa
+  // #191) — sem isso, editar o telefone aqui manualmente gravava a máscara digitada ("(11)
+  // 98888-7777") direto em `Cliente.telefone`, e o cross-reference de Reservas (que busca por
+  // igualdade exata de dígitos) nunca encontrava este cadastro.
+  if ("telefone" in body) {
+    const telefoneRaw = typeof body.telefone === "string" ? body.telefone.trim() : "";
+    data.telefone = telefoneRaw ? normalizeTelefoneDedupe(telefoneRaw) : null;
+  }
   if ("whatsapp" in body) data.whatsapp = body.whatsapp || null;
   if ("email" in body) data.email = body.email || null;
   if ("dataNascimento" in body) data.dataNascimento = body.dataNascimento ? new Date(body.dataNascimento) : null;

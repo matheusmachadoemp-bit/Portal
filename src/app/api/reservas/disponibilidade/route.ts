@@ -9,9 +9,13 @@ import { getAvailability } from "@/lib/reservas-disponibilidade";
 /**
  * Consulta de disponibilidade (Etapa 2) — `GET /api/reservas/disponibilidade?data=AAAA-MM-DD&
  * ambienteId=...&pessoas=N[&horario=HH:mm]`. Autenticada + `canView` do módulo "reservas", mesmo
- * padrão das demais rotas de Reservas já publicadas (Etapa 1) — a página PÚBLICA de reserva, que
- * vai consumir uma versão sem login desta mesma lógica, é da Etapa 3; esta rota aqui existe só
- * para permitir testar o motor de disponibilidade de ponta a ponta nesta etapa.
+ * padrão das demais rotas de Reservas já publicadas (Etapa 1). A página PÚBLICA de reserva
+ * (`/reservar/[empresaKey]`, Etapa 3) consome uma versão sem login desta mesma lógica, por uma
+ * rota própria — esta aqui é usada de verdade em produção pela criação MANUAL de reserva
+ * (tela administrativa, ver `reservas-client.tsx`), que precisa estar autenticada para checar a
+ * disponibilidade antes de confirmar a reserva pelo atendente. Achado do Mylon na revisão geral
+ * de Reservas (tarefa #190): o comentário antigo dizia que esta rota existia "só pra testar o
+ * motor nesta etapa" — já desatualizado desde a Etapa 4.
  */
 export async function GET(req: Request) {
   const session = await auth();

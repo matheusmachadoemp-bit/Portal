@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { normalizeTelefoneDedupe } from "@/lib/crm";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -87,7 +88,12 @@ export async function POST(req: Request) {
   }
 
   let clienteId: string | null = null;
-  const clienteTelefone = (body.clienteTelefone || "").trim();
+  // Normaliza pra só dígitos (igual importação CSV/CRM e fluxo de Reservas, achado do Mylon,
+  // tarefa #191) — sem isso, um telefone digitado com máscara aqui ("(11) 98888-7777") gravava
+  // `Cliente.telefone` exatamente assim, e o cross-reference de Reservas (que busca por igualdade
+  // exata de dígitos) nunca encontrava este cadastro.
+  const clienteTelefoneRaw = (body.clienteTelefone || "").trim();
+  const clienteTelefone = clienteTelefoneRaw ? normalizeTelefoneDedupe(clienteTelefoneRaw) : "";
   if (clienteTelefone) {
     const cliente = await prisma.cliente.upsert({
       where: { empresaId_telefone: { empresaId: empresa.id, telefone: clienteTelefone } },

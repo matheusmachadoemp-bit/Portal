@@ -6824,7 +6824,15 @@ model Reservation {
   updatedAt        DateTime               @updatedAt
 
   @@index([empresaId, date])
-  @@index([environmentId, startTime, endTime])
+  // Substitui o índice `[environmentId, startTime, endTime]` original (Etapa 2), obsoleto desde o
+  // redesign "reservas-slots-fixos" (ver comentário de redesign no topo de
+  // `src/lib/reservas-disponibilidade.ts`): o motor deixou de comparar sobreposição de intervalo
+  // (`startTime`/`endTime`) e passou a filtrar por `environmentId + status + date`
+  // (`getOccupyingReservations` e a revalidação dentro do lock em `reserveEnvironmentTransacted`),
+  // comparando `startTime` por igualdade EM MEMÓRIA depois de já ter os candidatos do dia — esse
+  // índice cobre exatamente esse padrão de consulta. Achado do Mylon na revisão geral de Reservas
+  // (tarefa #190).
+  @@index([environmentId, status, date])
 }
 
 // ---------------------------------------------------------------------------
