@@ -1,5 +1,30 @@
 import { differenceInCalendarDays, differenceInCalendarYears, startOfDay, subDays } from "date-fns";
 import { spDayStart, spDayEnd, spAddDays, spMonthStart, spMonthEnd, spSubMonths, customDayStart, customDayEnd } from "@/lib/periods";
+import { onlyDigits } from "@/lib/reservas";
+
+// Normaliza telefone pra fins de dedupe (confirmado com teste ao vivo — task #177): um número
+// nacional válido (DDD + telefone) tem 10 ou 11 dígitos; com o DDI do Brasil ("+55") na frente,
+// vira 12 ou 13. Sem remover esse prefixo, "+55 21 98888-7777" (planilha nova, ex.: exportação do
+// Cardápio Web) e "21988887777" (cliente já cadastrado via lançamento manual de venda ou
+// importação anterior, nenhum dos dois acrescenta DDI) geram dois cadastros pra mesma pessoa em
+// vez de um só ser atualizado. Olha só o comprimento total (>= 12) antes de cortar — DDD 55
+// (Santa Maria/RS e região) sozinho já dá 11 dígitos com celular, então não teria DDI pra cortar.
+//
+// Movida de `src/app/api/crm/clientes/import/route.ts` (onde nasceu, task #177) pra cá — achado do
+// Mylon na revisão de Reservas (tarefa #191): `POST /api/vendas/lancamentos` e
+// `PATCH /api/crm/clientes/[id]` gravavam `Cliente.telefone` exatamente como veio do formulário
+// (com máscara), sem reaproveitar esta normalização — único ponto de escrita que já normalizava
+// era a importação CSV. Consequência real: o cross-reference de Reservas (`onlyDigits` em
+// `@/lib/reservas`, comparação por igualdade exata de dígitos) não encontrava o `Cliente` quando o
+// telefone tinha sido criado/editado por um desses dois pontos com máscara, tratando a reserva
+// como "cliente anônimo" em vez de linkar o histórico/VIP já existente. Reaproveita `onlyDigits`
+// (já exportado por `@/lib/reservas`) em vez de duplicar essa regex aqui — mesmo racional de
+// `reservas-clientes.ts`.
+export function normalizeTelefoneDedupe(raw: string): string {
+  const digits = onlyDigits(raw);
+  if (digits.length >= 12 && digits.startsWith("55")) return digits.slice(2);
+  return digits;
+}
 
 export type CrmPeriodKey =
   | "hoje"

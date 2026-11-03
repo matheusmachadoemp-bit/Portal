@@ -176,18 +176,32 @@ function addDaysToDateKey(dateKey: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function getReservationSettings(empresaId: string): Promise<ReservationSettingsValues> {
-  const settings = await prisma.reservationSettings.findUnique({ where: { empresaId } });
-  if (!settings) return DEFAULT_RESERVATION_SETTINGS;
-  return {
-    durationMinutes: settings.durationMinutes,
-    cleaningMinutes: settings.cleaningMinutes,
-    lateToleranceMinutes: settings.lateToleranceMinutes,
-    minAdvanceMinutes: settings.minAdvanceMinutes,
-    maxAdvanceDays: settings.maxAdvanceDays,
-    specialGroupThreshold: settings.specialGroupThreshold,
-    slotIntervalMinutes: settings.slotIntervalMinutes,
-  };
+/** Carrega `ReservationSettings` e as horas de funcionamento (`weekdayHours`) do dia da semana
+ * pedido numa ÚNICA consulta (`findUnique` + `include`) — achado do Mylon na revisão geral de
+ * Reservas (tarefa #190): `getAvailability` fazia essa busca duas vezes (uma só para os campos de
+ * `ReservationSettingsValues`, outra quase idêntica só para `weekdayHours`), e esta função é
+ * chamada em loop por `getMonthAvailability` (até ~30x por carregamento de calendário mensal) —
+ * cada dia do mês pagava o custo de 2 queries de configuração em vez de 1. */
+async function getReservationSettingsWithWeekdayHours(
+  empresaId: string,
+  weekday: number,
+): Promise<{ settings: ReservationSettingsValues; weekdayHours: { openTime: string; closeTime: string; open: boolean } | undefined }> {
+  const settingsRow = await prisma.reservationSettings.findUnique({
+    where: { empresaId },
+    include: { weekdayHours: { where: { dayOfWeek: weekday } } },
+  });
+  const settings: ReservationSettingsValues = settingsRow
+    ? {
+        durationMinutes: settingsRow.durationMinutes,
+        cleaningMinutes: settingsRow.cleaningMinutes,
+        lateToleranceMinutes: settingsRow.lateToleranceMinutes,
+        minAdvanceMinutes: settingsRow.minAdvanceMinutes,
+        maxAdvanceDays: settingsRow.maxAdvanceDays,
+        specialGroupThreshold: settingsRow.specialGroupThreshold,
+        slotIntervalMinutes: settingsRow.slotIntervalMinutes,
+      }
+    : DEFAULT_RESERVATION_SETTINGS;
+  return { settings, weekdayHours: settingsRow?.weekdayHours[0] };
 }
 
 type OccupyingReservation = { start: Date; partySize: number };
@@ -280,7 +294,14 @@ export async function getAvailability(params: {
     return { open: false, reason: "fechado" };
   }
 
-  const settings = await getReservationSettings(empresaId);
+  // `weekday` só depende de `dateKey` (cálculo puro, sem consulta) — calculado já aqui para poder
+  // buscar `ReservationSettings` e `weekdayHours` do dia numa ÚNICA consulta abaixo (achado do
+  // Mylon, tarefa #190 — ver JSDoc de `getReservationSettingsWithWeekdayHours`), em vez das duas
+  // buscas quase idênticas que esta função fazia antes (uma só para `settings`, outra só para
+  // `weekdayHours`). A ORDEM dos retornos antecipados abaixo (bloqueado -> fora-do-prazo ->
+  // fechado) continua a mesma de antes — só a forma de buscar os dados mudou.
+  const weekday = spWeekday(dateKey);
+  const { settings, weekdayHours } = await getReservationSettingsWithWeekdayHours(empresaId, weekday);
 
   const blocked = await prisma.reservationBlockedDate.findUnique({
     where: { empresaId_date: { empresaId, date: spStartOfDay(dateKey) } },
@@ -295,12 +316,6 @@ export async function getAvailability(params: {
     return { open: false, reason: "fora-do-prazo" };
   }
 
-  const weekday = spWeekday(dateKey);
-  const settingsRow = await prisma.reservationSettings.findUnique({
-    where: { empresaId },
-    include: { weekdayHours: { where: { dayOfWeek: weekday } } },
-  });
-  const weekdayHours = settingsRow?.weekdayHours[0];
   if (!weekdayHours || !weekdayHours.open) {
     return { open: false, reason: "fechado" };
   }
