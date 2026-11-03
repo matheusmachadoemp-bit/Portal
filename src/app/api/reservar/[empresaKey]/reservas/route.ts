@@ -85,6 +85,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ empresa
     return NextResponse.json({ error: "Informe um e-mail válido." }, { status: 400 });
   }
 
+  // Aceite das regras da casa (tarefa "reservas-termos-aceite") — exibidas na tela pública antes
+  // do botão de confirmar, com caixinha obrigatória (ver `reservar-client.tsx`). Validado de novo
+  // aqui porque a rota é pública (sem sessão): nunca confiar só na validação do cliente — uma
+  // chamada direta à API (sem passar pela tela) não pode criar reserva sem o aceite. Não precisa
+  // de coluna nova no banco (não é um dado de negócio a persistir nesta etapa, só uma confirmação
+  // de entrada) — só recusa a requisição se não vier `true`.
+  if (body?.termsAccepted !== true) {
+    return NextResponse.json({ error: "É necessário aceitar as regras da casa para confirmar a reserva." }, { status: 400 });
+  }
+
   // Tudo daqui pra baixo bate no banco (consulta de disponibilidade, cross-reference de Cliente,
   // criação da reserva) — envolvido num try/catch genérico de propósito: é uma rota PÚBLICA (sem
   // sessão) que escreve no banco, então um erro inesperado (ex.: falha transitória de conexão)
