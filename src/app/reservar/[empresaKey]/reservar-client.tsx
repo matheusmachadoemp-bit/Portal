@@ -22,7 +22,19 @@ type AvailabilitySlot = {
 };
 type DayDetail =
   | { open: false; reason: "bloqueado" | "fechado" | "fora-do-prazo"; blockedReason?: string | null }
-  | { open: true; openTime: string; closeTime: string; isSpecialGroup: boolean; slots: AvailabilitySlot[] };
+  | {
+      open: true;
+      openTime: string;
+      closeTime: string;
+      isSpecialGroup: boolean;
+      slots: AvailabilitySlot[];
+      // `AvailabilityResult` (src/lib/reservas-disponibilidade.ts) já devolve `settings` (as
+      // configurações de Reservas da loja) quando `open: true` — só o campo usado aqui
+      // (`lateToleranceMinutes`) é tipado, para montar o texto das regras da casa na etapa de
+      // confirmação (tarefa "reservas-termos-aceite") com o valor real configurado pela loja, em
+      // vez de um número fixo no texto.
+      settings: { lateToleranceMinutes: number };
+    };
 
 type Step = "formulario" | "dados" | "confirmacao";
 
@@ -90,6 +102,9 @@ export function ReservarClient({
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
+  // Caixinha de aceite das regras da casa (tarefa "reservas-termos-aceite") — obrigatória para
+  // enviar a solicitação, mesmo padrão de validação do e-mail abaixo (ver `confirmarReserva`).
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +114,14 @@ export function ReservarClient({
   const [confirmation, setConfirmation] = useState<{ confirmationCode: string; status: string } | null>(null);
 
   const selectedEnvironment = environments.find((e) => e.id === environmentId) ?? null;
+  // Tempo de tolerância configurado pela loja (`ReservationSettings.lateToleranceMinutes`,
+  // configurável em Reservas > Configurações) — vem junto da própria consulta de disponibilidade
+  // do dia (`dayDetail.settings`), sem precisar de uma chamada nova. Só fica disponível depois que
+  // o cliente escolhe dia/horário (etapa "formulario"); na prática, ao chegar na etapa "dados" o
+  // dia selecionado sempre tem `dayDetail.open === true` (o botão de horário só aparece quando
+  // `dayDetail?.open`), mas o fallback abaixo evita um texto com valor indefinido em qualquer
+  // race condition.
+  const lateToleranceMinutes = dayDetail?.open ? dayDetail.settings.lateToleranceMinutes : null;
 
   // Recarrega o resumo do mês sempre que ambiente, quantidade de pessoas ou o mês visível mudam —
   // a seleção de dia/horário feita antes não vale mais nesse novo contexto (ex.: trocar de 2 pra 12
@@ -176,6 +199,10 @@ export function ReservarClient({
     const emailTrimmed = email.trim();
     if (!emailTrimmed) return setError("Informe seu e-mail.");
     if (!isValidEmail(emailTrimmed)) return setError("Informe um e-mail válido.");
+    // Caixinha de aceite das regras da casa (tarefa "reservas-termos-aceite") — obrigatória para
+    // enviar, mesmo padrão dos outros campos obrigatórios acima. Validado de novo no servidor
+    // (`POST .../reservas`, campo `termsAccepted`) — nunca confiar só na validação do cliente.
+    if (!termsAccepted) return setError("Marque que você leu e aceita as regras da casa para confirmar a reserva.");
     if (submitting) return;
     setSubmitting(true);
     const res = await apiRequest<{ reservation: { confirmationCode: string; status: string } }>(`/api/reservar/${empresaKey}/reservas`, "POST", {
@@ -186,6 +213,7 @@ export function ReservarClient({
       nome: nome.trim(),
       telefone: telefoneDigits,
       email: emailTrimmed,
+      termsAccepted,
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -208,6 +236,7 @@ export function ReservarClient({
     setNome("");
     setTelefone("");
     setEmail("");
+    setTermsAccepted(false);
     setError(null);
     setStep("formulario");
   }
@@ -401,6 +430,27 @@ export function ReservarClient({
               placeholder="seuemail@exemplo.com"
             />
           </label>
+
+          <div className="bg-nord-panel border border-nord-border rounded-2xl p-3 text-xs text-nord-gray space-y-2">
+            <p className="text-white text-sm font-semibold">Regras da casa</p>
+            <ol className="list-decimal list-outside pl-4 space-y-1.5">
+              <li>
+                Após {lateToleranceMinutes != null ? `os ${lateToleranceMinutes} minutos de tolerância` : "o tempo de tolerância"}
+                , se nem todos os convidados tiverem chegado, a equipe pode retirar as mesas que estiverem sobrando, caso seja
+                necessário.
+              </li>
+              <li>Não é permitido colar nenhum tipo de decoração nas paredes.</li>
+            </ol>
+            <label className="flex items-start gap-2 pt-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="mt-0.5 shrink-0 rounded border-nord-border accent-nord-blue"
+              />
+              <span className="text-white">Li e aceito as regras da casa.</span>
+            </label>
+          </div>
 
           <div className="flex items-center gap-2 pt-2">
             <button onClick={() => setStep("formulario")} className="px-4 py-3 rounded-lg text-sm border border-nord-border text-nord-gray flex items-center gap-1.5">
