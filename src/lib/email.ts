@@ -1,5 +1,23 @@
 import { Resend } from "resend";
 
+// Escape de HTML para qualquer texto livre digitado pelo cliente (ex. `customerName`, vindo do
+// formulário público de reserva, sem login e sem validação de conteúdo) antes de interpolar
+// dentro de um template de e-mail HTML. Sem isso, um "nome" como `<a href="...">clique aqui</a>`
+// virava link/tag de verdade no e-mail enviado pro endereço escolhido pelo próprio atacante
+// (achado de segurança do Jonas, tarefa #187 — `customerEmail` também não tem verificação de
+// posse, só formato, então o Portal Nord acabava sendo usado como ferramenta de phishing/spam
+// com a reputação do domínio da loja). Não há nenhum helper de escape de HTML já existente no
+// projeto (nada equivalente em outro lugar que renderize texto de usuário em e-mail/PDF), então
+// esta função simples (sem biblioteca externa) resolve.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Sem chave configurada, falha visivelmente (ver vault.ts para o mesmo
 // raciocínio): melhor um erro claro em produção do que enviar e-mails que
 // nunca chegam a lugar nenhum, ou pior, engolir o erro em silêncio e deixar
@@ -93,7 +111,7 @@ export async function sendReservationAcceptedEmail(to: string, details: Reservat
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
         <h2 style="margin-bottom: 8px;">Reserva confirmada!</h2>
-        <p>Olá, ${details.customerName}! Sua reserva na <strong>${details.empresaName}</strong> foi confirmada:</p>
+        <p>Olá, ${escapeHtml(details.customerName)}! Sua reserva na <strong>${details.empresaName}</strong> foi confirmada:</p>
         ${reservationDetailsHtml(details)}
         <p>Esperamos você!</p>
       </div>
@@ -134,7 +152,7 @@ export async function sendReservationCancelledEmail(
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
         <h2 style="margin-bottom: 8px;">${details.wasConfirmed ? "Reserva cancelada" : "Não foi possível confirmar sua reserva"}</h2>
-        <p>Olá, ${details.customerName}. ${intro}</p>
+        <p>Olá, ${escapeHtml(details.customerName)}. ${intro}</p>
         ${reservationDetailsHtml(details)}
         <p style="color: #666; font-size: 13px;">Pedimos desculpas pelo inconveniente. Entre em contato com a loja para mais informações${details.wasConfirmed ? " ou para reagendar" : ""}.</p>
       </div>
