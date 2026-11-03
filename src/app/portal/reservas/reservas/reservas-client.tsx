@@ -439,13 +439,30 @@ export function ReservasClient({
       <Toolbar
         filters={
           <>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input w-auto" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="input w-auto"
+              aria-label="Data inicial do filtro"
+            />
             <span className="text-nord-gray text-xs">até</span>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input w-auto" />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="input w-auto"
+              aria-label="Data final do filtro"
+            />
             <button type="button" className="btn-outline text-xs px-2.5 py-1.5" onClick={handleToday}>
               Hoje
             </button>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="input w-auto">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="input w-auto"
+              aria-label="Filtrar por status da reserva"
+            >
               <option value="">Todos os status</option>
               {RESERVATION_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -590,6 +607,7 @@ export function ReservasClient({
                             disabled={busyId === r.id}
                             onChange={(e) => changeStatus(r, e.target.value)}
                             className="input text-xs py-1 w-auto disabled:opacity-50"
+                            aria-label={`Mudar status da reserva de ${r.customerName ?? r.cliente?.nome ?? "cliente sem nome"}`}
                           >
                             <option value="" disabled>
                               {busyId === r.id ? "Salvando..." : "Mudar status..."}

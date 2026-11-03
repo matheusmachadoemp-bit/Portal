@@ -109,14 +109,17 @@ export function ClientesReservasClient({ hasEmpresa }: { hasEmpresa: boolean }) 
         title={`Clientes (${formatNumber(filtered.length)})`}
         action={
           clientes.length > 0 && (
-            <div className="relative">
+            // Largura fixa reduzida em telas pequenas (320-414px): `!w-56` (224px) cheio, somado
+            // ao título "Clientes (N)" ao lado, estourava a largura do cabeçalho do `Section`
+            // (que não tem flex-wrap — ver src/components/ui/stat-card.tsx) e cortava o campo.
+            <div className="relative min-w-0">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-nord-gray" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por nome ou telefone..."
-                className="input !pl-8 !w-56"
+                className="input !pl-8 !w-28 sm:!w-56"
               />
             </div>
           )
