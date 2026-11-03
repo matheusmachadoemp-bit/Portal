@@ -102,6 +102,20 @@ export async function PUT(req: Request) {
         { status: 400 }
       );
     }
+    // Comparação lexicográfica de "HH:mm" (largura fixa, zero-padded) equivale à comparação
+    // numérica de minutos do dia — não precisa converter. Não suportamos configuração cruzando a
+    // meia-noite (ver nota em `generateSlotStarts`, src/lib/reservas-disponibilidade.ts): sem esta
+    // checagem, um `closeTime <= openTime` era aceito aqui e só se manifestava como um dia "aberto"
+    // sem nenhum horário disponível (array vazio do motor de disponibilidade), sem nenhum aviso.
+    if (w.open && isValidHHMM(w.openTime) && isValidHHMM(w.closeTime) && w.closeTime <= w.openTime) {
+      return NextResponse.json(
+        {
+          error:
+            "Horário de fechamento precisa ser depois do de abertura no mesmo dia — configuração cruzando a meia-noite ainda não é suportada.",
+        },
+        { status: 400 }
+      );
+    }
   }
 
   const settings = await prisma.reservationSettings.upsert({

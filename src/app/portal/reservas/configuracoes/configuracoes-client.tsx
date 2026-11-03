@@ -63,6 +63,17 @@ export function ConfiguracoesClient({
     setSavingHours(true);
     setHoursError(null);
     setHoursSaved(false);
+    // Mesma regra validada pela API (PUT /api/reservas/configuracoes): comparação lexicográfica
+    // de "HH:mm" (largura fixa) equivale à comparação numérica de minutos do dia. Confere aqui
+    // antes de gastar um round-trip ao servidor — a API continua sendo a fonte da verdade.
+    const diaCruzandoMeiaNoite = weekdayHours.find((w) => w.open && w.closeTime <= w.openTime);
+    if (diaCruzandoMeiaNoite) {
+      setHoursError(
+        `${RESERVATION_WEEKDAY_LABEL[diaCruzandoMeiaNoite.dayOfWeek]}: horário de fechamento precisa ser depois do de abertura no mesmo dia — configuração cruzando a meia-noite ainda não é suportada.`
+      );
+      setSavingHours(false);
+      return;
+    }
     try {
       const res = await fetch("/api/reservas/configuracoes", {
         method: "PUT",
