@@ -24,6 +24,11 @@ export default async function ReservasConfiguracoesPage() {
 
   let weekdayHours: { dayOfWeek: number; open: boolean; openTime: string; closeTime: string }[] = [];
   let blockedDates: { id: string; date: string; reason: string | null; createdByName: string | null }[] = [];
+  // Tarefa #192: 4 parâmetros avançados que já existiam em `ReservationSettings` (schema) e já
+  // eram lidos pelo motor de disponibilidade, mas nunca tinham sido expostos nesta tela — valores
+  // default do schema até a loja abrir esta página e salvar (ver `DEFAULT_RESERVATION_SETTINGS`,
+  // src/lib/reservas-disponibilidade.ts, para os mesmos defaults usados como fallback lá).
+  let advancedSettings = { minAdvanceMinutes: 60, maxAdvanceDays: 60, specialGroupThreshold: 10, slotIntervalMinutes: 30 };
 
   if (empresa) {
     const settings = await prisma.reservationSettings.upsert({
@@ -58,6 +63,12 @@ export default async function ReservasConfiguracoesPage() {
       reason: b.reason,
       createdByName: b.createdBy?.name ?? null,
     }));
+    advancedSettings = {
+      minAdvanceMinutes: settings.minAdvanceMinutes,
+      maxAdvanceDays: settings.maxAdvanceDays,
+      specialGroupThreshold: settings.specialGroupThreshold,
+      slotIntervalMinutes: settings.slotIntervalMinutes,
+    };
   }
 
   return (
@@ -65,6 +76,7 @@ export default async function ReservasConfiguracoesPage() {
       <ConfiguracoesClient
         weekdayHours={weekdayHours}
         blockedDates={blockedDates}
+        advancedSettings={advancedSettings}
         canManage={canManage && !!empresa}
         hasEmpresa={!!empresa}
         empresaKey={empresa?.key ?? null}

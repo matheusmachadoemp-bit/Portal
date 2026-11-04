@@ -49,6 +49,15 @@ export function isPositiveInt(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+/** Valida um inteiro dentro de um intervalo `[min, max]` (ambos inclusive) vindo de fora — usado
+ * pelos 4 parâmetros avançados de `ReservationSettings` (tarefa #192: `minAdvanceMinutes`,
+ * `maxAdvanceDays`, `specialGroupThreshold`, `slotIntervalMinutes`), cada um com seu próprio
+ * limite de sanidade. Diferente de `isPositiveInt` acima porque `minAdvanceMinutes` aceita `0`
+ * (nenhuma antecedência mínima exigida) — não dá pra reaproveitar o `> 0`. */
+export function isIntInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+}
+
 // Reservas — Etapa 3 (página pública `/reservar/[empresaKey]`). `onlyDigits` fica aqui (em vez de
 // reexportado de `src/lib/customer-survey-server.ts`, que já tem uma cópia idêntica) porque este
 // arquivo não importa Prisma — pode ser usado tanto pelas rotas públicas novas (server) quanto
