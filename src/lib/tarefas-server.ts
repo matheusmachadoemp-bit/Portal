@@ -1,4 +1,4 @@
-import type { Task, TaskPriority } from "@prisma/client";
+import type { NotificationPriority, Task, TaskPriority } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recurrenceMatchesDate } from "@/lib/tarefas";
 import { createNotification, createNotifications } from "@/lib/notifications";
@@ -94,8 +94,15 @@ export async function logTaskHistory(taskId: string, userId: string | null, acti
  * de Tarefas. Quando vem com taskId, o push abre a tela de Tarefas (mesmo
  * destino que o sino já usa pra esse caso — ver handleOpenNotification em
  * notification-bell.tsx); sem taskId, abre a Central do portal. */
-export async function notifyUser(userId: string, type: string, title: string, body: string | null, taskId: string | null): Promise<void> {
-  await createNotification({ userId, type, title, body, taskId, url: taskId ? "/portal/tarefas" : "/portal" });
+export async function notifyUser(
+  userId: string,
+  type: string,
+  title: string,
+  body: string | null,
+  taskId: string | null,
+  priority?: NotificationPriority | null
+): Promise<void> {
+  await createNotification({ userId, type, title, body, priority: priority ?? null, taskId, url: taskId ? "/portal/tarefas" : "/portal" });
 }
 
 /**
@@ -137,4 +144,63 @@ export async function createTaskFromExternalSource(params: {
     await notifyUser(params.assigneeId, "NOVA_TAREFA", "Nova tarefa", `Você recebeu a tarefa "${task.title}".`, task.id);
   }
   return task;
+}
+
+/**
+ * Cobrança automática de tarefa atrasada — disparada por `GET /api/tarefas/alertas/run`
+ * (Vercel Cron, ver vercel.json), autenticado via CRON_SECRET. Mesma natureza/estrutura de
+ * `processChamadoAtrasoAlertas` (@/lib/manutencao-server.ts) para o Chamado de manutenção: um
+ * único aviso ("ficou atrasada, avisa quem está envolvido"), com a idempotência garantida por um
+ * campo direto na própria linha (`Task.atrasoNotificadoEm`) em vez de uma tabela de log à parte —
+ * aqui também não há vários níveis de escalonamento nem destinatários variáveis por nível.
+ *
+ * "Atrasada" usa o mesmo critério de `isTaskOverdue`/`effectiveTaskStatus` (@/lib/tarefas.ts):
+ * `dueDate` vencido e status != CONCLUIDA — só que aqui expresso como filtro de banco (`where`),
+ * não reaproveitando a função (que espera um objeto já carregado), para poder filtrar direto na
+ * query em vez de buscar todas as tarefas da empresa e filtrar em memória.
+ *
+ * Destinatários: todo responsável atribuído (`TaskAssignee`) + quem criou a tarefa (se ainda não
+ * estiver entre os responsáveis) — diferente do Chamado (que soma "donos" fixos/ADMINISTRADOR),
+ * Tarefas não tem um "dono do módulo" global por loja; quem precisa saber que atrasou é quem foi
+ * designado para executá-la e quem a criou.
+ */
+export async function processTaskAtrasoAlertas(): Promise<{ notified: number; tarefasAtrasadas: number }> {
+  const now = new Date();
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      dueDate: { lt: now },
+      status: { not: "CONCLUIDA" },
+      atrasoNotificadoEm: null,
+      // Mesmo filtro de `processChamadoAtrasoAlertas`/`processFechamentoAlertas` — uma loja
+      // desativada nunca aparece em nenhuma tela, então uma tarefa dela não deveria gerar aviso.
+      empresa: { active: true },
+    },
+    select: {
+      id: true,
+      title: true,
+      createdById: true,
+      empresa: { select: { name: true } },
+      assignees: { select: { userId: true } },
+    },
+  });
+  if (tasks.length === 0) return { notified: 0, tarefasAtrasadas: 0 };
+
+  let notified = 0;
+  for (const task of tasks) {
+    const recipientIds = new Set<string>(task.assignees.map((a) => a.userId));
+    recipientIds.add(task.createdById);
+
+    const title = "Tarefa atrasada";
+    const body = `A tarefa "${task.title}" passou do prazo — ${task.empresa.name}.`;
+    await Promise.all([...recipientIds].map((userId) => notifyUser(userId, "TAREFA_ATRASADA", title, body, task.id, "ATENCAO")));
+    notified += recipientIds.size;
+
+    // Marca como avisada mesmo se por algum motivo não houvesse destinatário (hipotético, já que
+    // createdById é sempre preenchido) — evita reprocessar a mesma tarefa pra sempre; volta a
+    // null (novo aviso liberado) se o prazo for alterado — ver PATCH /api/tarefas/[id].
+    await prisma.task.update({ where: { id: task.id }, data: { atrasoNotificadoEm: now } });
+  }
+
+  return { notified, tarefasAtrasadas: tasks.length };
 }
