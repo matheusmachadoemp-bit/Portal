@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
-import { IDEA_APPROVER_ROLES } from "@/lib/marketing";
+import { IDEA_APPROVER_ROLES, IDEA_STATUS_OPTIONS } from "@/lib/marketing";
 import { hasModulePermission } from "@/lib/authz";
 
 const STR_FIELDS = ["title", "description", "references", "links", "category", "tags", "status"] as const;
 const APPROVAL_STATUSES = ["APROVADA", "DESCARTADA"];
+// Mesmos valores do enum `MarketingIdeaStatus` (prisma/schema.prisma) — reaproveita
+// `IDEA_STATUS_OPTIONS` (fonte única já usada pela tela do Banco de Ideias) em vez de duplicar
+// a lista aqui.
+const VALID_IDEA_STATUSES: string[] = IDEA_STATUS_OPTIONS.map((o) => o.key);
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -18,6 +22,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Sem acesso a essa loja." }, { status: 403 });
   }
   const body = await req.json();
+
+  // Achado (Nina, auditoria geral): `status` é um enum fixo do Prisma (`MarketingIdeaStatus`) —
+  // sem esta validação, um valor fora do enum só seria pego quando o Prisma Client lançasse ao
+  // tentar gravar, derrubando a rota com um erro cru em vez de uma resposta 400 clara.
+  if (body.status !== undefined && body.status !== null && !VALID_IDEA_STATUSES.includes(body.status)) {
+    return NextResponse.json(
+      { error: `Status inválido. Valores aceitos: ${VALID_IDEA_STATUSES.join(", ")}.` },
+      { status: 400 }
+    );
+  }
 
   const isApprovalAction = body.promote || (typeof body.status === "string" && APPROVAL_STATUSES.includes(body.status));
   if (isApprovalAction && !IDEA_APPROVER_ROLES.includes(session.user.role)) {

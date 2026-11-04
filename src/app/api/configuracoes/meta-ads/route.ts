@@ -34,7 +34,22 @@ export async function PATCH(req: Request) {
   const instagramAccountId = typeof body.instagramAccountId === "string" ? body.instagramAccountId.trim() : "";
   const syncEnabled = Boolean(body.syncEnabled);
 
-  const tokenToUse = accessToken || (empresa.metaAdsAccessToken ? decryptSecret(empresa.metaAdsAccessToken) : "");
+  // `decryptSecret` lança quando o ciphertext salvo está corrompido/em formato inválido — sem
+  // este try/catch, isso derrubava a rota com um 500 cru. Mensagem genérica (sem detalhe
+  // interno), orientando a recadastrar o token em vez de só reenviar o campo em branco (que é
+  // o que ativaria este caminho de novo).
+  let tokenToUse: string;
+  try {
+    tokenToUse = accessToken || (empresa.metaAdsAccessToken ? decryptSecret(empresa.metaAdsAccessToken) : "");
+  } catch {
+    return NextResponse.json(
+      {
+        error:
+          "Não foi possível decifrar o token da Meta já salvo. Informe o token de acesso novamente para corrigir.",
+      },
+      { status: 500 }
+    );
+  }
 
   if (syncEnabled && (!tokenToUse || !adAccountId)) {
     return NextResponse.json(

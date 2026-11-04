@@ -28,9 +28,15 @@ const DEFAULT_MODEL = "claude-sonnet-5-5";
 // que o do Nord AI (1024) é suficiente e corta mais rápido uma eventual resposta fora do padrão.
 const MAX_OUTPUT_TOKENS = 220;
 
-/** Mensagem amigável quando `ANTHROPIC_API_KEY` não está configurada — mesmo padrão do Nord AI (nunca um 500 cru). */
+/**
+ * Mensagem amigável quando `ANTHROPIC_API_KEY` não está configurada — mesmo padrão do Nord AI
+ * (nunca um 500 cru). Achado (Nina, auditoria geral): igual à mensagem equivalente em
+ * `src/lib/nord-ai.ts`, apontava para "as configurações do projeto" dentro do Portal — mas
+ * essa chave é uma variável de ambiente pura, sem campo correspondente em nenhuma tela do
+ * sistema; quem configura é o administrador do projeto na Vercel.
+ */
 export const REVIEW_AI_NOT_CONFIGURED_MESSAGE =
-  "A chave de IA (ANTHROPIC_API_KEY) ainda não foi configurada — não é possível gerar respostas automáticas para avaliações. Peça para o administrador configurar a chave de IA nas configurações do projeto.";
+  "A chave de IA (ANTHROPIC_API_KEY) ainda não foi configurada — não é possível gerar respostas automáticas para avaliações. Peça para o administrador cadastrar a variável de ambiente ANTHROPIC_API_KEY no painel da Vercel que hospeda o Portal.";
 
 /** Limite de caracteres aceito pela API de Avaliações do iFood para o texto de resposta — [CONFIRMADO], ver `src/lib/ifood-client.ts`. */
 export const IFOOD_REPLY_MIN_LENGTH = 10;

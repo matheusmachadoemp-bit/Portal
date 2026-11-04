@@ -18,6 +18,14 @@ type NotificationDTO = {
   purchaseId: string | null;
   goalId: string | null;
   goalCategory: GoalCategoryKey | null;
+  /** Fechamento do Dia — ocorrência crítica (ver `notifyFechamentoOcorrenciaCritica` em
+   *  `src/lib/fechamento-server.ts`). */
+  fechamentoOcorrenciaId: string | null;
+  /** Satisfação do Cliente — avaliação crítica (ver `src/lib/customer-survey-server.ts`). */
+  customerSurveyResponseId: string | null;
+  /** Central de Bugs e Melhorias — novo bug/sugestão, mudança de status ou responsável definido
+   *  (ver `src/lib/feedback-server.ts`). */
+  feedbackReportId: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -95,6 +103,21 @@ export function NotificationBell() {
     else if (n.chamadoId) router.push(`/portal/manutencao/chamados/${n.chamadoId}`);
     else if (n.purchaseId) router.push("/portal/estoque/recebimento");
     else if (n.goalCategory) router.push(`/portal/metas/${GOAL_CATEGORY_ROUTE[n.goalCategory]}`);
+    // Não existe (nem nunca existiu) tela de detalhe de uma ocorrência por id — ver o comentário em
+    // `src/app/portal/fechamento-dia/ocorrencias/[id]/page.tsx` (confirmado ao vivo: aquele caminho
+    // antigo só redireciona pra uma rota que colide com `/portal/tarefas/ocorrencias/[cargoId]` e
+    // quebra). A gestão de ocorrências vive em `/portal/tarefas/ocorrencias` (lista) — mesmo destino
+    // já corrigido no payload do push em `fechamento-server.ts`.
+    else if (n.fechamentoOcorrenciaId) router.push("/portal/tarefas/ocorrencias");
+    else if (n.customerSurveyResponseId) router.push(`/portal/satisfacao-cliente/avaliacoes/${n.customerSurveyResponseId}`);
+    // Central de Bugs e Melhorias (`/portal/administrativo/bugs-melhorias`) ainda não aceita abrir
+    // um relato específico por URL (o modal de detalhe só é aberto por estado local do componente,
+    // não por query param) — mesma limitação que já faz o push deste tipo apontar pra "/portal" em
+    // `src/lib/feedback-server.ts`. Além disso, nem todo destinatário (quem criou o relato) tem
+    // acesso a essa tela (só ADMINISTRADOR). Mantém "/portal" aqui pra bater com o mesmo destino já
+    // usado pelo push, em vez de mandar pra uma tela que pode dar redirect/não existir pra quem
+    // recebeu.
+    else if (n.feedbackReportId) router.push("/portal");
   }
 
   return (
