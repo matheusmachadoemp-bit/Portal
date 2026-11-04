@@ -40,11 +40,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  const previousAttempts = await prisma.trainingAttempt.count({ where: { quizId, userId: session.user.id } });
-  if (previousAttempts >= quiz.maxAttempts) {
-    return NextResponse.json({ error: "Número máximo de tentativas atingido." }, { status: 400 });
-  }
-
   const body = await req.json();
   const answers: { questionId: string; optionId?: string; text?: string }[] = body.answers ?? [];
 
@@ -58,20 +53,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const score = gradable.length ? Math.round((correctCount / gradable.length) * 100) : 100;
   const passed = score >= quiz.minScore;
 
-  const attempt = await prisma.trainingAttempt.create({
-    data: {
-      quizId,
-      moduleEnrollmentId: moduleEnrollment.id,
-      userId: session.user.id,
-      score,
-      passed,
-      answers: JSON.stringify(answers),
-      attemptNumber: previousAttempts + 1,
-      submittedAt: new Date(),
-    },
+  // Achado (Nina, auditoria geral): contar as tentativas anteriores e gravar a nova tentativa
+  // eram duas operações separadas (count fora de qualquer transação, create depois) — duas
+  // requisições simultâneas (ex.: duplo clique, retry de rede) podiam cada uma contar as
+  // mesmas N tentativas anteriores (ambas < maxAttempts) e criar sua própria tentativa,
+  // passando do número máximo permitido. Agora as duas ficam dentro de uma única transação
+  // interativa, travada por um advisory lock do Postgres (`pg_advisory_xact_lock`) escopado a
+  // este par quiz+usuário: a segunda chamada concorrente só prossegue depois que a primeira
+  // já comitou (ou desfez) sua própria contagem+gravação, então sempre vê a contagem
+  // atualizada. O lock é automaticamente liberado no fim da transação — não precisa de
+  // nenhuma coluna/migração nova.
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${quizId} || ${session.user.id}))`;
+
+    const previousAttempts = await tx.trainingAttempt.count({ where: { quizId, userId: session.user.id } });
+    if (previousAttempts >= quiz.maxAttempts) {
+      return { ok: false as const };
+    }
+
+    const attempt = await tx.trainingAttempt.create({
+      data: {
+        quizId,
+        moduleEnrollmentId: moduleEnrollment.id,
+        userId: session.user.id,
+        score,
+        passed,
+        answers: JSON.stringify(answers),
+        attemptNumber: previousAttempts + 1,
+        submittedAt: new Date(),
+      },
+    });
+
+    return { ok: true as const, attempt };
   });
+
+  if (!result.ok) {
+    return NextResponse.json({ error: "Número máximo de tentativas atingido." }, { status: 400 });
+  }
 
   await applyModuleQuizResult(moduleEnrollment.id, passed, score === 100);
 
-  return NextResponse.json({ attempt });
+  return NextResponse.json({ attempt: result.attempt });
 }

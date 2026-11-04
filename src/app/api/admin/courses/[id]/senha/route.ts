@@ -28,7 +28,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!stored) return NextResponse.json({ senha: "" });
 
   if (isEncryptedSecret(stored)) {
-    return NextResponse.json({ senha: decryptSecret(stored) });
+    // `decryptSecret` lança quando o ciphertext salvo está corrompido/em formato inválido — sem
+    // este try/catch, isso derrubava a rota com um 500 cru. Mensagem genérica (sem detalhe
+    // interno) de propósito: é um erro de dado salvo, não algo que o usuário possa corrigir
+    // sozinho reenviando a requisição.
+    try {
+      return NextResponse.json({ senha: decryptSecret(stored) });
+    } catch {
+      return NextResponse.json(
+        { error: "Não foi possível decifrar a senha salva. Edite este curso e cadastre a senha novamente." },
+        { status: 500 }
+      );
+    }
   }
 
   // Dado legado: gravado em texto puro antes de existir criptografia para

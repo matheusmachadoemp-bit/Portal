@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import { addMonths } from "date-fns";
 import { parseDayInput } from "@/lib/timezone";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { balanceDelta } from "@/lib/finance";
+import { balanceDelta, splitInstallments } from "@/lib/finance";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -120,6 +122,39 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Categoria financeira não encontrada." }, { status: 400 });
   }
 
+  // Parcelamento: mesmo padrão de `/api/financeiro/pagar` — quando marcado, a quantidade de
+  // parcelas é obrigatória e define quantos lançamentos `Receivable` serão criados de uma vez (ver
+  // bloco da transação abaixo). O `valor` digitado acima é o TOTAL do recebimento, dividido entre as
+  // parcelas por `splitInstallments` (`src/lib/finance.ts`). `parcelaAtual` não é mais pedido ao
+  // criar (a série sempre nasce 1/N, 2/N, ..., N/N): só existe como metadado de leitura ao editar uma
+  // parcela já existente, e o PATCH (`[id]/route.ts`) não deixa mudar isso depois de criado.
+  const parcelado = !!body.parcelado;
+  let quantidadeParcelas: number | null = null;
+  if (parcelado) {
+    quantidadeParcelas = Number(body.quantidadeParcelas);
+    if (!Number.isInteger(quantidadeParcelas) || quantidadeParcelas < 2 || quantidadeParcelas > 120) {
+      return NextResponse.json(
+        { error: "Para um lançamento parcelado, informe a quantidade de parcelas (um número inteiro entre 2 e 120)." },
+        { status: 400 }
+      );
+    }
+    // `splitInstallments` dá no mínimo 1 centavo pra cada parcela (ver comentário lá) — só é
+    // possível se o valor total tiver pelo menos `quantidadeParcelas` centavos. Sem esta checagem,
+    // um valor pequeno pra muitas parcelas geraria parcela(s) com valor ZERO, violando a mesma regra
+    // que todo `Receivable` segue ("Valor é obrigatório e deve ser maior que zero", checada acima pro
+    // total, mas nunca pra cada parcela individual antes de existir este bloco).
+    const valorCentavos = Math.round(valor * 100);
+    if (valorCentavos < quantidadeParcelas) {
+      const minimo = (quantidadeParcelas / 100).toFixed(2).replace(".", ",");
+      return NextResponse.json(
+        {
+          error: `Valor total pequeno demais para ${quantidadeParcelas} parcelas: cada parcela precisa valer pelo menos R$ 0,01, então o mínimo para essa quantidade é R$ ${minimo}.`,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const status = body.status || "EM_ABERTO";
 
   const preDelta = balanceDelta(1, status, valor);
@@ -130,61 +165,123 @@ export async function POST(req: Request) {
     }
   }
 
-  const receivable = await prisma.$transaction(async (tx) => {
-    // number vem do id sequencial autoincrementado pelo Postgres (sequence),
-    // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo
-    // número (condição de corrida real com o COUNT(*) anterior).
-    let created = await tx.receivable.create({
-      data: {
-        number: body.number || "",
+  const created = await prisma.$transaction(async (tx) => {
+    if (!parcelado) {
+      // ---- fluxo de sempre: um único lançamento ----
+      // number vem do id sequencial autoincrementado pelo Postgres (sequence),
+      // não de COUNT(*): evita duas requisições simultâneas gerarem o mesmo
+      // número (condição de corrida real com o COUNT(*) anterior).
+      let row = await tx.receivable.create({
+        data: {
+          number: body.number || "",
+          cliente: body.cliente,
+          descricao: body.descricao,
+          categoriaId: body.categoriaId,
+          centroCusto: body.centroCusto || null,
+          empresaId: empresa.id,
+          valor,
+          dataCompetencia,
+          dataVencimento,
+          dataRecebimento,
+          bankAccountId: body.bankAccountId || null,
+          formaRecebimento: body.formaRecebimento || null,
+          parcelado: false,
+          quantidadeParcelas: null,
+          parcelaAtual: null,
+          installmentGroupId: null,
+          observacoes: body.observacoes || null,
+          status,
+          createdById: session.user.id,
+        },
+      });
+
+      if (!body.number) {
+        row = await tx.receivable.update({
+          where: { id: row.id },
+          data: { number: `CR-${String(row.sequence).padStart(5, "0")}` },
+        });
+      }
+
+      const delta = balanceDelta(1, status, valor);
+      if (delta && row.bankAccountId) {
+        await tx.bankAccount.update({
+          where: { id: row.bankAccountId },
+          data: { saldoAtual: { increment: delta } },
+        });
+      }
+
+      return [row];
+    }
+
+    // ---- parcelado: N lançamentos de uma vez, cada um com a fatia do valor total
+    // (`splitInstallments`) e vencimento/competência deslocados em 1 mês por parcela — mesmo padrão
+    // de `/api/financeiro/pagar` (`addMonths` do date-fns já lida sozinho com meses mais curtos, tipo
+    // fevereiro, sem "rolar" pro mês seguinte, então nenhuma data extra de clamping é necessária
+    // aqui). ----
+    const installmentGroupId = randomUUID();
+    const valores = splitInstallments(valor, quantidadeParcelas!);
+    const rows = await tx.receivable.createManyAndReturn({
+      data: valores.map((valorParcela, i) => ({
+        // Número próprio por parcela — nunca `body.number` (a tela nunca envia um valor nele, mesmo
+        // padrão de Contas a Pagar). Mesmo padrão `CR-PARC-<id>-<i+1>`: não depende da
+        // sequence/update em 2 passos porque `createManyAndReturn` não permite emendar um update por
+        // linha antes de saber a sequence de cada uma sem um loop; usar um id só
+        // (`installmentGroupId`) já garante número distinto E identificável como a mesma série.
+        number: `CR-PARC-${installmentGroupId.slice(-6)}-${i + 1}`,
         cliente: body.cliente,
         descricao: body.descricao,
         categoriaId: body.categoriaId,
         centroCusto: body.centroCusto || null,
         empresaId: empresa.id,
-        valor,
-        dataCompetencia,
-        dataVencimento,
+        valor: valorParcela,
+        dataCompetencia: addMonths(dataCompetencia, i),
+        dataVencimento: addMonths(dataVencimento, i),
         dataRecebimento,
         bankAccountId: body.bankAccountId || null,
         formaRecebimento: body.formaRecebimento || null,
-        parcelado: !!body.parcelado,
-        quantidadeParcelas: body.quantidadeParcelas ? Number(body.quantidadeParcelas) : null,
-        parcelaAtual: body.parcelaAtual ? Number(body.parcelaAtual) : null,
+        parcelado: true,
+        quantidadeParcelas,
+        parcelaAtual: i + 1,
+        installmentGroupId,
         observacoes: body.observacoes || null,
         status,
         createdById: session.user.id,
-      },
+      })),
     });
 
-    if (!body.number) {
-      created = await tx.receivable.update({
-        where: { id: created.id },
-        data: { number: `CR-${String(created.sequence).padStart(5, "0")}` },
-      });
-    }
-
+    // Saldo da conta bancária: UM único ajuste com o valor TOTAL digitado (não um por parcela, e
+    // não o total repetido N vezes) — matematicamente idêntico à soma dos ajustes de cada parcela,
+    // porque a soma das fatias de `splitInstallments` bate exatamente com `valor`.
     const delta = balanceDelta(1, status, valor);
-    if (delta && created.bankAccountId) {
+    const bankAccountId = body.bankAccountId || null;
+    if (delta && bankAccountId) {
       await tx.bankAccount.update({
-        where: { id: created.bankAccountId },
+        where: { id: bankAccountId },
         data: { saldoAtual: { increment: delta } },
       });
     }
 
-    return created;
+    return rows;
   });
 
-  await prisma.auditLog.create({
-    data: {
+  // Auditoria por lançamento (igual ao fluxo de sempre, 1 entrada por `Receivable`), mesmo quando a
+  // chamada gerou várias parcelas de uma vez — 1 única chamada (`createMany`) em vez de um loop de
+  // `create` (até 120 round-trips ao banco, 1 por parcela, fora da transação principal).
+  await prisma.auditLog.createMany({
+    data: created.map((row) => ({
       userId: session.user.id,
       empresaId: empresa.id,
       action: "CREATE",
       entityType: "Receivable",
-      entityId: receivable.id,
-      after: JSON.stringify(receivable),
-    },
+      entityId: row.id,
+      after: JSON.stringify(row),
+    })),
   });
 
-  return NextResponse.json({ receivable });
+  // A tela (ver `submit()`/`duplicate()` em `contas-receber-client.tsx`) só olha
+  // `receivable.dataVencimento` para avisar se o lançamento ficou fora da janela de 120 dias que
+  // `refresh()` busca — devolver a 1ª parcela (a de vencimento mais próximo) como `receivable`
+  // mantém esse contrato sem mudar a tela.
+  const receivable = created.find((row) => row.parcelaAtual === 1) ?? created[0];
+  return NextResponse.json({ receivable, parcelas: created.length });
 }

@@ -2,8 +2,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { pct, safeDiv } from "@/lib/calc";
 import { resolveCrmPeriod, type CrmPeriodKey } from "@/lib/crm";
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, format } from "date-fns";
-import { spDayStart, spDayEnd } from "@/lib/periods";
+import { startOfDay, endOfDay, subDays, format } from "date-fns";
+import { spDayStart, spDayEnd, spMonthStart, spMonthEnd } from "@/lib/periods";
 import {
   spDateKey,
   spHours,
@@ -137,9 +137,15 @@ export async function loadSalesSummary(
 export async function loadProgressoMeta(
   empresaId: string
 ): Promise<{ percentual: number; faturamentoMes: number; metaMensal: number }> {
+  // `startOfMonth`/`endOfMonth` (date-fns) calculavam "mês corrente" no fuso LOCAL do
+  // runtime — UTC no servidor (Vercel) — não no fuso de São Paulo (mesmo bug de calendário já
+  // documentado em @/lib/periods.ts e corrigido em `loadEquipePresenteHoje`, acima, e em
+  // `resolvePeriod`/`resolveRollingPeriod`). Perto da virada de mês/dia em SP (21h-23h59,
+  // justamente o horário de funcionamento da loja), isso podia calcular o mês errado.
+  // `spMonthStart`/`spMonthEnd` (@/lib/periods) resolvem sempre no fuso de SP.
   const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
+  const monthStart = spMonthStart(now);
+  const monthEnd = spMonthEnd(now);
 
   const entries = await prisma.salesEntry.findMany({
     where: { empresaId, date: { gte: monthStart, lte: monthEnd } },
