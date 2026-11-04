@@ -57,6 +57,7 @@ export function DivergenciasClient({ initialItems, canResolve }: { initialItems:
   const [valorCredito, setValorCredito] = useState("");
   const [observacao, setObservacao] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     const res = await fetch("/api/estoque/recebimento/divergencias");
@@ -99,25 +100,30 @@ export function DivergenciasClient({ initialItems, canResolve }: { initialItems:
   }
 
   async function confirmarResolucao() {
-    if (!resolvendo) return;
+    if (!resolvendo || submitting) return;
     setError(null);
-    const res = await fetch(`/api/estoque/recebimento/divergencias/${resolvendo.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        resolucaoTipo: tipo,
-        resolucaoDataPrevista: dataPrevista || null,
-        resolucaoValorCredito: valorCredito || null,
-        resolucaoObservacao: observacao || null,
-      }),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Não foi possível registrar a resolução.");
-      return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/estoque/recebimento/divergencias/${resolvendo.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resolucaoTipo: tipo,
+          resolucaoDataPrevista: dataPrevista || null,
+          resolucaoValorCredito: valorCredito || null,
+          resolucaoObservacao: observacao || null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Não foi possível registrar a resolução.");
+        return;
+      }
+      setResolvendo(null);
+      refresh();
+    } finally {
+      setSubmitting(false);
     }
-    setResolvendo(null);
-    refresh();
   }
 
   const pendentes = items.filter((it) => it.resolucaoTipo === "AGUARDANDO");
@@ -227,7 +233,13 @@ export function DivergenciasClient({ initialItems, canResolve }: { initialItems:
         </div>
       </Section>
 
-      <Modal open={!!resolvendo} onClose={() => setResolvendo(null)} title={`Resolver divergência — ${resolvendo?.ingredientName ?? ""}`} widthClass="max-w-lg">
+      <Modal
+        open={!!resolvendo}
+        onClose={() => setResolvendo(null)}
+        title={`Resolver divergência — ${resolvendo?.ingredientName ?? ""}`}
+        widthClass="max-w-lg"
+        closeDisabled={submitting}
+      >
         {resolvendo && (
           <div className="space-y-4">
             <label className="block">
@@ -255,8 +267,8 @@ export function DivergenciasClient({ initialItems, canResolve }: { initialItems:
               <textarea className="input" rows={3} value={observacao} onChange={(e) => setObservacao(e.target.value)} />
             </label>
             <FormError message={error} />
-            <button onClick={confirmarResolucao} className="btn-primary w-full py-2.5">
-              Confirmar resolução
+            <button onClick={confirmarResolucao} disabled={submitting} className="btn-primary w-full py-2.5 disabled:opacity-50">
+              {submitting ? "Confirmando..." : "Confirmar resolução"}
             </button>
           </div>
         )}
