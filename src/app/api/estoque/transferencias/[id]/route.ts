@@ -385,7 +385,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
-    return tx.transfer.update({
+    const updated = await tx.transfer.update({
       where: { id },
       data: {
         status: novoStatus ?? undefined,
@@ -395,6 +395,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         observacao: body.observacao !== undefined ? body.observacao || null : undefined,
       },
     });
+
+    // Dentro da MESMA transação (mesmo padrão de src/app/api/financeiro/pagar/[id]/route.ts) —
+    // se o lançamento de estoque falhar e a transação for revertida, o registro de auditoria
+    // reverte junto, em vez de gravar uma mudança que nunca aconteceu de fato.
+    if (novoStatus !== undefined) {
+      await tx.auditLog.create({
+        data: {
+          userId: session.user.id,
+          empresaId: existing.origemEmpresaId,
+          action: "UPDATE",
+          entityType: "Transfer",
+          entityId: id,
+          before: JSON.stringify({ status: existing.status }),
+          after: JSON.stringify({ status: updated.status, responsavelRecebimento: updated.responsavelRecebimento }),
+        },
+      });
+    }
+
+    return updated;
   }, ESTOQUE_TX_OPTIONS);
 
   return NextResponse.json({ transfer });

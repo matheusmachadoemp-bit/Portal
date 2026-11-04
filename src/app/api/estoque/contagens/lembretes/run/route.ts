@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isValidCronSecret } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { spDateKey } from "@/lib/checklist";
 import { generateStockCounts, processStockCountReminders } from "@/lib/estoque-server";
@@ -18,8 +19,9 @@ import { generateStockCounts, processStockCountReminders } from "@/lib/estoque-s
  * dataContagem])`), então rodar de novo dentro do mesmo dia é seguro e barato.
  */
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Comparação timing-safe (ver src/lib/cron-auth.ts) — achado do Jonas, auditoria de
+  // segurança 2026-11: comparação de string simples (`===`) é vulnerável a timing attack.
+  if (!(await isValidCronSecret(req.headers.get("authorization")))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

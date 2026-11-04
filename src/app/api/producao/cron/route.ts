@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isValidCronSecret } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { generateProductionPlan } from "@/lib/producao-plan-server";
 import { getStoreManagers, logProductionOrderHistory, notifyProducaoUsers } from "@/lib/producao-server";
@@ -9,8 +10,9 @@ import { effectiveProductionStatus } from "@/lib/producao";
  * `mode=atrasados` (fim de tarde): marca ordens de hoje que passaram do
  * prazo como ATRASADO e notifica responsável + gerentes da loja. */
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Comparação timing-safe (ver src/lib/cron-auth.ts) — achado do Jonas, auditoria de
+  // segurança 2026-11: comparação de string simples (`===`) é vulnerável a timing attack.
+  if (!(await isValidCronSecret(req.headers.get("authorization")))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

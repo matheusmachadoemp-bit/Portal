@@ -64,6 +64,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ...weekdayData,
     },
   });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "UPDATE",
+      entityType: "StockCountSchedule",
+      entityId: id,
+      before: JSON.stringify(existing),
+      after: JSON.stringify(schedule),
+    },
+  });
+
   return NextResponse.json({ schedule });
 }
 
@@ -85,5 +98,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.stockCountSchedule.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "DELETE",
+      entityType: "StockCountSchedule",
+      entityId: id,
+      before: JSON.stringify(existing),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

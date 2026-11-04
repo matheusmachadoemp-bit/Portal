@@ -99,5 +99,17 @@ export async function POST(req: Request) {
       ...weekdayData,
     },
   });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: schedule.empresaId,
+      action: "CREATE",
+      entityType: "StockCountSchedule",
+      entityId: schedule.id,
+      after: JSON.stringify(schedule),
+    },
+  });
+
   return NextResponse.json({ schedule });
 }

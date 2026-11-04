@@ -31,5 +31,16 @@ export async function POST(req: Request) {
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: reward.empresaId,
+      action: "CREATE",
+      entityType: "LoyaltyReward",
+      entityId: reward.id,
+      after: JSON.stringify(reward),
+    },
+  });
+
   return NextResponse.json({ reward });
 }

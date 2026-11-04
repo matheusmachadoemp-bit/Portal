@@ -24,5 +24,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.customerNote.delete({ where: { id: notaId } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: nota.empresaId,
+      action: "DELETE",
+      entityType: "CustomerNote",
+      entityId: notaId,
+      before: JSON.stringify(nota),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

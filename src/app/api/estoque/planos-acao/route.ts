@@ -64,5 +64,17 @@ export async function POST(req: Request) {
       createdById: session.user.id,
     },
   });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: plan.empresaId,
+      action: "CREATE",
+      entityType: "ActionPlan",
+      entityId: plan.id,
+      after: JSON.stringify(plan),
+    },
+  });
+
   return NextResponse.json({ plan });
 }

@@ -461,5 +461,19 @@ export async function POST(req: Request) {
   const possibleDuplicates = classified
     .filter((r) => r.possibleDuplicateNome)
     .map((r) => ({ line: r.line, nome: r.nome }));
+
+  // 1 registro resumido por importação (não 1 por cliente criado/atualizado — uma planilha grande
+  // pode ter milhares de linhas) — mesmo padrão de outras importações em massa (ex.: POST
+  // /api/vendas/importar). Achado do Jonas, 2026-11: uso de AuditLog inconsistente em CRM/Estoque.
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: empresa.id,
+      action: "IMPORT",
+      entityType: "Cliente",
+      after: JSON.stringify({ arquivo: file.name, created, updated, errors: errors.length }),
+    },
+  });
+
   return NextResponse.json({ imported: created + updated, created, updated, errors, possibleDuplicates });
 }

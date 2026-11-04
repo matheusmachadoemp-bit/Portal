@@ -29,6 +29,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("message" in body) data.message = body.message;
 
   const updated = await prisma.automation.update({ where: { id }, data });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: automacao.empresaId,
+      action: "UPDATE",
+      entityType: "Automation",
+      entityId: id,
+      before: JSON.stringify(automacao),
+      after: JSON.stringify(updated),
+    },
+  });
+
   return NextResponse.json({ automacao: updated });
 }
 
@@ -50,5 +63,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.automation.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: automacao.empresaId,
+      action: "DELETE",
+      entityType: "Automation",
+      entityId: id,
+      before: JSON.stringify(automacao),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

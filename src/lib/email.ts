@@ -93,7 +93,7 @@ function reservationDetailsHtml(details: ReservationEmailDetails): string {
     <ul style="padding-left: 18px; margin: 12px 0;">
       <li>Data: ${details.dateBR}</li>
       <li>Horário: ${details.timeHHMM}</li>
-      <li>Ambiente: ${details.environmentName}</li>
+      <li>Ambiente: ${escapeHtml(details.environmentName)}</li>
       <li>Pessoas: ${details.partySize}</li>
     </ul>
   `;
@@ -111,7 +111,7 @@ export async function sendReservationAcceptedEmail(to: string, details: Reservat
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #1a1a1a;">
         <h2 style="margin-bottom: 8px;">Reserva confirmada!</h2>
-        <p>Olá, ${escapeHtml(details.customerName)}! Sua reserva na <strong>${details.empresaName}</strong> foi confirmada:</p>
+        <p>Olá, ${escapeHtml(details.customerName)}! Sua reserva na <strong>${escapeHtml(details.empresaName)}</strong> foi confirmada:</p>
         ${reservationDetailsHtml(details)}
         <p>Esperamos você!</p>
       </div>
@@ -142,8 +142,8 @@ export async function sendReservationCancelledEmail(
     : `Não foi possível confirmar sua reserva — ${details.empresaName}`;
 
   const intro = details.wasConfirmed
-    ? `Avisamos que sua reserva confirmada na <strong>${details.empresaName}</strong>, abaixo, foi cancelada:`
-    : `Infelizmente não foi possível atender sua solicitação de reserva na <strong>${details.empresaName}</strong>, abaixo:`;
+    ? `Avisamos que sua reserva confirmada na <strong>${escapeHtml(details.empresaName)}</strong>, abaixo, foi cancelada:`
+    : `Infelizmente não foi possível atender sua solicitação de reserva na <strong>${escapeHtml(details.empresaName)}</strong>, abaixo:`;
 
   const { error } = await resend.emails.send({
     from,

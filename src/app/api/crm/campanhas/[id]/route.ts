@@ -49,6 +49,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       data: { status: "ENVIADA", sentAt: new Date() },
     });
     await prisma.campaignRecipient.updateMany({ where: { campaignId: id }, data: { status: "ENVIADO" } });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        empresaId: campanha.empresaId,
+        action: "UPDATE",
+        entityType: "Campaign",
+        entityId: id,
+        before: JSON.stringify(campanha),
+        after: JSON.stringify(updated),
+      },
+    });
+
     return NextResponse.json({ campanha: updated });
   }
 
@@ -73,5 +86,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.campaign.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: campanha.empresaId,
+      action: "DELETE",
+      entityType: "Campaign",
+      entityId: id,
+      before: JSON.stringify(campanha),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

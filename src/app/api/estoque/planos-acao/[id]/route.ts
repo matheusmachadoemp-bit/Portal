@@ -39,6 +39,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       evidenciaUrl: body.evidenciaUrl !== undefined ? body.evidenciaUrl || null : undefined,
     },
   });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "UPDATE",
+      entityType: "ActionPlan",
+      entityId: id,
+      before: JSON.stringify(existing),
+      after: JSON.stringify(plan),
+    },
+  });
+
   return NextResponse.json({ plan });
 }
 
@@ -58,5 +71,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     );
   }
   await prisma.actionPlan.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "DELETE",
+      entityType: "ActionPlan",
+      entityId: id,
+      before: JSON.stringify(existing),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

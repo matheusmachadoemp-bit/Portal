@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isValidCronSecret } from "@/lib/cron-auth";
 import { subDays } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { CHECKLIST_TERMINAL_STATUSES, spDateKey, spStartOfDay } from "@/lib/checklist";
@@ -27,8 +28,9 @@ const ESCALATION_LOOKBACK_DAYS = 7;
 
 /** Disparo agendado (Vercel Cron, ver vercel.json), autenticado via CRON_SECRET. */
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Comparação timing-safe (ver src/lib/cron-auth.ts) — achado do Jonas, auditoria de
+  // segurança 2026-11: comparação de string simples (`===`) é vulnerável a timing attack.
+  if (!(await isValidCronSecret(req.headers.get("authorization")))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

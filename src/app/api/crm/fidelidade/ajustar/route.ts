@@ -63,6 +63,19 @@ export async function POST(req: Request) {
     return acc;
   });
 
+  // Ajuste manual de pontos/cashback é dado sensível (equivalente a um lançamento financeiro) —
+  // mesmo padrão genérico de AuditLog já usado em Vendas/Financeiro (achado do Jonas, 2026-11).
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: cliente.empresaId,
+      action: "UPDATE",
+      entityType: "LoyaltyAccount",
+      entityId: account.id,
+      after: JSON.stringify({ clienteId: cliente.id, tipo, pontos, cashback, descricao: body.descricao ?? null, saldoFinal: account }),
+    },
+  });
+
   const saldosNegativos: string[] = [];
   if (account.pontos < 0) saldosNegativos.push(`pontos (${account.pontos})`);
   if (account.cashback < 0) saldosNegativos.push(`cashback (R$ ${account.cashback.toFixed(2)})`);
