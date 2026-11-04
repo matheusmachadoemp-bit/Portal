@@ -3994,6 +3994,15 @@ model Receivable {
   parcelado           Boolean            @default(false)
   quantidadeParcelas  Int?
   parcelaAtual        Int?
+  /// Mesmo valor em TODAS as parcelas geradas juntas por um único lançamento parcelado (POST
+  /// `/api/financeiro/receber` com `parcelado=true` e `quantidadeParcelas>1`), para poder
+  /// identificar/agrupar depois quais recebimentos são parcelas da MESMA venda/contrato — nulo para
+  /// lançamentos não parcelados (todo o histórico antes deste campo, e qualquer lançamento avulso).
+  /// Gerado em código (randomUUID), não é FK: não existe uma tabela "cabeçalho" de parcelamento, cada
+  /// parcela já é um `Receivable` completo e independente (editável/recebível isoladamente), só com
+  /// esta marca em comum. Mesmo padrão de `Payable.installmentGroupId` — ver `splitInstallments` em
+  /// `src/lib/finance.ts`.
+  installmentGroupId  String?
   observacoes         String?
   status              FinanceEntryStatus @default(EM_ABERTO)
   recurringTemplateId String?
@@ -4005,6 +4014,7 @@ model Receivable {
 
   @@index([empresaId, status, dataVencimento])
   @@index([empresaId, dataCompetencia])
+  @@index([installmentGroupId])
 }
 
 model CashMovement {
@@ -4608,6 +4618,14 @@ model Task {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
   completedAt        DateTime?
+  /// Quando o aviso de "tarefa atrasada" (processTaskAtrasoAlertas, @/lib/tarefas-server.ts) foi
+  /// disparado — mesma idempotência de `Chamado.atrasoNotificadoEm` (@/lib/manutencao-server.ts):
+  /// null = ainda não avisado (ou nunca ficou atrasada); a checagem periódica (GET
+  /// /api/tarefas/alertas/run, ver vercel.json) só processa tarefas com `dueDate` vencido, status
+  /// não-CONCLUIDA e este campo nulo, e preenche com o instante do aviso assim que notifica.
+  /// Zerado de volta pra null sempre que o prazo (`dueDate`) é alterado — ver PATCH
+  /// /api/tarefas/[id] — permitindo um novo aviso futuro se a tarefa atrasar de novo.
+  atrasoNotificadoEm DateTime?
 
   assignees             TaskAssignee[]
   checklist             TaskChecklistItem[]
@@ -4622,6 +4640,11 @@ model Task {
   @@unique([recurrenceId, dueDate])
   @@index([empresaId, status])
   @@index([empresaId, dueDate])
+  // Suporta a checagem de atraso (processTaskAtrasoAlertas, @/lib/tarefas-server.ts: dueDate <
+  // now(), status != CONCLUIDA, atrasoNotificadoEm IS NULL) — mesmo motivo do `@@index([prazo])`
+  // em `Chamado`: essa query não filtra por empresaId, então `@@index([empresaId, dueDate])`
+  // acima não ajuda (teria que varrer o índice todo ignorando a 1ª coluna).
+  @@index([dueDate])
 }
 
 model TaskAssignee {

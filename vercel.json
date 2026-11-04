@@ -33,6 +33,14 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/tarefas/alertas/run",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/manutencao/orcamentos/expirar/run",
+      "schedule": "0 3 * * *"
+    },
+    {
       "path": "/api/producao/cron?mode=plan",
       "schedule": "0 4 * * *"
     },

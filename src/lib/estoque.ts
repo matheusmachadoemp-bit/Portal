@@ -33,6 +33,60 @@ export function applyMovement(currentStock: number, type: string, quantidade: nu
 }
 
 /**
+ * Opções de `prisma.$transaction(async (tx) => {...}, ESTOQUE_TX_OPTIONS)` para as transações
+ * interativas desta tarefa (achado de auditoria, 2026-11) que gravam movimentação de estoque —
+ * `lockIngredientStock` (abaixo) e os blocos que usam `increment`/`decrement` + o valor retornado
+ * (ver comentário da função). Mesma convenção já usada pra outras transações que esperam uma
+ * trava de linha/advisory lock de outra chamada (`src/lib/ficha-autolink.ts`,
+ * `src/lib/ficha-nome-server.ts`, `src/lib/bank-sync-server.ts`,
+ * `src/lib/bank-reconciliation.ts`): o padrão do Prisma (2s de espera pra começar / 5s de duração
+ * total) é apertado demais pra isso — além da hibernação do Neon (banco de produção), agora
+ * `lockIngredientStock` BLOQUEIA de propósito quando duas chamadas concorrentes atingem o mesmo
+ * insumo (é o próprio mecanismo da correção), então, sob um insumo bem movimentado, uma chamada
+ * esperando a vez da outra pode facilmente passar dos 5s padrão e falhar com erro de transação em
+ * vez de aplicar o movimento — não é mais o lost update silencioso de antes, mas é um risco de
+ * disponibilidade novo que esse `timeout`/`maxWait` maior evita.
+ */
+export const ESTOQUE_TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
+
+/**
+ * Trava a linha do insumo (`SELECT ... FOR UPDATE`) até o fim da transação e devolve o
+ * `estoqueAtual` MAIS RECENTE — não o que o chamador leu antes de abrir a transação.
+ *
+ * Correção da condição de corrida (lost update) encontrada em
+ * `POST /api/estoque/movimentos` e `POST /api/estoque/perdas`: as duas rotas liam
+ * `ingredient.estoqueAtual` ANTES da transação, calculavam `estoqueApos` em JS, e gravavam
+ * `Ingredient.estoqueAtual` como valor ABSOLUTO dentro de um `$transaction([...])` em lote, que
+ * não relia o valor dentro da transação. Duas chamadas concorrentes para o MESMO insumo partiam
+ * do mesmo valor-base e a que grava por último sobrescrevia a outra silenciosamente (ex.: estoque
+ * 100 + duas entradas concorrentes de +10 e +5 virava 105 em vez de 115 — reproduzido e corrigido
+ * em 2026-11).
+ *
+ * Toda rota que precisa calcular um `estoqueApos` novo a partir do estoque atual — e o tipo de
+ * movimento não permite um `increment`/`decrement` atômico simples (ex.: AJUSTE/INVENTARIO, que
+ * definem um valor ABSOLUTO por natureza, não um delta) — deve chamar esta função DENTRO de uma
+ * transação interativa (`prisma.$transaction(async (tx) => {...})`), usando o valor retornado
+ * (não um valor lido antes de abrir a transação) para calcular `estoqueApos` e para o
+ * `tx.ingredient.update(...)` que grava o novo saldo. O lock da linha é liberado só quando a
+ * transação commita/aborta, então uma segunda chamada concorrente para o mesmo insumo espera
+ * aqui até a primeira terminar, e então lê o valor já atualizado — sem lost update.
+ *
+ * Quando o movimento é um delta simples (ENTRADA/SAIDA/TRANSFERENCIA/PERDA), prefira
+ * `tx.ingredient.update({ data: { estoqueAtual: { increment/decrement: delta } } })` direto (sem
+ * chamar esta função): o UPDATE atômico do Postgres já evita o lost update sem precisar de lock
+ * explícito, e o próprio retorno do `update` já traz o `estoqueAtual` resultante pra gravar no
+ * `StockMovement.estoqueApos` do histórico — ver `POST /api/estoque/compras/[id]`,
+ * `POST /api/estoque/recebimento` e `.../recebimento/responder/[token]/finalizar`.
+ */
+export async function lockIngredientStock(tx: Prisma.TransactionClient, ingredientId: string): Promise<number> {
+  const rows = await tx.$queryRaw<{ estoqueAtual: number }[]>`
+    SELECT "estoqueAtual" FROM "Ingredient" WHERE "id" = ${ingredientId} FOR UPDATE
+  `;
+  if (rows.length === 0) throw new Error("Insumo não encontrado.");
+  return rows[0].estoqueAtual;
+}
+
+/**
  * Custo de 1 unidade de `Ingredient.unidade` (kg, l, un...) — função central usada por TODO
  * cálculo de custo do sistema (Ficha Técnica/CMV via `@/lib/ficha`, valorização de estoque,
  * contagens, perdas). Até a correção abaixo (achado de produção, revisão de 02/10/2026, loja

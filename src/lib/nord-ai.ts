@@ -45,8 +45,14 @@ const MAX_OUTPUT_TOKENS = 1024;
  * — caminho esperado em produção até o Matheus terminar de configurar a chave. Nunca um erro
  * 500 cru, nunca falha a requisição.
  */
+// Achado (Nina, auditoria geral): a mensagem apontava para "as configurações do projeto"
+// dentro do Portal — mas `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` são variáveis de ambiente puras
+// (lidas só aqui via `process.env`), sem nenhum campo correspondente em /portal/configuracoes
+// nem em nenhuma outra tela do sistema (mesmo padrão de VAULT_SECRET/CRON_SECRET/
+// RESEND_API_KEY etc., ver @/lib/vault.ts e @/lib/email.ts): quem configura é o próprio
+// administrador do projeto na Vercel (painel de hospedagem), nunca dentro do Portal.
 export const NORD_AI_NOT_CONFIGURED_MESSAGE =
-  "O Nord AI ainda não foi configurado. Peça para o administrador configurar a chave de IA nas configurações do projeto.";
+  "O Nord AI ainda não foi configurado. Peça para o administrador cadastrar a variável de ambiente ANTHROPIC_API_KEY no painel da Vercel que hospeda o Portal.";
 
 /** "DD/MM/AAAA HH:mm" em horário de Brasília — mesmo offset fixo (UTC-3) usado em todo o resto do backend (ver @/lib/checklist e @/lib/periods). */
 function formatSpDateTime(date: Date): string {

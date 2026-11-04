@@ -18,12 +18,25 @@ export function computeHorasTrabalhadas(input: {
   retornoAlmoco?: string | null;
   saida?: string | null;
 }): number {
+  const MINUTOS_DIA = 24 * 60;
   const entrada = timeToMinutes(input.entrada);
   const saida = timeToMinutes(input.saida);
-  if (entrada === null || saida === null || saida <= entrada) return 0;
-  let totalMinutes = saida - entrada;
-  const saidaAlmoco = timeToMinutes(input.saidaAlmoco);
-  const retornoAlmoco = timeToMinutes(input.retornoAlmoco);
+  if (entrada === null || saida === null || saida === entrada) return 0;
+  // Turno que cruza a meia-noite (ex.: entrada 22:00, saída 06:00 do dia seguinte): o horário de
+  // saída, sozinho ("HH:MM"), não carrega informação de dia — quando ele é MENOR que o de entrada,
+  // isso indica que a saída ocorreu no dia seguinte, então somamos 24h (em minutos) pra colocar os
+  // dois horários numa mesma linha do tempo contínua antes de calcular a duração. Sem isso, `saida -
+  // entrada` dava negativo e o turno era descartado como 0h (achado da auditoria geral, RH/Jornada).
+  const saidaContinua = saida < entrada ? saida + MINUTOS_DIA : saida;
+  let totalMinutes = saidaContinua - entrada;
+
+  // Mesmo ajuste pro intervalo de almoço, relativo à entrada: qualquer horário menor que a entrada
+  // também cai no "dia seguinte" da linha do tempo contínua — cobre o caso raro de um intervalo de
+  // almoço que também cruza a meia-noite num turno noturno (ex. entrada 22:00, almoço 23:50–00:10).
+  const saidaAlmocoRaw = timeToMinutes(input.saidaAlmoco);
+  const retornoAlmocoRaw = timeToMinutes(input.retornoAlmoco);
+  const saidaAlmoco = saidaAlmocoRaw !== null && saidaAlmocoRaw < entrada ? saidaAlmocoRaw + MINUTOS_DIA : saidaAlmocoRaw;
+  const retornoAlmoco = retornoAlmocoRaw !== null && retornoAlmocoRaw < entrada ? retornoAlmocoRaw + MINUTOS_DIA : retornoAlmocoRaw;
   if (saidaAlmoco !== null && retornoAlmoco !== null && retornoAlmoco > saidaAlmoco) {
     totalMinutes -= retornoAlmoco - saidaAlmoco;
   }
