@@ -5,6 +5,8 @@ import { addMonths, setDate, lastDayOfMonth, getDate } from "date-fns";
 import { parseDayInput } from "@/lib/timezone";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { PURCHASE_PAYMENT_METHODS } from "@/lib/estoque";
+import { RECEIVABLE_PAYMENT_METHODS } from "@/lib/finance";
 
 const MAX_INFINITE_MONTHS = 24; // gera 24 meses por vez para recorrências infinitas
 
@@ -78,6 +80,19 @@ export async function POST(req: Request) {
   }
 
   const tipo: "PAGAR" | "RECEBER" = body.tipo;
+  if (tipo !== "PAGAR" && tipo !== "RECEBER") {
+    return NextResponse.json({ error: "Tipo deve ser PAGAR ou RECEBER." }, { status: 400 });
+  }
+  // Mesma validação já usada em `/api/financeiro/pagar` (`PURCHASE_PAYMENT_METHODS`) — aqui a lista
+  // curada depende do `tipo` do recorrente: PAGAR usa a mesma lista de "pagar um fornecedor" de
+  // Contas a Pagar/Estoque > Compras; RECEBER usa `RECEIVABLE_PAYMENT_METHODS` (`@/lib/finance`), a
+  // mesma já usada no `<select>` de Contas a Receber. Sem isso, um valor fora do enum
+  // `PaymentMethod` (ou mesmo um valor válido do enum mas fora da lista curada do tipo errado)
+  // estourava um 500 cru do Prisma na hora de criar o `Payable`/`Receivable` recorrente abaixo.
+  const allowedPaymentMethods = tipo === "PAGAR" ? PURCHASE_PAYMENT_METHODS : RECEIVABLE_PAYMENT_METHODS;
+  if (body.formaPagamento && !(allowedPaymentMethods as readonly string[]).includes(body.formaPagamento)) {
+    return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
+  }
   const valor = valorInput;
   const diaVencimento = Number(body.diaVencimento) || 1;
   // Meia-noite de São Paulo (03:00Z): addMonths/setDate abaixo preservam a hora, então toda competência e
