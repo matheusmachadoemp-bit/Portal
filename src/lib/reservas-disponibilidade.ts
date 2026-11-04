@@ -375,15 +375,16 @@ export async function getAvailability(params: {
   };
 }
 
-export type DayAvailabilityStatus = "fechado" | "bloqueado" | "fora-do-prazo" | "sem-horario" | "disponivel";
+export type DayAvailabilityStatus = "fechado" | "bloqueado" | "fora-do-prazo" | "sem-horario" | "esgotado" | "disponivel";
 
 export type DayAvailability = {
   dateKey: string;
   status: DayAvailabilityStatus;
-  /** Só presente quando `status` é "sem-horario" ou "disponivel" (dia aberto) — mesmo campo de
-   * `AvailabilityResult.isSpecialGroup`, repassado pra o calendário poder sinalizar visualmente
-   * que aquele `partySize` é um grupo especial (ver `ReservationSettings.specialGroupThreshold`;
-   * o processo diferenciado em si continua fora de escopo, só o aviso visual). */
+  /** Só presente quando `status` é "sem-horario", "esgotado" ou "disponivel" (dia aberto) — mesmo
+   * campo de `AvailabilityResult.isSpecialGroup`, repassado pra o calendário poder sinalizar
+   * visualmente que aquele `partySize` é um grupo especial (ver
+   * `ReservationSettings.specialGroupThreshold`; o processo diferenciado em si continua fora de
+   * escopo, só o aviso visual). */
   isSpecialGroup?: boolean;
 };
 
@@ -399,6 +400,12 @@ export type DayAvailability = {
  * tráfego alto, isso pode virar um ponto de otimização futura (ex.: uma versão que busca a
  * ocupação do mês inteiro de uma vez e itera em memória) — não feito nesta etapa por não ser
  * necessário para o volume esperado de uma reserva de restaurante.
+ *
+ * Dia aberto sem nenhum slot disponível sai como "esgotado" (capacidade cheia em TODOS os
+ * horários da grade) ou "sem-horario" (qualquer outro motivo pontual — ver comentário no ponto em
+ * que `isEsgotado` é calculado abaixo) — o calendário público usa essa distinção para colorir o
+ * dia esgotado em vermelho em vez do laranja genérico de "sem horário" (tarefa
+ * "reservas-cor-esgotado").
  */
 export async function getMonthAvailability(params: {
   empresaId: string;
@@ -421,7 +428,24 @@ export async function getMonthAvailability(params: {
       continue;
     }
     const hasAvailableSlot = result.slots.some((s) => s.available);
-    days.push({ dateKey, status: hasAvailableSlot ? "disponivel" : "sem-horario", isSpecialGroup: result.isSpecialGroup });
+    // Tarefa "reservas-cor-esgotado" (pedido do Matheus, calendário público): distingue, dentro do
+    // dia aberto sem nenhum slot disponível, o caso de ESGOTADO DE VERDADE (todo horário da grade já
+    // está com a capacidade do ambiente cheia para `partySize`) de qualquer outro motivo de
+    // indisponibilidade pontual — hoje, na prática, só um: para o dia de HOJE, à medida que a hora
+    // avança, os horários restantes vão falhando `withinAdvanceWindow` (ficam "tarde demais" para a
+    // antecedência mínima configurada) mesmo tendo capacidade livre; dias futuros quase nunca caem
+    // aqui porque `withinAdvanceWindow` só reprova por antecedência, não por capacidade. Não é uma
+    // conta nova: `occupiedCapacity`/`totalCapacity` já são calculados por `getAvailability` para
+    // cada slot (ver `AvailabilitySlot` acima) — só não eram comparados aqui para decidir o status do
+    // dia. `slots.length > 0` evita marcar como "esgotado" um dia sem nenhum horário na grade (não
+    // deveria acontecer hoje — `closeTime > openTime` é validado em Configurações — mas não custa a
+    // checagem, já que `every` em array vazio seria `true`).
+    const isEsgotado = result.slots.length > 0 && result.slots.every((s) => s.occupiedCapacity + partySize > s.totalCapacity);
+    days.push({
+      dateKey,
+      status: hasAvailableSlot ? "disponivel" : isEsgotado ? "esgotado" : "sem-horario",
+      isSpecialGroup: result.isSpecialGroup,
+    });
   }
   return { days };
 }
