@@ -3994,6 +3994,15 @@ model Receivable {
   parcelado           Boolean            @default(false)
   quantidadeParcelas  Int?
   parcelaAtual        Int?
+  /// Mesmo valor em TODAS as parcelas geradas juntas por um único lançamento parcelado (POST
+  /// `/api/financeiro/receber` com `parcelado=true` e `quantidadeParcelas>1`), para poder
+  /// identificar/agrupar depois quais recebimentos são parcelas da MESMA venda/contrato — nulo para
+  /// lançamentos não parcelados (todo o histórico antes deste campo, e qualquer lançamento avulso).
+  /// Gerado em código (randomUUID), não é FK: não existe uma tabela "cabeçalho" de parcelamento, cada
+  /// parcela já é um `Receivable` completo e independente (editável/recebível isoladamente), só com
+  /// esta marca em comum. Mesmo padrão de `Payable.installmentGroupId` — ver `splitInstallments` em
+  /// `src/lib/finance.ts`.
+  installmentGroupId  String?
   observacoes         String?
   status              FinanceEntryStatus @default(EM_ABERTO)
   recurringTemplateId String?
@@ -4005,6 +4014,7 @@ model Receivable {
 
   @@index([empresaId, status, dataVencimento])
   @@index([empresaId, dataCompetencia])
+  @@index([installmentGroupId])
 }
 
 model CashMovement {
