@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Pencil, Copy, Ban, Trash2, BarChart3, Send, CheckCheck } from "lucide-react";
 import { Badge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { ConfirmDialog, Modal } from "@/components/ui/modal";
+import { ConfirmDialog, FormError, Modal } from "@/components/ui/modal";
 import { PeriodFilterBar } from "@/components/ui/period-filter";
 import { SATISFACTION_STATUS_LABEL, SATISFACTION_STATUS_TONE } from "@/lib/satisfaction";
 import { type RollingPeriodKey } from "@/lib/periods";
@@ -58,6 +58,8 @@ export function PesquisaSatisfacaoClient({
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [invitationsLoading, setInvitationsLoading] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return surveys.filter((s) => {
@@ -178,16 +180,18 @@ export function PesquisaSatisfacaoClient({
 
   async function openSend(s: Survey) {
     setSendingSurvey(s);
+    setSendError(null);
     await loadInvitations(s.id);
   }
 
   async function generateInvitations() {
     if (!sendingSurvey) return;
     setInvitationsLoading(true);
+    setSendError(null);
     const res = await fetch(`/api/satisfaction/surveys/${sendingSurvey.id}/invitations`, { method: "POST" });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      alert(data?.error || "Não foi possível gerar os convites.");
+      setSendError(data?.error || "Não foi possível gerar os convites.");
       setInvitationsLoading(false);
       return;
     }
@@ -206,10 +210,11 @@ export function PesquisaSatisfacaoClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
+    setRowError(null);
     const res = await fetch(`/api/satisfaction/surveys/${confirmDeleteId}`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      alert(data?.error || "Não foi possível excluir essa pesquisa.");
+      setRowError(data?.error || "Não foi possível excluir essa pesquisa.");
     }
     setConfirmDeleteId(null);
     await refresh();
@@ -278,6 +283,8 @@ export function PesquisaSatisfacaoClient({
           },
         ]}
       />
+
+      <FormError message={rowError} />
 
       <Section title="Pesquisas recentes">
         <div className="overflow-x-auto nord-scrollbar">
@@ -377,6 +384,7 @@ export function PesquisaSatisfacaoClient({
         widthClass="max-w-lg"
       >
         <div className="space-y-3">
+          <FormError message={sendError} />
           <div className="flex items-center justify-between">
             <p className="text-xs text-nord-gray">
               {invitations.length === 0

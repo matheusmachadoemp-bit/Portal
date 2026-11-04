@@ -75,7 +75,7 @@ export default function ResetPasswordForm({ token }: { token: string }) {
               </div>
 
               {state?.error && (
-                <p className="text-sm text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
+                <p className="text-sm text-nord-danger bg-nord-danger/10 border border-nord-danger/30 rounded-lg px-3 py-2">
                   {state.error}
                 </p>
               )}
