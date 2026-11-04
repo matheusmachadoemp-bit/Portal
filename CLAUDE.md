@@ -369,6 +369,26 @@ o comportamento do parâmetro mudar entre versões — mas o vetor mais
 comum (rodar `next dev` numa tarefa qualquer) já não deve mais disparar
 a regeneração.
 
+**Atualização (upgrade do Next.js 16.3→16.4, tarefa do Mylon)**: a partir
+da 16.4.0, `agentRules: false` passou de "não sincroniza" (passivo) para
+"remove ativamente o bloco gerenciado no `next dev`, mesmo sem detectar
+nenhum agente" (destrutivo) — documentado no próprio changelog do pacote
+(`node_modules/next/dist/docs/.../agentRules.md`, seção "Version
+History"). Como o `AGENTS.md` deste projeto era *só* esse bloco, cada
+`next dev` rodado localmente nessa versão apagava o arquivo do disco por
+completo (`git status` mostrava ` D AGENTS.md`) — nunca afetou produção
+(Vercel só roda `next build`, que nunca tocou o arquivo em nenhuma
+versão), mas criava risco real de alguém commitar sem perceber e apagar
+o arquivo do histórico de verdade. Correção aplicada pelo líder, direto
+na pasta principal (mesma categoria de edição do CLAUDE.md): removidas as
+duas marcações `<!-- BEGIN:nextjs-agent-rules -->`/`<!-- END:nextjs-agent-rules -->`
+do `AGENTS.md`, mantendo o texto igual — sem essas marcações exatas, o
+gerador do Next.js (desta versão ou de qualquer futura) não reconhece
+mais o arquivo como "dele" e nunca mais o toca, nem para reescrever nem
+para remover. `agentRules: false` continua no `next.config.ts` como
+proteção extra contra o Next criar um bloco novo em outro lugar do
+arquivo.
+
 # Banco descartável para teste ao vivo: padrão que funciona (evita bloqueio do sandbox)
 
 Qualquer agente (Mylon, Otavio, Nina, Teulis ou o próprio líder) que precisar
