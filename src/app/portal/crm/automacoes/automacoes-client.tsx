@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, ArrowRight, Trash2 } from "lucide-react";
 import { Section } from "@/components/ui/stat-card";
-import { Modal } from "@/components/ui/modal";
+import { FormError, Modal } from "@/components/ui/modal";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { formatNumber } from "@/lib/calc";
 import { AUTOMATION_TEMPLATES, AUTOMATION_ACTION_LABEL, type AutomationTriggerKey } from "@/lib/crm";
@@ -49,6 +49,7 @@ export function AutomacoesClient({
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", trigger: "RECUPERACAO" as AutomationTriggerKey, waitDays: 0, message: "" });
   const [saving, setSaving] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   async function ativarTemplate(t: Template) {
     setBusyKey(t.trigger);
@@ -74,10 +75,11 @@ export function AutomacoesClient({
 
   async function excluir(id: string) {
     setBusyKey(id);
+    setRowError(null);
     const res = await fetch(`/api/crm/automacoes/${id}`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      alert(data?.error || "Não foi possível excluir essa automação.");
+      setRowError(data?.error || "Não foi possível excluir essa automação.");
     }
     setBusyKey(null);
     router.refresh();
@@ -149,35 +151,38 @@ export function AutomacoesClient({
       </Section>
 
       {custom.length > 0 && (
-        <Section title="Automações personalizadas">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {custom.map((c) => (
-              <div key={c.id} className="rounded-xl border border-nord-border p-4 space-y-3">
-                <div className="flex items-start justify-between">
-                  <p className="text-white text-sm font-medium">{c.name}</p>
-                  {canDelete && (
-                    <button onClick={() => excluir(c.id)} className="text-nord-gray hover:text-nord-danger">
-                      <Trash2 size={13} />
-                    </button>
-                  )}
+        <>
+          <FormError message={rowError} />
+          <Section title="Automações personalizadas">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {custom.map((c) => (
+                <div key={c.id} className="rounded-xl border border-nord-border p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <p className="text-white text-sm font-medium">{c.name}</p>
+                    {canDelete && (
+                      <button onClick={() => excluir(c.id)} className="text-nord-gray hover:text-nord-danger">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-nord-gray">
+                    {AUTOMATION_ACTION_LABEL[c.actionType]} · {c.waitDays > 0 ? `após ${c.waitDays} dias` : "imediato"}
+                  </p>
+                  <p className="text-xs text-nord-gray">
+                    <span className="text-white font-medium">{formatNumber(c.matchCount)}</span> clientes correspondem hoje
+                  </p>
+                  <button
+                    onClick={() => toggleAtivo(c.id, c.active)}
+                    disabled={busyKey === c.id || !canEdit}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${c.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
+                  >
+                    {c.active ? "Ativa" : "Inativa"}
+                  </button>
                 </div>
-                <p className="text-xs text-nord-gray">
-                  {AUTOMATION_ACTION_LABEL[c.actionType]} · {c.waitDays > 0 ? `após ${c.waitDays} dias` : "imediato"}
-                </p>
-                <p className="text-xs text-nord-gray">
-                  <span className="text-white font-medium">{formatNumber(c.matchCount)}</span> clientes correspondem hoje
-                </p>
-                <button
-                  onClick={() => toggleAtivo(c.id, c.active)}
-                  disabled={busyKey === c.id || !canEdit}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${c.active ? "bg-nord-success/15 text-nord-success" : "bg-white/5 text-nord-gray"}`}
-                >
-                  {c.active ? "Ativa" : "Inativa"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </Section>
+              ))}
+            </div>
+          </Section>
+        </>
       )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Criar Automação" widthClass="max-w-lg">

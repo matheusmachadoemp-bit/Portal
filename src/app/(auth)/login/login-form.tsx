@@ -96,7 +96,7 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
               </div>
 
               {loginState?.error && (
-                <p className="text-sm text-red-400 bg-red-950/40 border border-red-900 rounded-lg px-3 py-2">
+                <p className="text-sm text-nord-danger bg-nord-danger/10 border border-nord-danger/30 rounded-lg px-3 py-2">
                   {loginState.error}
                 </p>
               )}
@@ -134,8 +134,8 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
                 <p
                   className={
                     forgotState.message === FORGOT_PASSWORD_RATE_LIMIT_MESSAGE
-                      ? "text-sm text-amber-400 bg-amber-950/40 border border-amber-900 rounded-lg px-3 py-2"
-                      : "text-sm text-emerald-400 bg-emerald-950/40 border border-emerald-900 rounded-lg px-3 py-2"
+                      ? "text-sm text-nord-warning bg-nord-warning/10 border border-nord-warning/30 rounded-lg px-3 py-2"
+                      : "text-sm text-nord-success bg-nord-success/10 border border-nord-success/30 rounded-lg px-3 py-2"
                   }
                 >
                   {forgotState.message}
