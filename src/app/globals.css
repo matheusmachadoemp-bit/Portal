@@ -39,6 +39,24 @@
   --color-nord-danger: var(--nord-danger);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
+  /* Barra fina de progresso de navegação (`src/components/navigation-progress.tsx`): um trecho
+     de gradiente (largura fixa de 1/3, via classe Tailwind) que atravessa a barra em loop
+     enquanto a próxima página ainda está carregando. Registrar aqui como `--animate-*` faz o
+     Tailwind v4 gerar a classe utilitária `animate-nav-progress` automaticamente, igual
+     `animate-spin`/`animate-pulse` nativos. */
+  --animate-nav-progress: nav-progress 1.1s ease-in-out infinite;
+}
+
+@keyframes nav-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
 }
 
 body {
