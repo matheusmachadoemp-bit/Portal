@@ -87,6 +87,28 @@ export async function lockIngredientStock(tx: Prisma.TransactionClient, ingredie
 }
 
 /**
+ * Mesmo mecanismo de `lockIngredientStock` (acima) — `SELECT ... FOR UPDATE`, lock liberado só no
+ * fim da transação — mas devolvendo `precoAtual` em vez de `estoqueAtual`. Usada por
+ * `PATCH /api/estoque/compras/[id]` (bloco "Marcar recebido") para decidir se grava um registro de
+ * `priceHistory`: a condição `item.valorUnitario !== <precoAtual>` precisa comparar contra o
+ * `precoAtual` MAIS RECENTE, não o valor que a rota já tinha lido em `prisma.purchase.findUnique(...)`
+ * ANTES de abrir a transação (`item.ingredient.precoAtual`) — sob concorrência (duas compras do
+ * mesmo insumo recebidas quase ao mesmo tempo, ou uma edição manual de preço concorrente), aquela
+ * comparação usava um valor já desatualizado, podendo perder um registro de histórico de preço ou
+ * criar um espúrio (achado de auditoria, 2026-11). O `FOR UPDATE` aqui trava a linha até o fim da
+ * transação, então uma segunda chamada concorrente para o mesmo insumo espera esta terminar antes
+ * de ler/gravar — mesma consequência de disponibilidade sob insumo bem movimentado já documentada
+ * em `ESTOQUE_TX_OPTIONS` (por isso o `timeout`/`maxWait` maior de lá também cobre este bloco).
+ */
+export async function lockIngredientPrice(tx: Prisma.TransactionClient, ingredientId: string): Promise<number> {
+  const rows = await tx.$queryRaw<{ precoAtual: number }[]>`
+    SELECT "precoAtual" FROM "Ingredient" WHERE "id" = ${ingredientId} FOR UPDATE
+  `;
+  if (rows.length === 0) throw new Error("Insumo não encontrado.");
+  return rows[0].precoAtual;
+}
+
+/**
  * Custo de 1 unidade de `Ingredient.unidade` (kg, l, un...) — função central usada por TODO
  * cálculo de custo do sistema (Ficha Técnica/CMV via `@/lib/ficha`, valorização de estoque,
  * contagens, perdas). Até a correção abaixo (achado de produção, revisão de 02/10/2026, loja
@@ -401,6 +423,57 @@ export const COMPARATIVO_CAUSAS = [
   "Custo de compra desatualizado",
   "Furto ou desaparecimento",
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Lock de linha para leitura+escrita de estoque dentro de transação
+// ---------------------------------------------------------------------------
+
+/**
+ * Trava (via `SELECT ... FOR UPDATE`) e relê, DENTRO da transação `tx`, o `estoqueAtual` mais
+ * recente de cada insumo em `ingredientIds` — nunca o valor que o chamador possa ter lido ANTES
+ * de abrir a transação. Toda rota/função que calcula um novo `estoqueAtual` a partir do atual
+ * (débito/crédito de transferência, consumo de produção, movimento manual, perda) deve ler o
+ * saldo através desta função (ou de uma query equivalente com `FOR UPDATE` dentro da mesma
+ * transação), nunca de um `findMany`/`findUnique` comum feito antes da transação nem de um
+ * `include` carregado antes — senão duas transações concorrentes tocando o MESMO insumo leem o
+ * mesmo valor "antigo", calculam dois resultados diferentes a partir dele, e a segunda grava por
+ * cima da primeira sem nunca ver o efeito dela (lost update). Achado real (revisão de QA,
+ * 2026-11): transferências concorrentes entre lojas e finalizações de produção concorrentes
+ * consumindo o mesmo insumo cru perdiam atualização de estoque silenciosamente por esse motivo.
+ *
+ * Importante sobre ORDEM: `ingredientIds` é deduplicado e ORDENADO (por id, ordem total e
+ * estável) antes de travar, e cada linha é travada com uma consulta `FOR UPDATE` INDIVIDUAL, uma
+ * atrás da outra (nunca todas de uma vez num único `WHERE id IN (...)`) — de propósito. Com mais
+ * de um insumo envolvido na mesma transação (ex.: uma transferência com vários itens, ou um
+ * consumo de produção com várias matérias-primas), se duas transações concorrentes tentassem
+ * travar os MESMOS dois insumos em ordens diferentes, poderiam travar uma esperando a outra
+ * indefinidamente (deadlock) — o Postgres eventualmente cancela uma das duas, mas depender disso
+ * é arriscado. Travar sempre em ordem crescente de id (a mesma ordem, em qualquer chamada, de
+ * qualquer rota) elimina essa possibilidade: não existe par de chamadas concorrentes que
+ * discordem da ordem relativa de dois ids que ambas tentam travar. E `FOR UPDATE` combinado com
+ * `ORDER BY` numa única query de várias linhas NÃO garante essa ordem de aquisição (o Postgres
+ * pode travar as linhas na ordem em que o plano de execução as devolve, e só ordenar o resultado
+ * depois) — por isso o lock de cada id é uma query separada, sequencial.
+ *
+ * Devolve um `Map<ingredientId, estoqueAtual>` com todos os ids pedidos — lança `Error` se
+ * algum id não existir mais (mesmo comportamento da variante de um único id acima, por
+ * consistência: nunca mascara um insumo ausente devolvendo um mapa incompleto em silêncio).
+ */
+export async function lockIngredientStocks(
+  tx: Prisma.TransactionClient,
+  ingredientIds: string[]
+): Promise<Map<string, number>> {
+  const uniqueSortedIds = Array.from(new Set(ingredientIds)).sort();
+  const result = new Map<string, number>();
+  for (const id of uniqueSortedIds) {
+    const rows = await tx.$queryRaw<{ estoqueAtual: number }[]>`
+      SELECT "estoqueAtual" FROM "Ingredient" WHERE "id" = ${id} FOR UPDATE
+    `;
+    if (rows.length === 0) throw new Error("Insumo não encontrado.");
+    result.set(id, rows[0].estoqueAtual);
+  }
+  return result;
+}
 
 export function classificarCmv(
   realPercent: number,
