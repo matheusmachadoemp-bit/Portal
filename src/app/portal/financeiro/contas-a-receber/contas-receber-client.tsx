@@ -9,6 +9,7 @@ import { format, subDays } from "date-fns";
 import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
 import { csvField } from "@/lib/export-utils";
+import { RECEIVABLE_PAYMENT_METHODS } from "@/lib/finance";
 import {
   DUE_DATE_FILTER_OPTIONS,
   matchesDueDateFilter,
@@ -57,17 +58,8 @@ const STATUS_TONE: Record<string, "default" | "success" | "warning" | "danger" |
   ATRASADO: "danger",
 };
 
-const PAYMENT_METHODS = [
-  "PIX",
-  "DINHEIRO",
-  "CARTAO_DEBITO",
-  "CARTAO_CREDITO",
-  "TED",
-  "DOC",
-  "TRANSFERENCIA",
-  "CHEQUE",
-  "OUTRO",
-];
+/** Lista curada de "receber de um cliente" — ver `RECEIVABLE_PAYMENT_METHODS` em `@/lib/finance`. */
+const PAYMENT_METHODS = RECEIVABLE_PAYMENT_METHODS;
 
 const emptyForm = {
   number: "",

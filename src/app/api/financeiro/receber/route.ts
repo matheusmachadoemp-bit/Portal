@@ -4,7 +4,7 @@ import { addMonths } from "date-fns";
 import { parseDayInput } from "@/lib/timezone";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { balanceDelta, splitInstallments } from "@/lib/finance";
+import { balanceDelta, RECEIVABLE_PAYMENT_METHODS, splitInstallments } from "@/lib/finance";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
@@ -113,6 +113,16 @@ export async function POST(req: Request) {
   const valor = Number(body.valor);
   if (!body.valor || !Number.isFinite(valor) || valor <= 0) {
     return NextResponse.json({ error: "Valor é obrigatório e deve ser maior que zero." }, { status: 400 });
+  }
+
+  // Lista curada de "receber de um cliente" (`RECEIVABLE_PAYMENT_METHODS`, a mesma que a própria
+  // tela de Contas a Receber já usa no `<select>`, ver `contas-receber-client.tsx`). Campo opcional
+  // (nullable): ausência/null continua aceita normalmente; só um valor PRESENTE fora da lista
+  // (inclusive um que nem exista no enum PaymentMethod do Postgres) é rejeitado aqui, em vez de cair
+  // num 500 cru do Prisma na hora de gravar. Mesmo padrão de `/api/financeiro/pagar` (achado do
+  // Teulis, 2026-11).
+  if (body.formaRecebimento && !(RECEIVABLE_PAYMENT_METHODS as readonly string[]).includes(body.formaRecebimento)) {
+    return NextResponse.json({ error: "Forma de recebimento inválida." }, { status: 400 });
   }
 
   // FinancialCategory é cadastro global (sem empresaId), então basta existir — não há "pertencer

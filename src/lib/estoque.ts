@@ -87,6 +87,28 @@ export async function lockIngredientStock(tx: Prisma.TransactionClient, ingredie
 }
 
 /**
+ * Mesmo mecanismo de `lockIngredientStock` (acima) — `SELECT ... FOR UPDATE`, lock liberado só no
+ * fim da transação — mas devolvendo `precoAtual` em vez de `estoqueAtual`. Usada por
+ * `PATCH /api/estoque/compras/[id]` (bloco "Marcar recebido") para decidir se grava um registro de
+ * `priceHistory`: a condição `item.valorUnitario !== <precoAtual>` precisa comparar contra o
+ * `precoAtual` MAIS RECENTE, não o valor que a rota já tinha lido em `prisma.purchase.findUnique(...)`
+ * ANTES de abrir a transação (`item.ingredient.precoAtual`) — sob concorrência (duas compras do
+ * mesmo insumo recebidas quase ao mesmo tempo, ou uma edição manual de preço concorrente), aquela
+ * comparação usava um valor já desatualizado, podendo perder um registro de histórico de preço ou
+ * criar um espúrio (achado de auditoria, 2026-11). O `FOR UPDATE` aqui trava a linha até o fim da
+ * transação, então uma segunda chamada concorrente para o mesmo insumo espera esta terminar antes
+ * de ler/gravar — mesma consequência de disponibilidade sob insumo bem movimentado já documentada
+ * em `ESTOQUE_TX_OPTIONS` (por isso o `timeout`/`maxWait` maior de lá também cobre este bloco).
+ */
+export async function lockIngredientPrice(tx: Prisma.TransactionClient, ingredientId: string): Promise<number> {
+  const rows = await tx.$queryRaw<{ precoAtual: number }[]>`
+    SELECT "precoAtual" FROM "Ingredient" WHERE "id" = ${ingredientId} FOR UPDATE
+  `;
+  if (rows.length === 0) throw new Error("Insumo não encontrado.");
+  return rows[0].precoAtual;
+}
+
+/**
  * Custo de 1 unidade de `Ingredient.unidade` (kg, l, un...) — função central usada por TODO
  * cálculo de custo do sistema (Ficha Técnica/CMV via `@/lib/ficha`, valorização de estoque,
  * contagens, perdas). Até a correção abaixo (achado de produção, revisão de 02/10/2026, loja
