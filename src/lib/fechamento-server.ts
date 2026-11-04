@@ -322,7 +322,13 @@ async function notificarFechamentoOcorrenciaCritica(ocorrencia: FechamentoOcorre
         body: `${cargo?.nome ?? "Fechamento do Dia"}${empresa?.name ? ` — ${empresa.name}` : ""}: ${ocorrencia.descricao}`,
         priority: "CRITICA",
         fechamentoOcorrenciaId: ocorrencia.id,
-        url: `/portal/fechamento-dia/ocorrencias/${ocorrencia.id}`,
+        // Não existe (nem nunca existiu) tela de detalhe de uma ocorrência por id — ver o
+        // comentário em `src/app/portal/fechamento-dia/ocorrencias/[id]/page.tsx` (redirecionamento
+        // de compatibilidade só pra notificações antigas já enviadas com o link anterior, que
+        // levava pra uma rota que colidia com `/portal/tarefas/ocorrencias/[cargoId]`). A gestão de
+        // ocorrências vive em `/portal/tarefas/ocorrencias` (lista), achado e corrigido junto da
+        // tarefa #15 (sino de notificações) — ver `notification-bell.tsx`.
+        url: "/portal/tarefas/ocorrencias",
       })
     )
   );

@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/calc";
 import { format, subDays } from "date-fns";
 import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
+import { csvField } from "@/lib/export-utils";
 import {
   DUE_DATE_FILTER_OPTIONS,
   matchesDueDateFilter,
@@ -296,7 +297,7 @@ export function ContasReceberClient({
       format(new Date(p.dataVencimento), "dd/MM/yyyy"),
       STATUS_LABEL[p.status],
     ]);
-    const csv = [header, ...rows].map((r) => r.join(";")).join("\n");
+    const csv = [header, ...rows].map((r) => r.map((v) => csvField(v, ";")).join(";")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

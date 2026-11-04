@@ -11,6 +11,7 @@ import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { spDateKey, storedDayKey } from "@/lib/timezone";
 import { apiRequest } from "@/lib/api-client";
+import { csvField } from "@/lib/export-utils";
 import {
   DUE_DATE_FILTER_OPTIONS,
   matchesDueDateFilter,
@@ -855,7 +856,7 @@ export function ContasPagarClient({
       p.invoice ? detailPercent(p.invoice.totalCobrado, p.valor) : 0,
       combinadoLabel(p.invoice),
     ]);
-    const csv = [header, ...rows].map((r) => r.join(";")).join("\n");
+    const csv = [header, ...rows].map((r) => r.map((v) => csvField(v, ";")).join(";")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
