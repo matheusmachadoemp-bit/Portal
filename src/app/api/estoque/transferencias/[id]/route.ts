@@ -4,13 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import { lockIngredientStock, type TransferStatusValue } from "@/lib/estoque";
-
-// Folga para o banco "acordar" (Neon hiberna) e para quem estiver esperando o lock de linha de
-// outro débito/crédito concorrente no mesmo insumo (ver `lockIngredientStock`, @/lib/estoque) —
-// mesmo valor já usado em `ficha-autolink.ts`/`ficha-nome-server.ts`/`bank-sync-server.ts`/
-// `bank-reconciliation.ts`; o padrão do Prisma (2s de espera / 5s de duração) é apertado pra isso.
-const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
+import { lockIngredientStocks, ESTOQUE_TX_OPTIONS, type TransferStatusValue } from "@/lib/estoque";
 
 // Mesmo critério de normalização de nome usado em outras comparações do sistema (ex.
 // `src/app/api/vendas/importar-itens/route.ts`, `src/lib/saipos-mapper.ts`): remove acento,
@@ -108,14 +102,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // da outra sem nunca ver o efeito dela (lost update; achado P0 de revisão de QA, 2026-11).
   //
   // Agora tudo roda dentro de UMA transação interativa (`prisma.$transaction(async (tx) => ...)`,
-  // com os `TX_OPTIONS` acima — o padrão do Prisma, 2s de espera/5s de duração, é apertado demais
-  // pra uma transferência grande + lock de linha) que relê o `estoqueAtual` mais recente de cada
-  // insumo envolvido via `lockIngredientStock` (`SELECT ... FOR UPDATE`, @/lib/estoque) DENTRO da
-  // transação, sempre ANTES de calcular o novo valor — nunca a partir do snapshot carregado fora
-  // dela. `lockIngredientStock` já trava sempre na mesma ordem (por id, ordenado) e com uma query
-  // por insumo, nunca uma só com `IN (...)`, pra duas transferências concorrentes em sentidos
-  // opostos tocando o mesmo par de insumos não entrarem em deadlock — ver o comentário na própria
-  // função para o racional completo.
+  // com `ESTOQUE_TX_OPTIONS` (@/lib/estoque) — o padrão do Prisma, 2s de espera/5s de duração, é
+  // apertado demais pra uma transferência grande + lock de linha) que relê o `estoqueAtual` mais
+  // recente de cada insumo envolvido via `lockIngredientStocks` (`SELECT ... FOR UPDATE`,
+  // @/lib/estoque) DENTRO da transação, sempre ANTES de calcular o novo valor — nunca a partir do
+  // snapshot carregado fora dela. `lockIngredientStocks` já trava sempre na mesma ordem (por id,
+  // ordenado) e com uma query por insumo, nunca uma só com `IN (...)`, pra duas transferências
+  // concorrentes em sentidos opostos tocando o mesmo par de insumos não entrarem em deadlock — e
+  // lança erro em vez de omitir silenciosamente um id que não exista mais, então nunca cai de
+  // volta num valor pré-transação — ver o comentário na própria função para o racional completo.
   const transfer = await prisma.$transaction(async (tx) => {
     if (disparaSaida && existing.items.length > 0) {
       // Trava e relê, AGORA, o estoque de todos os insumos de origem envolvidos — antes de
@@ -125,7 +120,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // insumo duas vezes) — achado real do Teulis: insumo com 100, itens de 30+10, resultado
       // errado 90 em vez de 60, quando cada ingredientId só contava uma vez no UPDATE em lote.
       const ingredientIdsOrigem = Array.from(new Set(existing.items.map((item) => item.ingredientId)));
-      const estoqueAtualOrigemMap = await lockIngredientStock(tx, ingredientIdsOrigem);
+      const estoqueAtualOrigemMap = await lockIngredientStocks(tx, ingredientIdsOrigem);
 
       const estoqueCorrenteOrigem = new Map<string, number>();
       const movimentosSaida: {
@@ -142,10 +137,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }[] = [];
 
       for (const item of existing.items) {
-        const base =
-          estoqueCorrenteOrigem.get(item.ingredientId) ??
-          estoqueAtualOrigemMap.get(item.ingredientId) ??
-          item.ingredient.estoqueAtual;
+        const estoqueAtualOrigem = estoqueAtualOrigemMap.get(item.ingredientId);
+        if (estoqueAtualOrigem === undefined) {
+          throw new Error(`Insumo ${item.ingredientId} não encontrado ao enviar transferência.`);
+        }
+        const base = estoqueCorrenteOrigem.get(item.ingredientId) ?? estoqueAtualOrigem;
         const estoqueApos = Math.max(0, base - item.quantidadeEnviada);
         estoqueCorrenteOrigem.set(item.ingredientId, estoqueApos);
 
@@ -223,7 +219,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               .filter((id): id is string => !!id)
           )
         );
-        const estoqueAtualDestinoMap = await lockIngredientStock(tx, existingIngredientIdsDestino);
+        const estoqueAtualDestinoMap = await lockIngredientStocks(tx, existingIngredientIdsDestino);
 
         // Estoque "corrente" por insumo de destino conforme os créditos desta transferência vão
         // sendo empilhados — cobre o caso (raro) de dois itens da mesma transferência caírem no
@@ -298,10 +294,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           let estoqueBase: number;
           if (existenteDestino) {
             ingredientId = existenteDestino.id;
-            estoqueBase =
-              estoqueCorrente.get(ingredientId) ??
-              estoqueAtualDestinoMap.get(ingredientId) ??
-              existenteDestino.estoqueAtual;
+            const estoqueAtualDestino = estoqueAtualDestinoMap.get(ingredientId);
+            if (estoqueAtualDestino === undefined) {
+              throw new Error(`Insumo ${ingredientId} não encontrado ao receber transferência.`);
+            }
+            estoqueBase = estoqueCorrente.get(ingredientId) ?? estoqueAtualDestino;
           } else {
             const novo = novosPorNome.get(nomeNormalizado);
             if (novo) {
@@ -398,7 +395,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         observacao: body.observacao !== undefined ? body.observacao || null : undefined,
       },
     });
-  }, TX_OPTIONS);
+  }, ESTOQUE_TX_OPTIONS);
 
   return NextResponse.json({ transfer });
 }

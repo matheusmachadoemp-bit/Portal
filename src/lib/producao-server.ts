@@ -3,14 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { notifyUser } from "@/lib/tarefas-server";
 import { getStoreManagers } from "@/lib/manutencao-server";
 import { compareProducedToPlanned, effectiveProductionStatus } from "@/lib/producao";
-import { lockIngredientStock } from "@/lib/estoque";
-
-// Folga para o banco "acordar" (Neon hiberna) e para quem estiver esperando o lock de linha de
-// outro consumo de produção/débito de transferência concorrente no mesmo insumo (ver
-// `lockIngredientStock`, @/lib/estoque) — mesmo valor já usado em `ficha-autolink.ts`/
-// `ficha-nome-server.ts`/`bank-sync-server.ts`/`bank-reconciliation.ts`; o padrão do Prisma (2s de
-// espera/5s de duração) é apertado demais pra uma transação com lock de linha.
-const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
+import { lockIngredientStocks, ESTOQUE_TX_OPTIONS } from "@/lib/estoque";
 
 export const PRODUCTION_MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 /** Pontos ganhos na régua da Loja Nord por concluir uma produção no prazo e
@@ -133,14 +126,14 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
     // insumo (3N idas ao banco), agrupa o StockMovement num único createMany
     // (1 escrita) e o UPDATE de estoque num único UNNEST em lote (1 escrita)
     // — sobra só a leitura, que precisa continuar sendo via
-    // `lockIngredientStock` (abaixo), nunca um `findMany` comum.
+    // `lockIngredientStocks` (abaixo), nunca um `findMany` comum.
     //
     // Lock de linha obrigatório (achado P0 de revisão de QA, 2026-11): antes desta correção, a
     // leitura de `estoqueAtual` era um `tx.ingredient.findMany` comum, SEM `FOR UPDATE` — não
     // trava a linha, então duas finalizações de produção concorrentes (ou uma finalização e uma
     // transferência concorrente) consumindo o mesmo insumo cru liam o mesmo valor "antigo" e uma
     // gravava por cima do consumo da outra sem nunca ver o efeito dela (lost update).
-    // `lockIngredientStock` (@/lib/estoque) resolve isso: trava e relê o `estoqueAtual` mais
+    // `lockIngredientStocks` (@/lib/estoque) resolve isso: trava e relê o `estoqueAtual` mais
     // recente de cada insumo DENTRO desta transação, sempre na mesma ordem (por id), antes de
     // calcular qualquer consumo — mesma função usada pelo débito/crédito de transferências entre
     // lojas, pra as duas rotas nunca entrarem em deadlock entre si quando tocam o mesmo insumo.
@@ -150,7 +143,7 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
     // sequencial original.
     if (quantidadeProduzida > 0 && item.ingredientes.length > 0) {
       const ingredientIds = Array.from(new Set(item.ingredientes.map((linha) => linha.ingredientId)));
-      const estoqueMap = await lockIngredientStock(tx, ingredientIds);
+      const estoqueMap = await lockIngredientStocks(tx, ingredientIds);
 
       const movimentos: Prisma.StockMovementCreateManyInput[] = [];
 
@@ -195,7 +188,7 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
     }
 
     return [updatedOrder];
-  }, TX_OPTIONS);
+  }, ESTOQUE_TX_OPTIONS);
 
   const planejado = order.quantidadeAprovada ?? order.quantidadeSugerida;
   await logProductionOrderHistory(orderId, userId, "FINALIZADO", `Planejado: ${planejado} · Produzido: ${quantidadeProduzida}`);

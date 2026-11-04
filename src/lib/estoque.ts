@@ -433,10 +433,11 @@ export const COMPARATIVO_CAUSAS = [
  * pode travar as linhas na ordem em que o plano de execução as devolve, e só ordenar o resultado
  * depois) — por isso o lock de cada id é uma query separada, sequencial.
  *
- * Devolve um `Map<ingredientId, estoqueAtual>` só com os ids que de fato existem (um id que não
- * existe mais simplesmente não aparece no mapa — quem chama decide o que fazer, ex. lançar erro).
+ * Devolve um `Map<ingredientId, estoqueAtual>` com todos os ids pedidos — lança `Error` se
+ * algum id não existir mais (mesmo comportamento da variante de um único id acima, por
+ * consistência: nunca mascara um insumo ausente devolvendo um mapa incompleto em silêncio).
  */
-export async function lockIngredientStock(
+export async function lockIngredientStocks(
   tx: Prisma.TransactionClient,
   ingredientIds: string[]
 ): Promise<Map<string, number>> {
@@ -446,7 +447,8 @@ export async function lockIngredientStock(
     const rows = await tx.$queryRaw<{ estoqueAtual: number }[]>`
       SELECT "estoqueAtual" FROM "Ingredient" WHERE "id" = ${id} FOR UPDATE
     `;
-    if (rows[0]) result.set(id, rows[0].estoqueAtual);
+    if (rows.length === 0) throw new Error("Insumo não encontrado.");
+    result.set(id, rows[0].estoqueAtual);
   }
   return result;
 }
