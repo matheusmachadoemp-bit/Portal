@@ -604,7 +604,7 @@ export function CompraItensEditor({
       {loadingItems ? (
         <p className="text-xs text-nord-gray rounded-lg border border-dashed border-nord-border px-3 py-3">Carregando os itens desta conta…</p>
       ) : loadFailed ? (
-        <div className="text-xs rounded-lg border border-nord-danger/40 bg-nord-danger/10 px-3 py-3 text-red-300 flex flex-wrap items-center gap-2">
+        <div className="text-xs rounded-lg border border-nord-danger/40 bg-nord-danger/10 px-3 py-3 text-nord-danger flex flex-wrap items-center gap-2">
           <span>Não foi possível carregar os itens desta conta. Para nenhum item se perder, só dá para salvar depois de carregar.</span>
           <button type="button" onClick={onRetryLoad} className="btn-outline !py-1 !px-2 !text-xs">
             Tentar de novo
@@ -816,7 +816,7 @@ export function CompraItensEditor({
                   aria-pressed={decision.acao === "CONTESTAR"}
                   onClick={() => chooseAction("CONTESTAR")}
                   className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                    decision.acao === "CONTESTAR" ? "border-nord-danger bg-nord-danger/20 text-white" : "border-nord-danger/50 text-red-300 hover:bg-nord-danger/10"
+                    decision.acao === "CONTESTAR" ? "border-nord-danger bg-nord-danger/20 text-white" : "border-nord-danger/50 text-nord-danger hover:bg-nord-danger/10"
                   }`}
                 >
                   <MessageSquare size={13} /> Contestar com o fornecedor

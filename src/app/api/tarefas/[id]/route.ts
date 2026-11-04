@@ -86,6 +86,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.dueDate !== undefined) changes.push("prazo");
   if (body.assigneeIds !== undefined) changes.push("responsáveis");
 
+  const novoDueDate = body.dueDate !== undefined ? (body.dueDate ? new Date(body.dueDate) : null) : undefined;
+  // Mesma checagem de `prazoMudou` em PATCH /api/manutencao/chamados/[id] (Chamado.atrasoNotificadoEm):
+  // só reseta o aviso de atraso se o valor de fato mudou, não só porque `dueDate` veio presente no
+  // body (um PATCH pode reenviar o mesmo prazo que já estava salvo).
+  const dueDateMudou = novoDueDate !== undefined && (novoDueDate?.getTime() ?? null) !== (existing.dueDate?.getTime() ?? null);
+
   const task = await prisma.task.update({
     where: { id },
     data: {
@@ -94,7 +100,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       sectorKey: body.sectorKey ?? undefined,
       priority: body.priority ?? undefined,
       startDate: body.startDate !== undefined ? (body.startDate ? new Date(body.startDate) : null) : undefined,
-      dueDate: body.dueDate !== undefined ? (body.dueDate ? new Date(body.dueDate) : null) : undefined,
+      dueDate: novoDueDate,
+      // Prazo mudou de verdade: libera um novo aviso de atraso (processTaskAtrasoAlertas,
+      // @/lib/tarefas-server.ts) — mesmo padrão de Chamado.atrasoNotificadoEm (@/lib/manutencao-server.ts).
+      atrasoNotificadoEm: dueDateMudou ? null : undefined,
       dueTime: body.dueTime !== undefined ? body.dueTime || null : undefined,
       proofType: body.proofType ?? undefined,
       requiresValidation: body.requiresValidation !== undefined ? !!body.requiresValidation : undefined,

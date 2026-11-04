@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, PartyPopper, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ArrowLeft, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Badge } from "@/components/ui/stat-card";
+import { RoletaFlow } from "./roleta-wheel";
 
 type QuestionType = "NOTA_0_5" | "NOTA_0_10" | "GOSTEI_NAO_GOSTEI" | "TEXTO_LIVRE";
 type Question = { id: string; tipo: QuestionType; titulo: string; tema: string | null; obrigatoria: boolean };
@@ -166,7 +167,9 @@ export function AvaliarClient({
   const [sugestao, setSugestao] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
+  // Preenchido com o `responseId` devolvido pelo POST de submissão — nulo até lá, e passa a
+  // identificar "pesquisa já enviada, agora mostra a etapa da Roleta" (ver bloco `if` abaixo).
+  const [submittedResponseId, setSubmittedResponseId] = useState<string | null>(null);
 
   const step = steps[stepIndex];
 
@@ -195,7 +198,7 @@ export function AvaliarClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Não foi possível enviar sua avaliação. Tente novamente.");
-      setDone(true);
+      setSubmittedResponseId(data.responseId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível enviar sua avaliação. Tente novamente.");
     } finally {
@@ -235,17 +238,11 @@ export function AvaliarClient({
     setStepIndex((i) => Math.max(i - 1, 0));
   }
 
-  if (done) {
+  if (submittedResponseId) {
     const primeiroNome = nome.trim().split(" ")[0];
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="w-full max-w-sm text-center space-y-3">
-          <PartyPopper size={40} className="text-nord-success mx-auto" />
-          <h1 className="text-white font-semibold text-lg">{primeiroNome ? `Obrigado, ${primeiroNome}!` : "Obrigado!"}</h1>
-          <p className="text-nord-gray text-sm">
-            Sua avaliação foi enviada com sucesso. Ela é muito importante pra {empresa.name} continuar melhorando.
-          </p>
-        </div>
+        <RoletaFlow token={token} responseId={submittedResponseId} nomeCliente={primeiroNome} empresaNome={empresa.name} />
       </div>
     );
   }

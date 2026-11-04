@@ -61,6 +61,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (inUse > 0) {
     return NextResponse.json({ error: "Este fornecedor possui compras registradas e não pode ser excluído. Desative-o." }, { status: 400 });
   }
+  // Mesmo padrão de estoque/categorias/[id] (Ingredient.categoryId): um insumo que tem este
+  // fornecedor marcado como `fornecedorPrincipalId` ficaria com uma referência quebrada/órfã
+  // se o fornecedor fosse excluído — bloqueia em vez de deixar cair silenciosamente.
+  const vinculadoAInsumo = await prisma.ingredient.count({ where: { fornecedorPrincipalId: id } });
+  if (vinculadoAInsumo > 0) {
+    return NextResponse.json(
+      { error: "Este fornecedor está definido como fornecedor principal de um ou mais insumos e não pode ser excluído. Desative-o ou troque o fornecedor principal dos insumos primeiro." },
+      { status: 400 }
+    );
+  }
   await prisma.supplier.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
