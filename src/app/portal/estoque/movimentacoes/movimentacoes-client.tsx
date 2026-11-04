@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Section, Badge } from "@/components/ui/stat-card";
-import { Modal } from "@/components/ui/modal";
+import { Modal, FormError } from "@/components/ui/modal";
 import { Toolbar } from "@/components/ui/toolbar";
 import { formatNumber } from "@/lib/calc";
 import { format } from "date-fns";
@@ -94,6 +94,11 @@ export function MovimentacoesClient({
   const [quantidadesRecebidas, setQuantidadesRecebidas] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
   const [recebendoSubmitting, setRecebendoSubmitting] = useState(false);
+  // Erro de "Marcar enviada" (ação por linha na tabela de transferências, sem modal) e de
+  // "Confirmar recebimento" (dentro do modal de recebimento) — separados do `error` acima, que é
+  // só do modal "Registrar movimentação"/"Transferência para outra loja".
+  const [transferActionError, setTransferActionError] = useState<string | null>(null);
+  const [recebimentoError, setRecebimentoError] = useState<string | null>(null);
 
   const filtered = useMemo(
     () =>
@@ -220,12 +225,18 @@ export function MovimentacoesClient({
   async function marcarEnviada(t: TransferDTO) {
     if (enviando) return;
     setEnviando(true);
+    setTransferActionError(null);
     try {
-      await fetch(`/api/estoque/transferencias/${t.id}`, {
+      const res = await fetch(`/api/estoque/transferencias/${t.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "ENVIADA", responsavelEnvio: t.responsavelEnvio }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setTransferActionError(data.error ?? "Não foi possível marcar a transferência como enviada.");
+        return;
+      }
       // Marcar como enviada gera um StockMovement (saída) na loja de origem, além de avançar o
       // status da transferência — por isso atualiza as duas listas desta tela.
       await Promise.all([refresh(), refreshTransfers()]);
@@ -237,6 +248,7 @@ export function MovimentacoesClient({
   function openRecebimento(t: TransferDTO) {
     setRecebendo(t);
     setResponsavelRecebimento("");
+    setRecebimentoError(null);
     const initial: Record<string, string> = {};
     for (const it of t.items) initial[it.id] = String(it.quantidadeEnviada);
     setQuantidadesRecebidas(initial);
@@ -245,8 +257,9 @@ export function MovimentacoesClient({
   async function confirmarRecebimento() {
     if (!recebendo || recebendoSubmitting) return;
     setRecebendoSubmitting(true);
+    setRecebimentoError(null);
     try {
-      await fetch(`/api/estoque/transferencias/${recebendo.id}`, {
+      const res = await fetch(`/api/estoque/transferencias/${recebendo.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -255,6 +268,11 @@ export function MovimentacoesClient({
           quantidadesRecebidas: recebendo.items.map((it) => ({ itemId: it.id, quantidade: Number(quantidadesRecebidas[it.id] ?? it.quantidadeEnviada) })),
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setRecebimentoError(data.error ?? "Não foi possível confirmar o recebimento.");
+        return;
+      }
       setRecebendo(null);
       refreshTransfers();
     } finally {
@@ -350,6 +368,7 @@ export function MovimentacoesClient({
       </Section>
 
       <Section title="Transferências entre lojas" action={<Toolbar onRefresh={refreshTransfers} />}>
+        <FormError message={transferActionError} />
         <div className="overflow-x-auto nord-scrollbar">
           <table className="w-full text-sm">
             <thead>
@@ -507,7 +526,13 @@ export function MovimentacoesClient({
         </div>
       </Modal>
 
-      <Modal open={!!recebendo} onClose={() => setRecebendo(null)} title="Conferir recebimento" widthClass="max-w-lg">
+      <Modal
+        open={!!recebendo}
+        onClose={() => setRecebendo(null)}
+        title="Conferir recebimento"
+        widthClass="max-w-lg"
+        closeDisabled={recebendoSubmitting}
+      >
         {recebendo && (
           <div className="space-y-3">
             <label className="block">
@@ -528,6 +553,7 @@ export function MovimentacoesClient({
                 </div>
               ))}
             </div>
+            <FormError message={recebimentoError} />
             <button onClick={confirmarRecebimento} disabled={recebendoSubmitting} className="w-full bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5">
               {recebendoSubmitting ? "Confirmando..." : "Confirmar recebimento"}
             </button>
