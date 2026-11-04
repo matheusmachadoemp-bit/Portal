@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type TransitionStartFunction } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -35,6 +35,7 @@ import { IconPicker, ColorPicker } from "@/components/ui/icon-picker";
 import { logoutAction } from "@/app/actions/logout";
 import { StoreSwitcher } from "./store-switcher";
 import { useMobileSidebar } from "./mobile-sidebar-context";
+import { useNavigationProgress } from "@/components/navigation-progress";
 import type { CategoryDTO, SubcategoryDTO } from "./types";
 import { isSubcategoryVisible } from "./subcategory-visibility";
 import { GRUPO_SENTINEL } from "@/lib/empresa-constants";
@@ -71,6 +72,7 @@ export function Sidebar({
   const router = useRouter();
   const isAdmin = userRole === "ADMINISTRADOR" || userRole === "GESTOR";
   const { open: mobileOpen, setOpen: setMobileOpen } = useMobileSidebar();
+  const { startNavigation } = useNavigationProgress();
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -299,6 +301,7 @@ export function Sidebar({
                   onExpandSidebar={() => setCollapsed(false)}
                   pathname={pathname}
                   router={router}
+                  startNavigation={startNavigation}
                   isAdmin={isAdmin}
                   onEdit={() => setEditCategory(cat)}
                   onDelete={() => setConfirmDelete({ type: "category", id: cat.id, name: cat.name })}
@@ -416,6 +419,7 @@ function CategoryRow({
   onExpandSidebar,
   pathname,
   router,
+  startNavigation,
   isAdmin,
   onEdit,
   onDelete,
@@ -436,6 +440,7 @@ function CategoryRow({
   onExpandSidebar: () => void;
   pathname: string;
   router: ReturnType<typeof useRouter>;
+  startNavigation: TransitionStartFunction;
   isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -509,7 +514,7 @@ function CategoryRow({
                 onToggleExpand();
               }
             } else {
-              router.push(`/portal/${cat.key}`);
+              startNavigation(() => router.push(`/portal/${cat.key}`));
             }
           }}
           aria-label={cat.name}
@@ -570,6 +575,7 @@ function CategoryRow({
                   cat={cat}
                   pathname={pathname}
                   router={router}
+                  startNavigation={startNavigation}
                   isAdmin={isAdmin}
                   onEdit={() => onEditSub(sub)}
                   onDelete={() => onDeleteSub(sub)}
@@ -590,6 +596,7 @@ function SubRow({
   cat,
   pathname,
   router,
+  startNavigation,
   isAdmin,
   onEdit,
   onDelete,
@@ -600,6 +607,7 @@ function SubRow({
   cat: CategoryDTO;
   pathname: string;
   router: ReturnType<typeof useRouter>;
+  startNavigation: TransitionStartFunction;
   isAdmin: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -631,7 +639,7 @@ function SubRow({
         </button>
       )}
       <button
-        onClick={() => router.push(`/portal/${cat.key}/${sub.key}`)}
+        onClick={() => startNavigation(() => router.push(`/portal/${cat.key}/${sub.key}`))}
         className={`flex-1 flex items-center gap-2 text-[13px] py-1 min-w-0 ${
           active ? "text-white font-medium" : "text-nord-gray hover:text-white"
         }`}

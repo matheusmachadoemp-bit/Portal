@@ -63,8 +63,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // já comitou (ou desfez) sua própria contagem+gravação, então sempre vê a contagem
   // atualizada. O lock é automaticamente liberado no fim da transação — não precisa de
   // nenhuma coluna/migração nova.
+  //
+  // Achado P4 (Nina): a versão original travava com `hashtext(quizId || userId)` — um único
+  // hash de 32 bits sobre a concatenação CRUA dos dois ids, sem separador nem prefixo de
+  // domínio, diferente do padrão já estabelecido no resto do projeto (2 chaves de 32 bits via
+  // `hashtext('namespace', id)`, ou 1 chave de 64 bits via `hashtextextended('namespace:' + id,
+  // 0)` — ver `travarSaldoLojaNord`/src/lib/loja-nord-server.ts, `travarProbabilidadeRoleta` e
+  // `travarGiroPorResponse`/src/lib/roulette-server.ts, `src/lib/ficha-autolink.ts`,
+  // `src/lib/ficha-nome-server.ts`, `src/lib/bank-sync-server.ts`,
+  // `src/lib/bank-reconciliation.ts`, `src/lib/reservas-disponibilidade.ts`). Sem separador,
+  // ids concatenados sem delimitador podem colidir entre pares diferentes (ex.: quizId="ab",
+  // userId="cd" produz a mesma string que quizId="a", userId="bcd") — risco baixo na prática
+  // (hash de 32 bits já tem colisão residual mesmo com separador), mas a inconsistência de
+  // estilo com o resto do projeto não tinha motivo. Agora usa 2 chaves de 32 bits, uma por
+  // entidade, com prefixo de domínio na primeira — mesmo padrão de `travarProbabilidadeRoleta`/
+  // `travarGiroPorResponse`.
   const result = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${quizId} || ${session.user.id}))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('quiz_attempt:' || ${quizId}), hashtext(${session.user.id}))`;
 
     const previousAttempts = await tx.trainingAttempt.count({ where: { quizId, userId: session.user.id } });
     if (previousAttempts >= quiz.maxAttempts) {

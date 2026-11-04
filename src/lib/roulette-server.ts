@@ -535,6 +535,80 @@ export async function girarRoleta(params: { responseId: string; empresaIdEsperad
 }
 
 // ---------------------------------------------------------------------------
+// Consulta de giro já existente (recuperação) — achado P4 (Nina)
+// ---------------------------------------------------------------------------
+
+export type ResultadoConsultaGiro =
+  | {
+      ok: true;
+      existe: true;
+      resultado: "premio";
+      codigo: string;
+      validadeAte: Date | null;
+      premio: { id: string; nome: string; descricao: string | null; imagemUrl: string | null; icone: string | null };
+    }
+  | { ok: true; existe: true; resultado: "tente_novamente" }
+  | { ok: true; existe: false }
+  | { ok: false; error: string };
+
+/**
+ * Consulta (só leitura, sem travar nada e sem nunca criar/alterar um giro) se já existe um
+ * `RouletteSpin` para esta `CustomerSurveyResponse` — achado P4 (Nina): antes desta função não
+ * havia nenhuma forma de recuperar o resultado de um giro já processado no servidor se a
+ * RESPOSTA de `POST .../responder/[token]/girar` se perdesse no caminho (ex.: queda de rede
+ * logo depois do giro ter sido gravado com sucesso) — o cliente não tinha como saber se já
+ * tinha ganhado algo ou não, e `girarRoleta` corretamente recusa girar de novo pra mesma
+ * `responseId` (`RouletteSpin.responseId` é `@unique`), então um retry ingênuo do client só
+ * devolvia "Você já girou a roleta para esta avaliação." sem NUNCA revelar qual foi o
+ * resultado.
+ *
+ * Mesmas duas checagens de posse de `girarRoleta` (nunca confia em id vindo do cliente sem
+ * checar contra o que foi resolvido a partir do token): a `CustomerSurveyResponse` precisa
+ * existir e pertencer exatamente a esta `empresaId`/`tableId`.
+ *
+ * Idempotente por natureza (é uma leitura) — pode ser chamada quantas vezes o client quiser,
+ * inclusive em paralelo com um `POST .../girar` em andamento para a MESMA `responseId` (sem
+ * lock aqui: na pior hipótese, antes do `POST` concorrente comitar, esta consulta só vê
+ * `existe: false`, nunca um estado inconsistente — `RouletteSpin.create` é a única escrita e só
+ * fica visível para outras transações depois do commit).
+ */
+export async function consultarGiroExistente(params: {
+  responseId: string;
+  empresaIdEsperado: string;
+  tableIdEsperado: string;
+}): Promise<ResultadoConsultaGiro> {
+  const response = await prisma.customerSurveyResponse.findUnique({
+    where: { id: params.responseId },
+    include: {
+      rouletteSpin: {
+        include: { prize: { select: { id: true, nome: true, descricao: true, imagemUrl: true, icone: true } } },
+      },
+    },
+  });
+  if (!response) return { ok: false, error: "Avaliação não encontrada." };
+  if (response.empresaId !== params.empresaIdEsperado || response.tableId !== params.tableIdEsperado) {
+    return { ok: false, error: "Esta avaliação não pertence a esta mesa." };
+  }
+
+  const spin = response.rouletteSpin;
+  if (!spin) return { ok: true, existe: false };
+
+  // `codigo: null` é como `executarGiro` marca o resultado "Tente novamente" (ver bloco da
+  // sentinela no topo do arquivo) — mesmo critério usado lá, nunca comparado por `prizeId`
+  // diretamente aqui pra não precisar importar `tenteNovamentePrizeId` com `empresaId` de fora.
+  if (spin.codigo === null) return { ok: true, existe: true, resultado: "tente_novamente" };
+
+  return {
+    ok: true,
+    existe: true,
+    resultado: "premio",
+    codigo: spin.codigo,
+    validadeAte: spin.validadeAte,
+    premio: spin.prize,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Resgate do prêmio (Fase 7) — funcionário digita o `codigo` na loja
 // ---------------------------------------------------------------------------
 

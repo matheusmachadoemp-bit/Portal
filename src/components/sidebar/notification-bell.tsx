@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
+import { useNavigationProgress } from "@/components/navigation-progress";
 
 type NotificationDTO = {
   id: string;
@@ -46,6 +47,7 @@ export function NotificationBell() {
   const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
+  const { startNavigation } = useNavigationProgress();
 
   function computePanelPos() {
     const rect = btnRef.current?.getBoundingClientRect();
@@ -98,18 +100,27 @@ export function NotificationBell() {
     }
     setOpen(false);
     load();
-    if (n.checklistOccurrenceId) router.push(`/portal/tarefas/checklist/executar/${n.checklistOccurrenceId}`);
-    else if (n.taskId) router.push("/portal/tarefas");
-    else if (n.chamadoId) router.push(`/portal/manutencao/chamados/${n.chamadoId}`);
-    else if (n.purchaseId) router.push("/portal/estoque/recebimento");
-    else if (n.goalCategory) router.push(`/portal/metas/${GOAL_CATEGORY_ROUTE[n.goalCategory]}`);
+    // `startNavigation` (useTransition) acende a barra fina de progresso no topo da página
+    // enquanto a tela de destino carrega — ver `src/components/navigation-progress.tsx`.
+    if (n.checklistOccurrenceId) startNavigation(() => router.push(`/portal/tarefas/checklist/executar/${n.checklistOccurrenceId}`));
+    else if (n.taskId) startNavigation(() => router.push("/portal/tarefas"));
+    else if (n.chamadoId) startNavigation(() => router.push(`/portal/manutencao/chamados/${n.chamadoId}`));
+    else if (n.purchaseId) startNavigation(() => router.push("/portal/estoque/recebimento"));
+    else if (n.goalCategory) {
+      // Variável separada: dentro do closure passado a `startNavigation`, o TypeScript não
+      // preserva o estreitamento de tipo feito pelo `if` acima sobre `n.goalCategory` (parâmetro,
+      // não é um `const`) — sem isso, `GOAL_CATEGORY_ROUTE[n.goalCategory]` erra achando que ainda
+      // pode ser `null` dentro do closure.
+      const goalCategory = n.goalCategory;
+      startNavigation(() => router.push(`/portal/metas/${GOAL_CATEGORY_ROUTE[goalCategory]}`));
+    }
     // Não existe (nem nunca existiu) tela de detalhe de uma ocorrência por id — ver o comentário em
     // `src/app/portal/fechamento-dia/ocorrencias/[id]/page.tsx` (confirmado ao vivo: aquele caminho
     // antigo só redireciona pra uma rota que colide com `/portal/tarefas/ocorrencias/[cargoId]` e
     // quebra). A gestão de ocorrências vive em `/portal/tarefas/ocorrencias` (lista) — mesmo destino
     // já corrigido no payload do push em `fechamento-server.ts`.
-    else if (n.fechamentoOcorrenciaId) router.push("/portal/tarefas/ocorrencias");
-    else if (n.customerSurveyResponseId) router.push(`/portal/satisfacao-cliente/avaliacoes/${n.customerSurveyResponseId}`);
+    else if (n.fechamentoOcorrenciaId) startNavigation(() => router.push("/portal/tarefas/ocorrencias"));
+    else if (n.customerSurveyResponseId) startNavigation(() => router.push(`/portal/satisfacao-cliente/avaliacoes/${n.customerSurveyResponseId}`));
     // Central de Bugs e Melhorias (`/portal/administrativo/bugs-melhorias`) ainda não aceita abrir
     // um relato específico por URL (o modal de detalhe só é aberto por estado local do componente,
     // não por query param) — mesma limitação que já faz o push deste tipo apontar pra "/portal" em
@@ -117,7 +128,7 @@ export function NotificationBell() {
     // acesso a essa tela (só ADMINISTRADOR). Mantém "/portal" aqui pra bater com o mesmo destino já
     // usado pelo push, em vez de mandar pra uma tela que pode dar redirect/não existir pra quem
     // recebeu.
-    else if (n.feedbackReportId) router.push("/portal");
+    else if (n.feedbackReportId) startNavigation(() => router.push("/portal"));
   }
 
   return (
