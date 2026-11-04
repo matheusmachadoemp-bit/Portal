@@ -322,13 +322,22 @@ export async function POST(req: Request) {
   });
   const toUpdate = classified.filter((r) => r.matchClienteId);
 
-  // Cria todos os clientes novos de uma vez (uma linha sem telefone, e-mail e nome que batam com um
-  // cliente já cadastrado sempre cria; com telefone ou e-mail repetido dentro do próprio arquivo,
-  // só a primeira ocorrência entra — telefone via `skipDuplicates`/constraint do banco, e-mail via
-  // o filtro acima).
-  if (toCreate.length > 0) {
+  // Separa quem tem telefone ou e-mail (pode ir em `createMany` — o id de volta é religado pelo
+  // reload abaixo, via telefone/e-mail) de quem não tem nenhum dos dois (match só por nome, ou
+  // nenhum match possível): essas linhas precisam ser criadas uma a uma com `cliente.create` (em
+  // vez de `createMany`) porque `createMany` não devolve os registros criados, e sem telefone nem
+  // e-mail não existe NENHUM identificador único pra religar o id depois do reload — era exatamente
+  // isso que fazia o pedido (`comPedido` abaixo) dessas linhas nunca ser gravado em
+  // `ClienteHistoricoImportado`.
+  const toCreateComContato = toCreate.filter((r) => r.telefone || r.email);
+  const toCreateSemContato = toCreate.filter((r) => !r.telefone && !r.email);
+
+  // Cria de uma vez só quem tem telefone ou e-mail (com telefone ou e-mail repetido dentro do
+  // próprio arquivo, só a primeira ocorrência entra — telefone via `skipDuplicates`/constraint do
+  // banco, e-mail via o filtro acima).
+  if (toCreateComContato.length > 0) {
     await prisma.cliente.createMany({
-      data: toCreate.map((r) => ({
+      data: toCreateComContato.map((r) => ({
         empresaId: empresa.id,
         nome: r.nome,
         telefone: r.telefone || null,
@@ -347,8 +356,8 @@ export async function POST(req: Request) {
     });
   }
 
-  // Recarrega para ter o id de todo mundo (inclusive os recém-criados),
-  // já que createMany não retorna os registros criados.
+  // Recarrega para ter o id de todo mundo que entrou no `createMany` acima (inclusive os
+  // recém-criados), já que `createMany` não retorna os registros criados.
   const allClientes = await prisma.cliente.findMany({
     where: { empresaId: empresa.id },
     select: { id: true, telefone: true, email: true },
@@ -362,6 +371,33 @@ export async function POST(req: Request) {
     const key = normalizeEmailDedupe(c.email);
     if (!clienteIdByEmail.has(key)) clienteIdByEmail.set(key, c.id);
   }
+
+  // Quem não tem telefone nem e-mail: cria um por um (não em lote) justamente para poder usar o id
+  // devolvido por `cliente.create` imediatamente — `r.line` (número da linha na planilha) é único
+  // por linha e serve de chave temporária só para religar o pedido (`comPedido` abaixo) ao cliente
+  // que acabou de ser criado para ESTA linha especificamente.
+  const clienteIdByLineSemContato = new Map<number, string>();
+  await processInChunks(toCreateSemContato, 15, async (r) => {
+    const cliente = await prisma.cliente.create({
+      data: {
+        empresaId: empresa.id,
+        nome: r.nome,
+        telefone: null,
+        whatsapp: r.whatsapp,
+        email: r.email,
+        dataNascimento: r.dataNascimento,
+        endereco: r.endereco,
+        bairro: r.bairro,
+        cidade: r.cidade,
+        pedidosImportados: r.pedidosImportados,
+        valorGastoImportado: r.valorGastoImportado,
+        ticketMedioImportado: r.ticketMedioImportado,
+        ultimaCompraImportada: r.ultimaCompraImportada,
+      },
+      select: { id: true },
+    });
+    clienteIdByLineSemContato.set(r.line, cliente.id);
+  });
 
   let updated = 0;
   await processInChunks(toUpdate, 15, async (r) => {
@@ -394,14 +430,16 @@ export async function POST(req: Request) {
   // cliente).
   const comPedido = classified.filter((r) => r.numeroPedido || r.itens || r.valorPedido !== null);
   await processInChunks(comPedido, 15, async (r) => {
-    // Linha de update: já tem o id (telefone ou e-mail). Linha de create: precisa do reload acima
-    // (telefone ou e-mail, o que a linha tiver) — linha sem telefone nem e-mail (match só por nome,
-    // ou nenhum match) não tem como ser ligada ao cliente recém-criado com um identificador único,
-    // igual já era antes desta mudança (que só cobria telefone).
+    // Linha de update: já tem o id (telefone ou e-mail). Linha de create COM telefone ou e-mail:
+    // acha o id pelo reload acima. Linha de create SEM telefone nem e-mail (match só por nome, ou
+    // nenhum match): usa `clienteIdByLineSemContato`, preenchido na criação individual acima
+    // (`r.line` identifica exatamente esta linha — sem isso, essas linhas nunca tinham como ser
+    // ligadas ao cliente recém-criado, e o pedido ficava sem histórico gravado).
     const clienteId =
       r.matchClienteId ??
       (r.telefone ? clienteIdByTelefone.get(r.telefone) : undefined) ??
-      (r.email ? clienteIdByEmail.get(normalizeEmailDedupe(r.email)) : undefined);
+      (r.email ? clienteIdByEmail.get(normalizeEmailDedupe(r.email)) : undefined) ??
+      clienteIdByLineSemContato.get(r.line);
     if (!clienteId) return;
     if (r.numeroPedido) {
       await prisma.clienteHistoricoImportado.upsert({
