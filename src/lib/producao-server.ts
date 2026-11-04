@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { notifyUser } from "@/lib/tarefas-server";
 import { getStoreManagers } from "@/lib/manutencao-server";
 import { compareProducedToPlanned, effectiveProductionStatus } from "@/lib/producao";
+import { lockIngredientStocks, ESTOQUE_TX_OPTIONS } from "@/lib/estoque";
 
 export const PRODUCTION_MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 /** Pontos ganhos na régua da Loja Nord por concluir uma produção no prazo e
@@ -122,25 +123,27 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
     // deixa o estoque ficar negativo, só zera.
     //
     // Otimização (achado #182): em vez de 1 leitura + 1 update + 1 create por
-    // insumo (3N idas ao banco), busca o estoque de TODOS os insumos da
-    // ficha de uma vez (1 leitura) e agrupa os StockMovement num único
-    // createMany (1 escrita) — sobra só o `ingredient.update` em loop (N
-    // escritas, uma por insumo), que foi mantido individual de propósito:
-    // Prisma não tem "update em lote com valor por linha" nativo, e um
-    // UPDATE em SQL bruto aqui arriscaria corromper estoque por um erro de
-    // sintaxe/mapeamento — não vale o risco numa tarefa de baixa prioridade.
-    // O mapa `estoqueMap` é atualizado a cada iteração para preservar o
-    // mesmo comportamento "em cascata" de antes: se dois insumos da ficha
-    // apontarem pro mesmo ingrediente, o segundo consumo continua partindo
-    // do saldo já descontado pelo primeiro, exatamente como no loop
+    // insumo (3N idas ao banco), agrupa o StockMovement num único createMany
+    // (1 escrita) e o UPDATE de estoque num único UNNEST em lote (1 escrita)
+    // — sobra só a leitura, que precisa continuar sendo via
+    // `lockIngredientStocks` (abaixo), nunca um `findMany` comum.
+    //
+    // Lock de linha obrigatório (achado P0 de revisão de QA, 2026-11): antes desta correção, a
+    // leitura de `estoqueAtual` era um `tx.ingredient.findMany` comum, SEM `FOR UPDATE` — não
+    // trava a linha, então duas finalizações de produção concorrentes (ou uma finalização e uma
+    // transferência concorrente) consumindo o mesmo insumo cru liam o mesmo valor "antigo" e uma
+    // gravava por cima do consumo da outra sem nunca ver o efeito dela (lost update).
+    // `lockIngredientStocks` (@/lib/estoque) resolve isso: trava e relê o `estoqueAtual` mais
+    // recente de cada insumo DENTRO desta transação, sempre na mesma ordem (por id), antes de
+    // calcular qualquer consumo — mesma função usada pelo débito/crédito de transferências entre
+    // lojas, pra as duas rotas nunca entrarem em deadlock entre si quando tocam o mesmo insumo.
+    // O mapa `estoqueMap` é atualizado a cada iteração para preservar o mesmo comportamento "em
+    // cascata" de antes: se dois insumos da ficha apontarem pro mesmo ingrediente, o segundo
+    // consumo continua partindo do saldo já descontado pelo primeiro, exatamente como no loop
     // sequencial original.
     if (quantidadeProduzida > 0 && item.ingredientes.length > 0) {
       const ingredientIds = Array.from(new Set(item.ingredientes.map((linha) => linha.ingredientId)));
-      const ingredientesAtuais = await tx.ingredient.findMany({
-        where: { id: { in: ingredientIds } },
-        select: { id: true, estoqueAtual: true },
-      });
-      const estoqueMap = new Map(ingredientesAtuais.map((ing) => [ing.id, ing.estoqueAtual]));
+      const estoqueMap = await lockIngredientStocks(tx, ingredientIds);
 
       const movimentos: Prisma.StockMovementCreateManyInput[] = [];
 
@@ -153,7 +156,6 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
         }
         const estoqueApos = Math.max(0, estoqueAntes - consumo);
         estoqueMap.set(linha.ingredientId, estoqueApos);
-        await tx.ingredient.update({ where: { id: linha.ingredientId }, data: { estoqueAtual: estoqueApos } });
         movimentos.push({
           ingredientId: linha.ingredientId,
           empresaId: order.empresaId,
@@ -166,13 +168,27 @@ export async function finalizarProductionOrder(orderId: string, userId: string, 
         });
       }
 
+      // Ids efetivamente consumidos (`consumo > 0`) — do mesmo jeito que antes, uma linha da
+      // ficha com `quantidadeUsada` zerada (ou quantidade produzida zero) não gera UPDATE nem
+      // StockMovement algum para aquele insumo.
+      const idsConsumidos = Array.from(new Set(movimentos.map((m) => m.ingredientId)));
+      if (idsConsumidos.length > 0) {
+        const estoquesFinais = idsConsumidos.map((id) => estoqueMap.get(id)!);
+        await tx.$executeRaw`
+          UPDATE "Ingredient" AS ing
+          SET "estoqueAtual" = v.estoque_atual
+          FROM UNNEST(${idsConsumidos}::text[], ${estoquesFinais}::float8[]) AS v(ingredient_id, estoque_atual)
+          WHERE ing."id" = v.ingredient_id
+        `;
+      }
+
       if (movimentos.length > 0) {
         await tx.stockMovement.createMany({ data: movimentos });
       }
     }
 
     return [updatedOrder];
-  });
+  }, ESTOQUE_TX_OPTIONS);
 
   const planejado = order.quantidadeAprovada ?? order.quantidadeSugerida;
   await logProductionOrderHistory(orderId, userId, "FINALIZADO", `Planejado: ${planejado} · Produzido: ${quantidadeProduzida}`);

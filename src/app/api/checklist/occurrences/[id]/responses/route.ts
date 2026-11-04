@@ -34,14 +34,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
+  const itemTemplate = await prisma.checklistItemTemplate.findUnique({ where: { id: itemTemplateId } });
+  if (!itemTemplate || itemTemplate.templateId !== occurrence.templateId) {
+    return NextResponse.json({ error: "Item do checklist não encontrado." }, { status: 404 });
+  }
+
   if (status === "PROBLEMA" && occurrence.template.exigirObservacaoProblema && !observacao?.trim()) {
     return NextResponse.json({ error: "Esse checklist exige uma observação quando há um problema." }, { status: 400 });
+  }
+
+  // Item que exige foto (tipo FOTO ou fotoObrigatoria marcada no template, independente do tipo):
+  // nunca marca CONCLUIDO por esta rota sem uma foto já persistida (ChecklistPhoto) vinculada à
+  // resposta — quem de fato confirma que o upload teve sucesso e libera o CONCLUIDO é
+  // `POST .../photos` (ver ali), chamado só depois que o arquivo já subiu e a foto já foi
+  // gravada. Sem isso, o cliente podia marcar CONCLUIDO antes/independente do upload da foto (ex.:
+  // `handleItemPhoto` em executar-client.tsx chama esta rota com status CONCLUIDO e só depois
+  // tenta subir o arquivo — se o upload falhar, o item ficava "Concluído" sem foto nenhuma).
+  const precisaFoto = itemTemplate.tipo === "FOTO" || itemTemplate.fotoObrigatoria;
+  let effectiveStatus = status || "CONCLUIDO";
+  if (effectiveStatus === "CONCLUIDO" && precisaFoto) {
+    const existing = await prisma.checklistItemResponse.findUnique({
+      where: { occurrenceId_itemTemplateId: { occurrenceId: id, itemTemplateId } },
+      include: { fotos: true },
+    });
+    if (!existing || existing.fotos.length === 0) {
+      effectiveStatus = "PENDENTE";
+    }
   }
 
   const response = await prisma.checklistItemResponse.upsert({
     where: { occurrenceId_itemTemplateId: { occurrenceId: id, itemTemplateId } },
     update: {
-      status: status || "CONCLUIDO",
+      status: effectiveStatus,
       valorTexto: valorTexto ?? null,
       valorNumero: valorNumero != null ? Number(valorNumero) : null,
       valorBooleano: valorBooleano ?? null,
@@ -52,7 +76,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     create: {
       occurrenceId: id,
       itemTemplateId,
-      status: status || "CONCLUIDO",
+      status: effectiveStatus,
       valorTexto: valorTexto ?? null,
       valorNumero: valorNumero != null ? Number(valorNumero) : null,
       valorBooleano: valorBooleano ?? null,

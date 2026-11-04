@@ -450,3 +450,61 @@ export async function processChamadoAtrasoAlertas(): Promise<{ notified: number;
 
   return { notified, chamadosAtrasados: chamados.length };
 }
+
+/**
+ * Dias sem decisão (ainda RECEBIDO/EM_ANALISE, desde `createdAt`) até um orçamento ser marcado
+ * `EXPIRADO` automaticamente. `Orcamento` não tem hoje nenhum campo de prazo/validade próprio
+ * (o campo `prazo`, String, é o prazo de entrega/execução informado pelo prestador, não uma data)
+ * — então, na ausência de uma regra de negócio explícita para quando um orçamento "vence", este
+ * é o critério mais simples possível: tempo parado sem aprovação/recusa. Ajustável aqui se o
+ * Matheus confirmar outro número; nenhuma outra parte do código depende deste valor.
+ */
+const ORCAMENTO_EXPIRACAO_DIAS = 15;
+
+/**
+ * Expira automaticamente orçamentos que ficaram `ORCAMENTO_EXPIRACAO_DIAS` dias sem decisão
+ * (RECEBIDO ou EM_ANALISE) — disparado por `GET /api/manutencao/orcamentos/expirar/run` (Vercel
+ * Cron, ver vercel.json). Até esta função existir, `OrcamentoStatus.EXPIRADO` nunca era atribuído
+ * por nada no sistema (nem automaticamente, nem manualmente pela tela — que só oferece os botões
+ * Aprovar/Recusar), mesmo já existindo no enum e na legenda da UI (`ORCAMENTO_STATUS_OPTIONS`).
+ *
+ * Diferente de `processChamadoAtrasoAlertas` (um único aviso, booleano), aqui a ação em si é a
+ * transição de status — por isso não precisa de um campo de idempotência próprio: uma vez
+ * `EXPIRADO`, o orçamento já sai do filtro `status: { in: ["RECEBIDO", "EM_ANALISE"] }` e nunca é
+ * revisitado de novo.
+ */
+export async function processOrcamentosExpirados(): Promise<{ expirados: number }> {
+  const limite = new Date();
+  limite.setDate(limite.getDate() - ORCAMENTO_EXPIRACAO_DIAS);
+
+  const orcamentos = await prisma.orcamento.findMany({
+    where: {
+      status: { in: ["RECEBIDO", "EM_ANALISE"] },
+      createdAt: { lt: limite },
+      chamado: { empresa: { active: true } },
+    },
+    include: { chamado: true, prestador: true },
+  });
+  if (orcamentos.length === 0) return { expirados: 0 };
+
+  for (const orcamento of orcamentos) {
+    await prisma.orcamento.update({ where: { id: orcamento.id }, data: { status: "EXPIRADO" } });
+    await logChamadoHistorico(
+      orcamento.chamadoId,
+      null,
+      "ORCAMENTO_EXPIRADO",
+      `${orcamento.prestador.nome} — sem decisão em ${ORCAMENTO_EXPIRACAO_DIAS} dias`
+    );
+    const notifyId = orcamento.chamado.responsavelId ?? orcamento.chamado.solicitanteId;
+    await notifyManutencaoUser(
+      notifyId,
+      "ORCAMENTO_EXPIRADO",
+      "Orçamento expirado",
+      `O orçamento de ${orcamento.prestador.nome} para o chamado "${orcamento.chamado.titulo}" (${orcamento.chamado.protocolo}) expirou sem decisão em ${ORCAMENTO_EXPIRACAO_DIAS} dias.`,
+      orcamento.chamadoId,
+      "ATENCAO"
+    );
+  }
+
+  return { expirados: orcamentos.length };
+}
