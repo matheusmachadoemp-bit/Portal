@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { Badge, ColorBadge, Section } from "@/components/ui/stat-card";
 import { SortableStatCards } from "@/components/ui/sortable-stat-cards";
-import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Modal, ConfirmDialog, FormError } from "@/components/ui/modal";
 import { GOAL_CATEGORIES, GOAL_CATEGORY_COLOR, GOAL_CATEGORY_LABEL, type GoalCategoryKey } from "@/lib/goals";
 import { CHECKLIST_STATUS_LABEL, CHECKLIST_STATUS_TONE, spDateKey } from "@/lib/checklist";
 
@@ -253,6 +253,8 @@ export function ChecklistClient({
   const [editing, setEditing] = useState<Template | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmToggleId, setConfirmToggleId] = useState<Template | null>(null);
@@ -354,11 +356,13 @@ export function ChecklistClient({
   function openNew() {
     setEditing(null);
     setForm(emptyForm());
+    setFormError(null);
     setShowForm(true);
   }
 
   function openEdit(t: Template) {
     setEditing(t);
+    setFormError(null);
     setForm({
       name: t.name,
       description: t.description ?? "",
@@ -409,12 +413,13 @@ export function ChecklistClient({
 
   async function submit() {
     if (submitting) return;
+    setFormError(null);
     if (!form.name.trim()) {
-      alert("Informe o nome do checklist.");
+      setFormError("Informe o nome do checklist.");
       return;
     }
     if (form.itens.length === 0) {
-      alert("Adicione ao menos um item ao checklist.");
+      setFormError("Adicione ao menos um item ao checklist.");
       return;
     }
     setSubmitting(true);
@@ -445,6 +450,7 @@ export function ChecklistClient({
   }
 
   async function toggleActive(t: Template) {
+    setRowError(null);
     // Envia TODOS os campos que `PATCH /api/checklist/templates/[id]` grava —
     // essa rota não é um patch parcial de verdade (recalcula cada campo a
     // partir do body recebido, com fallback fixo quando ausente, ver
@@ -497,7 +503,7 @@ export function ChecklistClient({
     // padrão de `doDelete`, logo abaixo, que já tratava isso corretamente.
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      alert(data?.error || "Não foi possível alterar esse checklist.");
+      setRowError(data?.error || "Não foi possível alterar esse checklist.");
     }
     setConfirmToggleId(null);
     await refreshTemplates();
@@ -505,10 +511,11 @@ export function ChecklistClient({
 
   async function doDelete() {
     if (!confirmDeleteId) return;
+    setRowError(null);
     const res = await fetch(`/api/checklist/templates/${confirmDeleteId}`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      alert(data?.error || "Não foi possível excluir esse checklist.");
+      setRowError(data?.error || "Não foi possível excluir esse checklist.");
     }
     setConfirmDeleteId(null);
     await Promise.all([refreshTemplates(), refreshOccurrences()]);
@@ -723,6 +730,8 @@ export function ChecklistClient({
           </div>
         )}
       </Section>
+
+      <FormError message={rowError} />
 
       <Section title="Tabela de checklists">
         <div className="overflow-x-auto nord-scrollbar">
@@ -1087,6 +1096,8 @@ export function ChecklistClient({
               {form.itens.length === 0 && <p className="text-xs text-nord-gray text-center py-3">Nenhum item adicionado ainda.</p>}
             </div>
           </div>
+
+          <FormError message={formError} />
 
           <button
             onClick={submit}

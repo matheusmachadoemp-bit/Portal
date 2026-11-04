@@ -67,7 +67,7 @@ export function FinalizarModal({
         </label>
 
         {comparison?.alerta && (
-          <div className={`text-xs rounded-lg px-3 py-2 border ${comparison.alerta === "abaixo" ? "bg-nord-warning/10 border-nord-warning/30 text-nord-warning" : "bg-blue-950/20 border-blue-900/40 text-blue-300"}`}>
+          <div className={`text-xs rounded-lg px-3 py-2 border ${comparison.alerta === "abaixo" ? "bg-nord-warning/10 border-nord-warning/30 text-nord-warning" : "bg-nord-blue-light/10 border-nord-blue-light/30 text-nord-blue-light"}`}>
             ATENÇÃO — {comparison.diferenca < 0 ? `${Math.abs(comparison.diferenca).toFixed(2)} ${ordem.productionItem.unidade} abaixo do planejado` : `produção ${Math.abs(comparison.diferencaPercent).toFixed(0)}% acima do planejado`}.
           </div>
         )}
