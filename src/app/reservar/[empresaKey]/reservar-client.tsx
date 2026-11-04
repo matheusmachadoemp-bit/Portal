@@ -10,7 +10,7 @@ import { onlyDigits, isValidEmail } from "@/lib/reservas";
 
 type Environment = { id: string; name: string; capacity: number };
 
-type DayStatus = "fechado" | "bloqueado" | "fora-do-prazo" | "sem-horario" | "disponivel";
+type DayStatus = "fechado" | "bloqueado" | "fora-do-prazo" | "sem-horario" | "esgotado" | "disponivel";
 type DayAvailability = { dateKey: string; status: DayStatus; isSpecialGroup?: boolean };
 
 type AvailabilitySlot = {
@@ -58,10 +58,17 @@ function monthKeyOf(cursor: Date): string {
 }
 
 /** Cor da pílula de cada dia do calendário, por status de disponibilidade (ver
- * `getMonthAvailability`, src/lib/reservas-disponibilidade.ts). */
+ * `getMonthAvailability`, src/lib/reservas-disponibilidade.ts).
+ *
+ * "esgotado" (vermelho) é o dia aberto em que TODOS os horários já estão com a capacidade do
+ * ambiente cheia — diferente de "sem-horario" (laranja), que cobre qualquer outro motivo pontual
+ * do dia estar sem horário oferecido (ex.: hoje, horários restantes já fora da janela de
+ * antecedência mínima configurada) sem ser por falta de capacidade (tarefa "reservas-cor-esgotado",
+ * pedido do Matheus — antes os dois caíam juntos em "sem-horario"/laranja). */
 const DAY_STATUS_STYLE: Record<DayStatus, string> = {
   disponivel: "bg-nord-success/15 border-nord-success text-nord-success hover:bg-nord-success/25",
   "sem-horario": "bg-amber-500/10 border-amber-500/40 text-amber-400",
+  esgotado: "bg-nord-danger/15 border-nord-danger text-nord-danger",
   fechado: "bg-transparent border-transparent text-nord-gray/30",
   bloqueado: "bg-transparent border-transparent text-nord-gray/30",
   "fora-do-prazo": "bg-transparent border-transparent text-nord-gray/20",
@@ -326,9 +333,12 @@ export function ReservarClient({
                 );
               }}
             />
-            <div className="flex items-center gap-3 mt-2.5 text-[10px] text-nord-gray">
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2.5 text-[10px] text-nord-gray">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-nord-success" /> Tem horário
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-nord-danger" /> Esgotado
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-amber-400" /> Sem horário
