@@ -207,6 +207,7 @@ const HISTORICO_ACTION_LABEL: Record<string, string> = {
   ORCAMENTO_ADICIONADO: "adicionou um orçamento",
   ORCAMENTO_APROVADO: "aprovou um orçamento",
   ORCAMENTO_RECUSADO: "recusou um orçamento",
+  ORCAMENTO_EXPIRADO: "expirou um orçamento sem decisão",
 };
 
 export const ORCAMENTO_STATUS_OPTIONS = [

@@ -52,5 +52,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     },
   });
 
+  // Chegar até aqui é a confirmação de que o upload da foto teve sucesso de verdade (o arquivo já
+  // subiu pro blob e a linha já foi persistida) — só agora é seguro marcar o item como CONCLUIDO
+  // quando ele exige foto (tipo FOTO ou fotoObrigatoria). PATCH .../responses nunca marca CONCLUIDO
+  // nesse caso por conta própria (ver comentário ali) — é essa rota que fecha o ciclo, evitando o
+  // item ficar "Concluído" quando o upload falhou ou nem foi tentado.
+  if (itemResponseId) {
+    const response = await prisma.checklistItemResponse.findUnique({
+      where: { id: itemResponseId },
+      include: { itemTemplate: true },
+    });
+    if (response && response.occurrenceId === id && response.status !== "PROBLEMA" && response.status !== "CONCLUIDO") {
+      const precisaFoto = response.itemTemplate.tipo === "FOTO" || response.itemTemplate.fotoObrigatoria;
+      if (precisaFoto) {
+        await prisma.checklistItemResponse.update({
+          where: { id: itemResponseId },
+          data: { status: "CONCLUIDO", respondidoPorId: session.user.id, respondidoEm: new Date() },
+        });
+      }
+    }
+  }
+
   return NextResponse.json({ photo });
 }

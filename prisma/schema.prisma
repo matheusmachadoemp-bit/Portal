@@ -4608,6 +4608,14 @@ model Task {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
   completedAt        DateTime?
+  /// Quando o aviso de "tarefa atrasada" (processTaskAtrasoAlertas, @/lib/tarefas-server.ts) foi
+  /// disparado — mesma idempotência de `Chamado.atrasoNotificadoEm` (@/lib/manutencao-server.ts):
+  /// null = ainda não avisado (ou nunca ficou atrasada); a checagem periódica (GET
+  /// /api/tarefas/alertas/run, ver vercel.json) só processa tarefas com `dueDate` vencido, status
+  /// não-CONCLUIDA e este campo nulo, e preenche com o instante do aviso assim que notifica.
+  /// Zerado de volta pra null sempre que o prazo (`dueDate`) é alterado — ver PATCH
+  /// /api/tarefas/[id] — permitindo um novo aviso futuro se a tarefa atrasar de novo.
+  atrasoNotificadoEm DateTime?
 
   assignees             TaskAssignee[]
   checklist             TaskChecklistItem[]
@@ -4622,6 +4630,11 @@ model Task {
   @@unique([recurrenceId, dueDate])
   @@index([empresaId, status])
   @@index([empresaId, dueDate])
+  // Suporta a checagem de atraso (processTaskAtrasoAlertas, @/lib/tarefas-server.ts: dueDate <
+  // now(), status != CONCLUIDA, atrasoNotificadoEm IS NULL) — mesmo motivo do `@@index([prazo])`
+  // em `Chamado`: essa query não filtra por empresaId, então `@@index([empresaId, dueDate])`
+  // acima não ajuda (teria que varrer o índice todo ignorando a 1ª coluna).
+  @@index([dueDate])
 }
 
 model TaskAssignee {
