@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { applyMovement } from "@/lib/estoque";
+import { applyMovement, ESTOQUE_TX_OPTIONS, lockIngredientStock } from "@/lib/estoque";
 import { hasModulePermission } from "@/lib/authz";
 
 export async function GET(req: Request) {
@@ -67,10 +67,18 @@ export async function POST(req: Request) {
   }
 
   const quantidade = Number(body.quantidade) || 0;
-  const estoqueApos = Math.max(0, applyMovement(ingredient.estoqueAtual, body.type, quantidade));
 
-  const [movement] = await prisma.$transaction([
-    prisma.stockMovement.create({
+  // Transação interativa (não em lote): relê `estoqueAtual` DENTRO da transação, com a linha
+  // travada (`lockIngredientStock`/`SELECT ... FOR UPDATE`), para calcular `estoqueApos` a partir
+  // do valor mais recente — nunca do valor lido em `ingredient` acima, antes da transação abrir.
+  // Sem isso, duas chamadas concorrentes para o MESMO insumo partiam do mesmo valor-base e a que
+  // gravasse por último sobrescrevia a outra silenciosamente (lost update — achado de auditoria,
+  // 2026-11). O lock é liberado só quando a transação termina, então uma segunda chamada
+  // concorrente espera aqui e lê o valor já atualizado pela primeira.
+  const movement = await prisma.$transaction(async (tx) => {
+    const currentStock = await lockIngredientStock(tx, ingredient.id);
+    const estoqueApos = Math.max(0, applyMovement(currentStock, body.type, quantidade));
+    const created = await tx.stockMovement.create({
       data: {
         ingredientId: ingredient.id,
         empresaId: empresa.id,
@@ -80,9 +88,10 @@ export async function POST(req: Request) {
         motivo: body.motivo || null,
         createdById: session.user.id,
       },
-    }),
-    prisma.ingredient.update({ where: { id: ingredient.id }, data: { estoqueAtual: estoqueApos } }),
-  ]);
+    });
+    await tx.ingredient.update({ where: { id: ingredient.id }, data: { estoqueAtual: estoqueApos } });
+    return created;
+  }, ESTOQUE_TX_OPTIONS);
 
   return NextResponse.json({ movement });
 }

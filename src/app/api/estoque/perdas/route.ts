@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
-import { ingredientCostPerUnit } from "@/lib/estoque";
+import { ESTOQUE_TX_OPTIONS, ingredientCostPerUnit, lockIngredientStock } from "@/lib/estoque";
 
 export async function GET() {
   const session = await auth();
@@ -57,13 +57,20 @@ export async function POST(req: Request) {
   }
 
   const quantidade = Number(body.quantidade) || 0;
-  const estoqueApos = Math.max(0, ingredient.estoqueAtual - quantidade);
   // ingredientCostPerUnit: precoAtual já é o preço de 1 `unidade` (ver comentário na definição em
   // @/lib/estoque) — não dividir por quantidadeEmbalagem de novo.
   const valorEstimado = body.valorEstimado !== undefined ? Number(body.valorEstimado) : ingredientCostPerUnit(ingredient) * quantidade;
 
-  const [loss] = await prisma.$transaction([
-    prisma.loss.create({
+  // Transação interativa (não em lote): relê `estoqueAtual` DENTRO da transação, com a linha
+  // travada (`lockIngredientStock`/`SELECT ... FOR UPDATE`), pra calcular `estoqueApos` a partir
+  // do valor mais recente — nunca do `ingredient.estoqueAtual` lido acima, antes da transação
+  // abrir. Mesma correção de lost update aplicada em POST /api/estoque/movimentos (achado de
+  // auditoria, 2026-11): sem isso, uma perda concorrente com outro movimento do mesmo insumo
+  // sobrescrevia silenciosamente o resultado do outro.
+  const loss = await prisma.$transaction(async (tx) => {
+    const currentStock = await lockIngredientStock(tx, ingredient.id);
+    const estoqueApos = Math.max(0, currentStock - quantidade);
+    const created = await tx.loss.create({
       data: {
         empresaId: empresa.id,
         setor: body.setor || ingredient.setor || null,
@@ -78,8 +85,8 @@ export async function POST(req: Request) {
         observacao: body.observacao || null,
         createdById: session.user.id,
       },
-    }),
-    prisma.stockMovement.create({
+    });
+    await tx.stockMovement.create({
       data: {
         ingredientId: ingredient.id,
         empresaId: empresa.id,
@@ -90,9 +97,10 @@ export async function POST(req: Request) {
         origin: "PERDA",
         createdById: session.user.id,
       },
-    }),
-    prisma.ingredient.update({ where: { id: ingredient.id }, data: { estoqueAtual: estoqueApos } }),
-  ]);
+    });
+    await tx.ingredient.update({ where: { id: ingredient.id }, data: { estoqueAtual: estoqueApos } });
+    return created;
+  }, ESTOQUE_TX_OPTIONS);
 
   return NextResponse.json({ loss });
 }

@@ -6,7 +6,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { parseDayInput } from "@/lib/timezone";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
-import { PURCHASE_PAYMENT_METHODS, RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { ESTOQUE_TX_OPTIONS, PURCHASE_PAYMENT_METHODS, RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 
 // Campos de cabeçalho que só podem ser editados enquanto a compra ainda não foi recebida — ver
 // bloqueio logo abaixo de `willReceive`. `status`, `numeroNota`, `notaFiscalUrl` e `observacoes`
@@ -99,8 +99,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (willReceive) {
-    await prisma.$transaction([
-      prisma.receiving.create({
+    // Transação interativa (não em lote): o saldo real do insumo (`estoqueAtual`) já era gravado
+    // com `increment` atômico (protegido de lost update por natureza), mas `StockMovement.
+    // estoqueApos` — o "saldo resultante" exibido no histórico de movimentações — era calculado a
+    // partir de `item.ingredient.estoqueAtual`, lido ANTES da transação abrir. Sob concorrência
+    // (ex.: duas compras do mesmo insumo recebidas quase ao mesmo tempo, ou esta mesma compra
+    // tendo 2 itens do mesmo insumo), isso deixava o extrato de auditoria incoerente com o saldo
+    // real (saldo real certo, histórico mentindo) — achado de auditoria, 2026-11. Cada item é
+    // processado em sequência dentro da MESMA transação, usando o `estoqueAtual` que o próprio
+    // `update` com `increment` devolve (já atômico e consistente) para gravar o `StockMovement`
+    // correspondente — nunca o valor lido em `existing.items` antes da transação.
+    await prisma.$transaction(async (tx) => {
+      await tx.receiving.create({
         data: {
           purchaseId: existing.id,
           empresaId: existing.empresaId,
@@ -114,24 +124,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           dataFim: new Date(),
           observacao: body.observacao || "Recebimento confirmado a partir da tela de Compras.",
         },
-      }),
-      ...existing.items.map((item) =>
-        prisma.stockMovement.create({
-          data: {
-            ingredientId: item.ingredientId,
-            empresaId: existing.empresaId,
-            type: "ENTRADA",
-            quantidade: item.quantidade,
-            estoqueApos: item.ingredient.estoqueAtual + item.quantidade,
-            motivo: `Compra NF ${existing.numeroNota ?? existing.id.slice(0, 8)} — ${existing.supplier.nomeFantasia ?? existing.supplier.razaoSocial}`,
-            origin: "COMPRA",
-            origem: existing.supplier.nomeFantasia ?? existing.supplier.razaoSocial,
-            createdById: session.user.id,
-          },
-        })
-      ),
-      ...existing.items.map((item) =>
-        prisma.ingredient.update({
+      });
+
+      for (const item of existing.items) {
+        const updatedIngredient = await tx.ingredient.update({
           where: { id: item.ingredientId },
           data: {
             estoqueAtual: { increment: item.quantidade },
@@ -139,25 +135,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             lastPurchaseDate: new Date(),
             ...(item.valorUnitario !== item.ingredient.precoAtual ? { priceHistory: { create: { price: item.valorUnitario } } } : {}),
           },
-        })
-      ),
-      // Este fluxo ("Marcar recebido" na tela de Compras) não tem conferência item a item — é
-      // "confirma tudo exatamente como foi pedido" (por isso o StockMovement acima já usa
-      // `item.quantidade` direto, sem nenhum mapa de quantidades recebidas vindo do body). Por
-      // isso, diferente de POST /api/estoque/recebimento e do link público de recebimento
-      // (responder/[token]/finalizar), aqui `quantidadeRecebida` só pode ser a quantidade PEDIDA —
-      // é o único dado disponível nesta tela. Sem isso, o relatório "Gasto por Insumo"
-      // (computeGastoPorInsumoRows, src/lib/recebimento-server.ts) ficava com `quantidadeRecebida`
-      // nula pra toda compra confirmada por este botão, caindo no fallback (mesmo valor, só que por
-      // acidente em vez de por gravação explícita) — grava explícito aqui pra não depender do
-      // fallback nesse caso, que é o normal (não uma exceção do histórico antigo).
-      ...existing.items.map((item) =>
-        prisma.purchaseItem.update({
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            ingredientId: item.ingredientId,
+            empresaId: existing.empresaId,
+            type: "ENTRADA",
+            quantidade: item.quantidade,
+            estoqueApos: updatedIngredient.estoqueAtual,
+            motivo: `Compra NF ${existing.numeroNota ?? existing.id.slice(0, 8)} — ${existing.supplier.nomeFantasia ?? existing.supplier.razaoSocial}`,
+            origin: "COMPRA",
+            origem: existing.supplier.nomeFantasia ?? existing.supplier.razaoSocial,
+            createdById: session.user.id,
+          },
+        });
+
+        // Este fluxo ("Marcar recebido" na tela de Compras) não tem conferência item a item — é
+        // "confirma tudo exatamente como foi pedido" (por isso o StockMovement acima já usa
+        // `item.quantidade` direto, sem nenhum mapa de quantidades recebidas vindo do body). Por
+        // isso, diferente de POST /api/estoque/recebimento e do link público de recebimento
+        // (responder/[token]/finalizar), aqui `quantidadeRecebida` só pode ser a quantidade PEDIDA —
+        // é o único dado disponível nesta tela. Sem isso, o relatório "Gasto por Insumo"
+        // (computeGastoPorInsumoRows, src/lib/recebimento-server.ts) ficava com `quantidadeRecebida`
+        // nula pra toda compra confirmada por este botão, caindo no fallback (mesmo valor, só que por
+        // acidente em vez de por gravação explícita) — grava explícito aqui pra não depender do
+        // fallback nesse caso, que é o normal (não uma exceção do histórico antigo).
+        await tx.purchaseItem.update({
           where: { id: item.id },
           data: { quantidadeRecebida: item.quantidade },
-        })
-      ),
-    ]);
+        });
+      }
+    }, ESTOQUE_TX_OPTIONS);
 
     await logPurchaseEvent({
       purchaseId: existing.id,
