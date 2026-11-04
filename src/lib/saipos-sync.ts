@@ -243,8 +243,25 @@ function startOfDayUtc(date: Date): Date {
 
 /**
  * Recalcula o lançamento diário (SalesEntry) de cada dia do intervalo a
- * partir das vendas da Saipos já salvas, substituindo o lançamento manual
- * do dia (se houver) por um lançamento com origem "SAIPOS".
+ * partir das vendas da Saipos já salvas, substituindo o lançamento do dia
+ * (se houver) por um lançamento com origem "SAIPOS" — EXCETO quando o
+ * lançamento existente está marcado como `source: MANUAL`.
+ *
+ * Achado (Nina, auditoria geral): antes desta checagem, toda sincronização
+ * recalculava e sobrescrevia o dia inteiro (faturamento/pedidos) mesmo
+ * quando um gestor tinha corrigido manualmente o lançamento daquele dia —
+ * a correção "sumia" silenciosamente na próxima sincronização. Mesmo
+ * cuidado que já existe em `syncMarketingEntryFromMetaAds`
+ * (src/lib/meta-ads-sync.ts, achado #173) para o lançamento mensal de
+ * Tráfego Pago. Diferente daquele caso (que preserva só 2 dos vários
+ * campos do lançamento), aqui TODOS os campos que esta função grava
+ * (faturamento/pedidos) são exatamente os campos que um lançamento manual
+ * de `SalesEntry` também preenche — por isso, quando `source === MANUAL`,
+ * o dia é pulado por completo, em vez de mesclar campo a campo.
+ * `PATCH /api/vendas/[id]` (src/app/api/vendas/[id]/route.ts) marca o
+ * lançamento como MANUAL sempre que um desses campos é editado à mão
+ * (mesmo padrão de `PATCH /api/marketing/[id]`), e o sync passa a
+ * respeitar essa marcação.
  */
 async function syncSalesEntriesFromSaipos(empresaId: string, range: { start: Date; end: Date }) {
   const sales = await prisma.saiposSale.findMany({
@@ -262,6 +279,13 @@ async function syncSalesEntriesFromSaipos(empresaId: string, range: { start: Dat
 
   for (const [dayKey, daySales] of byDay) {
     const day = new Date(dayKey);
+
+    const existing = await prisma.salesEntry.findFirst({
+      where: { empresaId, date: day, periodType: "DIARIO" },
+      select: { id: true, source: true },
+    });
+    if (existing?.source === "MANUAL") continue;
+
     const faturamentoDelivery = daySales.filter((s) => s.channel === "DELIVERY").reduce((sum, s) => sum + s.valorTotal, 0);
     const faturamentoSalao = daySales.filter((s) => s.channel !== "DELIVERY").reduce((sum, s) => sum + s.valorTotal, 0);
     const pedidosDelivery = daySales.filter((s) => s.channel === "DELIVERY").length;
@@ -277,11 +301,6 @@ async function syncSalesEntriesFromSaipos(empresaId: string, range: { start: Dat
       source: "SAIPOS" as const,
       createdById: null,
     };
-
-    const existing = await prisma.salesEntry.findFirst({
-      where: { empresaId, date: day, periodType: "DIARIO" },
-      select: { id: true },
-    });
 
     if (existing) {
       await prisma.salesEntry.update({ where: { id: existing.id }, data });

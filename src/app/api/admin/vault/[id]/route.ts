@@ -23,7 +23,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     data: { vaultEntryId: id, userId: session.user.id, action },
   });
 
-  return NextResponse.json({ password: decryptSecret(entry.passwordCipher) });
+  // `decryptSecret` lança quando o ciphertext salvo está corrompido/em formato inválido (ex.:
+  // GCM com tag de autenticação alterada) — sem este try/catch, isso derrubava a rota com um
+  // 500 cru. Mensagem genérica (sem detalhe interno) de propósito: é um erro de dado salvo, não
+  // algo que o usuário possa corrigir sozinho reenviando a requisição.
+  try {
+    return NextResponse.json({ password: decryptSecret(entry.passwordCipher) });
+  } catch {
+    return NextResponse.json(
+      { error: "Não foi possível decifrar a senha salva. Edite este registro e cadastre a senha novamente." },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
