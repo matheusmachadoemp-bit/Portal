@@ -22,21 +22,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
+  // Campos que `syncSalesEntriesFromSaipos` (src/lib/saipos-sync.ts) recalcula/sobrescreve a
+  // cada sincronização — os mesmos que precisam marcar o lançamento como MANUAL quando
+  // corrigidos à mão, para não serem silenciosamente perdidos na próxima sincronização
+  // (achado da Nina — mesmo padrão já usado em `PATCH /api/marketing/[id]` para
+  // investimento/receita de Tráfego Pago).
+  const SAIPOS_SYNCED_FIELDS = [
+    "faturamentoDelivery",
+    "faturamentoSalao",
+    "pedidosDelivery",
+    "pedidosBalcao",
+    "pedidosSalao",
+  ] as const;
+
+  const data: Record<string, unknown> = {
+    date: body.date ? new Date(body.date) : undefined,
+    periodType: body.periodType ?? undefined,
+    faturamentoDelivery: body.faturamentoDelivery !== undefined ? Number(body.faturamentoDelivery) : undefined,
+    faturamentoSalao: body.faturamentoSalao !== undefined ? Number(body.faturamentoSalao) : undefined,
+    pedidosDelivery: body.pedidosDelivery !== undefined ? Number(body.pedidosDelivery) : undefined,
+    pedidosBalcao: body.pedidosBalcao !== undefined ? Number(body.pedidosBalcao) : undefined,
+    pedidosSalao: body.pedidosSalao !== undefined ? Number(body.pedidosSalao) : undefined,
+    mesasAtendidas: body.mesasAtendidas !== undefined ? Number(body.mesasAtendidas) : undefined,
+    taxaServicoValor: body.taxaServicoValor !== undefined ? Number(body.taxaServicoValor) : undefined,
+    metaDiaria: body.metaDiaria !== undefined ? Number(body.metaDiaria) : undefined,
+    observacoes: body.observacoes ?? undefined,
+  };
+
+  // Compara o valor FINAL já calculado em `data` (não só a presença da chave no body) contra o
+  // valor atual do registro — mesmo cuidado de `PATCH /api/marketing/[id]`: o formulário da
+  // tela normalmente reenvia todos os campos, mesmo quando o gestor só editou "Observações" ou
+  // outro campo qualquer; checar só `!== undefined` marcaria MANUAL (e passaria a bloquear a
+  // sincronização automática) mesmo sem nenhum campo financeiro ter sido de fato alterado.
+  const algumCampoSincronizadoMudou = SAIPOS_SYNCED_FIELDS.some(
+    (f) => data[f] !== undefined && data[f] !== before[f]
+  );
+  if (algumCampoSincronizadoMudou) {
+    data.source = "MANUAL";
+  }
+
   const entry = await prisma.salesEntry.update({
     where: { id },
-    data: {
-      date: body.date ? new Date(body.date) : undefined,
-      periodType: body.periodType ?? undefined,
-      faturamentoDelivery: body.faturamentoDelivery !== undefined ? Number(body.faturamentoDelivery) : undefined,
-      faturamentoSalao: body.faturamentoSalao !== undefined ? Number(body.faturamentoSalao) : undefined,
-      pedidosDelivery: body.pedidosDelivery !== undefined ? Number(body.pedidosDelivery) : undefined,
-      pedidosBalcao: body.pedidosBalcao !== undefined ? Number(body.pedidosBalcao) : undefined,
-      pedidosSalao: body.pedidosSalao !== undefined ? Number(body.pedidosSalao) : undefined,
-      mesasAtendidas: body.mesasAtendidas !== undefined ? Number(body.mesasAtendidas) : undefined,
-      taxaServicoValor: body.taxaServicoValor !== undefined ? Number(body.taxaServicoValor) : undefined,
-      metaDiaria: body.metaDiaria !== undefined ? Number(body.metaDiaria) : undefined,
-      observacoes: body.observacoes ?? undefined,
-    },
+    data,
   });
 
   await prisma.auditLog.create({
