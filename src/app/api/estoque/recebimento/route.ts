@@ -10,7 +10,7 @@ import {
   notifyReceivingDivergence,
   resolveRecebimentoDashboardRange,
 } from "@/lib/recebimento-server";
-import { RECEIVING_DIVERGENCE_LABEL } from "@/lib/estoque";
+import { ESTOQUE_TX_OPTIONS, RECEIVING_DIVERGENCE_LABEL } from "@/lib/estoque";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import type { RollingPeriodKey } from "@/lib/periods";
 
@@ -131,8 +131,15 @@ export async function POST(req: Request) {
   const houveDivergencia = ["APROVADO_RESSALVA", "RECEBIDO_PARCIAL", "RECUSADO", "AGUARDANDO_SOLUCAO"].includes(status);
   const gerarMovimentos = status === "APROVADO" || status === "APROVADO_RESSALVA" || status === "RECEBIDO_PARCIAL";
 
-  const [receiving] = await prisma.$transaction([
-    prisma.receiving.create({
+  // Transação interativa (não em lote): mesma correção de POST /api/estoque/compras/[id]
+  // ("Marcar recebido" na tela de Compras) — o saldo real (`Ingredient.estoqueAtual`) já era
+  // gravado com `increment` atômico, mas `StockMovement.estoqueApos` era calculado a partir de
+  // `item.ingredient.estoqueAtual` lido ANTES da transação, deixando o extrato de auditoria
+  // incoerente sob concorrência (achado de auditoria, 2026-11). Processa cada item em sequência
+  // dentro da MESMA transação, usando o `estoqueAtual` que o próprio `update` com `increment`
+  // devolve para gravar o `StockMovement`.
+  const receiving = await prisma.$transaction(async (tx) => {
+    const created = await tx.receiving.create({
       data: {
         purchaseId: purchase.id,
         empresaId: purchase.empresaId,
@@ -152,45 +159,50 @@ export async function POST(req: Request) {
         fotoNotaUrl: body.fotoNotaUrl || null,
         observacao: body.observacao || null,
       },
-    }),
-    prisma.purchase.update({
+    });
+
+    await tx.purchase.update({
       where: { id: purchase.id },
       data: { status: status === "RECUSADO" ? "DIVERGENCIA" : status === "RECEBIDO_PARCIAL" ? "RECEBIDO_PARCIAL" : "RECEBIDO" },
-    }),
-    ...(gerarMovimentos
-      ? purchase.items.flatMap((item) => {
-          const quantidadeRecebida = body.quantidadesRecebidas?.[item.id] !== undefined ? Number(body.quantidadesRecebidas[item.id]) : item.quantidade;
-          return [
-            prisma.stockMovement.create({
-              data: {
-                ingredientId: item.ingredientId,
-                empresaId: purchase.empresaId,
-                type: "ENTRADA",
-                quantidade: quantidadeRecebida,
-                estoqueApos: item.ingredient.estoqueAtual + quantidadeRecebida,
-                motivo: `Recebimento NF ${purchase.numeroNota ?? purchase.id.slice(0, 8)} — ${purchase.supplier.nomeFantasia ?? purchase.supplier.razaoSocial}`,
-                origin: "COMPRA",
-                origem: purchase.supplier.nomeFantasia ?? purchase.supplier.razaoSocial,
-                autorizadoPor: body.responsavel || session.user.name || null,
-                createdById: session.user.id,
-              },
-            }),
-            prisma.ingredient.update({
-              where: { id: item.ingredientId },
-              data: { estoqueAtual: { increment: quantidadeRecebida }, precoAtual: item.valorUnitario, lastPurchaseDate: new Date() },
-            }),
-            // Grava a quantidade que REALMENTE chegou no próprio PurchaseItem — sem isso, o
-            // relatório "Gasto por Insumo" (computeGastoPorInsumoRows, src/lib/recebimento-server.ts)
-            // não tem como saber depois quanto foi recebido de fato num recebimento parcial (só
-            // teria a quantidade PEDIDA). Mesmo valor já usado acima pro StockMovement.
-            prisma.purchaseItem.update({
-              where: { id: item.id },
-              data: { quantidadeRecebida },
-            }),
-          ];
-        })
-      : []),
-  ]);
+    });
+
+    if (gerarMovimentos) {
+      for (const item of purchase.items) {
+        const quantidadeRecebida = body.quantidadesRecebidas?.[item.id] !== undefined ? Number(body.quantidadesRecebidas[item.id]) : item.quantidade;
+
+        const updatedIngredient = await tx.ingredient.update({
+          where: { id: item.ingredientId },
+          data: { estoqueAtual: { increment: quantidadeRecebida }, precoAtual: item.valorUnitario, lastPurchaseDate: new Date() },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            ingredientId: item.ingredientId,
+            empresaId: purchase.empresaId,
+            type: "ENTRADA",
+            quantidade: quantidadeRecebida,
+            estoqueApos: updatedIngredient.estoqueAtual,
+            motivo: `Recebimento NF ${purchase.numeroNota ?? purchase.id.slice(0, 8)} — ${purchase.supplier.nomeFantasia ?? purchase.supplier.razaoSocial}`,
+            origin: "COMPRA",
+            origem: purchase.supplier.nomeFantasia ?? purchase.supplier.razaoSocial,
+            autorizadoPor: body.responsavel || session.user.name || null,
+            createdById: session.user.id,
+          },
+        });
+
+        // Grava a quantidade que REALMENTE chegou no próprio PurchaseItem — sem isso, o
+        // relatório "Gasto por Insumo" (computeGastoPorInsumoRows, src/lib/recebimento-server.ts)
+        // não tem como saber depois quanto foi recebido de fato num recebimento parcial (só
+        // teria a quantidade PEDIDA). Mesmo valor já usado acima pro StockMovement.
+        await tx.purchaseItem.update({
+          where: { id: item.id },
+          data: { quantidadeRecebida },
+        });
+      }
+    }
+
+    return created;
+  }, ESTOQUE_TX_OPTIONS);
 
   await logPurchaseEvent({
     purchaseId: purchase.id,
