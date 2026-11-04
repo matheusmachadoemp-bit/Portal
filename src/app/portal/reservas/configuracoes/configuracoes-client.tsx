@@ -8,16 +8,27 @@ import { RESERVATION_WEEKDAY_LABEL, RESERVATION_WEEKDAYS } from "@/lib/reservas"
 
 type WeekdayHourDTO = { dayOfWeek: number; open: boolean; openTime: string; closeTime: string };
 type BlockedDateDTO = { id: string; date: string; reason: string | null; createdByName: string | null };
+/** 4 parâmetros avançados (tarefa #192) — já existiam em `ReservationSettings` (schema) e já
+ * eram lidos pelo motor de disponibilidade (`src/lib/reservas-disponibilidade.ts`), mas nunca
+ * tinham sido expostos nesta tela. */
+type AdvancedSettingsDTO = {
+  minAdvanceMinutes: number;
+  maxAdvanceDays: number;
+  specialGroupThreshold: number;
+  slotIntervalMinutes: number;
+};
 
 export function ConfiguracoesClient({
   weekdayHours: initialWeekdayHours,
   blockedDates: initialBlockedDates,
+  advancedSettings: initialAdvancedSettings,
   canManage,
   hasEmpresa,
   empresaKey,
 }: {
   weekdayHours: WeekdayHourDTO[];
   blockedDates: BlockedDateDTO[];
+  advancedSettings: AdvancedSettingsDTO;
   canManage: boolean;
   hasEmpresa: boolean;
   empresaKey: string | null;
@@ -37,6 +48,11 @@ export function ConfiguracoesClient({
   const [savingHours, setSavingHours] = useState(false);
   const [hoursError, setHoursError] = useState<string | null>(null);
   const [hoursSaved, setHoursSaved] = useState(false);
+
+  const [advancedSettings, setAdvancedSettings] = useState<AdvancedSettingsDTO>(initialAdvancedSettings);
+  const [savingAdvanced, setSavingAdvanced] = useState(false);
+  const [advancedError, setAdvancedError] = useState<string | null>(null);
+  const [advancedSaved, setAdvancedSaved] = useState(false);
 
   const [newDate, setNewDate] = useState("");
   const [newReason, setNewReason] = useState("");
@@ -103,6 +119,55 @@ export function ConfiguracoesClient({
       setHoursError("Não foi possível salvar os horários.");
     } finally {
       setSavingHours(false);
+    }
+  }
+
+  function updateAdvanced(patch: Partial<AdvancedSettingsDTO>) {
+    setAdvancedSettings((s) => ({ ...s, ...patch }));
+  }
+
+  async function salvarAvancado() {
+    setSavingAdvanced(true);
+    setAdvancedError(null);
+    setAdvancedSaved(false);
+    // Mesma faixa validada pela API (PUT /api/reservas/configuracoes) — confere aqui antes de
+    // gastar um round-trip ao servidor; a API continua sendo a fonte da verdade.
+    if (!Number.isInteger(advancedSettings.minAdvanceMinutes) || advancedSettings.minAdvanceMinutes < 0 || advancedSettings.minAdvanceMinutes > 1440) {
+      setAdvancedError("Antecedência mínima precisa ser um número inteiro entre 0 e 1440 minutos (24 horas).");
+      setSavingAdvanced(false);
+      return;
+    }
+    if (!Number.isInteger(advancedSettings.maxAdvanceDays) || advancedSettings.maxAdvanceDays < 1 || advancedSettings.maxAdvanceDays > 365) {
+      setAdvancedError("Prazo máximo de antecedência precisa ser um número inteiro entre 1 e 365 dias.");
+      setSavingAdvanced(false);
+      return;
+    }
+    if (!Number.isInteger(advancedSettings.specialGroupThreshold) || advancedSettings.specialGroupThreshold < 1 || advancedSettings.specialGroupThreshold > 100) {
+      setAdvancedError("Tamanho de grupo especial precisa ser um número inteiro entre 1 e 100 pessoas.");
+      setSavingAdvanced(false);
+      return;
+    }
+    if (!Number.isInteger(advancedSettings.slotIntervalMinutes) || advancedSettings.slotIntervalMinutes < 5 || advancedSettings.slotIntervalMinutes > 240) {
+      setAdvancedError("Intervalo entre horários precisa ser um número inteiro entre 5 e 240 minutos.");
+      setSavingAdvanced(false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/reservas/configuracoes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(advancedSettings),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setAdvancedError(data.error ?? "Não foi possível salvar as configurações avançadas.");
+        return;
+      }
+      setAdvancedSaved(true);
+    } catch {
+      setAdvancedError("Não foi possível salvar as configurações avançadas.");
+    } finally {
+      setSavingAdvanced(false);
     }
   }
 
@@ -245,6 +310,94 @@ export function ConfiguracoesClient({
           </button>
         )}
         {hoursSaved && !hoursError && <p className="text-xs text-nord-success mt-2">Horários salvos.</p>}
+      </Section>
+
+      <Section title="Configurações avançadas">
+        <FormError message={advancedError} />
+        {!canManage && <p className="text-xs text-nord-warning mb-3">Seu perfil de permissão só permite visualizar.</p>}
+        <div className="space-y-4">
+          <label className="block">
+            <span className="block text-sm text-white mb-0.5">Antecedência mínima (minutos)</span>
+            <span className="block text-xs text-nord-gray mb-1.5">
+              Quantos minutos antes do horário o cliente precisa reservar. Exemplo: 60 = não aceita reserva para menos
+              de 1h de antecedência. Valor entre 0 e 1440 (24 horas).
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={1440}
+              value={advancedSettings.minAdvanceMinutes}
+              disabled={!canManage}
+              onChange={(e) => updateAdvanced({ minAdvanceMinutes: Number(e.target.value) })}
+              aria-label="Antecedência mínima em minutos"
+              className="input w-full sm:w-40"
+            />
+          </label>
+
+          <label className="block">
+            <span className="block text-sm text-white mb-0.5">Prazo máximo de antecedência (dias)</span>
+            <span className="block text-xs text-nord-gray mb-1.5">
+              Até quantos dias no futuro o cliente pode reservar. Exemplo: 60 = reservas só até 60 dias à frente de
+              hoje. Valor entre 1 e 365.
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={advancedSettings.maxAdvanceDays}
+              disabled={!canManage}
+              onChange={(e) => updateAdvanced({ maxAdvanceDays: Number(e.target.value) })}
+              aria-label="Prazo máximo de antecedência em dias"
+              className="input w-full sm:w-40"
+            />
+          </label>
+
+          <label className="block">
+            <span className="block text-sm text-white mb-0.5">Grupo especial (pessoas)</span>
+            <span className="block text-xs text-nord-gray mb-1.5">
+              Reservas com MAIS pessoas do que esse número são marcadas como &quot;grupo especial&quot;. Exemplo: 10 =
+              reservas de 11 pessoas ou mais aparecem destacadas como grupo especial. Valor entre 1 e 100.
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={advancedSettings.specialGroupThreshold}
+              disabled={!canManage}
+              onChange={(e) => updateAdvanced({ specialGroupThreshold: Number(e.target.value) })}
+              aria-label="Tamanho de grupo especial em pessoas"
+              className="input w-full sm:w-40"
+            />
+          </label>
+
+          <label className="block">
+            <span className="block text-sm text-white mb-0.5">Intervalo entre horários (minutos)</span>
+            <span className="block text-xs text-nord-gray mb-1.5">
+              De quantos em quantos minutos aparecem os horários disponíveis para reserva. Exemplo: 30 = horários de
+              30 em 30 minutos (18:00, 18:30, 19:00...). Valor entre 5 e 240.
+            </span>
+            <input
+              type="number"
+              min={5}
+              max={240}
+              value={advancedSettings.slotIntervalMinutes}
+              disabled={!canManage}
+              onChange={(e) => updateAdvanced({ slotIntervalMinutes: Number(e.target.value) })}
+              aria-label="Intervalo entre horários em minutos"
+              className="input w-full sm:w-40"
+            />
+          </label>
+        </div>
+        {canManage && (
+          <button
+            onClick={salvarAvancado}
+            disabled={savingAdvanced}
+            className="mt-4 bg-nord-blue hover:bg-nord-blue-light disabled:opacity-50 text-white text-sm font-medium rounded-lg py-2.5 px-4"
+          >
+            {savingAdvanced ? "Salvando..." : "Salvar configurações avançadas"}
+          </button>
+        )}
+        {advancedSaved && !advancedError && <p className="text-xs text-nord-success mt-2">Configurações avançadas salvas.</p>}
       </Section>
 
       <Section title="Bloqueios de data (feriados e exceções)">
