@@ -479,20 +479,16 @@ export function ReservarClient({
           {confirmation.status === "CONFIRMADA" ? (
             <div>
               <p className="text-white text-lg font-semibold">Reserva confirmada!</p>
-              <p className="text-nord-gray text-sm mt-1">Guarde o código abaixo — ele identifica sua reserva.</p>
+              <p className="text-nord-gray text-sm mt-1">Te esperamos no horário combinado.</p>
             </div>
           ) : (
             <div>
-              <p className="text-white text-lg font-semibold">Solicitação enviada!</p>
+              <p className="text-white text-lg font-semibold">Recebemos sua solicitação de reserva!</p>
               <p className="text-nord-gray text-sm mt-1">
-                Aguarde a confirmação da loja — você receberá um e-mail quando ela for aprovada ou recusada. Guarde o código
-                abaixo — ele identifica sua reserva.
+                Em breve você vai receber um e-mail confirmando se a reserva foi aprovada.
               </p>
             </div>
           )}
-          <div className="bg-nord-panel border border-nord-border rounded-2xl px-6 py-3">
-            <span className="text-2xl font-bold tracking-[0.3em] text-white">{confirmation.confirmationCode}</span>
-          </div>
           <div className="bg-nord-panel border border-nord-border rounded-2xl p-4 text-sm text-left space-y-1.5 w-full max-w-xs">
             <p className="text-white capitalize">{selectedDateKey && formatDiaExtenso(selectedDateKey)}</p>
             <p className="text-nord-gray">Horário: {selectedTime}</p>
