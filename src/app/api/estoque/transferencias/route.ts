@@ -94,5 +94,16 @@ export async function POST(req: Request) {
     include: { items: { include: { ingredient: true } }, origemEmpresa: true, destinoEmpresa: true },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: transfer.origemEmpresaId,
+      action: "CREATE",
+      entityType: "Transfer",
+      entityId: transfer.id,
+      after: JSON.stringify({ origemEmpresaId: transfer.origemEmpresaId, destinoEmpresaId: transfer.destinoEmpresaId, status: transfer.status, itens: transfer.items.length }),
+    },
+  });
+
   return NextResponse.json({ transfer });
 }

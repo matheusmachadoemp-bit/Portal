@@ -102,5 +102,16 @@ export async function POST(req: Request) {
     include: { items: { include: { ingredient: true } } },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: count.empresaId,
+      action: "CREATE",
+      entityType: "StockCount",
+      entityId: count.id,
+      after: JSON.stringify({ type: count.type, setor: count.setor, status: count.status, itens: count.items.length }),
+    },
+  });
+
   return NextResponse.json({ count });
 }

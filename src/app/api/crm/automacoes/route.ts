@@ -58,5 +58,18 @@ export async function POST(req: Request) {
     },
   });
 
+  // Mesmo padrão genérico de AuditLog já usado em Vendas/Financeiro/Marketing/Universidade (ver
+  // CLAUDE.md) — faltava em CRM/Estoque (achado do Jonas, 2026-11).
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: automacao.empresaId,
+      action: "CREATE",
+      entityType: "Automation",
+      entityId: automacao.id,
+      after: JSON.stringify(automacao),
+    },
+  });
+
   return NextResponse.json({ automacao });
 }

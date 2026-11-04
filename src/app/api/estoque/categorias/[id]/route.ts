@@ -38,6 +38,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       active: body.active !== undefined ? !!body.active : undefined,
     },
   });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "UPDATE",
+      entityType: "StockCategory",
+      entityId: id,
+      before: JSON.stringify(existing),
+      after: JSON.stringify(category),
+    },
+  });
+
   return NextResponse.json({ category });
 }
 
@@ -66,5 +79,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Existem produtos vinculados a esta categoria. Remova o vínculo antes de excluir." }, { status: 400 });
   }
   await prisma.stockCategory.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "DELETE",
+      entityType: "StockCategory",
+      entityId: id,
+      before: JSON.stringify(existing),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

@@ -30,5 +30,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: resposta.empresaId,
+      action: "UPDATE",
+      entityType: "NpsResponse",
+      entityId: id,
+      before: JSON.stringify(resposta),
+      after: JSON.stringify(updated),
+    },
+  });
+
   return NextResponse.json({ resposta: updated });
 }

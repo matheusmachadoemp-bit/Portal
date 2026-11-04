@@ -264,6 +264,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     include: { items: { include: { ingredient: true } } },
   });
 
+  // Só registra no AuditLog transição de status (abrir/concluir/aprovar/reabrir) ou edição dos
+  // metadados (setor/responsável) — não a cada item contado isoladamente: a tela salva 1 item por
+  // vez conforme o usuário digita (`salvarItem`, contagem-mensal-client.tsx/contagem-semanal-
+  // client.tsx), e uma contagem mensal cobre facilmente centenas de insumos — logar cada uma
+  // inundaria o AuditLog sem agregar valor de auditoria (o resultado final já fica registrado em
+  // `StockMovement` na aprovação, com `createdById`/`autorizadoPor`).
+  if (novoStatus !== undefined || body.setor !== undefined || body.responsavel !== undefined) {
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        empresaId: existing.empresaId,
+        action: "UPDATE",
+        entityType: "StockCount",
+        entityId: id,
+        before: JSON.stringify({ status: existing.status, setor: existing.setor, responsavel: existing.responsavel }),
+        after: JSON.stringify({ status: count.status, setor: count.setor, responsavel: count.responsavel, aprovadoPor: count.aprovadoPor, motivoReabertura: count.motivoReabertura }),
+      },
+    });
+  }
+
   return NextResponse.json({ count });
 }
 
@@ -312,5 +332,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // onDelete: Cascade em StockCountItem.count — os itens somem junto, sem precisar de uma
   // segunda chamada.
   await prisma.stockCount.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "DELETE",
+      entityType: "StockCount",
+      entityId: id,
+      before: JSON.stringify(existing),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

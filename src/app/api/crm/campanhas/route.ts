@@ -88,5 +88,16 @@ export async function POST(req: Request) {
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: campanha.empresaId,
+      action: "CREATE",
+      entityType: "Campaign",
+      entityId: campanha.id,
+      after: JSON.stringify(campanha),
+    },
+  });
+
   return NextResponse.json({ campanha });
 }

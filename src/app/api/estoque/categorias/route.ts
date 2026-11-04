@@ -71,5 +71,17 @@ export async function POST(req: Request) {
       order: (maxOrder._max.order ?? 0) + 1,
     },
   });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: category.empresaId,
+      action: "CREATE",
+      entityType: "StockCategory",
+      entityId: category.id,
+      after: JSON.stringify(category),
+    },
+  });
+
   return NextResponse.json({ category });
 }

@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import { authConfig } from "@/auth.config";
+import { isValidCronSecret } from "@/lib/cron-auth";
 
 const { auth } = NextAuth(authConfig);
 
@@ -29,15 +30,18 @@ const PUBLIC_PATHS = [
 // estiver definida.
 const PUBLIC_EXACT_PATHS = ["/api/financeiro/conciliacao/sync"];
 
-export default auth((req) => {
+export default auth(async (req) => {
   const { pathname } = req.nextUrl;
 
   // Disparos do Vercel Cron (ex.: sincronizações, cobrança automática do
   // Checklist) chegam sem sessão de usuário — cada rota valida o próprio
   // CRON_SECRET, então deixamos passar aqui para não redirecioná-los ao
-  // /login antes de chegarem no handler.
-  const isCronRequest =
-    !!process.env.CRON_SECRET && req.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
+  // /login antes de chegarem no handler. Comparação timing-safe (ver
+  // src/lib/cron-auth.ts) — igual à validação feita dentro de cada rota de cron.
+  // `await` necessário: a função usa a Web Crypto API (`crypto.subtle`, assíncrona por natureza)
+  // em vez de `node:crypto` de propósito — este middleware roda no runtime Edge por padrão (ver
+  // comentário em cron-auth.ts), que não suporta `node:crypto`.
+  const isCronRequest = await isValidCronSecret(req.headers.get("authorization"));
 
   const isPublic =
     isCronRequest ||

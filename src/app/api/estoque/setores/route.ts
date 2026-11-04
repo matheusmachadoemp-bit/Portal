@@ -58,6 +58,18 @@ export async function POST(req: Request) {
     const sector = await prisma.stockSector.create({
       data: { empresaId: empresa.id, name, order: (maxOrder._max.order ?? 0) + 1 },
     });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        empresaId: sector.empresaId,
+        action: "CREATE",
+        entityType: "StockSector",
+        entityId: sector.id,
+        after: JSON.stringify(sector),
+      },
+    });
+
     return NextResponse.json({ sector });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "name") ?? true)) {

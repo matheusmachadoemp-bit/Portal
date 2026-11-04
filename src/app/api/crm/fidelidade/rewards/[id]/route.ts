@@ -26,6 +26,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where: { id },
     data: { ativo: body.ativo !== undefined ? !!body.ativo : undefined },
   });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: reward.empresaId,
+      action: "UPDATE",
+      entityType: "LoyaltyReward",
+      entityId: id,
+      before: JSON.stringify(reward),
+      after: JSON.stringify(updated),
+    },
+  });
+
   return NextResponse.json({ reward: updated });
 }
 
@@ -47,5 +60,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.loyaltyReward.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: reward.empresaId,
+      action: "DELETE",
+      entityType: "LoyaltyReward",
+      entityId: id,
+      before: JSON.stringify(reward),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }

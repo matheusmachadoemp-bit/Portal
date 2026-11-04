@@ -41,5 +41,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("cidade" in body) data.cidade = body.cidade || null;
 
   const updated = await prisma.cliente.update({ where: { id }, data });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: cliente.empresaId,
+      action: "UPDATE",
+      entityType: "Cliente",
+      entityId: id,
+      before: JSON.stringify(cliente),
+      after: JSON.stringify(updated),
+    },
+  });
+
   return NextResponse.json({ cliente: updated });
 }

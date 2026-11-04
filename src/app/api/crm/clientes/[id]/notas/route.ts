@@ -36,5 +36,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     include: { author: { select: { name: true } } },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: cliente.empresaId,
+      action: "CREATE",
+      entityType: "CustomerNote",
+      entityId: nota.id,
+      after: JSON.stringify({ clienteId: nota.clienteId, texto: nota.texto }),
+    },
+  });
+
   return NextResponse.json({ nota });
 }

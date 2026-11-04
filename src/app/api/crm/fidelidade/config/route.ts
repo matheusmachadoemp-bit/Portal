@@ -26,10 +26,24 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Informe um valor válido de pontos por real." }, { status: 400 });
   }
 
+  const before = await prisma.loyaltyConfig.findUnique({ where: { empresaId: empresa.id } });
+
   const config = await prisma.loyaltyConfig.upsert({
     where: { empresaId: empresa.id },
     update: { pontosPorReal },
     create: { empresaId: empresa.id, pontosPorReal },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: empresa.id,
+      action: before ? "UPDATE" : "CREATE",
+      entityType: "LoyaltyConfig",
+      entityId: config.id,
+      before: before ? JSON.stringify(before) : null,
+      after: JSON.stringify(config),
+    },
   });
 
   return NextResponse.json({ config });

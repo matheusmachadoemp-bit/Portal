@@ -457,7 +457,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // A escrita em si já foi feita pela guarda no início (`tx.transfer.updateMany`) — aqui só
       // relê a linha para devolver no response, igual ao que `tx.transfer.update(...)` devolvia
       // antes (sem includes, só os campos escalares).
-      return tx.transfer.findUniqueOrThrow({ where: { id } });
+      const updated = await tx.transfer.findUniqueOrThrow({ where: { id } });
+
+      // Dentro da MESMA transação (mesmo padrão de src/app/api/financeiro/pagar/[id]/route.ts) —
+      // se o lançamento de estoque falhar e a transação for revertida (ou a guarda contra duplo
+      // clique acima já tiver lançado `TransferStatusConflictError`, nem chegando até aqui), o
+      // registro de auditoria reverte/nunca é criado junto, em vez de gravar uma mudança que nunca
+      // aconteceu de fato. Só loga quando o status de fato muda (não a cada edição de metadado
+      // como `observacao`) — mesmo critério de antes da guarda contra duplo clique.
+      if (novoStatus !== undefined) {
+        await tx.auditLog.create({
+          data: {
+            userId: session.user.id,
+            empresaId: existing.origemEmpresaId,
+            action: "UPDATE",
+            entityType: "Transfer",
+            entityId: id,
+            before: JSON.stringify({ status: existing.status }),
+            after: JSON.stringify({ status: updated.status, responsavelRecebimento: updated.responsavelRecebimento }),
+          },
+        });
+      }
+
+      return updated;
     }, ESTOQUE_TX_OPTIONS);
   } catch (error) {
     if (error instanceof TransferStatusConflictError) {

@@ -39,6 +39,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         active: body.active !== undefined ? !!body.active : undefined,
       },
     });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        empresaId: existing.empresaId,
+        action: "UPDATE",
+        entityType: "StockSector",
+        entityId: id,
+        before: JSON.stringify(existing),
+        after: JSON.stringify(sector),
+      },
+    });
+
     return NextResponse.json({ sector });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && (p2002ConstraintIncludes(e, "name") ?? true)) {
@@ -73,5 +86,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   await prisma.stockSector.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      empresaId: existing.empresaId,
+      action: "DELETE",
+      entityType: "StockSector",
+      entityId: id,
+      before: JSON.stringify(existing),
+    },
+  });
+
   return NextResponse.json({ ok: true });
 }
