@@ -26,6 +26,28 @@ export function normalizeTelefoneDedupe(raw: string): string {
   return digits;
 }
 
+/** Normaliza e-mail pra fins de dedupe (fallback de `/api/crm/clientes/import` quando a linha não
+ *  tem telefone — ver task #14): mesmo padrão de `.toLowerCase().trim()` já usado em login/cadastro
+ *  de usuário (`auth.ts`, `usuarios/route.ts`). */
+export function normalizeEmailDedupe(raw: string): string {
+  return raw.toLowerCase().trim();
+}
+
+/** Normaliza nome pra fins de dedupe (fallback de `/api/crm/clientes/import` quando a linha não tem
+ *  telefone nem e-mail — ver task #14): remove acentos, baixa caixa e colapsa espaços, mesmo padrão
+ *  de `findSupplier`/`norm` em `contas-pagar-client.tsx`. Usado só para SINALIZAR uma possível
+ *  duplicata (nunca pra fundir/atualizar automaticamente — nome sozinho não é um identificador forte
+ *  o bastante: duas pessoas diferentes podem ter o mesmo nome).
+ */
+export function normalizeNomeDedupe(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export type CrmPeriodKey =
   | "hoje"
   | "ontem"

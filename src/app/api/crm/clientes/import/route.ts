@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
-import { normalizeTelefoneDedupe } from "@/lib/crm";
+import { normalizeTelefoneDedupe, normalizeEmailDedupe, normalizeNomeDedupe } from "@/lib/crm";
 
 // No plano Vercel Pro o teto real é de pelo menos 800s, sem precisar habilitar
 // nada em beta (bem acima do teto efetivo de 60s do plano Hobby anterior, que
@@ -264,18 +264,68 @@ export async function POST(req: Request) {
 
   const existingClientes = await prisma.cliente.findMany({
     where: { empresaId: empresa.id },
-    select: { id: true, telefone: true },
+    select: { id: true, telefone: true, email: true, nome: true },
   });
   const byTelefone = new Map(
     existingClientes.filter((c) => c.telefone).map((c) => [normalizeTelefoneDedupe(c.telefone!), c])
   );
+  // Fallback de dedup quando a linha não tem telefone (ver task #14 — sem isso, reimportar a mesma
+  // planilha sem telefone criava um cliente novo a cada vez): tenta por e-mail (identificador forte
+  // o bastante pra atualizar direto); a primeira ocorrência cadastrada "vence" em caso de e-mail
+  // duplicado entre clientes já existentes (cenário que não deveria ocorrer na prática).
+  const byEmail = new Map<string, (typeof existingClientes)[number]>();
+  for (const c of existingClientes) {
+    if (!c.email) continue;
+    const key = normalizeEmailDedupe(c.email);
+    if (!byEmail.has(key)) byEmail.set(key, c);
+  }
+  // Nome sozinho NÃO é identificador forte (duas pessoas diferentes podem ter o mesmo nome) — nunca
+  // funde/atualiza automaticamente por nome, só sinaliza como "possível duplicata" no resultado.
+  const byNome = new Map<string, (typeof existingClientes)[number][]>();
+  for (const c of existingClientes) {
+    const key = normalizeNomeDedupe(c.nome);
+    const list = byNome.get(key);
+    if (list) list.push(c);
+    else byNome.set(key, [c]);
+  }
 
-  const toCreate = parsed.filter((r) => !(r.telefone && byTelefone.has(r.telefone)));
-  const toUpdate = parsed.filter((r) => r.telefone && byTelefone.has(r.telefone));
+  const classified = parsed.map((r) => {
+    if (r.telefone) {
+      const cliente = byTelefone.get(r.telefone);
+      return { ...r, matchClienteId: cliente?.id ?? null, possibleDuplicateNome: false };
+    }
+    if (r.email) {
+      const cliente = byEmail.get(normalizeEmailDedupe(r.email));
+      return { ...r, matchClienteId: cliente?.id ?? null, possibleDuplicateNome: false };
+    }
+    const candidatos = byNome.get(normalizeNomeDedupe(r.nome)) ?? [];
+    return { ...r, matchClienteId: null as string | null, possibleDuplicateNome: candidatos.length > 0 };
+  });
 
-  // Cria todos os clientes novos de uma vez (uma linha sem telefone sempre
-  // cria; com telefone repetido dentro do próprio arquivo, skipDuplicates
-  // evita erro — só a primeira ocorrência entra).
+  // Dedup DENTRO do próprio arquivo por e-mail (achado do Teulis na revisão): entre as linhas sem
+  // match no banco (candidatas a CRIAR), mais de uma linha com o mesmo e-mail normalizado é o MESMO
+  // cliente — ex.: planilha "uma linha por pedido" sem telefone, identificada só por e-mail. Sem
+  // isso, cada linha criava um Cliente separado já na PRIMEIRA importação (não só ao reimportar),
+  // porque não há `@@unique` em `email` (só em `[empresaId, telefone]`) pro `skipDuplicates` do
+  // `createMany` abaixo proteger esse caso, do jeito que já protege telefone repetido. Mesmo
+  // princípio: a primeira ocorrência no arquivo "vence" e é quem cria o registro de verdade; as
+  // demais linhas com o mesmo e-mail não criam de novo — ficam religadas ao id dela via
+  // `clienteIdByEmail` no reload mais abaixo (mesmo caminho que já resolve telefone duplicado).
+  const seenEmailInFile = new Set<string>();
+  const toCreate = classified.filter((r) => {
+    if (r.matchClienteId) return false;
+    if (!r.email) return true;
+    const key = normalizeEmailDedupe(r.email);
+    if (seenEmailInFile.has(key)) return false;
+    seenEmailInFile.add(key);
+    return true;
+  });
+  const toUpdate = classified.filter((r) => r.matchClienteId);
+
+  // Cria todos os clientes novos de uma vez (uma linha sem telefone, e-mail e nome que batam com um
+  // cliente já cadastrado sempre cria; com telefone ou e-mail repetido dentro do próprio arquivo,
+  // só a primeira ocorrência entra — telefone via `skipDuplicates`/constraint do banco, e-mail via
+  // o filtro acima).
   if (toCreate.length > 0) {
     await prisma.cliente.createMany({
       data: toCreate.map((r) => ({
@@ -301,15 +351,23 @@ export async function POST(req: Request) {
   // já que createMany não retorna os registros criados.
   const allClientes = await prisma.cliente.findMany({
     where: { empresaId: empresa.id },
-    select: { id: true, telefone: true },
+    select: { id: true, telefone: true, email: true },
   });
   const clienteIdByTelefone = new Map(
     allClientes.filter((c) => c.telefone).map((c) => [normalizeTelefoneDedupe(c.telefone!), c.id])
   );
+  const clienteIdByEmail = new Map<string, string>();
+  for (const c of allClientes) {
+    if (!c.email) continue;
+    const key = normalizeEmailDedupe(c.email);
+    if (!clienteIdByEmail.has(key)) clienteIdByEmail.set(key, c.id);
+  }
 
   let updated = 0;
   await processInChunks(toUpdate, 15, async (r) => {
-    const clienteId = clienteIdByTelefone.get(r.telefone);
+    // `matchClienteId` já veio direto da classificação acima (por telefone ou e-mail) — não precisa
+    // esperar o reload, que só é necessário pra achar o id dos recém-CRIADOS (ver comPedido abaixo).
+    const clienteId = r.matchClienteId;
     if (!clienteId) return;
     await prisma.cliente.update({
       where: { id: clienteId },
@@ -334,9 +392,16 @@ export async function POST(req: Request) {
   // valor daquele pedido) viram histórico por pedido; não tenta cruzar com
   // linhas que só trazem totais agregados (tratadas acima, direto no
   // cliente).
-  const comPedido = parsed.filter((r) => r.numeroPedido || r.itens || r.valorPedido !== null);
+  const comPedido = classified.filter((r) => r.numeroPedido || r.itens || r.valorPedido !== null);
   await processInChunks(comPedido, 15, async (r) => {
-    const clienteId = r.telefone ? clienteIdByTelefone.get(r.telefone) : undefined;
+    // Linha de update: já tem o id (telefone ou e-mail). Linha de create: precisa do reload acima
+    // (telefone ou e-mail, o que a linha tiver) — linha sem telefone nem e-mail (match só por nome,
+    // ou nenhum match) não tem como ser ligada ao cliente recém-criado com um identificador único,
+    // igual já era antes desta mudança (que só cobria telefone).
+    const clienteId =
+      r.matchClienteId ??
+      (r.telefone ? clienteIdByTelefone.get(r.telefone) : undefined) ??
+      (r.email ? clienteIdByEmail.get(normalizeEmailDedupe(r.email)) : undefined);
     if (!clienteId) return;
     if (r.numeroPedido) {
       await prisma.clienteHistoricoImportado.upsert({
@@ -352,5 +417,11 @@ export async function POST(req: Request) {
   });
 
   const created = toCreate.length;
-  return NextResponse.json({ imported: created + updated, created, updated, errors });
+  // Linhas sem telefone e sem e-mail cujo nome exato já bate com um cliente cadastrado: nunca funde
+  // automaticamente (nome sozinho não é identificador forte — pode ser gente diferente), mas avisa
+  // no resultado pra o usuário conferir manualmente.
+  const possibleDuplicates = classified
+    .filter((r) => r.possibleDuplicateNome)
+    .map((r) => ({ line: r.line, nome: r.nome }));
+  return NextResponse.json({ imported: created + updated, created, updated, errors, possibleDuplicates });
 }

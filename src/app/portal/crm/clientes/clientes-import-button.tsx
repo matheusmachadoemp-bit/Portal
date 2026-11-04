@@ -15,6 +15,10 @@ export function ClientesImportButton({ canCreate = true }: { canCreate?: boolean
     created: number;
     updated: number;
     errors: string[];
+    /** Linhas sem telefone/e-mail cujo nome exato já bate com um cliente cadastrado — nunca fundidas
+     *  automaticamente (nome sozinho não é identificador forte o bastante), só sinalizadas aqui pra
+     *  o usuário conferir manualmente (ver `POST /api/crm/clientes/import`). */
+    possibleDuplicates: { line: number; nome: string }[];
   } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,7 +48,12 @@ export function ClientesImportButton({ canCreate = true }: { canCreate?: boolean
         setImportError(data.error ?? "Não foi possível importar o arquivo.");
         return;
       }
-      setImportResult({ created: data.created, updated: data.updated, errors: data.errors ?? [] });
+      setImportResult({
+        created: data.created,
+        updated: data.updated,
+        errors: data.errors ?? [],
+        possibleDuplicates: data.possibleDuplicates ?? [],
+      });
       setImportFile(null);
       if (importInputRef.current) importInputRef.current.value = "";
       router.refresh();
@@ -73,9 +82,12 @@ export function ClientesImportButton({ canCreate = true }: { canCreate?: boolean
           </p>
           <div className="bg-nord-panel border border-nord-border rounded-lg px-3 py-2 text-xs space-y-1.5">
             <p>
-              Clientes existentes são identificados pelo <span className="text-white">telefone</span>: se já houver
-              um cadastro com o mesmo telefone, ele é atualizado em vez de duplicado. Sem telefone, um novo cadastro
-              é sempre criado.
+              Clientes existentes são identificados, em ordem: pelo <span className="text-white">telefone</span>;
+              sem telefone, pelo <span className="text-white">e-mail</span> (sem diferenciar maiúsculas/minúsculas);
+              sem telefone nem e-mail, um cadastro novo é sempre criado — mas se já existir um cliente com o mesmo
+              nome, a importação avisa como “possível duplicata” pra você conferir à mão (nome sozinho nunca funde
+              automaticamente, já que duas pessoas diferentes podem ter o mesmo nome). Em todos os casos, achar uma
+              correspondência atualiza o cadastro em vez de duplicá-lo.
             </p>
             <p>
               Também aceita colunas de pedidos, em dois formatos: uma linha por pedido (Número do pedido, O que
@@ -110,6 +122,24 @@ export function ClientesImportButton({ canCreate = true }: { canCreate?: boolean
                     ))}
                   </ul>
                   {importResult.errors.length > 5 && <p>e mais {importResult.errors.length - 5}...</p>}
+                </div>
+              )}
+              {importResult.possibleDuplicates.length > 0 && (
+                <div className="text-nord-warning">
+                  <p>
+                    {importResult.possibleDuplicates.length} linha(s) sem telefone/e-mail com o mesmo nome de um
+                    cliente já cadastrado — não foram fundidas automaticamente, confira se não é duplicata:
+                  </p>
+                  <ul className="list-disc list-inside">
+                    {importResult.possibleDuplicates.slice(0, 5).map((d, i) => (
+                      <li key={i}>
+                        Linha {d.line}: {d.nome}
+                      </li>
+                    ))}
+                  </ul>
+                  {importResult.possibleDuplicates.length > 5 && (
+                    <p>e mais {importResult.possibleDuplicates.length - 5}...</p>
+                  )}
                 </div>
               )}
             </div>
