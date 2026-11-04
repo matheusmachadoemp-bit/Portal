@@ -6,7 +6,7 @@ import { hasModulePermission } from "@/lib/authz";
 import { logPurchaseEvent } from "@/lib/recebimento-server";
 import { parseDayInput } from "@/lib/timezone";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
-import { ESTOQUE_TX_OPTIONS, PURCHASE_PAYMENT_METHODS, RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
+import { ESTOQUE_TX_OPTIONS, lockIngredientPrice, PURCHASE_PAYMENT_METHODS, RECEBIMENTO_MANAGE_ROLES } from "@/lib/estoque";
 
 // Campos de cabeçalho que só podem ser editados enquanto a compra ainda não foi recebida — ver
 // bloqueio logo abaixo de `willReceive`. `status`, `numeroNota`, `notaFiscalUrl` e `observacoes`
@@ -53,7 +53,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existing = await prisma.purchase.findUnique({
     where: { id },
-    include: { items: { include: { ingredient: true } }, receiving: true, supplier: true },
+    // `items.ingredient` não é mais incluído aqui de propósito: a comparação de `precoAtual` que
+    // usava esse relacionamento (lido ANTES da transação) foi corrigida para reler/travar o valor
+    // mais recente de DENTRO da transação (`lockIngredientPrice`, bloco "Marcar recebido" abaixo) —
+    // manter o include aqui só buscaria um dado que nada mais no arquivo usa.
+    include: { items: true, receiving: true, supplier: true },
   });
   if (!existing) return NextResponse.json({ error: "Não encontrada." }, { status: 404 });
   if (!(await assertEmpresaAccess(session.user.id, session.user.role, existing.empresaId))) {
@@ -127,13 +131,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       });
 
       for (const item of existing.items) {
+        // `precoAtual` MAIS RECENTE, lido/travado (`FOR UPDATE`) de dentro desta mesma transação —
+        // não `item.ingredient.precoAtual`, que é o valor lido em `prisma.purchase.findUnique(...)`
+        // ANTES de abrir a transação e pode estar desatualizado sob concorrência. Mesmo princípio
+        // da correção de `estoqueApos` acima, aplicado à condição que decide criar `priceHistory`
+        // (achado de auditoria, 2026-11 — ver `lockIngredientPrice`, `@/lib/estoque`).
+        const precoAtualMaisRecente = await lockIngredientPrice(tx, item.ingredientId);
         const updatedIngredient = await tx.ingredient.update({
           where: { id: item.ingredientId },
           data: {
             estoqueAtual: { increment: item.quantidade },
             precoAtual: item.valorUnitario,
             lastPurchaseDate: new Date(),
-            ...(item.valorUnitario !== item.ingredient.precoAtual ? { priceHistory: { create: { price: item.valorUnitario } } } : {}),
+            ...(item.valorUnitario !== precoAtualMaisRecente ? { priceHistory: { create: { price: item.valorUnitario } } } : {}),
           },
         });
 

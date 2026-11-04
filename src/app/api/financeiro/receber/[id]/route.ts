@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { parseDayInput } from "@/lib/timezone";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { balanceDelta } from "@/lib/finance";
+import { balanceDelta, RECEIVABLE_PAYMENT_METHODS } from "@/lib/finance";
 import type { FinanceEntryStatus } from "@prisma/client";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
@@ -39,6 +39,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     : undefined;
   if (dataCompetencia === null || dataVencimento === null || (body.dataRecebimento && dataRecebimento === null)) {
     return NextResponse.json({ error: "Data inválida. Use o formato AAAA-MM-DD." }, { status: 400 });
+  }
+
+  // Lista curada de "receber de um cliente" (mesma validação do POST). `body.formaRecebimento ===
+  // existingCheck.formaRecebimento` também é aceito mesmo fora da lista atual, pelo mesmo motivo do
+  // PATCH de Contas a Pagar: reenviar sem mudança um valor legado (ex.: já gravado antes de a lista
+  // ganhar BOLETO/PAGO_ONLINE/FIADO/MUMBUCA) não deve falhar só por isso. Mesmo padrão de
+  // `/api/financeiro/pagar/[id]` (achado do Teulis, 2026-11).
+  if (
+    body.formaRecebimento &&
+    body.formaRecebimento !== existingCheck.formaRecebimento &&
+    !(RECEIVABLE_PAYMENT_METHODS as readonly string[]).includes(body.formaRecebimento)
+  ) {
+    return NextResponse.json({ error: "Forma de recebimento inválida." }, { status: 400 });
   }
 
   // FinancialCategory é cadastro global (sem empresaId), então basta existir — só valida quando
