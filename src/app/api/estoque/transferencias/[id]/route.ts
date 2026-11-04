@@ -4,7 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
-import type { TransferStatusValue } from "@/lib/estoque";
+import { lockIngredientStock, type TransferStatusValue } from "@/lib/estoque";
+
+// Folga para o banco "acordar" (Neon hiberna) e para quem estiver esperando o lock de linha de
+// outro débito/crédito concorrente no mesmo insumo (ver `lockIngredientStock`, @/lib/estoque) —
+// mesmo valor já usado em `ficha-autolink.ts`/`ficha-nome-server.ts`/`bank-sync-server.ts`/
+// `bank-reconciliation.ts`; o padrão do Prisma (2s de espera / 5s de duração) é apertado pra isso.
+const TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
 
 // Mesmo critério de normalização de nome usado em outras comparações do sistema (ex.
 // `src/app/api/vendas/importar-itens/route.ts`, `src/lib/saipos-mapper.ts`): remove acento,
@@ -92,233 +98,259 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  // Antes disso, cada item da transferência virava 2-3 operações (create do
-  // movimento, update do estoque do ingrediente, update da quantidade
-  // recebida) empilhadas num único array passado pra `prisma.$transaction(ops)`
-  // — a API de "sequential operations" do Prisma, que roda cada operação uma
-  // atrás da outra dentro de uma transação interativa com timeout padrão de
-  // 5s. Uma transferência pode incluir um número grande de ingredientes (até
-  // o catálogo inteiro da loja), e isso derrubaria a operação inteira sem
-  // nada aplicado (mesmo bug encontrado e corrigido em
-  // `syncEmpresaSaiposSales`, ver `src/lib/saipos-sync.ts`). Agora o número
-  // de operações dentro da transação é constante (no máximo 3), não importa
-  // quantos itens a transferência tenha.
-  const ops = [];
+  // Antes desta correção, cada item da transferência virava 2-3 operações (create do movimento,
+  // update do estoque do ingrediente, update da quantidade recebida) empilhadas num único array
+  // passado pra `prisma.$transaction(ops)` — a API de "sequential operations" do Prisma. O débito
+  // (lado ENVIADA) e o crédito (lado RECEBIDA) liam `estoqueAtual` de um snapshot carregado ANTES
+  // da transação (`item.ingredient.estoqueAtual`/`destinoIngredients` lido fora da transação) e
+  // calculavam o novo valor em JS a partir dele — duas transferências concorrentes tocando o
+  // MESMO insumo (como origem OU destino) podiam ler o mesmo valor "antigo" e uma gravar por cima
+  // da outra sem nunca ver o efeito dela (lost update; achado P0 de revisão de QA, 2026-11).
+  //
+  // Agora tudo roda dentro de UMA transação interativa (`prisma.$transaction(async (tx) => ...)`,
+  // com os `TX_OPTIONS` acima — o padrão do Prisma, 2s de espera/5s de duração, é apertado demais
+  // pra uma transferência grande + lock de linha) que relê o `estoqueAtual` mais recente de cada
+  // insumo envolvido via `lockIngredientStock` (`SELECT ... FOR UPDATE`, @/lib/estoque) DENTRO da
+  // transação, sempre ANTES de calcular o novo valor — nunca a partir do snapshot carregado fora
+  // dela. `lockIngredientStock` já trava sempre na mesma ordem (por id, ordenado) e com uma query
+  // por insumo, nunca uma só com `IN (...)`, pra duas transferências concorrentes em sentidos
+  // opostos tocando o mesmo par de insumos não entrarem em deadlock — ver o comentário na própria
+  // função para o racional completo.
+  const transfer = await prisma.$transaction(async (tx) => {
+    if (disparaSaida && existing.items.length > 0) {
+      // Trava e relê, AGORA, o estoque de todos os insumos de origem envolvidos — antes de
+      // calcular qualquer desconto. Cobre tanto a concorrência entre duas transferências diferentes
+      // tocando o mesmo insumo quanto (via o acumulador abaixo) duas `TransferItem` desta MESMA
+      // transferência apontando pro mesmo insumo (a tela de criação não impede escolher o mesmo
+      // insumo duas vezes) — achado real do Teulis: insumo com 100, itens de 30+10, resultado
+      // errado 90 em vez de 60, quando cada ingredientId só contava uma vez no UPDATE em lote.
+      const ingredientIdsOrigem = Array.from(new Set(existing.items.map((item) => item.ingredientId)));
+      const estoqueAtualOrigemMap = await lockIngredientStock(tx, ingredientIdsOrigem);
 
-  if (disparaSaida && existing.items.length > 0) {
-    // Acumulador por ingredientId (mesmo padrão do `estoqueCorrente` do lado do recebimento,
-    // abaixo) — sem isso, duas `TransferItem` apontando pro MESMO insumo de origem (a tela de
-    // criação não impede escolher o mesmo insumo duas vezes) liam o mesmo snapshot pré-transação
-    // (`item.ingredient.estoqueAtual`) pra calcular o desconto, e como cada ingredientId só podia
-    // aparecer UMA vez no UNNEST usado pelo UPDATE em lote abaixo, só o desconto do último item
-    // processado "vencia" — o outro se perdia (achado real do Teulis: insumo com 100, itens de
-    // 30+10, resultado errado 90 em vez de 60).
-    const estoqueCorrenteOrigem = new Map<string, number>();
-    const movimentosSaida: {
-      ingredientId: string;
-      empresaId: string;
-      type: "TRANSFERENCIA";
-      quantidade: number;
-      estoqueApos: number;
-      motivo: string;
-      origin: string;
-      destino: string;
-      autorizadoPor: string | null;
-      createdById: string;
-    }[] = [];
-
-    for (const item of existing.items) {
-      const base = estoqueCorrenteOrigem.get(item.ingredientId) ?? item.ingredient.estoqueAtual;
-      const estoqueApos = Math.max(0, base - item.quantidadeEnviada);
-      estoqueCorrenteOrigem.set(item.ingredientId, estoqueApos);
-
-      movimentosSaida.push({
-        ingredientId: item.ingredientId,
-        empresaId: existing.origemEmpresaId,
-        type: "TRANSFERENCIA",
-        quantidade: item.quantidadeEnviada,
-        estoqueApos,
-        motivo: `Transferência enviada para ${existing.destinoEmpresa.name}`,
-        origin: "TRANSFERENCIA_ENVIADA",
-        destino: existing.destinoEmpresa.name,
-        autorizadoPor: body.responsavelEnvio || session.user.name || null,
-        createdById: session.user.id,
-      });
-    }
-
-    const ingredientIds = Array.from(estoqueCorrenteOrigem.keys());
-    const novosEstoques = ingredientIds.map((ingredientId) => estoqueCorrenteOrigem.get(ingredientId)!);
-
-    ops.push(
-      prisma.stockMovement.createMany({ data: movimentosSaida }),
-      prisma.$executeRaw`
-        UPDATE "Ingredient" AS ing
-        SET "estoqueAtual" = v.estoque_atual
-        FROM UNNEST(${ingredientIds}::text[], ${novosEstoques}::float8[]) AS v(ingredient_id, estoque_atual)
-        WHERE ing."id" = v.ingredient_id
-      `
-    );
-  }
-
-  if (disparaEntrada && Array.isArray(body.quantidadesRecebidas) && body.quantidadesRecebidas.length > 0) {
-    const recebidas = (body.quantidadesRecebidas as { itemId: string; quantidade: number }[])
-      // Descarta itemId que não pertence a esta transferência — nunca confia em input vindo do
-      // cliente sem checar contra o que já foi carregado em `existing.items`.
-      .filter((q) => existing.items.some((item) => item.id === q.itemId))
-      .map((q) => ({ itemId: q.itemId, quantidade: Number(q.quantidade) || 0 }));
-    const itemIds = recebidas.map((q) => q.itemId);
-    const quantidades = recebidas.map((q) => q.quantidade);
-
-    if (itemIds.length > 0) {
-      ops.push(prisma.$executeRaw`
-        UPDATE "TransferItem" AS ti
-        SET "quantidadeRecebida" = v.quantidade
-        FROM UNNEST(${itemIds}::text[], ${quantidades}::float8[]) AS v(item_id, quantidade)
-        WHERE ti."id" = v.item_id
-      `);
-    }
-
-    // Até aqui, confirmar o recebimento só registrava a quantidade recebida no próprio
-    // TransferItem — o insumo da loja de DESTINO nunca ganhava o estoque de volta (gap
-    // identificado na fusão de Movimentações+Transferências; usuário decidiu que o sistema
-    // deve resolver sozinho, sem exigir um de-para manual entre insumos das duas lojas).
-    // Casa por NOME normalizado (ver `normalizeText` acima) com um insumo ativo já cadastrado
-    // na empresa de destino: se achar, credita o estoque dele; se não achar, cria um insumo
-    // novo lá (nome/unidade vindos do item de origem, estoque inicial = quantidade recebida).
-    // Item com quantidade recebida 0 (não chegou / recusado) não gera crédito nem insumo novo.
-    const recebidasComQuantidade = recebidas.filter((q) => q.quantidade > 0);
-    if (recebidasComQuantidade.length > 0) {
-      const itemById = new Map(existing.items.map((item) => [item.id, item]));
-      const destinoIngredients = await prisma.ingredient.findMany({
-        where: { empresaId: existing.destinoEmpresaId, active: true },
-        select: { id: true, name: true, estoqueAtual: true },
-      });
-      const destinoPorNome = new Map(destinoIngredients.map((i) => [normalizeText(i.name), i]));
-
-      // Estoque "corrente" por insumo de destino conforme os créditos desta transferência vão
-      // sendo empilhados — cobre o caso (raro) de dois itens da mesma transferência caírem no
-      // mesmo insumo de destino (mesmo nome normalizado), pra o segundo crédito somar em cima
-      // do primeiro em vez de um sobrescrever o outro.
-      const estoqueCorrente = new Map<string, number>();
-      // Categoria equivalente na loja de destino pra cada `StockCategory.key` presente nos
-      // insumos de origem desta transferência — `key` é único só por `(empresaId, key)`, mas
-      // convencionalmente a mesma categoria (ex. "pescados") existe com a mesma key em cada loja
-      // (ver seed). 1 query só, fora do loop abaixo.
-      const categoryKeysOrigem = [...new Set(recebidasComQuantidade.map((q) => itemById.get(q.itemId)!.ingredient.category?.key).filter((k): k is string => !!k))];
-      const destinoCategoriaIdPorKey = categoryKeysOrigem.length
-        ? new Map(
-            (
-              await prisma.stockCategory.findMany({
-                where: { empresaId: existing.destinoEmpresaId, key: { in: categoryKeysOrigem } },
-                select: { id: true, key: true },
-              })
-            ).map((c) => [c.key, c.id])
-          )
-        : new Map<string, string>();
-      // Insumos novos que serão criados na loja de destino nesta chamada, por nome normalizado —
-      // pra não criar duplicado se dois itens da mesma transferência caírem no mesmo insumo novo
-      // (ex.: mesmo insumo de origem informado duas vezes por engano). Carrega os campos
-      // descritivos/de custo do insumo de ORIGEM (preço, categoria, embalagem, fornecedor em
-      // texto livre etc.) — achado de produção (02/10/2026): sem isso, um insumo criado
-      // automaticamente aqui nascia com `precoAtual` 0 e sem categoria/fornecedor (`categoryId`/
-      // `fornecedorPrincipalId` null), entrando silenciosamente no CMV como "custo zero" e nas
-      // listagens como "sem categoria"/"sem fornecedor" até alguém completar o cadastro na mão.
-      // `fornecedorPrincipalId` (relação com `Supplier`, que é 100% por loja, sem `key`
-      // compartilhada como `StockCategory`) propositalmente NÃO é copiado — não tem como saber
-      // se existe um fornecedor equivalente cadastrado na loja de destino; só o texto livre
-      // `fornecedor` (sem FK) é copiado, como referência.
-      const novosPorNome = new Map<
-        string,
-        {
-          id: string;
-          name: string;
-          unidade: string;
-          precoAtual: number;
-          quantidadeEmbalagem: number;
-          percentualPerda: number;
-          fornecedor: string | null;
-          unidadeCompra: string | null;
-          fatorConversao: number;
-          pesoEmbalagem: number | null;
-          rendimentoAproveitavel: number | null;
-          perecivel: boolean;
-          setor: string | null;
-          categoryId: string | null;
-        }
-      >();
-      const movimentosEntrada: {
+      const estoqueCorrenteOrigem = new Map<string, number>();
+      const movimentosSaida: {
         ingredientId: string;
         empresaId: string;
-        type: "ENTRADA";
+        type: "TRANSFERENCIA";
         quantidade: number;
         estoqueApos: number;
         motivo: string;
         origin: string;
-        origem: string;
+        destino: string;
         autorizadoPor: string | null;
         createdById: string;
       }[] = [];
 
-      for (const recebida of recebidasComQuantidade) {
-        const item = itemById.get(recebida.itemId)!;
-        const nomeNormalizado = normalizeText(item.ingredient.name);
-        const existenteDestino = destinoPorNome.get(nomeNormalizado);
+      for (const item of existing.items) {
+        const base =
+          estoqueCorrenteOrigem.get(item.ingredientId) ??
+          estoqueAtualOrigemMap.get(item.ingredientId) ??
+          item.ingredient.estoqueAtual;
+        const estoqueApos = Math.max(0, base - item.quantidadeEnviada);
+        estoqueCorrenteOrigem.set(item.ingredientId, estoqueApos);
 
-        let ingredientId: string;
-        let estoqueBase: number;
-        if (existenteDestino) {
-          ingredientId = existenteDestino.id;
-          estoqueBase = estoqueCorrente.get(ingredientId) ?? existenteDestino.estoqueAtual;
-        } else {
-          const novo = novosPorNome.get(nomeNormalizado);
-          if (novo) {
-            ingredientId = novo.id;
-            estoqueBase = estoqueCorrente.get(ingredientId) ?? 0;
-          } else {
-            ingredientId = randomUUID();
-            novosPorNome.set(nomeNormalizado, {
-              id: ingredientId,
-              name: item.ingredient.name,
-              unidade: item.unidade,
-              precoAtual: item.ingredient.precoAtual,
-              quantidadeEmbalagem: item.ingredient.quantidadeEmbalagem,
-              percentualPerda: item.ingredient.percentualPerda,
-              fornecedor: item.ingredient.fornecedor,
-              unidadeCompra: item.ingredient.unidadeCompra,
-              fatorConversao: item.ingredient.fatorConversao,
-              pesoEmbalagem: item.ingredient.pesoEmbalagem,
-              rendimentoAproveitavel: item.ingredient.rendimentoAproveitavel,
-              perecivel: item.ingredient.perecivel,
-              setor: item.ingredient.setor,
-              categoryId: item.ingredient.category ? destinoCategoriaIdPorKey.get(item.ingredient.category.key) ?? null : null,
-            });
-            estoqueBase = 0;
-          }
-        }
-
-        const estoqueApos = estoqueBase + recebida.quantidade;
-        estoqueCorrente.set(ingredientId, estoqueApos);
-
-        movimentosEntrada.push({
-          ingredientId,
-          empresaId: existing.destinoEmpresaId,
-          type: "ENTRADA",
-          quantidade: recebida.quantidade,
+        movimentosSaida.push({
+          ingredientId: item.ingredientId,
+          empresaId: existing.origemEmpresaId,
+          type: "TRANSFERENCIA",
+          quantidade: item.quantidadeEnviada,
           estoqueApos,
-          motivo: `Transferência recebida de ${existing.origemEmpresa.name}`,
-          origin: "TRANSFERENCIA_RECEBIDA",
-          origem: existing.origemEmpresa.name,
-          autorizadoPor: body.responsavelRecebimento || session.user.name || null,
+          motivo: `Transferência enviada para ${existing.destinoEmpresa.name}`,
+          origin: "TRANSFERENCIA_ENVIADA",
+          destino: existing.destinoEmpresa.name,
+          autorizadoPor: body.responsavelEnvio || session.user.name || null,
           createdById: session.user.id,
         });
       }
 
-      // Ordem importa: cria os insumos novos primeiro (senão o StockMovement referenciando o
-      // ingredientId deles quebraria a FK), só depois credita os já existentes e lança os
-      // movimentos — igual ao padrão em ops acima (bulk via UNNEST, não uma operação por item).
-      if (novosPorNome.size > 0) {
-        ops.push(
-          prisma.ingredient.createMany({
+      const ingredientIds = Array.from(estoqueCorrenteOrigem.keys());
+      const novosEstoques = ingredientIds.map((ingredientId) => estoqueCorrenteOrigem.get(ingredientId)!);
+
+      await tx.stockMovement.createMany({ data: movimentosSaida });
+      await tx.$executeRaw`
+        UPDATE "Ingredient" AS ing
+        SET "estoqueAtual" = v.estoque_atual
+        FROM UNNEST(${ingredientIds}::text[], ${novosEstoques}::float8[]) AS v(ingredient_id, estoque_atual)
+        WHERE ing."id" = v.ingredient_id
+      `;
+    }
+
+    if (disparaEntrada && Array.isArray(body.quantidadesRecebidas) && body.quantidadesRecebidas.length > 0) {
+      const recebidas = (body.quantidadesRecebidas as { itemId: string; quantidade: number }[])
+        // Descarta itemId que não pertence a esta transferência — nunca confia em input vindo do
+        // cliente sem checar contra o que já foi carregado em `existing.items`.
+        .filter((q) => existing.items.some((item) => item.id === q.itemId))
+        .map((q) => ({ itemId: q.itemId, quantidade: Number(q.quantidade) || 0 }));
+      const itemIds = recebidas.map((q) => q.itemId);
+      const quantidades = recebidas.map((q) => q.quantidade);
+
+      if (itemIds.length > 0) {
+        await tx.$executeRaw`
+          UPDATE "TransferItem" AS ti
+          SET "quantidadeRecebida" = v.quantidade
+          FROM UNNEST(${itemIds}::text[], ${quantidades}::float8[]) AS v(item_id, quantidade)
+          WHERE ti."id" = v.item_id
+        `;
+      }
+
+      // Até aqui, confirmar o recebimento só registrava a quantidade recebida no próprio
+      // TransferItem — o insumo da loja de DESTINO nunca ganhava o estoque de volta (gap
+      // identificado na fusão de Movimentações+Transferências; usuário decidiu que o sistema
+      // deve resolver sozinho, sem exigir um de-para manual entre insumos das duas lojas).
+      // Casa por NOME normalizado (ver `normalizeText` acima) com um insumo ativo já cadastrado
+      // na empresa de destino: se achar, credita o estoque dele; se não achar, cria um insumo
+      // novo lá (nome/unidade vindos do item de origem, estoque inicial = quantidade recebida).
+      // Item com quantidade recebida 0 (não chegou / recusado) não gera crédito nem insumo novo.
+      const recebidasComQuantidade = recebidas.filter((q) => q.quantidade > 0);
+      if (recebidasComQuantidade.length > 0) {
+        const itemById = new Map(existing.items.map((item) => [item.id, item]));
+        const destinoIngredients = await tx.ingredient.findMany({
+          where: { empresaId: existing.destinoEmpresaId, active: true },
+          select: { id: true, name: true, estoqueAtual: true },
+        });
+        const destinoPorNome = new Map(destinoIngredients.map((i) => [normalizeText(i.name), i]));
+
+        // Trava e relê, AGORA, o estoque de todos os insumos de destino já existentes que vão
+        // receber crédito nesta chamada — antes de qualquer cálculo. Cobre o mesmo insumo sendo
+        // origem de OUTRA transferência (debitado por outra chamada concorrente) e/ou destino de
+        // uma segunda transferência concorrente ao mesmo tempo — sem isso, o `estoqueAtual` lido
+        // acima (`destinoIngredients`, fora do lock) já pode estar desatualizado quando a conta é
+        // feita a seguir.
+        const existingIngredientIdsDestino = Array.from(
+          new Set(
+            recebidasComQuantidade
+              .map((q) => destinoPorNome.get(normalizeText(itemById.get(q.itemId)!.ingredient.name))?.id)
+              .filter((id): id is string => !!id)
+          )
+        );
+        const estoqueAtualDestinoMap = await lockIngredientStock(tx, existingIngredientIdsDestino);
+
+        // Estoque "corrente" por insumo de destino conforme os créditos desta transferência vão
+        // sendo empilhados — cobre o caso (raro) de dois itens da mesma transferência caírem no
+        // mesmo insumo de destino (mesmo nome normalizado), pra o segundo crédito somar em cima
+        // do primeiro em vez de um sobrescrever o outro.
+        const estoqueCorrente = new Map<string, number>();
+        // Categoria equivalente na loja de destino pra cada `StockCategory.key` presente nos
+        // insumos de origem desta transferência — `key` é único só por `(empresaId, key)`, mas
+        // convencionalmente a mesma categoria (ex. "pescados") existe com a mesma key em cada loja
+        // (ver seed). 1 query só, fora do loop abaixo.
+        const categoryKeysOrigem = [...new Set(recebidasComQuantidade.map((q) => itemById.get(q.itemId)!.ingredient.category?.key).filter((k): k is string => !!k))];
+        const destinoCategoriaIdPorKey = categoryKeysOrigem.length
+          ? new Map(
+              (
+                await tx.stockCategory.findMany({
+                  where: { empresaId: existing.destinoEmpresaId, key: { in: categoryKeysOrigem } },
+                  select: { id: true, key: true },
+                })
+              ).map((c) => [c.key, c.id])
+            )
+          : new Map<string, string>();
+        // Insumos novos que serão criados na loja de destino nesta chamada, por nome normalizado —
+        // pra não criar duplicado se dois itens da mesma transferência caírem no mesmo insumo novo
+        // (ex.: mesmo insumo de origem informado duas vezes por engano). Carrega os campos
+        // descritivos/de custo do insumo de ORIGEM (preço, categoria, embalagem, fornecedor em
+        // texto livre etc.) — achado de produção (02/10/2026): sem isso, um insumo criado
+        // automaticamente aqui nascia com `precoAtual` 0 e sem categoria/fornecedor (`categoryId`/
+        // `fornecedorPrincipalId` null), entrando silenciosamente no CMV como "custo zero" e nas
+        // listagens como "sem categoria"/"sem fornecedor" até alguém completar o cadastro na mão.
+        // `fornecedorPrincipalId` (relação com `Supplier`, que é 100% por loja, sem `key`
+        // compartilhada como `StockCategory`) propositalmente NÃO é copiado — não tem como saber
+        // se existe um fornecedor equivalente cadastrado na loja de destino; só o texto livre
+        // `fornecedor` (sem FK) é copiado, como referência.
+        const novosPorNome = new Map<
+          string,
+          {
+            id: string;
+            name: string;
+            unidade: string;
+            precoAtual: number;
+            quantidadeEmbalagem: number;
+            percentualPerda: number;
+            fornecedor: string | null;
+            unidadeCompra: string | null;
+            fatorConversao: number;
+            pesoEmbalagem: number | null;
+            rendimentoAproveitavel: number | null;
+            perecivel: boolean;
+            setor: string | null;
+            categoryId: string | null;
+          }
+        >();
+        const movimentosEntrada: {
+          ingredientId: string;
+          empresaId: string;
+          type: "ENTRADA";
+          quantidade: number;
+          estoqueApos: number;
+          motivo: string;
+          origin: string;
+          origem: string;
+          autorizadoPor: string | null;
+          createdById: string;
+        }[] = [];
+
+        for (const recebida of recebidasComQuantidade) {
+          const item = itemById.get(recebida.itemId)!;
+          const nomeNormalizado = normalizeText(item.ingredient.name);
+          const existenteDestino = destinoPorNome.get(nomeNormalizado);
+
+          let ingredientId: string;
+          let estoqueBase: number;
+          if (existenteDestino) {
+            ingredientId = existenteDestino.id;
+            estoqueBase =
+              estoqueCorrente.get(ingredientId) ??
+              estoqueAtualDestinoMap.get(ingredientId) ??
+              existenteDestino.estoqueAtual;
+          } else {
+            const novo = novosPorNome.get(nomeNormalizado);
+            if (novo) {
+              ingredientId = novo.id;
+              estoqueBase = estoqueCorrente.get(ingredientId) ?? 0;
+            } else {
+              ingredientId = randomUUID();
+              novosPorNome.set(nomeNormalizado, {
+                id: ingredientId,
+                name: item.ingredient.name,
+                unidade: item.unidade,
+                precoAtual: item.ingredient.precoAtual,
+                quantidadeEmbalagem: item.ingredient.quantidadeEmbalagem,
+                percentualPerda: item.ingredient.percentualPerda,
+                fornecedor: item.ingredient.fornecedor,
+                unidadeCompra: item.ingredient.unidadeCompra,
+                fatorConversao: item.ingredient.fatorConversao,
+                pesoEmbalagem: item.ingredient.pesoEmbalagem,
+                rendimentoAproveitavel: item.ingredient.rendimentoAproveitavel,
+                perecivel: item.ingredient.perecivel,
+                setor: item.ingredient.setor,
+                categoryId: item.ingredient.category ? destinoCategoriaIdPorKey.get(item.ingredient.category.key) ?? null : null,
+              });
+              estoqueBase = 0;
+            }
+          }
+
+          const estoqueApos = estoqueBase + recebida.quantidade;
+          estoqueCorrente.set(ingredientId, estoqueApos);
+
+          movimentosEntrada.push({
+            ingredientId,
+            empresaId: existing.destinoEmpresaId,
+            type: "ENTRADA",
+            quantidade: recebida.quantidade,
+            estoqueApos,
+            motivo: `Transferência recebida de ${existing.origemEmpresa.name}`,
+            origin: "TRANSFERENCIA_RECEBIDA",
+            origem: existing.origemEmpresa.name,
+            autorizadoPor: body.responsavelRecebimento || session.user.name || null,
+            createdById: session.user.id,
+          });
+        }
+
+        // Ordem importa: cria os insumos novos primeiro (senão o StockMovement referenciando o
+        // ingredientId deles quebraria a FK), só depois credita os já existentes e lança os
+        // movimentos — igual ao padrão acima (bulk via UNNEST, não uma operação por item).
+        if (novosPorNome.size > 0) {
+          await tx.ingredient.createMany({
             data: Array.from(novosPorNome.values()).map((n) => ({
               id: n.id,
               empresaId: existing.destinoEmpresaId,
@@ -337,28 +369,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               setor: n.setor,
               categoryId: n.categoryId,
             })),
-          })
-        );
-      }
+          });
+        }
 
-      const novoIds = new Set(Array.from(novosPorNome.values()).map((n) => n.id));
-      const idsExistentesParaAtualizar = Array.from(estoqueCorrente.keys()).filter((id) => !novoIds.has(id));
-      if (idsExistentesParaAtualizar.length > 0) {
-        const estoquesFinais = idsExistentesParaAtualizar.map((id) => estoqueCorrente.get(id)!);
-        ops.push(prisma.$executeRaw`
-          UPDATE "Ingredient" AS ing
-          SET "estoqueAtual" = v.estoque_atual
-          FROM UNNEST(${idsExistentesParaAtualizar}::text[], ${estoquesFinais}::float8[]) AS v(ingredient_id, estoque_atual)
-          WHERE ing."id" = v.ingredient_id
-        `);
-      }
+        const novoIds = new Set(Array.from(novosPorNome.values()).map((n) => n.id));
+        const idsExistentesParaAtualizar = Array.from(estoqueCorrente.keys()).filter((id) => !novoIds.has(id));
+        if (idsExistentesParaAtualizar.length > 0) {
+          const estoquesFinais = idsExistentesParaAtualizar.map((id) => estoqueCorrente.get(id)!);
+          await tx.$executeRaw`
+            UPDATE "Ingredient" AS ing
+            SET "estoqueAtual" = v.estoque_atual
+            FROM UNNEST(${idsExistentesParaAtualizar}::text[], ${estoquesFinais}::float8[]) AS v(ingredient_id, estoque_atual)
+            WHERE ing."id" = v.ingredient_id
+          `;
+        }
 
-      ops.push(prisma.stockMovement.createMany({ data: movimentosEntrada }));
+        await tx.stockMovement.createMany({ data: movimentosEntrada });
+      }
     }
-  }
 
-  ops.push(
-    prisma.transfer.update({
+    return tx.transfer.update({
       where: { id },
       data: {
         status: novoStatus ?? undefined,
@@ -367,11 +397,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         dataRecebimento: novoStatus === "RECEBIDA" ? new Date() : undefined,
         observacao: body.observacao !== undefined ? body.observacao || null : undefined,
       },
-    })
-  );
-
-  const results = await prisma.$transaction(ops);
-  const transfer = results[results.length - 1];
+    });
+  }, TX_OPTIONS);
 
   return NextResponse.json({ transfer });
 }
