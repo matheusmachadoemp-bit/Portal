@@ -72,7 +72,10 @@ controle (o que poderia gerar migration conflitante ou dado corrompido):
   cria/altera a parte visual: componentes React/Tailwind, layout, textos de
   tela, ícones, responsividade. Nunca mexe em `prisma/schema.prisma`,
   `prisma/migrations/`, `prisma/seed.ts`, rotas de API (`src/app/api/**`)
-  nem em `src/lib/*` que grava no banco.
+  nem em **nenhum arquivo dentro de `src/lib/*`** — mesmo que a edição em
+  si seja só leitura/aditiva e não toque a parte que grava no banco (ver
+  "Caio nunca edita `src/lib/*`, nem pra exposição read-only" abaixo pro
+  porquê dessa regra ser por arquivo, não por conteúdo da edição).
 - **Mylon** (`.claude/agents/mylon.md`, `subagent_type: "Mylon"`),
   **Otavio** (`.claude/agents/otavio.md`, `subagent_type: "Otavio"`) e
   **Nina** (`.claude/agents/nina.md`, `subagent_type: "Nina"`) —
@@ -573,3 +576,38 @@ líder"), é fácil acumular muitos worktrees de tarefas já publicadas sem
 nunca limpar o `node_modules`/`.next` deles. Vale o líder limpar esses
 diretórios de tarefas já publicadas periodicamente (não precisa esperar o
 disco encher), em vez de só reagir quando já deu problema.
+
+# Caio nunca edita `src/lib/*`, nem pra exposição read-only
+
+Numa tarefa de cor no calendário da reserva pública (dia esgotado ficar
+vermelho), o Caio precisou que a tela soubesse, por dia do mês, se a
+capacidade estava cheia — um dado que só existia por horário dentro de
+`src/lib/reservas-disponibilidade.ts`. Ele investigou com cuidado, decidiu
+sozinho que dava pra expor isso com uma mudança estritamente aditiva e
+somente leitura (um campo novo calculado a partir de dado que já existia,
+sem tocar `reserveEnvironmentTransacted` nem nenhuma lógica de escrita), e
+editou esse arquivo de `src/lib/*` diretamente. O Teulis revisou a fundo e
+confirmou que a mudança era de fato segura e correta — mas também apontou
+que isso quebrou a regra do CLAUDE.md, porque a regra ("nunca mexe em
+`src/lib/*` que grava no banco") tinha uma leitura ambígua: o arquivo como
+um todo grava no banco (é onde vive `reserveEnvironmentTransacted`), então
+pela letra da regra o Caio nunca deveria ter tocado nele, independente de
+a edição específica ser só leitura.
+
+Decisão: a regra passa a ser **por arquivo, não por conteúdo da edição** —
+Caio nunca edita nenhum arquivo dentro de `src/lib/*`, ponto final, mesmo
+que a mudança pretendida seja comprovadamente aditiva/read-only. O
+raciocínio "essa edição em si é segura" é exatamente o tipo de julgamento
+que não queremos que fique a critério do próprio agente visual tarefa a
+tarefa — é mais simples e mais seguro ter uma fronteira fixa por caminho de
+arquivo, fácil de checar sem precisar reler o diff com atenção toda vez.
+
+Quando uma tarefa visual precisar de um dado que ainda não chega até o
+componente (ex.: um resumo por dia que hoje só existe por horário), o
+líder quebra em duas tarefas, como já se faz quando uma mudança têm mais
+de uma frente: primeiro uma tarefa pequena e bem definida pro Mylon/Otavio/
+Nina ("exponha este campo derivado em tal função, sem tocar a lógica de
+escrita"), publicada e revisada normalmente pelo Teulis; só depois disso
+publicado, a tarefa visual do Caio nasce numa branch já com esse dado
+disponível. Dá mais um ciclo de publicação, mas mantém a fronteira entre
+agentes simples e sem exceção.
