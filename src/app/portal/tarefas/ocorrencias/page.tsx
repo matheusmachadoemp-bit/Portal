@@ -20,17 +20,19 @@ import { OcorrenciasClient } from "./ocorrencias-client";
  * de cada bloco vêm 100% daquelas rotas, consumidas pelos respectivos client components abaixo
  * — nenhuma regra de autorização é reimplementada aqui.
  *
- * As duas listas buscadas diretamente aqui (categorias e usuários ativos com acesso à(s) loja(s)
- * do contexto ativo, via `getSelectableTeamMembers`) são só para alimentar seletores do bloco de
- * Ocorrências (categoria pra editar, responsável pra transformar) — mesmo padrão já usado em
- * Manutenção/Tarefas/Checklist (busca direta no page.tsx pra popular um `<select>`, sem rota
- * própria pra isso).
+ * A lista de categorias buscada diretamente aqui é só para alimentar o seletor de categoria do
+ * modal de editar ocorrência — mesmo padrão já usado em Manutenção/Tarefas/Checklist (busca
+ * direta no page.tsx pra popular um `<select>`, sem rota própria pra isso). Até a Fase 4, Parte 2
+ * (remoção completa de "transformar em ação"), este arquivo também buscava a lista de usuários
+ * ativos com acesso à(s) loja(s) do contexto (`teamMembers`, via `getSelectableTeamMembers`) para
+ * o seletor de "responsável" do modal de transformação — removida junto com o modal, já que não
+ * tinha mais nenhum outro consumidor.
  *
  * `teamMembersByEmpresa` (pro bloco "Status do dia", seletor de Responsável/Substituto de cada
- * card de cargo) é a MESMA busca, mas uma vez por loja do contexto em vez de uma vez só com todas
- * as `empresaIds` juntas: em modo Grupo Nord, um card de cargo pertence a uma loja específica
- * (`cargo.empresa.id`), e `getSelectableTeamMembers(empresaIds)` combinado devolveria também
- * usuários que só têm acesso a OUTRA loja do grupo — a API já rejeitaria essa escolha
+ * card de cargo) é uma busca diferente, uma vez por loja do contexto em vez de uma vez só com
+ * todas as `empresaIds` juntas: em modo Grupo Nord, um card de cargo pertence a uma loja
+ * específica (`cargo.empresa.id`), e `getSelectableTeamMembers(empresaIds)` combinado devolveria
+ * também usuários que só têm acesso a OUTRA loja do grupo — a API já rejeitaria essa escolha
  * (`findUsersWithoutEmpresaAccess` em `PATCH .../cargos/[cargoId]`), mas a lista nem deveria
  * oferecer essa opção pra começo (mesmo racional do achado #177: seletor de Responsável sem
  * filtro de loja).
@@ -45,13 +47,12 @@ export default async function OcorrenciasPage() {
   const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
   const canEdit = await hasModulePermission(session.user.id, "fechamento-dia", "canEdit");
 
-  const [categorias, teamMembers, teamMembersPerEmpresa] = await Promise.all([
+  const [categorias, teamMembersPerEmpresa] = await Promise.all([
     prisma.fechamentoCategoria.findMany({
       where: { empresaId: { in: empresaIds }, ativa: true },
       select: { id: true, nome: true, icon: true, empresaId: true },
       orderBy: [{ empresaId: "asc" }, { ordem: "asc" }],
     }),
-    getSelectableTeamMembers(empresaIds),
     Promise.all(empresaIds.map((id) => getSelectableTeamMembers([id]))),
   ]);
   const teamMembersByEmpresa = Object.fromEntries(empresaIds.map((id, idx) => [id, teamMembersPerEmpresa[idx]]));
@@ -73,7 +74,6 @@ export default async function OcorrenciasPage() {
           <h2 className="text-base font-semibold text-white">Ocorrências</h2>
           <OcorrenciasClient
             categorias={categorias}
-            teamMembers={teamMembers}
             empresas={empresas.map((e) => ({ id: e.id, name: e.name }))}
             canEdit={canEdit}
           />

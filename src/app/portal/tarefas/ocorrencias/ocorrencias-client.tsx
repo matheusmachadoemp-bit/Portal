@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Pencil, Wand2, RefreshCw, ExternalLink, X, Inbox, History } from "lucide-react";
+import { Pencil, RefreshCw, ExternalLink, X, Inbox, History } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Badge } from "@/components/ui/stat-card";
 import { FormError } from "@/components/ui/modal";
@@ -23,8 +23,7 @@ import {
   formatDataHora,
 } from "./constants";
 import { EditarOcorrenciaModal } from "./editar-modal";
-import { TransformarOcorrenciaModal } from "./transformar-modal";
-import type { CategoriaOption, EmpresaOption, FechamentoGravidade, FechamentoOcorrenciaStatus, Ocorrencia, UserOption } from "./types";
+import type { CategoriaOption, EmpresaOption, FechamentoGravidade, FechamentoOcorrenciaStatus, Ocorrencia } from "./types";
 
 // ---------------------------------------------------------------------------
 // GET /api/fechamento-dia/ocorrencias aceita from/to/gravidade/status/categoriaId/cargoId.
@@ -64,15 +63,11 @@ function OcorrenciaCard({
   ocorrencia: o,
   canEdit,
   onEdit,
-  onTransform,
 }: {
   ocorrencia: Ocorrencia;
   canEdit: boolean;
   onEdit: (o: Ocorrencia) => void;
-  onTransform: (o: Ocorrencia) => void;
 }) {
-  const jaTransformada = !!(o.transformadoEmTaskId || o.transformadoEmChamadoId);
-
   return (
     <div className="nord-card p-4 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -168,11 +163,6 @@ function OcorrenciaCard({
           <button onClick={() => onEdit(o)} className="btn-outline">
             <Pencil size={12} /> Editar
           </button>
-          {!jaTransformada && (
-            <button onClick={() => onTransform(o)} className="btn-primary">
-              <Wand2 size={12} /> Transformar em ação
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -181,12 +171,10 @@ function OcorrenciaCard({
 
 export function OcorrenciasClient({
   categorias,
-  teamMembers,
   empresas,
   canEdit,
 }: {
   categorias: CategoriaOption[];
-  teamMembers: UserOption[];
   empresas: EmpresaOption[];
   canEdit: boolean;
 }) {
@@ -226,8 +214,6 @@ export function OcorrenciasClient({
     setEditSeq((s) => s + 1);
     setEditing(o);
   }
-
-  const [transforming, setTransforming] = useState<Ocorrencia | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -470,7 +456,7 @@ export function OcorrenciasClient({
       {listaAtual.length > 0 && (
         <div className="space-y-3">
           {listaAtual.map((o) => (
-            <OcorrenciaCard key={o.id} ocorrencia={o} canEdit={canEdit} onEdit={openEdit} onTransform={setTransforming} />
+            <OcorrenciaCard key={o.id} ocorrencia={o} canEdit={canEdit} onEdit={openEdit} />
           ))}
         </div>
       )}
@@ -484,12 +470,6 @@ export function OcorrenciasClient({
           setEditing(null);
           load();
         }}
-      />
-      <TransformarOcorrenciaModal
-        ocorrencia={transforming}
-        teamMembers={teamMembers}
-        onClose={() => setTransforming(null)}
-        onTransformed={() => { setTransforming(null); load(); }}
       />
 
       <style jsx global>{`

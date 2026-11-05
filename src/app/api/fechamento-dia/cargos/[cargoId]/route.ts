@@ -14,8 +14,9 @@ import { hasModulePermission } from "@/lib/authz";
  * fase 2, do Caio; esta rota só habilita a escrita).
  *
  * Permissão: `canEdit` do módulo "fechamento-dia" como um todo, SEM subcategoria por cargo — mesmo
- * gate já usado por `PATCH /api/fechamento-dia/ocorrencias/[id]` e
- * `POST .../ocorrencias/[id]/transformar` para as outras ações de "gestão" do módulo. Por padrão
+ * gate já usado por `PATCH /api/fechamento-dia/ocorrencias/[id]` (a rota irmã
+ * `POST .../ocorrencias/[id]/transformar`, que usava o mesmo gate, foi removida na Fase 4, Parte
+ * 2) para as outras ações de "gestão" do módulo. Por padrão
  * (`prisma/seed.ts`) isso libera administrador/gestor/gerente/supervisor — o mesmo grupo de
  * "liderança" que já edita Ocorrências/Perguntas — e nega líder/funcionário/marketing/financeiro.
  * Duas alternativas mais óbvias foram descartadas de propósito:

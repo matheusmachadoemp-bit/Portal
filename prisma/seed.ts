@@ -17,7 +17,7 @@ const prisma = new PrismaClient({ adapter });
 
 // Cargos padrão do Fechamento do Dia — usado tanto no seed do catálogo (mais abaixo) quanto
 // no bloco de permissões por subcategoria logo a seguir.
-const FECHAMENTO_CARGO_KEYS = ["gerencia", "salao", "cozinha"] as const;
+const FECHAMENTO_CARGO_KEYS = ["gerencia", "salao", "cozinha", "delivery"] as const;
 
 const CATEGORIES = [
   { key: "inicio", name: "Início", icon: "Home", order: 0, contentType: "dashboard", subs: [] },
@@ -1158,15 +1158,24 @@ async function main() {
     tipo: FechamentoTipoResposta;
     obrigatoria?: boolean; // default true
     abreOcorrencia?: boolean;
+    /// Só relevante com abreOcorrencia=true numa pergunta SIM_NAO — ver comentário do campo no
+    /// schema. Default false (Sim = problema, convenção original); true inverte (Não = problema)
+    /// pra perguntas como "Os motoboys foram suficientes?" (Chef Delivery), onde a redação
+    /// afirmativa foi mantida de propósito mas o resultado bom é "Sim".
+    inverterPolaridade?: boolean;
     categoriaSugerida?: string; // nome de uma das FECHAMENTO_CATEGORIAS
     gravidadeSugerida?: FechamentoGravidade;
     opcoes?: string[]; // só para tipo MULTIPLA_ESCOLHA
     /// Perguntas condicionais ("se SIM, abre campo"): só entram na
     /// FechamentoResposta quando a resposta desta pergunta bater com
-    /// `valorPaiQueExibe` (sempre "true" nesta fase, já que todo pai
-    /// condicional do catálogo inicial é SIM_NAO) — a checagem de
-    /// obrigatoriedade condicional é feita pela rota de submissão, não pelo
-    /// banco.
+    /// `valorPaiQueExibe` — valor usado SÓ quando esta pergunta é uma FILHA (dentro de
+    /// `filhas` de outra), pra decidir com qual resposta do PAI ela aparece. Default "true"
+    /// (pai respondido "Sim" — único caso usado até a Fase 4, Parte 1); perguntas-filha de um
+    /// pai com `inverterPolaridade: true` usam "false" aqui, pra aparecer quando a resposta do
+    /// pai é a que de fato indica problema (ex.: filha "Descrição" de "Os motoboys foram
+    /// suficientes?" aparece quando a resposta é "Não", não "Sim" — ver
+    /// `fechamentoValorParaComparacaoCondicional`, @/lib/fechamento).
+    valorPaiQueExibe?: "true" | "false";
     filhas?: FechamentoPerguntaSeed[];
   };
 
@@ -1372,6 +1381,80 @@ async function main() {
         { texto: "O que precisa ser preparado, comprado ou corrigido amanhã?", tipo: "TEXTO", obrigatoria: false },
       ],
     },
+    {
+      // Fase 4, Parte 1 (Otavio): 4º cargo do Fechamento do Dia, mesmo padrão dos outros 3.
+      // Texto/decisões de polaridade e "sem ocorrência" vindos literalmente do pedido do líder:
+      // - "Como foi o movimento hoje?": avaliativo (NOTA_1_5, igual às outras "nota do dia"),
+      //   nunca abre ocorrência — é só o insumo da "nota média por cargo" do indicador.
+      // - "Os motoboys foram suficientes?": redação mantida afirmativa de propósito, mas é
+      //   "Não" que indica problema — `inverterPolaridade: true` (ver comentário do campo no
+      //   schema). A filha "Descrição" usa `valorPaiQueExibe: "false"` por isso (aparece quando
+      //   a resposta É a que indica problema, igual ao padrão normal das outras).
+      // - "Precisa de troco?": SIM_NAO, mas puramente informativo — `abreOcorrencia: false` (não
+      //   gera ocorrência nem entra na contagem de problemas do dashboard da Parte 3/4).
+      // - Demais (atraso/cancelamento/erro/tempo/fechar loja): padrão normal (Sim = problema),
+      //   com filha "Descrição" opcional seguindo o precedente de 100% das perguntas
+      //   SIM_NAO+abreOcorrencia já existentes em Chef de Salão/Cozinha (decisão minha: o pedido
+      //   só citou a filha explicitamente para 3 das 6, mas estender às outras 3 mantém o
+      //   catálogo consistente — fácil de remover depois se não for o esperado).
+      key: "delivery",
+      nome: "Chef Delivery",
+      icon: "Bike",
+      ordem: 3,
+      perguntas: [
+        { texto: "Como foi o movimento hoje?", tipo: "NOTA_1_5" },
+        {
+          texto: "Os motoboys foram suficientes?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          inverterPolaridade: true,
+          categoriaSugerida: "Delivery",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false, valorPaiQueExibe: "false" }],
+        },
+        {
+          texto: "Teve atraso nos pedidos?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Delivery",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Teve Cancelamento?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Delivery",
+          gravidadeSugerida: "IMPORTANTE",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Teve Algum erro?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Produto",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Precisou aumentar o tempo?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Delivery",
+          gravidadeSugerida: "ATENCAO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        {
+          texto: "Precisou fechar a loja?",
+          tipo: "SIM_NAO",
+          abreOcorrencia: true,
+          categoriaSugerida: "Delivery",
+          gravidadeSugerida: "CRITICO",
+          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
+        },
+        { texto: "Precisa de troco?", tipo: "SIM_NAO", abreOcorrencia: false },
+      ],
+    },
   ];
 
   const todasEmpresasFechamento = await prisma.empresa.findMany();
@@ -1429,10 +1512,11 @@ async function main() {
           obrigatoria: spec.obrigatoria ?? true,
           ordem: currentOrdem,
           abreOcorrencia: spec.abreOcorrencia ?? false,
+          inverterPolaridade: spec.inverterPolaridade ?? false,
           categoriaSugeridaId: spec.categoriaSugerida ? (categoriaPorNome.get(spec.categoriaSugerida) ?? null) : null,
           gravidadeSugerida: spec.gravidadeSugerida ?? null,
           perguntaPaiId: perguntaPaiId ?? null,
-          valorPaiQueExibe: perguntaPaiId ? "true" : null,
+          valorPaiQueExibe: perguntaPaiId ? (spec.valorPaiQueExibe ?? "true") : null,
         };
 
         // Idempotência feita a mão (busca por empresa+texto+pai, depois cria ou atualiza) em
