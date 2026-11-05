@@ -123,3 +123,19 @@ export function computeCoverage(totalAtivos: number, indisponiveisCount: number,
   const deficit = Math.max(0, quantidadeMinima - escalados);
   return { quantidadeMinima, escalados, deficit, insuficiente: deficit > 0 };
 }
+
+/**
+ * "YYYY-MM-DD" -> `key` estável (minúsculo, sem acento, só `a-z0-9-`) — usado pra gerar a `key`
+ * única dos catálogos globais do módulo (`DayOffType`/`EventType`) a partir do `nome` digitado
+ * pelo gestor. Extraído de `POST /api/rh/escala-folgas/day-off-types` (existia só ali antes da
+ * expansão "Escala de Folgas e Eventos") pra `POST /api/rh/escala-folgas/event-types` reaproveitar
+ * em vez de duplicar.
+ */
+export function slugify(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}

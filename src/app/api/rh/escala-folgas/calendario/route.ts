@@ -15,6 +15,10 @@ import { getCalendarioDias, resolveOwnSetor } from "@/lib/escala-folgas-server";
  * aplicada 3x nesta feature, reaproveitada aqui via `vacationOverlapsRangeWhere`/
  * `absenceOverlapsRangeWhere`).
  *
+ * Expansão "Escala de Folgas e Eventos": cada dia da resposta também traz `eventos`
+ * (`CalendarEvent` — evento da loja sem colaborador, ex. "Aniversário Coletivo"), numa lista
+ * separada de `indisponiveis` (nunca filtrada por `setor`/Líder, ver `getCalendarioDias`).
+ *
  * Query: `from`/`to` (obrigatórios, "YYYY-MM-DD", inclusive nos dois extremos; máximo de 366 dias
  * de intervalo) e `setor` (opcional).
  *
