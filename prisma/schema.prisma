@@ -5812,6 +5812,15 @@ model FechamentoPergunta {
   /// ainda não existe).
   abreOcorrencia Boolean @default(false)
 
+  /// Só relevante quando `abreOcorrencia = true` numa pergunta SIM_NAO: por padrão (false),
+  /// "Sim" é a resposta que indica problema e gera a ocorrência (convenção usada por todas as
+  /// 13 perguntas originais de Chef de Salão/Chef de Cozinha). Algumas perguntas têm a
+  /// polaridade invertida de propósito — ex. "Os motoboys foram suficientes?" (Chef Delivery):
+  /// manter a redação afirmativa pedida pelo usuário, mas é "Não" que sinaliza problema. Quando
+  /// `true`, `gerarFechamentoOcorrencias` (src/lib/fechamento-server.ts) gera a ocorrência em
+  /// `valorBooleano === false`, não `=== true`. Nunca lido para tipos diferentes de SIM_NAO.
+  inverterPolaridade Boolean @default(false)
+
   /// Conditional genérico: mostra esta pergunta só quando a pergunta "pai"
   /// foi respondida com determinado valor — é o mecanismo usado nesta fase
   /// para os "se SIM, abre campo" dos 3 formulários (perguntas filhas de
@@ -6004,6 +6013,20 @@ model FechamentoResposta {
 // transformação só preenche uma das duas, nunca as duas ao mesmo tempo).
 // ---------------------------------------------------------------------------
 
+/// `TRANSFORMADA` ficou INATINGÍVEL a partir da Fase 4 (Parte 2 — remoção completa de
+/// "transformar em ação": botão, modal e `POST .../ocorrencias/[id]/transformar`, o único
+/// caminho de escrita que levava uma ocorrência a este status). Mantido no enum (em vez de
+/// removido com uma migration que recriaria o tipo) porque não foi possível confirmar, a partir
+/// deste ambiente de desenvolvimento (sem acesso a credencial/dado de produção — ver CLAUDE.md,
+/// "Padrões que disparam o bloqueio"), se já existe algum `FechamentoOcorrencia` real em
+/// produção marcado como TRANSFORMADA; Postgres não tem `ALTER TYPE ... DROP VALUE`, então
+/// "remover" de verdade exigiria recriar o tipo e decidir pra qual outro status mapear essas
+/// linhas, caso existam — arriscado demais pra fazer sem certeza. Nenhum código escreve mais
+/// este valor (nem a rota de "transformar", que não existe mais, nem `PATCH
+/// .../ocorrencias/[id]`, que já recusava este valor antes mesmo desta fase); os três lugares
+/// que ainda leem/exibem TRANSFORMADA (`GET .../ocorrencias`, `STATUS_LABEL`/`STATUS_TONE` em
+/// ocorrencias-client.tsx, o "Transformada (manter)" do editar-modal.tsx) continuam servindo só
+/// pra exibir histórico eventual, nunca pra criar um registro novo nesse status.
 enum FechamentoOcorrenciaStatus {
   ABERTA
   TRANSFORMADA

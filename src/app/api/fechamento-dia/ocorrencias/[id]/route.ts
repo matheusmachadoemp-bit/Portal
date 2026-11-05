@@ -6,10 +6,12 @@ import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 
 const GRAVIDADES: FechamentoGravidade[] = ["INFORMATIVO", "ATENCAO", "IMPORTANTE", "CRITICO"];
-// "TRANSFORMADA" de propósito fora da lista aceita aqui — só a rota
-// `POST .../transformar` pode levar uma ocorrência a esse status (é o único jeito de garantir
-// que `transformadoEmTaskId`/`transformadoEmChamadoId` sempre estejam preenchidos quando o
-// status diz TRANSFORMADA).
+// "TRANSFORMADA" de propósito fora da lista aceita aqui. Até a Fase 4, Parte 2, só a rota
+// `POST .../transformar` podia levar uma ocorrência a esse status — essa rota foi removida por
+// completo (junto com o botão/modal "Transformar em ação" na tela), então TRANSFORMADA agora é
+// definitivamente inatingível: nenhum caminho de escrita no sistema cria mais este valor (ver
+// comentário de `FechamentoOcorrenciaStatus` no schema.prisma). Mantido fora desta lista mesmo
+// assim, sem exceção.
 const STATUSES_ACEITOS: FechamentoOcorrenciaStatus[] = ["ABERTA", "RESOLVIDA", "DESCARTADA"];
 
 /**
@@ -51,10 +53,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Gravidade inválida." }, { status: 400 });
   }
   if (status !== undefined && !STATUSES_ACEITOS.includes(status)) {
-    return NextResponse.json(
-      { error: 'Status inválido — para marcar como TRANSFORMADA, use a rota de "transformar".' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Status inválido." }, { status: 400 });
   }
   if (descricao !== undefined && !descricao.trim()) {
     return NextResponse.json({ error: "Descrição não pode ficar vazia." }, { status: 400 });

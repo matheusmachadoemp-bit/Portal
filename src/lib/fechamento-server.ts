@@ -5,6 +5,7 @@ import { computeFechamentoStatus, fechamentoReleaseEDueAt } from "@/lib/fechamen
 import { createNotification } from "@/lib/notifications";
 import { getStoreManagers } from "@/lib/manutencao-server";
 import { hasModulePermission } from "@/lib/authz";
+import { GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
 
 /**
  * Decide se um usuário pode de fato preencher o formulário de UM `FechamentoCargo` específico —
@@ -172,12 +173,13 @@ const FILHA_PENDENCIA_TEXTO = "Ficou alguma pendência para amanhã?";
 
 /**
  * Gera as `FechamentoOcorrencia` de uma submissão: para cada pergunta com `abreOcorrencia =
- * true` do cargo, se a resposta registrada for "afirmativa" (`valorBooleano === true` — hoje a
- * única forma que existe no catálogo real, ver comentário do model no schema), cria uma
- * ocorrência (idempotente via `@@unique` em `respostaId`: chamar de novo pra uma resposta que
- * já gerou ocorrência não duplica nem sobrescreve categoria/gravidade/status que um humano
- * já possa ter ajustado manualmente). Chamada pela rota de submissão logo depois de gravar as
- * `FechamentoResposta`.
+ * true` do cargo, se a resposta registrada for "a que indica problema" (`valorBooleano ===
+ * true` por padrão, ou `=== false` quando `pergunta.inverterPolaridade = true` — ver comentário
+ * do campo no schema; hoje a única pergunta assim é "Os motoboys foram suficientes?" do Chef
+ * Delivery, onde "Não" é quem sinaliza problema, não "Sim"), cria uma ocorrência (idempotente
+ * via `@@unique` em `respostaId`: chamar de novo pra uma resposta que já gerou ocorrência não
+ * duplica nem sobrescreve categoria/gravidade/status que um humano já possa ter ajustado
+ * manualmente). Chamada pela rota de submissão logo depois de gravar as `FechamentoResposta`.
  */
 export async function gerarFechamentoOcorrencias(submissaoId: string): Promise<FechamentoOcorrencia[]> {
   const submissao = await prisma.fechamentoSubmissao.findUnique({ where: { id: submissaoId } });
@@ -193,6 +195,7 @@ export async function gerarFechamentoOcorrencias(submissaoId: string): Promise<F
           tipo: true,
           categoriaSugeridaId: true,
           gravidadeSugerida: true,
+          inverterPolaridade: true,
           condicionais: { select: { id: true, texto: true } },
         },
       },
@@ -222,7 +225,8 @@ export async function gerarFechamentoOcorrencias(submissaoId: string): Promise<F
       );
       continue;
     }
-    if (resposta.valorBooleano !== true) continue;
+    const valorQueIndicaProblema = !pergunta.inverterPolaridade;
+    if (resposta.valorBooleano !== valorQueIndicaProblema) continue;
 
     const existente = await prisma.fechamentoOcorrencia.findUnique({ where: { respostaId: resposta.id } });
     if (existente) {
@@ -390,11 +394,27 @@ function agruparMedia<T>(items: T[], keyFn: (item: T) => string, labelFn: (item:
  * como "atrasado"). Na prática isso deve ser raro (a tela de Status do Dia é o objetivo central
  * do módulo, visitada diariamente), mas é uma subestimação real do "não enviado" que vale a pena
  * ter em mente ao ler o indicador.
+ *
+ * `problemasPorSetor` (Fase 4, Parte 3 + Parte 4 — Ocorrências, Otavio): "qual setor tem mais
+ * problema" combina DUAS fontes pela mesma chave de setor — `FechamentoOcorrencia.cargoId`
+ * (`ocorrenciasPorCargo`) e `ChecklistItemResponse` com `status = PROBLEMA` do mês/período
+ * (`checklistProblemasPorSetor`), SEM criar uma `FechamentoOcorrencia` para cada item de
+ * checklist com problema (decisão do usuário: o Checklist continua no próprio pipeline, só a
+ * CONTAGEM entra no mesmo dashboard). A chave compartilhada é possível porque
+ * `ChecklistTemplate.setor` (enum `GoalCategory`) já usa o MESMO vocabulário de
+ * `FechamentoCargo.key` — `GOAL_CATEGORY_ROUTE` (@/lib/goals), já usado por Metas, faz
+ * GERENCIA->"gerencia"/SALAO->"salao"/COZINHA->"cozinha"/DELIVERY->"delivery" (os 4 cargos do
+ * Fechamento do Dia hoje). MARKETING/ADMINISTRATIVO não têm `FechamentoCargo` correspondente —
+ * ainda assim entram em `problemasPorSetor` (usando o rótulo de Metas, `GOAL_CATEGORY_LABEL`)
+ * caso tenham item de checklist com problema no período, já que "setor com mais problema" é um
+ * conceito mais amplo que só os cargos do Fechamento do Dia; só não aparecem em
+ * `ocorrenciasPorCargo` (que é só `FechamentoOcorrencia`, sempre ligada a um `FechamentoCargo`
+ * real).
  */
 export async function getFechamentoResumoData(empresaIds: string[], from: Date, to: Date) {
   const now = new Date();
 
-  const [submissoes, ocorrencias] = await Promise.all([
+  const [submissoes, ocorrencias, checklistProblemas] = await Promise.all([
     prisma.fechamentoSubmissao.findMany({
       where: { empresaId: { in: empresaIds }, data: { gte: from, lte: to } },
       select: {
@@ -412,6 +432,19 @@ export async function getFechamentoResumoData(empresaIds: string[], from: Date, 
         gravidade: true,
         categoriaId: true,
         categoria: { select: { nome: true } },
+        cargoId: true,
+        cargo: { select: { key: true, nome: true } },
+      },
+    }),
+    // ChecklistItemResponse não tem data própria — herda a data da ChecklistOccurrence (mesma
+    // convenção de ChecklistOccurrence.date já usada no resto do módulo Checklist).
+    prisma.checklistItemResponse.findMany({
+      where: {
+        status: "PROBLEMA",
+        occurrence: { empresaId: { in: empresaIds }, date: { gte: from, lte: to } },
+      },
+      select: {
+        itemTemplate: { select: { template: { select: { setor: true } } } },
       },
     }),
   ]);
@@ -448,6 +481,37 @@ export async function getFechamentoResumoData(empresaIds: string[], from: Date, 
   // @/lib/manutencao-server, ex. `gastosPorEquipamento.slice(0, 10)`).
   const topCategorias = [...ocorrenciasPorCategoria].sort((a, b) => b.total - a.total).slice(0, 5);
 
+  // 5) Ocorrências por cargo (setor) — Parte 3: só faltava esta contagem (`cargoId` já existe em
+  // `FechamentoOcorrencia` desde a Fase 3); mesmo padrão de `agruparContagem` já usado acima.
+  const ocorrenciasPorCargo = agruparContagem(ocorrencias, (o) => o.cargo.key, (o) => o.cargo.nome);
+
+  // 6) Itens de Checklist marcados "Problema" por setor — Parte 4: ver comentário da função para
+  // o racional completo do mapeamento `GoalCategory` -> `FechamentoCargo.key`.
+  const checklistProblemasPorSetor = agruparContagem(
+    checklistProblemas,
+    (r) => GOAL_CATEGORY_ROUTE[r.itemTemplate.template.setor as GoalCategoryKey],
+    (r) => GOAL_CATEGORY_LABEL[r.itemTemplate.template.setor as GoalCategoryKey]
+  );
+
+  // 7) "Qual setor tem mais problema" — combina as duas contagens acima pela mesma chave de
+  // setor num total único, já ordenado do maior pro menor (pronta pra tela futura do Caio exibir
+  // direto, sem precisar somar as duas listas separadas).
+  const problemasPorSetorMap = new Map<
+    string,
+    { key: string; nome: string; ocorrencias: number; checklistProblemas: number }
+  >();
+  for (const o of ocorrenciasPorCargo) {
+    problemasPorSetorMap.set(o.key, { key: o.key, nome: o.nome, ocorrencias: o.total, checklistProblemas: 0 });
+  }
+  for (const c of checklistProblemasPorSetor) {
+    const atual = problemasPorSetorMap.get(c.key);
+    if (atual) atual.checklistProblemas = c.total;
+    else problemasPorSetorMap.set(c.key, { key: c.key, nome: c.nome, ocorrencias: 0, checklistProblemas: c.total });
+  }
+  const problemasPorSetor = [...problemasPorSetorMap.values()]
+    .map((p) => ({ ...p, total: p.ocorrencias + p.checklistProblemas }))
+    .sort((a, b) => b.total - a.total);
+
   return {
     notaMediaPorLoja,
     notaMediaPorCargo,
@@ -461,8 +525,12 @@ export async function getFechamentoResumoData(empresaIds: string[], from: Date, 
     ocorrenciasPorGravidade,
     ocorrenciasPorCategoria,
     topCategorias,
+    ocorrenciasPorCargo,
+    checklistProblemasPorSetor,
+    problemasPorSetor,
     totalSubmissoes: submissoes.length,
     totalOcorrencias: ocorrencias.length,
+    totalChecklistProblemas: checklistProblemas.length,
   };
 }
 
