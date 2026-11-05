@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/keep-alive",
       "schedule": "*/4 * * * *"
+    },
+    {
+      "path": "/api/cron/rh/adicional-noturno",
+      "schedule": "0 6 2 * *"
     }
   ]
 }

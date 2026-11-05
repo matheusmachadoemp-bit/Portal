@@ -12,23 +12,41 @@ export function timeToMinutes(t?: string | null): number | null {
   return hours * 60 + minutes;
 }
 
-export function computeHorasTrabalhadas(input: {
+export const MINUTOS_DIA = 24 * 60;
+
+export type TimeEntryTimesLike = {
   entrada?: string | null;
   saidaAlmoco?: string | null;
   retornoAlmoco?: string | null;
   saida?: string | null;
-}): number {
-  const MINUTOS_DIA = 24 * 60;
+};
+
+/**
+ * Converte os 4 horários (`entrada`/`saidaAlmoco`/`retornoAlmoco`/`saida`, "HH:MM") de uma marcação
+ * de ponto numa linha do tempo CONTÍNUA (minutos a partir da meia-noite do dia da entrada, podendo
+ * passar de 1440 quando o turno cruza a virada) e devolve os intervalos efetivamente trabalhados —
+ * já descontado o intervalo de almoço, quando houver.
+ *
+ * Extraído de `computeHorasTrabalhadas` (ver racional completo da virada de dia abaixo) pra ser
+ * reaproveitado por quem precisa saber ONDE no tempo o colaborador trabalhou, não só QUANTAS horas
+ * (ex.: `src/lib/adicional-noturno.ts`, que precisa recortar a interseção com a janela 22h–05h) —
+ * nunca duplica essa lógica de ajuste de virada de dia num segundo lugar.
+ *
+ * Retorna `null` quando não há como calcular (falta entrada/saída, ou entrada === saída — dado
+ * inconsistente, mesmo critério de sempre).
+ */
+export function computeAdjustedWorkIntervals(
+  input: TimeEntryTimesLike
+): { entrada: number; saidaContinua: number; intervals: [number, number][] } | null {
   const entrada = timeToMinutes(input.entrada);
   const saida = timeToMinutes(input.saida);
-  if (entrada === null || saida === null || saida === entrada) return 0;
+  if (entrada === null || saida === null || saida === entrada) return null;
   // Turno que cruza a meia-noite (ex.: entrada 22:00, saída 06:00 do dia seguinte): o horário de
   // saída, sozinho ("HH:MM"), não carrega informação de dia — quando ele é MENOR que o de entrada,
   // isso indica que a saída ocorreu no dia seguinte, então somamos 24h (em minutos) pra colocar os
   // dois horários numa mesma linha do tempo contínua antes de calcular a duração. Sem isso, `saida -
   // entrada` dava negativo e o turno era descartado como 0h (achado da auditoria geral, RH/Jornada).
   const saidaContinua = saida < entrada ? saida + MINUTOS_DIA : saida;
-  let totalMinutes = saidaContinua - entrada;
 
   // Mesmo ajuste pro intervalo de almoço, relativo à entrada: qualquer horário menor que a entrada
   // também cai no "dia seguinte" da linha do tempo contínua — cobre o caso raro de um intervalo de
@@ -37,9 +55,22 @@ export function computeHorasTrabalhadas(input: {
   const retornoAlmocoRaw = timeToMinutes(input.retornoAlmoco);
   const saidaAlmoco = saidaAlmocoRaw !== null && saidaAlmocoRaw < entrada ? saidaAlmocoRaw + MINUTOS_DIA : saidaAlmocoRaw;
   const retornoAlmoco = retornoAlmocoRaw !== null && retornoAlmocoRaw < entrada ? retornoAlmocoRaw + MINUTOS_DIA : retornoAlmocoRaw;
-  if (saidaAlmoco !== null && retornoAlmoco !== null && retornoAlmoco > saidaAlmoco) {
-    totalMinutes -= retornoAlmoco - saidaAlmoco;
-  }
+
+  const intervals: [number, number][] =
+    saidaAlmoco !== null && retornoAlmoco !== null && retornoAlmoco > saidaAlmoco
+      ? [
+          [entrada, saidaAlmoco],
+          [retornoAlmoco, saidaContinua],
+        ]
+      : [[entrada, saidaContinua]];
+
+  return { entrada, saidaContinua, intervals };
+}
+
+export function computeHorasTrabalhadas(input: TimeEntryTimesLike): number {
+  const adjusted = computeAdjustedWorkIntervals(input);
+  if (!adjusted) return 0;
+  const totalMinutes = adjusted.intervals.reduce((sum, [start, end]) => sum + (end - start), 0);
   return Math.max(0, Math.round((totalMinutes / 60) * 100) / 100);
 }
 
