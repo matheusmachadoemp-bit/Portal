@@ -44,13 +44,19 @@ const ENTRY_INCLUDE = {
  * `POST` aceita 2 formatos de payload (ver corpo da função pra detalhe de cada um):
  * - Legado: `{ employeeId: string, dayOffTypeId, date, observacao? }` — cria UMA `DayOffEntry`,
  *   resposta `{ dayOffEntry, saved, coverage }` ou `{ error }`, exatamente como sempre foi.
- * - Lote (novo, pra eventos que envolvem vários colaboradores de setores diferentes no mesmo dia,
- *   ex. "Aniversário Coletivo"/"Dia da Massagem"): `{ employeeIds: string[], dayOffTypeId, date,
- *   observacao? }` — cria uma `DayOffEntry` por colaborador da lista (mesmo `dayOffTypeId`+`date`
- *   pra todos), resposta `{ saved, results, createdCount, failedCount }` com um item em `results`
- *   por colaborador (`status: "created" | "coverage_pending" | "error"`), sempre HTTP 200 — nunca
- *   tudo-ou-nada: um colaborador com conflito (já tem folga nesse dia), fora da loja ativa, ou
- *   abaixo da cobertura mínima do setor (sem confirmação) não impede os demais do mesmo lote.
+ * - Lote (novo, pra folga real de vários colaboradores de setores diferentes no mesmo dia):
+ *   `{ employeeIds: string[], dayOffTypeId, date, observacao? }` — cria uma `DayOffEntry` por
+ *   colaborador da lista (mesmo `dayOffTypeId`+`date` pra todos), resposta `{ saved, results,
+ *   createdCount, failedCount }` com um item em `results` por colaborador (`status: "created" |
+ *   "coverage_pending" | "error"`), sempre HTTP 200 — nunca tudo-ou-nada: um colaborador com
+ *   conflito (já tem folga nesse dia), fora da loja ativa, ou abaixo da cobertura mínima do setor
+ *   (sem confirmação) não impede os demais do mesmo lote.
+ *   Nota (expansão "Escala de Folgas e Eventos"): "Aniversário Coletivo"/"Dia da Massagem" — os 2
+ *   casos que originalmente motivaram este modo lote — migraram pra `CalendarEvent`/`EventType`
+ *   (`POST /api/rh/escala-folgas/events`), que não exige nenhum colaborador. Este modo lote
+ *   continua existindo e válido pra folga de verdade (ausência real) de vários colaboradores ao
+ *   mesmo tempo; os 2 `DayOffType` antigos (`aniversario-coletivo`/`dia-da-massagem`) foram
+ *   desativados (`ativo: false`) e `validateDayOffType` abaixo já rejeita tipo inativo.
  */
 const MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 

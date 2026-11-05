@@ -162,6 +162,12 @@ export async function resolveOwnSetor(userId: string): Promise<string | null> {
 // Vacation, Absence, StoreClosedWeekday) num resultado único por dia, pronto pra uma tela de
 // calendário/visão semanal/visão por colaborador consumir sem N+1 de requisições. Usado por
 // `GET /api/rh/escala-folgas/calendario`.
+//
+// Expansão "Escala de Folgas e Eventos": soma também `CalendarEvent` (evento da loja SEM
+// colaborador, ex. "Aniversário Coletivo") — numa lista PRÓPRIA por dia (`eventos`), separada de
+// `indisponiveis`, porque não é a ausência de ninguém (não tem `employeeId`/setor pra encaixar no
+// mesmo formato dos outros 4). Ver comentário "Escala de Folgas E EVENTOS (expansão)" no bloco
+// "RH — ESCALA DE FOLGAS" em `prisma/schema.prisma`.
 // ---------------------------------------------------------------------------
 
 export type CalendarioFonte = "DAY_OFF" | "VACATION" | "ABSENCE";
@@ -186,6 +192,18 @@ export type CalendarioIndisponivel = {
   observacao: string | null;
 };
 
+/** Um `CalendarEvent` (evento sem colaborador, ex. "Aniversário Coletivo") resolvido pro dia —
+ *  ver comentário "Escala de Folgas E EVENTOS (expansão)" no bloco "RH — ESCALA DE FOLGAS" em
+ *  `prisma/schema.prisma`. `eventType` é `null` quando o evento foi criado com título livre, sem
+ *  tipo do catálogo (`eventTypeId` nulo). */
+export type CalendarioEvento = {
+  id: string;
+  empresaId: string;
+  titulo: string;
+  observacao: string | null;
+  eventType: { id: string; key: string; nome: string; cor: string } | null;
+};
+
 export type CalendarioDia = {
   date: string;
   weekday: number;
@@ -193,6 +211,10 @@ export type CalendarioDia = {
    *  nunca filtrado por setor (loja fechada não é um conceito de setor). Vazio na maioria dos dias. */
   lojasFechadas: { empresaId: string; empresaName: string }[];
   indisponiveis: CalendarioIndisponivel[];
+  /** Eventos (`CalendarEvent`) do dia — SEMPRE a loja inteira, nunca filtrado por `setor` (mesmo
+   *  racional de `lojasFechadas`: evento não pertence a um setor, ver `POST
+   *  /api/rh/escala-folgas/events`). Vazio na maioria dos dias. */
+  eventos: CalendarioEvento[];
 };
 
 const RESERVED_TYPE_FALLBACK: Record<"FERIAS" | "AFASTAMENTO", CalendarioDayOffType> = {
@@ -202,7 +224,7 @@ const RESERVED_TYPE_FALLBACK: Record<"FERIAS" | "AFASTAMENTO", CalendarioDayOffT
 
 /**
  * Monta o calendário agregado de `fromKey` a `toKey` (inclusive) pras lojas de `empresaIds`,
- * opcionalmente restrito a um `setor`. Só 6 queries no total (nenhuma por dia/por colaborador —
+ * opcionalmente restrito a um `setor`. Só 7 queries no total (nenhuma por dia/por colaborador —
  * a montagem dia a dia acontece em memória, sobre os resultados já carregados), então o custo não
  * cresce com o tamanho do período pedido além do volume de dado real.
  *
@@ -210,6 +232,9 @@ const RESERVED_TYPE_FALLBACK: Record<"FERIAS" | "AFASTAMENTO", CalendarioDayOffT
  * `status: "ATIVO"` de propósito: o calendário também serve pra olhar um período passado (quem
  * estava de folga mês passado), e um colaborador desligado depois não deve sumir do histórico —
  * mesmo comportamento que `GET /api/rh/escala-folgas/entries` já tinha antes desta fase.
+ *
+ * `setor`, quando informado, NUNCA filtra `eventos` (nem `lojasFechadas`) — os dois são fatos da
+ * loja inteira, não de um colaborador/setor específico.
  */
 export async function getCalendarioDias(params: {
   empresaIds: string[];
@@ -223,7 +248,7 @@ export async function getCalendarioDias(params: {
 
   const employeeFilter: Prisma.EmployeeWhereInput = setor ? { setor } : {};
 
-  const [entries, vacations, absences, closedWeekdays, reservedTypes, empresas] = await Promise.all([
+  const [entries, vacations, absences, closedWeekdays, reservedTypes, empresas, events] = await Promise.all([
     prisma.dayOffEntry.findMany({
       where: {
         empresaId: { in: empresaIds },
@@ -250,6 +275,15 @@ export async function getCalendarioDias(params: {
     // já existentes — desativar não é a mesma coisa que apagar.
     prisma.dayOffType.findMany({ where: { kind: { in: ["FERIAS", "AFASTAMENTO"] } } }),
     prisma.empresa.findMany({ where: { id: { in: empresaIds } }, select: { id: true, name: true } }),
+    // `CalendarEvent` NUNCA é filtrado por `employeeFilter`/`setor` — evento não tem colaborador
+    // nem setor, é da loja inteira (mesmo racional de `closedWeekdays` acima). Mesmo `ativo: false`
+    // do `eventType` não esconde o evento (igual `dayOffType` acima): desativar o tipo no catálogo
+    // só impede criar evento NOVO com ele (ver `POST /api/rh/escala-folgas/events`), não afeta
+    // eventos já cadastrados.
+    prisma.calendarEvent.findMany({
+      where: { empresaId: { in: empresaIds }, date: { gte: spStartOfDay(fromKey), lte: spStartOfDay(toKey) } },
+      include: { eventType: { select: { id: true, key: true, nome: true, cor: true } } },
+    }),
   ]);
 
   const feriasType = reservedTypes.find((t) => t.kind === "FERIAS") ?? RESERVED_TYPE_FALLBACK.FERIAS;
@@ -313,6 +347,21 @@ export async function getCalendarioDias(params: {
       });
     }
 
-    return { date, weekday, lojasFechadas, indisponiveis };
+    const eventos: CalendarioEvento[] = [];
+    for (const ev of events) {
+      if (ev.date.getTime() !== dayInstant) continue;
+      // `empresaIds` pode cobrir mais de uma loja (modo "Grupo Nord"); um evento é sempre visível
+      // em QUALQUER loja do contexto ativo que bata com `ev.empresaId`, mesmo que o dia tenha
+      // `setor` restrito (Líder) — evento não pertence a setor, não há o que filtrar aqui.
+      eventos.push({
+        id: ev.id,
+        empresaId: ev.empresaId,
+        titulo: ev.titulo,
+        observacao: ev.observacao,
+        eventType: ev.eventType,
+      });
+    }
+
+    return { date, weekday, lojasFechadas, indisponiveis, eventos };
   });
 }

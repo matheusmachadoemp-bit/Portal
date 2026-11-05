@@ -26,6 +26,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const existing = await prisma.dayOffType.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Não encontrado." }, { status: 404 });
+  // Achado desta tarefa (expansão "Escala de Folgas e Eventos"): faltava aqui a mesma trava que o
+  // DELETE já tinha (ver abaixo) — sem ela, dava pra renomear/recolorir "Férias"/"Afastamento"
+  // (`isSystem = true`) por este PATCH, mesmo esses 2 sendo reservados (redirecionam pra
+  // `Vacation`/`Absence`, nunca geram `DayOffEntry` de verdade) e só deveriam nascer pelo seed.
+  if (existing.isSystem) {
+    return NextResponse.json(
+      { error: `"${existing.nome}" é um tipo reservado do sistema e não pode ser editado.` },
+      { status: 409 }
+    );
+  }
 
   const body = await req.json().catch(() => null);
   // `kind`/`key` nunca mudam por aqui: `kind` decide se a linha é reservada (FERIAS/AFASTAMENTO,
