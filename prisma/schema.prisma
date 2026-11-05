@@ -119,6 +119,7 @@ model User {
   schedulePeriodsPublicadas          SchedulePeriod[]                    @relation("SchedulePeriodPublicadoPor")
   dayOffEntriesCreated               DayOffEntry[]                       @relation("DayOffEntryCreatedBy")
   dayOffEntriesAutorizadas           DayOffEntry[]                       @relation("DayOffEntryAutorizadoPor")
+  calendarEventsCreated              CalendarEvent[]                     @relation("CalendarEventCreatedBy")
   shiftSwapRequestsSolicitados       ShiftSwapRequest[]                  @relation("SwapSolicitante")
   shiftSwapRequestsRecebidos         ShiftSwapRequest[]                  @relation("SwapDestinatario")
   shiftSwapRequestsAprovados         ShiftSwapRequest[]                  @relation("SwapAprovador")
@@ -416,6 +417,7 @@ model Empresa {
   sectorCoverageConfigs              SectorCoverageConfig[]
   schedulePeriods                    SchedulePeriod[]
   dayOffEntries                      DayOffEntry[]
+  calendarEvents                     CalendarEvent[]
   shiftSwapRequests                  ShiftSwapRequest[]
   scheduleChangeLogs                 ScheduleChangeLog[]
   subcategories                      Subcategory[]
@@ -2121,6 +2123,37 @@ model Absence {
 // em `src/lib/rh-helpers.ts` (que só soma `TimeEntry.horasTrabalhadas` na hora de exibir, nunca
 // persiste um saldo). Validar "o colaborador tem saldo suficiente pra essa folga" fica pra uma
 // fase futura, fora do escopo desta.
+//
+// --- Escala de Folgas E EVENTOS (expansão) ---
+// O usuário percebeu que "Aniversário Coletivo"/"Dia da Massagem" tinham sido modelados como
+// `DayOffType` (kind FOLGA) — gambiarra: um evento da loja inteira não é a ausência de um
+// colaborador específico, mas `DayOffEntry.employeeId` é obrigatório (`@@unique([employeeId,
+// date])`), então usar esses 2 tipos exigia marcar "folga" de cada colaborador da lista um a um.
+// Em vez de forçar evento dentro de `DayOffEntry` (que tem 8 pontos de uso e regras de cobertura
+// por setor que não fazem sentido pra evento sem colaborador), nasce aqui um par de models NOVO e
+// DESACOPLADO: `EventType` (catálogo, mesmo racional GLOBAL de `DayOffType` acima — "Aniversário
+// Coletivo" significa a mesma coisa em qualquer loja do Grupo Nord) e `CalendarEvent` (a ocorrência
+// em si, por loja+dia, SEM NENHUMA FK de colaborador). `EventType` não tem `kind`/`isSystem` como
+// `DayOffType`: não existe aqui o conceito de "tipo reservado que redireciona pra outra tabela"
+// (Férias/Afastamento viram `Vacation`/`Absence` por regra de negócio; todo `EventType` sempre
+// gera só `CalendarEvent`, sem excecão) — por isso um catálogo mais simples.
+//
+// `CalendarEvent.titulo` é sempre o texto exibido (nunca derivado on-the-fly do catálogo): ao
+// criar com `eventTypeId`, a rota preenche `titulo` com o `nome` do tipo escolhido se o cliente não
+// mandar um texto próprio; sem `eventTypeId`, `titulo` é 100% livre — cobre os 2 casos reais do
+// pedido original ("Aniversário Coletivo"/"Dia da Massagem", recorrentes, pelo catálogo) e qualquer
+// evento futuro avulso sem precisar cadastrar um tipo novo pra um texto que só vai ser usado 1 vez.
+//
+// Migração de dado dos 2 `DayOffType` workaround existentes ("aniversario-coletivo",
+// "dia-da-massagem"): a migration desta mudança marca as 2 linhas como `ativo = false` (não
+// exclui) — confirmado nesta sessão, revisando o catálogo seedado, que nenhum `DayOffEntry` de
+// exemplo foi criado com esses 2 tipos (só a linha do catálogo em si existia); mesmo assim, manter
+// em vez de excluir é a opção sem risco nenhum de perda de dado caso uma loja real já tenha
+// cadastrado uma folga em lote com um desses 2 tipos em produção (este agente não tem acesso de
+// leitura ao Postgres de produção pra confirmar isso com 100% de certeza — ver relatório). Ficam
+// desativados só pra não aparecerem mais como opção no modal "Adicionar folga" (`validateDayOffType`
+// em `/api/rh/escala-folgas/entries` já rejeita `ativo: false`) — o caminho certo pra esses 2 casos
+// de uso passa a ser `CalendarEvent` com `EventType` (seed cria os 2 tipos equivalentes aqui).
 // ---------------------------------------------------------------------------
 
 enum DayOffTypeKind {
@@ -2237,6 +2270,53 @@ model DayOffEntry {
   @@index([empresaId, date])
   @@index([schedulePeriodId])
   @@index([dayOffTypeId])
+}
+
+/// Catálogo GLOBAL (sem empresaId, mesmo racional de `DayOffType`) de tipos de evento da loja —
+/// "Aniversário Coletivo"/"Dia da Massagem" (seed) e qualquer tipo recorrente novo que o RH queira
+/// cadastrar sem precisar de migration. Administrado por `/api/rh/escala-folgas/event-types`
+/// (GET/POST) e `/api/rh/escala-folgas/event-types/[id]` (PATCH) — mesmo padrão de
+/// `DayOffType`/`day-off-types`, mas sem `kind`/`isSystem`: não existe aqui o conceito de "tipo
+/// reservado que redireciona pra outra tabela" (todo `EventType` sempre gera só `CalendarEvent`).
+model EventType {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  nome      String
+  cor       String   @default("#2952E3")
+  ativo     Boolean  @default(true)
+  ordem     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendarEvents CalendarEvent[]
+}
+
+/// Evento da loja num dia específico, SEM colaborador nenhum vinculado (ex.: "Aniversário
+/// Coletivo", "Dia da Massagem", ou qualquer evento avulso digitado livre) — ver comentário
+/// "Escala de Folgas E EVENTOS (expansão)" no topo deste bloco pro porquê de ser um model
+/// desacoplado de `DayOffEntry` em vez de forçar um `employeeId` artificial. `eventTypeId` é
+/// opcional: quando presente, veio do catálogo `EventType` (RH escolheu um tipo já cadastrado,
+/// `titulo` nasce igual ao `nome` do tipo se o cliente não mandar um texto próprio); quando
+/// ausente, `titulo` é 100% texto livre (evento avulso, sem necessidade de cadastrar um tipo novo
+/// só pra um uso único). Sem `@@unique`: nada impede 2 eventos no mesmo dia (ex.: "Aniversário
+/// Coletivo" e "Dia da Massagem" caindo na mesma data), diferente de `DayOffEntry` (1 por
+/// colaborador+dia) — aqui não há "colaborador" pra servir de chave natural.
+model CalendarEvent {
+  id          String     @id @default(cuid())
+  empresaId   String
+  empresa     Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  date        DateTime
+  eventTypeId String?
+  eventType   EventType? @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
+  titulo      String
+  observacao  String?
+  createdById String
+  createdBy   User       @relation("CalendarEventCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([empresaId, date])
+  @@index([eventTypeId])
 }
 
 enum ShiftSwapRequestStatus {
