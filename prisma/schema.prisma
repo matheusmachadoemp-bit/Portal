@@ -206,6 +206,7 @@ model User {
   feedbackHistoricoEntries           FeedbackHistory[]
   feedbackComments                   FeedbackComment[]
   reservationBlockedDatesCreated     ReservationBlockedDate[]            @relation("ReservationBlockedDateCreatedBy")
+  nightShiftAllowancesAprovadas      NightShiftAllowance[]               @relation("NightShiftAllowanceAprovadoPor")
   // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver model AiConversation no final deste
   // arquivo para o racional de design).
   aiConversations                    AiConversation[]
@@ -377,6 +378,7 @@ model Empresa {
   qualityConfigs                     CategoryQualityConfig[]
   employeeFinanceEntries             EmployeeFinanceEntry[]
   timeEntries                        TimeEntry[]
+  nightShiftAllowances               NightShiftAllowance[]
   vacations                          Vacation[]
   uniformDeliveries                  UniformDelivery[]
   employeeDocuments                  EmployeeDocument[]
@@ -1770,44 +1772,57 @@ enum EmployeeStatus {
 }
 
 model Employee {
-  id                    String         @id @default(cuid())
-  empresaId             String
-  empresa               Empresa        @relation(fields: [empresaId], references: [id])
-  name                  String
-  cargo                 String
-  setor                 String
+  id                       String         @id @default(cuid())
+  empresaId                String
+  empresa                  Empresa        @relation(fields: [empresaId], references: [id])
+  name                     String
+  cargo                    String
+  setor                    String
   /// Marca explícita de "este colaborador atende salão" (select de garçom do módulo
   /// Satisfação do Cliente e os rankings por garçom) — um campo próprio em vez de comparar
   /// `cargo === "Garçom"` por texto, porque `cargo` é validado só contra o catálogo
   /// `EmployeeCargo` POR LOJA (uma loja futura pode usar "Garçonete"/"Atendente de Salão" em
   /// vez de "Garçom" e ainda assim marcar `atendeSalao = true`). Marcado manualmente na ficha
   /// do colaborador (RH > Colaboradores) — não inferido a partir do cargo.
-  atendeSalao           Boolean        @default(false)
-  photoUrl              String?
-  admissionDate         DateTime
-  terminationDate       DateTime?
-  status                EmployeeStatus @default(ATIVO)
-  phone                 String?
-  email                 String?
-  cpf                   String?
-  pixKey                String?
-  birthDate             DateTime?
-  escala                String?
-  gestorResponsavel     String?
-  supervisorResponsavel String?
-  salarioFixo           Float?
-  lastEvaluationDate    DateTime?
-  lastEvaluationNote    String?
-  lastTrainingDate      DateTime?
-  lastTrainingName      String?
+  atendeSalao              Boolean        @default(false)
+  photoUrl                 String?
+  admissionDate            DateTime
+  terminationDate          DateTime?
+  status                   EmployeeStatus @default(ATIVO)
+  phone                    String?
+  email                    String?
+  cpf                      String?
+  pixKey                   String?
+  birthDate                DateTime?
+  escala                   String?
+  gestorResponsavel        String?
+  supervisorResponsavel    String?
+  salarioFixo              Float?
+  /// Horário padrão de trabalho (HH:MM, mesmo formato de `TimeEntry.entrada`/`.saida`) usado só
+  /// como referência cadastral — o cálculo do Adicional Noturno (`NightShiftAllowance`, ver
+  /// `src/lib/adicional-noturno.ts`) usa as marcações REAIS em `TimeEntry`, nunca este par, mas
+  /// a ficha do colaborador (RH > Colaboradores) precisa de um lugar pra registrar o horário
+  /// contratual dele (ex. "18:00"/"02:00" num turno que cruza a meia-noite). Nullable: colocado
+  /// em colaboradores já cadastrados sem valor algum, sem quebrar nada.
+  horarioContratualEntrada String?
+  horarioContratualSaida   String?
+  /// Divisor usado pra achar o valor da hora (`salarioFixo / divisorContratual`) no cálculo do
+  /// Adicional Noturno — nullable pra não quebrar colaboradores já cadastrados, mas sempre
+  /// tratado como 220 (CLT, jornada padrão de 44h semanais) quando ausente, tanto no `@default`
+  /// de linha nova quanto no fallback do motor de cálculo (`src/lib/adicional-noturno.ts`).
+  divisorContratual        Int?           @default(220)
+  lastEvaluationDate       DateTime?
+  lastEvaluationNote       String?
+  lastTrainingDate         DateTime?
+  lastTrainingName         String?
   /// Contato de algum familiar/pessoa próxima do colaborador, para a empresa conseguir acionar em
   /// caso de emergência (acidente, mal súbito etc.) — pedido direto do usuário olhando o modal
   /// "Editar colaborador" de RH > Colaboradores. Texto livre, sem máscara/validação de formato,
   /// mesmo padrão de `phone`/`gestorResponsavel` (não é dado sensível como `pixKey`/`salarioFixo`).
-  emergencyContactName  String?
-  emergencyContactPhone String?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
 
   /// Ponta inversa de `User.employeeId` (a FK/`@unique` vivem lá) — o login (se
   /// existir) que corresponde a esta ficha de funcionário.
@@ -1833,6 +1848,7 @@ model Employee {
   /// (vínculo real, preenchido na criação da meta ou por backfill; ver comentário completo no
   /// campo em `Goal`).
   metasResponsavel        Goal[]
+  nightShiftAllowances    NightShiftAllowance[]
 
   @@index([empresaId])
 }
@@ -2026,6 +2042,66 @@ model TimeEntry {
 
   @@unique([employeeId, date])
   @@index([empresaId, date])
+}
+
+// ---------------------------------------------------------------------------
+// RH — SALÁRIO > FOLHA SALARIAL (Adicional Noturno, Art. 73 da CLT)
+//
+// Primeiro pedaço do módulo de RH "Salário" (sidebar RH > Financeiro > Salário — item visual
+// nasce depois, numa tarefa própria do Caio, já com este model e estas rotas publicados).
+//
+// `NightShiftAllowance` guarda o RESULTADO mensal, por colaborador, do cálculo do adicional
+// noturno — nunca a regra em si (regras fixas: janela 22h–05h, percentual 20%, fator de hora
+// reduzida 60/52,5 — ver `src/lib/adicional-noturno.ts`, não configuráveis, decisão tomada com o
+// usuário). `horasNoturnasReais` é a soma do tempo real dentro da janela 22h–05h (recortado de
+// `TimeEntry`, inclusive turnos que cruzam a meia-noite); `horasNoturnasConvertidas` já aplica o
+// fator de hora reduzida; `valorAdicional` é o valor em R$ (`(salarioFixo / divisorContratual) *
+// horasNoturnasConvertidas * 0.20`). Mesmo padrão de tipo monetário do resto do schema: `Float`
+// (nenhum model usa `Decimal` hoje — ver `EmployeeFinanceEntry.value`, `Employee.salarioFixo`).
+//
+// Nasce (ou é recalculado) de duas formas: automático, todo dia 2 do mês, pra competência que
+// acabou de fechar (`/api/cron/rh/adicional-noturno`, ver vercel.json), sempre em status
+// PENDENTE; ou manual, se o RH quiser forçar um recálculo antes do fechamento. Colaborador sem
+// NENHUMA marcação (`TimeEntry`) dentro da janela noturna no mês simplesmente não gera linha
+// (não entra na Folha Salarial daquele mês) — decisão tomada para não poluir a lista com zeros
+// permanentes para quem nunca trabalha de madrugada; ver racional completo em
+// `src/lib/adicional-noturno.ts`.
+//
+// `status`/`aprovadoPorId`/`aprovadoEm`: aprovação por linha na Folha Salarial (tela do Caio,
+// ainda não construída). Só ADMINISTRADOR/GESTOR/GERENTE podem aprovar/reprovar (ver
+// `src/app/api/rh/salario/folha/[id]/route.ts`) — mesmo corte de "quem decide sobre dinheiro de
+// outro colaborador" já usado por `/api/rh/finance` (criar lançamento financeiro) e mais
+// restrito que `/api/rh/vacations`/`/api/rh/employees` (que também liberam SUPERVISOR), porque
+// aprovar uma linha de folha salarial é uma decisão financeira, não operacional do dia a dia.
+// Uma vez `APROVADO`/`REPROVADO`, a linha fica travada pra quem não é ADMINISTRADOR (mesmo
+// padrão de "não reabrir o que já foi decidido" sugerido no pedido original) — recalcular de
+// novo (cron do mês seguinte ou força manual) só toca linhas ainda `PENDENTE`.
+enum NightShiftAllowanceStatus {
+  PENDENTE
+  APROVADO
+  REPROVADO
+}
+
+model NightShiftAllowance {
+  id                       String                    @id @default(cuid())
+  employeeId               String
+  employee                 Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId                String
+  empresa                  Empresa                   @relation(fields: [empresaId], references: [id])
+  competenciaMes           Int
+  competenciaAno           Int
+  horasNoturnasReais       Float
+  horasNoturnasConvertidas Float
+  valorAdicional           Float
+  status                   NightShiftAllowanceStatus @default(PENDENTE)
+  aprovadoPorId            String?
+  aprovadoPor              User?                     @relation("NightShiftAllowanceAprovadoPor", fields: [aprovadoPorId], references: [id])
+  aprovadoEm               DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  @@unique([employeeId, competenciaMes, competenciaAno])
+  @@index([empresaId, competenciaAno, competenciaMes])
 }
 
 // ---------------------------------------------------------------------------
