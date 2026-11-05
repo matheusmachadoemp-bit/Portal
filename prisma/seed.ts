@@ -3002,6 +3002,7 @@ async function main() {
       cor: string;
       ordem: number;
       isSystem?: boolean;
+      ativo?: boolean;
     }[] = [
       { key: "folga-semanal", nome: "Folga Semanal", kind: "FOLGA", cor: "#2952E3", ordem: 0 },
       { key: "folga-do-mes", nome: "Folga do Mês", kind: "FOLGA", cor: "#8b5cf6", ordem: 1 },
@@ -3009,18 +3010,45 @@ async function main() {
       { key: "compensacao", nome: "Compensação", kind: "FOLGA", cor: "#14b8a6", ordem: 3 },
       { key: "ferias", nome: "Férias", kind: "FERIAS", cor: "#f59e0b", ordem: 4, isSystem: true },
       { key: "afastamento", nome: "Afastamento", kind: "AFASTAMENTO", cor: "#ef4444", ordem: 5, isSystem: true },
-      // Eventos que na prática envolvem vários colaboradores de setores diferentes no mesmo dia
-      // (ex.: "Aline Souza - CQ, Matheus Henrique - sushibar, Jonas Lemos - Bar") — motivo de
-      // `POST /api/rh/escala-folgas/entries` ganhar suporte a `employeeIds` em lote nesta mesma
-      // tarefa, pra não obrigar o gestor a repetir o cadastro pessoa por pessoa.
-      { key: "aniversario-coletivo", nome: "Aniversário Coletivo", kind: "FOLGA", cor: "#f97316", ordem: 6 },
-      { key: "dia-da-massagem", nome: "Dia da Massagem", kind: "FOLGA", cor: "#ec4899", ordem: 7 },
+      // Substituídos por `EventType`/`CalendarEvent` (ver bloco "Escala de Folgas E EVENTOS
+      // (expansão)" em schema.prisma): eram a gambiarra original pra eventos que envolvem a loja
+      // inteira, sem colaborador específico, mas `DayOffEntry.employeeId` é obrigatório. Mantidos
+      // aqui (não removidos) só por segurança — a migration desta mudança já marca as 2 linhas
+      // equivalentes como `ativo: false` em produção; `ativo: false` nasce explícito pra qualquer
+      // ambiente novo/seed do zero nascer já desativado também, sem precisar da migration pra isso.
+      { key: "aniversario-coletivo", nome: "Aniversário Coletivo", kind: "FOLGA", cor: "#f97316", ordem: 6, ativo: false },
+      { key: "dia-da-massagem", nome: "Dia da Massagem", kind: "FOLGA", cor: "#ec4899", ordem: 7, ativo: false },
     ];
     for (const t of DAY_OFF_TYPES) {
       await prisma.dayOffType.upsert({
         where: { key: t.key },
         update: {},
-        create: { key: t.key, nome: t.nome, kind: t.kind, cor: t.cor, ordem: t.ordem, isSystem: t.isSystem ?? false },
+        create: {
+          key: t.key,
+          nome: t.nome,
+          kind: t.kind,
+          cor: t.cor,
+          ordem: t.ordem,
+          isSystem: t.isSystem ?? false,
+          ativo: t.ativo ?? true,
+        },
+      });
+    }
+
+    // --- Escala de Folgas: catálogo de tipos de evento (EventType, global) ---
+    // Substitui, pra estes 2 casos, a gambiarra de cima (ver bloco "Escala de Folgas E EVENTOS
+    // (expansão)" em schema.prisma) — eventos da loja inteira, sem nenhum colaborador vinculado.
+    // Mesmo `update: {}` de propósito que DAY_OFF_TYPES: nunca reverte customização feita depois
+    // pela tela de administração (fase futura do Caio).
+    const EVENT_TYPES: { key: string; nome: string; cor: string; ordem: number }[] = [
+      { key: "aniversario-coletivo", nome: "Aniversário Coletivo", cor: "#f97316", ordem: 0 },
+      { key: "dia-da-massagem", nome: "Dia da Massagem", cor: "#ec4899", ordem: 1 },
+    ];
+    for (const t of EVENT_TYPES) {
+      await prisma.eventType.upsert({
+        where: { key: t.key },
+        update: {},
+        create: { key: t.key, nome: t.nome, cor: t.cor, ordem: t.ordem },
       });
     }
 

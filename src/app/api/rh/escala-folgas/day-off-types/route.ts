@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
+import { slugify } from "@/lib/escala-folgas";
 
 /**
  * Catálogo de tipos de folga da Escala de Folgas (`DayOffType`) — GLOBAL (sem loja), ver
@@ -71,13 +72,4 @@ export async function POST(req: Request) {
     },
   });
   return NextResponse.json({ dayOffType }, { status: 201 });
-}
-
-function slugify(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
 }

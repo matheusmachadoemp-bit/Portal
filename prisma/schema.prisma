@@ -119,6 +119,7 @@ model User {
   schedulePeriodsPublicadas          SchedulePeriod[]                    @relation("SchedulePeriodPublicadoPor")
   dayOffEntriesCreated               DayOffEntry[]                       @relation("DayOffEntryCreatedBy")
   dayOffEntriesAutorizadas           DayOffEntry[]                       @relation("DayOffEntryAutorizadoPor")
+  calendarEventsCreated              CalendarEvent[]                     @relation("CalendarEventCreatedBy")
   shiftSwapRequestsSolicitados       ShiftSwapRequest[]                  @relation("SwapSolicitante")
   shiftSwapRequestsRecebidos         ShiftSwapRequest[]                  @relation("SwapDestinatario")
   shiftSwapRequestsAprovados         ShiftSwapRequest[]                  @relation("SwapAprovador")
@@ -205,6 +206,7 @@ model User {
   feedbackHistoricoEntries           FeedbackHistory[]
   feedbackComments                   FeedbackComment[]
   reservationBlockedDatesCreated     ReservationBlockedDate[]            @relation("ReservationBlockedDateCreatedBy")
+  nightShiftAllowancesAprovadas      NightShiftAllowance[]               @relation("NightShiftAllowanceAprovadoPor")
   // Nord AI — Fase 1, Etapa 1 (fundação do módulo; ver model AiConversation no final deste
   // arquivo para o racional de design).
   aiConversations                    AiConversation[]
@@ -376,6 +378,7 @@ model Empresa {
   qualityConfigs                     CategoryQualityConfig[]
   employeeFinanceEntries             EmployeeFinanceEntry[]
   timeEntries                        TimeEntry[]
+  nightShiftAllowances               NightShiftAllowance[]
   vacations                          Vacation[]
   uniformDeliveries                  UniformDelivery[]
   employeeDocuments                  EmployeeDocument[]
@@ -416,6 +419,7 @@ model Empresa {
   sectorCoverageConfigs              SectorCoverageConfig[]
   schedulePeriods                    SchedulePeriod[]
   dayOffEntries                      DayOffEntry[]
+  calendarEvents                     CalendarEvent[]
   shiftSwapRequests                  ShiftSwapRequest[]
   scheduleChangeLogs                 ScheduleChangeLog[]
   subcategories                      Subcategory[]
@@ -1768,44 +1772,57 @@ enum EmployeeStatus {
 }
 
 model Employee {
-  id                    String         @id @default(cuid())
-  empresaId             String
-  empresa               Empresa        @relation(fields: [empresaId], references: [id])
-  name                  String
-  cargo                 String
-  setor                 String
+  id                       String         @id @default(cuid())
+  empresaId                String
+  empresa                  Empresa        @relation(fields: [empresaId], references: [id])
+  name                     String
+  cargo                    String
+  setor                    String
   /// Marca explícita de "este colaborador atende salão" (select de garçom do módulo
   /// Satisfação do Cliente e os rankings por garçom) — um campo próprio em vez de comparar
   /// `cargo === "Garçom"` por texto, porque `cargo` é validado só contra o catálogo
   /// `EmployeeCargo` POR LOJA (uma loja futura pode usar "Garçonete"/"Atendente de Salão" em
   /// vez de "Garçom" e ainda assim marcar `atendeSalao = true`). Marcado manualmente na ficha
   /// do colaborador (RH > Colaboradores) — não inferido a partir do cargo.
-  atendeSalao           Boolean        @default(false)
-  photoUrl              String?
-  admissionDate         DateTime
-  terminationDate       DateTime?
-  status                EmployeeStatus @default(ATIVO)
-  phone                 String?
-  email                 String?
-  cpf                   String?
-  pixKey                String?
-  birthDate             DateTime?
-  escala                String?
-  gestorResponsavel     String?
-  supervisorResponsavel String?
-  salarioFixo           Float?
-  lastEvaluationDate    DateTime?
-  lastEvaluationNote    String?
-  lastTrainingDate      DateTime?
-  lastTrainingName      String?
+  atendeSalao              Boolean        @default(false)
+  photoUrl                 String?
+  admissionDate            DateTime
+  terminationDate          DateTime?
+  status                   EmployeeStatus @default(ATIVO)
+  phone                    String?
+  email                    String?
+  cpf                      String?
+  pixKey                   String?
+  birthDate                DateTime?
+  escala                   String?
+  gestorResponsavel        String?
+  supervisorResponsavel    String?
+  salarioFixo              Float?
+  /// Horário padrão de trabalho (HH:MM, mesmo formato de `TimeEntry.entrada`/`.saida`) usado só
+  /// como referência cadastral — o cálculo do Adicional Noturno (`NightShiftAllowance`, ver
+  /// `src/lib/adicional-noturno.ts`) usa as marcações REAIS em `TimeEntry`, nunca este par, mas
+  /// a ficha do colaborador (RH > Colaboradores) precisa de um lugar pra registrar o horário
+  /// contratual dele (ex. "18:00"/"02:00" num turno que cruza a meia-noite). Nullable: colocado
+  /// em colaboradores já cadastrados sem valor algum, sem quebrar nada.
+  horarioContratualEntrada String?
+  horarioContratualSaida   String?
+  /// Divisor usado pra achar o valor da hora (`salarioFixo / divisorContratual`) no cálculo do
+  /// Adicional Noturno — nullable pra não quebrar colaboradores já cadastrados, mas sempre
+  /// tratado como 220 (CLT, jornada padrão de 44h semanais) quando ausente, tanto no `@default`
+  /// de linha nova quanto no fallback do motor de cálculo (`src/lib/adicional-noturno.ts`).
+  divisorContratual        Int?           @default(220)
+  lastEvaluationDate       DateTime?
+  lastEvaluationNote       String?
+  lastTrainingDate         DateTime?
+  lastTrainingName         String?
   /// Contato de algum familiar/pessoa próxima do colaborador, para a empresa conseguir acionar em
   /// caso de emergência (acidente, mal súbito etc.) — pedido direto do usuário olhando o modal
   /// "Editar colaborador" de RH > Colaboradores. Texto livre, sem máscara/validação de formato,
   /// mesmo padrão de `phone`/`gestorResponsavel` (não é dado sensível como `pixKey`/`salarioFixo`).
-  emergencyContactName  String?
-  emergencyContactPhone String?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
 
   /// Ponta inversa de `User.employeeId` (a FK/`@unique` vivem lá) — o login (se
   /// existir) que corresponde a esta ficha de funcionário.
@@ -1831,6 +1848,7 @@ model Employee {
   /// (vínculo real, preenchido na criação da meta ou por backfill; ver comentário completo no
   /// campo em `Goal`).
   metasResponsavel        Goal[]
+  nightShiftAllowances    NightShiftAllowance[]
 
   @@index([empresaId])
 }
@@ -2027,6 +2045,66 @@ model TimeEntry {
 }
 
 // ---------------------------------------------------------------------------
+// RH — SALÁRIO > FOLHA SALARIAL (Adicional Noturno, Art. 73 da CLT)
+//
+// Primeiro pedaço do módulo de RH "Salário" (sidebar RH > Financeiro > Salário — item visual
+// nasce depois, numa tarefa própria do Caio, já com este model e estas rotas publicados).
+//
+// `NightShiftAllowance` guarda o RESULTADO mensal, por colaborador, do cálculo do adicional
+// noturno — nunca a regra em si (regras fixas: janela 22h–05h, percentual 20%, fator de hora
+// reduzida 60/52,5 — ver `src/lib/adicional-noturno.ts`, não configuráveis, decisão tomada com o
+// usuário). `horasNoturnasReais` é a soma do tempo real dentro da janela 22h–05h (recortado de
+// `TimeEntry`, inclusive turnos que cruzam a meia-noite); `horasNoturnasConvertidas` já aplica o
+// fator de hora reduzida; `valorAdicional` é o valor em R$ (`(salarioFixo / divisorContratual) *
+// horasNoturnasConvertidas * 0.20`). Mesmo padrão de tipo monetário do resto do schema: `Float`
+// (nenhum model usa `Decimal` hoje — ver `EmployeeFinanceEntry.value`, `Employee.salarioFixo`).
+//
+// Nasce (ou é recalculado) de duas formas: automático, todo dia 2 do mês, pra competência que
+// acabou de fechar (`/api/cron/rh/adicional-noturno`, ver vercel.json), sempre em status
+// PENDENTE; ou manual, se o RH quiser forçar um recálculo antes do fechamento. Colaborador sem
+// NENHUMA marcação (`TimeEntry`) dentro da janela noturna no mês simplesmente não gera linha
+// (não entra na Folha Salarial daquele mês) — decisão tomada para não poluir a lista com zeros
+// permanentes para quem nunca trabalha de madrugada; ver racional completo em
+// `src/lib/adicional-noturno.ts`.
+//
+// `status`/`aprovadoPorId`/`aprovadoEm`: aprovação por linha na Folha Salarial (tela do Caio,
+// ainda não construída). Só ADMINISTRADOR/GESTOR/GERENTE podem aprovar/reprovar (ver
+// `src/app/api/rh/salario/folha/[id]/route.ts`) — mesmo corte de "quem decide sobre dinheiro de
+// outro colaborador" já usado por `/api/rh/finance` (criar lançamento financeiro) e mais
+// restrito que `/api/rh/vacations`/`/api/rh/employees` (que também liberam SUPERVISOR), porque
+// aprovar uma linha de folha salarial é uma decisão financeira, não operacional do dia a dia.
+// Uma vez `APROVADO`/`REPROVADO`, a linha fica travada pra quem não é ADMINISTRADOR (mesmo
+// padrão de "não reabrir o que já foi decidido" sugerido no pedido original) — recalcular de
+// novo (cron do mês seguinte ou força manual) só toca linhas ainda `PENDENTE`.
+enum NightShiftAllowanceStatus {
+  PENDENTE
+  APROVADO
+  REPROVADO
+}
+
+model NightShiftAllowance {
+  id                       String                    @id @default(cuid())
+  employeeId               String
+  employee                 Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  empresaId                String
+  empresa                  Empresa                   @relation(fields: [empresaId], references: [id])
+  competenciaMes           Int
+  competenciaAno           Int
+  horasNoturnasReais       Float
+  horasNoturnasConvertidas Float
+  valorAdicional           Float
+  status                   NightShiftAllowanceStatus @default(PENDENTE)
+  aprovadoPorId            String?
+  aprovadoPor              User?                     @relation("NightShiftAllowanceAprovadoPor", fields: [aprovadoPorId], references: [id])
+  aprovadoEm               DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  @@unique([employeeId, competenciaMes, competenciaAno])
+  @@index([empresaId, competenciaAno, competenciaMes])
+}
+
+// ---------------------------------------------------------------------------
 // RH — FÉRIAS
 // ---------------------------------------------------------------------------
 
@@ -2121,6 +2199,37 @@ model Absence {
 // em `src/lib/rh-helpers.ts` (que só soma `TimeEntry.horasTrabalhadas` na hora de exibir, nunca
 // persiste um saldo). Validar "o colaborador tem saldo suficiente pra essa folga" fica pra uma
 // fase futura, fora do escopo desta.
+//
+// --- Escala de Folgas E EVENTOS (expansão) ---
+// O usuário percebeu que "Aniversário Coletivo"/"Dia da Massagem" tinham sido modelados como
+// `DayOffType` (kind FOLGA) — gambiarra: um evento da loja inteira não é a ausência de um
+// colaborador específico, mas `DayOffEntry.employeeId` é obrigatório (`@@unique([employeeId,
+// date])`), então usar esses 2 tipos exigia marcar "folga" de cada colaborador da lista um a um.
+// Em vez de forçar evento dentro de `DayOffEntry` (que tem 8 pontos de uso e regras de cobertura
+// por setor que não fazem sentido pra evento sem colaborador), nasce aqui um par de models NOVO e
+// DESACOPLADO: `EventType` (catálogo, mesmo racional GLOBAL de `DayOffType` acima — "Aniversário
+// Coletivo" significa a mesma coisa em qualquer loja do Grupo Nord) e `CalendarEvent` (a ocorrência
+// em si, por loja+dia, SEM NENHUMA FK de colaborador). `EventType` não tem `kind`/`isSystem` como
+// `DayOffType`: não existe aqui o conceito de "tipo reservado que redireciona pra outra tabela"
+// (Férias/Afastamento viram `Vacation`/`Absence` por regra de negócio; todo `EventType` sempre
+// gera só `CalendarEvent`, sem excecão) — por isso um catálogo mais simples.
+//
+// `CalendarEvent.titulo` é sempre o texto exibido (nunca derivado on-the-fly do catálogo): ao
+// criar com `eventTypeId`, a rota preenche `titulo` com o `nome` do tipo escolhido se o cliente não
+// mandar um texto próprio; sem `eventTypeId`, `titulo` é 100% livre — cobre os 2 casos reais do
+// pedido original ("Aniversário Coletivo"/"Dia da Massagem", recorrentes, pelo catálogo) e qualquer
+// evento futuro avulso sem precisar cadastrar um tipo novo pra um texto que só vai ser usado 1 vez.
+//
+// Migração de dado dos 2 `DayOffType` workaround existentes ("aniversario-coletivo",
+// "dia-da-massagem"): a migration desta mudança marca as 2 linhas como `ativo = false` (não
+// exclui) — confirmado nesta sessão, revisando o catálogo seedado, que nenhum `DayOffEntry` de
+// exemplo foi criado com esses 2 tipos (só a linha do catálogo em si existia); mesmo assim, manter
+// em vez de excluir é a opção sem risco nenhum de perda de dado caso uma loja real já tenha
+// cadastrado uma folga em lote com um desses 2 tipos em produção (este agente não tem acesso de
+// leitura ao Postgres de produção pra confirmar isso com 100% de certeza — ver relatório). Ficam
+// desativados só pra não aparecerem mais como opção no modal "Adicionar folga" (`validateDayOffType`
+// em `/api/rh/escala-folgas/entries` já rejeita `ativo: false`) — o caminho certo pra esses 2 casos
+// de uso passa a ser `CalendarEvent` com `EventType` (seed cria os 2 tipos equivalentes aqui).
 // ---------------------------------------------------------------------------
 
 enum DayOffTypeKind {
@@ -2237,6 +2346,53 @@ model DayOffEntry {
   @@index([empresaId, date])
   @@index([schedulePeriodId])
   @@index([dayOffTypeId])
+}
+
+/// Catálogo GLOBAL (sem empresaId, mesmo racional de `DayOffType`) de tipos de evento da loja —
+/// "Aniversário Coletivo"/"Dia da Massagem" (seed) e qualquer tipo recorrente novo que o RH queira
+/// cadastrar sem precisar de migration. Administrado por `/api/rh/escala-folgas/event-types`
+/// (GET/POST) e `/api/rh/escala-folgas/event-types/[id]` (PATCH) — mesmo padrão de
+/// `DayOffType`/`day-off-types`, mas sem `kind`/`isSystem`: não existe aqui o conceito de "tipo
+/// reservado que redireciona pra outra tabela" (todo `EventType` sempre gera só `CalendarEvent`).
+model EventType {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  nome      String
+  cor       String   @default("#2952E3")
+  ativo     Boolean  @default(true)
+  ordem     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendarEvents CalendarEvent[]
+}
+
+/// Evento da loja num dia específico, SEM colaborador nenhum vinculado (ex.: "Aniversário
+/// Coletivo", "Dia da Massagem", ou qualquer evento avulso digitado livre) — ver comentário
+/// "Escala de Folgas E EVENTOS (expansão)" no topo deste bloco pro porquê de ser um model
+/// desacoplado de `DayOffEntry` em vez de forçar um `employeeId` artificial. `eventTypeId` é
+/// opcional: quando presente, veio do catálogo `EventType` (RH escolheu um tipo já cadastrado,
+/// `titulo` nasce igual ao `nome` do tipo se o cliente não mandar um texto próprio); quando
+/// ausente, `titulo` é 100% texto livre (evento avulso, sem necessidade de cadastrar um tipo novo
+/// só pra um uso único). Sem `@@unique`: nada impede 2 eventos no mesmo dia (ex.: "Aniversário
+/// Coletivo" e "Dia da Massagem" caindo na mesma data), diferente de `DayOffEntry` (1 por
+/// colaborador+dia) — aqui não há "colaborador" pra servir de chave natural.
+model CalendarEvent {
+  id          String     @id @default(cuid())
+  empresaId   String
+  empresa     Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  date        DateTime
+  eventTypeId String?
+  eventType   EventType? @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
+  titulo      String
+  observacao  String?
+  createdById String
+  createdBy   User       @relation("CalendarEventCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([empresaId, date])
+  @@index([eventTypeId])
 }
 
 enum ShiftSwapRequestStatus {
