@@ -5,7 +5,12 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { spDateKey, spStartOfDay } from "@/lib/checklist";
 import { fechamentoPerguntasFaltando, fechamentoReleaseEDueAt } from "@/lib/fechamento";
-import { gerarFechamentoOcorrencias, podeExecutarFechamentoCargo } from "@/lib/fechamento-server";
+import {
+  aplicarListaProducaoAoDiaSeguinte,
+  COZINHA_LISTA_PRODUCAO_CARGO_KEY,
+  gerarFechamentoOcorrencias,
+  podeExecutarFechamentoCargo,
+} from "@/lib/fechamento-server";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
 type RespostaInput = {
@@ -21,13 +26,26 @@ type RespostaInput = {
   anexoUrl?: string | null;
 };
 
+/** Uma linha da última etapa do fechamento da Cozinha — ver `FechamentoListaProducaoResposta`
+ * em schema.prisma. `quantidade` em branco/0/negativo é tratado como "não precisa produzir este
+ * item" (não gera linha nenhuma), nunca um erro de validação — só valores realmente inválidos
+ * (não numéricos) são rejeitados. */
+type ListaProducaoInput = {
+  productionItemId: string;
+  quantidade?: number | string | null;
+};
+
 /**
  * Submete o fechamento de um cargo num dia: cria/atualiza a
  * `FechamentoSubmissao` (calculando `notaGeral` — ver comentário mais abaixo
  * — e se foi enviado no prazo ou com atraso) e cada `FechamentoResposta`,
  * gerando (de forma idempotente) as `FechamentoOcorrencia` das respostas
  * "afirmativas" a perguntas com `abreOcorrencia = true` (ver
- * `gerarFechamentoOcorrencias`, em `@/lib/fechamento-server`).
+ * `gerarFechamentoOcorrencias`, em `@/lib/fechamento-server`) e, só para o
+ * cargo Cozinha e só quando o corpo trouxer `listaProducao` (campo opcional —
+ * omiti-lo não altera nada já salvo, igual `notaGeral`), grava a lista de
+ * produção do dia seguinte e aplica os valores à `ProductionOrder` de cada
+ * item (ver `aplicarListaProducaoAoDiaSeguinte`, em `@/lib/fechamento-server`).
  */
 export async function POST(req: Request, { params }: { params: Promise<{ cargoId: string }> }) {
   const session = await auth();
@@ -53,16 +71,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });
   }
-  const { date, notaGeral, respostas } = body as {
+  const { date, notaGeral, respostas, listaProducao } = body as {
     date?: string;
     notaGeral?: number | null;
     respostas?: RespostaInput[];
+    listaProducao?: ListaProducaoInput[];
   };
   if (!Array.isArray(respostas)) {
     return NextResponse.json({ error: "\"respostas\" precisa ser uma lista." }, { status: 400 });
   }
   if (notaGeral != null && (!Number.isInteger(notaGeral) || notaGeral < 1 || notaGeral > 5)) {
     return NextResponse.json({ error: "\"notaGeral\" precisa ser um número inteiro de 1 a 5." }, { status: 400 });
+  }
+  // `listaProducao` só existe de verdade para o cargo Cozinha (ver comentário de
+  // `FechamentoListaProducaoResposta` em schema.prisma) — se vier para outro cargo, ignoramos em
+  // vez de dar erro (mesmo espírito de tolerância do resto desta rota, ex. perguntaId desconhecido
+  // é só filtrado, não rejeita a requisição inteira).
+  const ehCozinha = cargo.key === COZINHA_LISTA_PRODUCAO_CARGO_KEY;
+  if (listaProducao !== undefined && ehCozinha && !Array.isArray(listaProducao)) {
+    return NextResponse.json({ error: "\"listaProducao\" precisa ser uma lista." }, { status: 400 });
   }
 
   const dateKey = date || spDateKey();
@@ -167,6 +194,55 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
     }
   }
 
+  // Lista de produção (última etapa, só Cozinha) — normaliza/valida ANTES de tocar o banco,
+  // mesmo padrão do resto da rota. `undefined` (campo ausente do corpo) = "não mexe nessa
+  // etapa" (ver tipo `ListaProducaoInput`); só um array explícito (mesmo `[]`, pra permitir
+  // "nenhum item precisa ser produzido amanhã") passa a substituir o conjunto salvo.
+  let listaProducaoNormalizada: { productionItemId: string; quantidade: number }[] | null = null;
+  if (ehCozinha && Array.isArray(listaProducao)) {
+    const quantidadePorItemId = new Map<string, number>();
+    for (const entrada of listaProducao) {
+      if (!entrada || typeof entrada.productionItemId !== "string" || !entrada.productionItemId) continue;
+      const vazio = entrada.quantidade == null || entrada.quantidade === "";
+      const quantidadeNum = vazio ? 0 : Number(entrada.quantidade);
+      if (!Number.isFinite(quantidadeNum)) {
+        return NextResponse.json(
+          { error: "Quantidade inválida em um dos itens da lista de produção." },
+          { status: 400 }
+        );
+      }
+      if (quantidadeNum < 0) {
+        return NextResponse.json(
+          { error: "Quantidade inválida em um dos itens da lista de produção (não pode ser negativa)." },
+          { status: 400 }
+        );
+      }
+      // Entrada repetida pro mesmo item no mesmo corpo: a última vence (mesmo espírito do Map
+      // de respostas acima).
+      quantidadePorItemId.set(entrada.productionItemId, quantidadeNum);
+    }
+
+    const idsParaValidar = [...quantidadePorItemId.keys()];
+    if (idsParaValidar.length > 0) {
+      // Precisa ser um ProductionItem ATIVO desta mesma loja — nunca confiamos num id solto
+      // vindo do cliente (mesmo padrão de produtoIdsAValidar/colaboradorIdsAValidar acima).
+      const itensValidos = await prisma.productionItem.count({
+        where: { id: { in: idsParaValidar }, empresaId: cargo.empresaId, active: true },
+      });
+      if (itensValidos !== idsParaValidar.length) {
+        return NextResponse.json(
+          { error: "Um ou mais itens da lista de produção são inválidos para esta loja." },
+          { status: 400 }
+        );
+      }
+    }
+
+    listaProducaoNormalizada = [...quantidadePorItemId.entries()].map(([productionItemId, quantidade]) => ({
+      productionItemId,
+      quantidade,
+    }));
+  }
+
   const { releaseAt, dueAt } = fechamentoReleaseEDueAt(dateKey, cargo.horarioLiberacao, cargo.horarioLimite);
   const now = new Date();
   const atrasado = now.getTime() > dueAt.getTime();
@@ -244,5 +320,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ cargoId
   // em @/lib/fechamento-server).
   const ocorrencias = await gerarFechamentoOcorrencias(submissao.id);
 
-  return NextResponse.json({ submissao, respostas: respostasCriadas, atrasado, ocorrencias });
+  // Lista de produção (última etapa, só Cozinha, só quando o corpo trouxe o campo — ver
+  // comentário acima). Substitui o conjunto inteiro salvo para esta submissão (reenvio no mesmo
+  // dia sempre reflete o último valor informado, igual FechamentoResposta) e só então aplica os
+  // valores à ProductionOrder do dia seguinte (ver aplicarListaProducaoAoDiaSeguinte, em
+  // @/lib/fechamento-server, para a regra de colisão com o planejamento automático).
+  let listaProducaoAplicada: { criadas: number; atualizadas: number; ignoradas: number } | null = null;
+  if (listaProducaoNormalizada) {
+    // Só itens com quantidade > 0 ganham uma linha (ver comentário do model em schema.prisma) —
+    // um item deixado em branco/0 neste envio nunca gera/mantém linha, mesmo se uma submissão
+    // anterior do mesmo dia tinha gravado uma quantidade para ele (reenvio sempre substitui o
+    // conjunto inteiro).
+    const itensComQuantidade = listaProducaoNormalizada.filter((i) => i.quantidade > 0);
+    const idsAManter = itensComQuantidade.map((i) => i.productionItemId);
+    await prisma.fechamentoListaProducaoResposta.deleteMany({
+      where: { submissaoId: submissao.id, productionItemId: { notIn: idsAManter.length > 0 ? idsAManter : [""] } },
+    });
+    await Promise.all(
+      itensComQuantidade.map(({ productionItemId, quantidade }) =>
+        prisma.fechamentoListaProducaoResposta.upsert({
+          where: { submissaoId_productionItemId: { submissaoId: submissao.id, productionItemId } },
+          update: { quantidade },
+          create: { submissaoId: submissao.id, productionItemId, quantidade },
+        })
+      )
+    );
+    listaProducaoAplicada = await aplicarListaProducaoAoDiaSeguinte(submissao.id, session.user.id);
+  }
+
+  return NextResponse.json({ submissao, respostas: respostasCriadas, atrasado, ocorrencias, listaProducaoAplicada });
 }

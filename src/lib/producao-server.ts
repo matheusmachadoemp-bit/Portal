@@ -4,6 +4,7 @@ import { notifyUser } from "@/lib/tarefas-server";
 import { getStoreManagers } from "@/lib/manutencao-server";
 import { compareProducedToPlanned, effectiveProductionStatus } from "@/lib/producao";
 import { lockIngredientStocks, ESTOQUE_TX_OPTIONS } from "@/lib/estoque";
+import { p2002ConstraintIncludes } from "@/lib/prisma-errors";
 
 export const PRODUCTION_MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "SUPERVISOR"];
 /** Pontos ganhos na régua da Loja Nord por concluir uma produção no prazo e
@@ -12,6 +13,23 @@ export const PRODUCTION_MANAGER_ROLES = ["ADMINISTRADOR", "GESTOR", "GERENTE", "
 const PRODUCAO_PONTOS_NO_PRAZO = 5;
 
 export { getStoreManagers };
+
+/**
+ * Detecta a violação da constraint única `ProductionItem.ingredientId` (Prisma `P2002`) — usado
+ * por POST/PATCH `/api/producao/itens` para devolver um 409 com mensagem clara em vez de deixar
+ * o 500 sem tratamento subir pro cliente (achado real: usuário tentou vincular "Mussarela" a um
+ * segundo produto de produção, já em uso por "Mussarela 240g", e a tela "travou" sem nenhuma
+ * mensagem porque o `$transaction` não tinha catch nenhum). A constraint em si é intencional (o
+ * motor de previsão, `rollUpToProductionItems` em `producao-forecast.ts`, só sabe mapear 1
+ * insumo -> 1 produto de produção) — este helper só identifica o erro, nunca relaxa a regra.
+ * Reaproveita `p2002ConstraintIncludes` (@/lib/prisma-errors) com fallback `?? true`, mesmo
+ * padrão dos outros helpers `isXConflict` do app: `ProductionItem` só tem essa UMA constraint
+ * única além da PK, então qualquer P2002 não identificável com certeza ainda é seguro tratar como
+ * sendo esta.
+ */
+export function isUniqueIngredientIdViolation(error: unknown): boolean {
+  return p2002ConstraintIncludes(error, "ingredientId") ?? true;
+}
 
 export async function logProductionOrderHistory(
   orderId: string,
