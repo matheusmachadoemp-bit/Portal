@@ -508,6 +508,17 @@ model Subcategory {
   order            Int               @default(0)
   active           Boolean           @default(true)
   isSystem         Boolean           @default(false)
+  // `active = false` continua mostrando a linha pra admin/gestor no menu lateral (esmaecida, com
+  // opção Ativar/Desativar/Excluir no "⋮") — pensado pra um estado TRANSITÓRIO em que algum
+  // admin pode querer reativar ou decidir excluir depois (ver `isSubcategoryVisible` em
+  // `subcategory-visibility.ts`). `hidden = true` é pra quando não existe nenhuma ação de gestão
+  // esperada: a tela foi definitivamente incorporada a outra (ex.: "Indicadores" de Produção
+  // juntada dentro de "Visão Geral", a pedido do Matheus) e a linha só continua existindo porque
+  // não pode ser excluída com segurança (`isSystem: true`, ou referenciada por
+  // `FeedbackReport.subcategoriaId` sem `onDelete: Cascade` — excluir quebraria essa FK). Uma
+  // subcategoria `hidden` nunca aparece no menu lateral pra ninguém, nem admin — ver
+  // `prisma/migrations/20261106130000_hide_indicadores_subcategoria_producao`.
+  hidden           Boolean           @default(false)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   // Loja dona desta subcategoria (ex.: "Pizzas Salgadas" da Ficha Técnica só faz sentido pra
