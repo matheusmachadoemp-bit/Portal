@@ -424,7 +424,16 @@ const CATEGORIES = [
       { key: "planejamento", name: "Planejamento", icon: "CalendarClock" },
       { key: "produtos", name: "Produtos de Produção", icon: "Beef" },
       { key: "historico", name: "Histórico", icon: "History" },
-      { key: "indicadores", name: "Indicadores", icon: "BarChart3" },
+      // "Indicadores" deixou de ser subcategoria própria: a pedido do Matheus, foi unificada
+      // dentro de "Visão Geral" (mesma tela passa a mostrar os dois conteúdos juntos — tarefa
+      // visual do Caio, depois desta). Pra banco novo, do zero, o seed já nasce sem esta linha;
+      // a linha já existente em produção é desativada (active = false, nunca excluída) pela
+      // migration prisma/migrations/20261106000000_remove_indicadores_subcategoria_producao —
+      // mesmo padrão de "remover" subcategoria do menu sem quebrar referência existente (ex.:
+      // FeedbackReport.subcategoriaId) usado em
+      // prisma/migrations/20261105010000_escala_folgas_eventos (UPDATE "DayOffType" SET "ativo"
+      // = false ...). A rota GET/POST /api/producao/indicadores continua existindo sem mudança,
+      // só passa a ser consumida de outro lugar.
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
