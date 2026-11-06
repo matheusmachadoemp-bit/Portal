@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Loader2, PenLine, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Loader2, PenLine, RefreshCw } from "lucide-react";
 import {
   fechamentoPerguntaObrigatoriaAgora,
   fechamentoPerguntasFaltando,
@@ -27,13 +27,29 @@ type Pessoa = { id: string; name: string };
 
 type RespostaSalva = FechamentoRespostaInput & { perguntaId: string };
 
+/** Uma linha já salva da lista de produção (ver `FechamentoListaProducaoResposta` no schema) —
+ * só existe de fato quando o cargo é Cozinha, mas a relação vem sempre presente (vazia nos
+ * demais cargos), igual ao resto da submissão. */
+type ListaProducaoRespostaSalva = { productionItemId: string; quantidade: number };
+
 type SubmissaoAtualDTO = {
   status: "PENDENTE" | "ENVIADO" | "ATRASADO";
   enviadoEm: string | null;
   dueAt: string;
   notaGeral: number | null;
   respostas: RespostaSalva[];
+  listaProducaoItens: ListaProducaoRespostaSalva[];
 } | null;
+
+/** Item do catálogo de produção (ver `ProductionItem` no schema) listado na última etapa do
+ * fechamento da Cozinha — só vem preenchido (`listaProducaoItens` no nível do `PerguntasResponse`
+ * abaixo) quando `cargo.key === "cozinha"`; `null` para qualquer outro cargo. */
+type ListaProducaoItemDTO = {
+  id: string;
+  name: string;
+  unidade: string;
+  category: { id: string; name: string } | null;
+};
 
 type PerguntasResponse = {
   cargo: {
@@ -49,6 +65,7 @@ type PerguntasResponse = {
   podeExecutar: boolean;
   date: string;
   submissaoAtual: SubmissaoAtualDTO;
+  listaProducaoItens: ListaProducaoItemDTO[] | null;
 };
 
 /** Visibilidade de uma pergunta condicional — mesma regra usada pela rota de submissão (ver `fechamentoValorParaComparacaoCondicional`, @/lib/fechamento), só que aqui a decisão é lida a partir do estado local em vez do banco. */
@@ -109,6 +126,11 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modo, setModo] = useState<"view" | "edit">("view");
   const [respostas, setRespostas] = useState<Record<string, FechamentoRespostaInput>>({});
+  // Quantidades da última etapa (só Cozinha) — guardadas como texto (não número) pra permitir o
+  // campo vazio enquanto o chefe digita, igual ao padrão do tipo NUMERO em `PerguntaItem`. Chave
+  // = `productionItemId`; item ausente do mapa é tratado como "sem quantidade informada" (o
+  // mesmo que string vazia).
+  const [listaProducaoQuantidades, setListaProducaoQuantidades] = useState<Record<string, string>>({});
   const [perguntasComErro, setPerguntasComErro] = useState<Set<string>>(new Set());
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -144,9 +166,15 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
           };
         }
         setRespostas(iniciais);
+        const producaoIniciais: Record<string, string> = {};
+        for (const item of resposta.submissaoAtual.listaProducaoItens) {
+          producaoIniciais[item.productionItemId] = String(item.quantidade);
+        }
+        setListaProducaoQuantidades(producaoIniciais);
         setModo("view");
       } else {
         setRespostas({});
+        setListaProducaoQuantidades({});
         setModo(resposta.podeExecutar ? "edit" : "view");
       }
       setPerguntasComErro(new Set());
@@ -185,6 +213,27 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
   const respostaPorPerguntaIdMap = useMemo(() => new Map(Object.entries(respostas)), [respostas]);
   const respondidasCount = visiveis.filter((p) => fechamentoRespostaEstaPreenchida(p.tipo, respostas[p.id])).length;
   const progresso = visiveis.length > 0 ? Math.round((respondidasCount / visiveis.length) * 100) : 100;
+
+  // `null` = cargo não é Cozinha (ver `PerguntasResponse.listaProducaoItens`), não mostra a
+  // etapa; `[]` = é Cozinha mas ainda não há `ProductionItem` cadastrado (mensagem própria, ver
+  // JSX abaixo).
+  const listaProducaoItens = data?.listaProducaoItens ?? null;
+  // Só pro resumo em modo leitura (submissão já enviada hoje) — mesmo filtro "> 0" aplicado no
+  // envio e na rota, pra nunca mostrar um item que na prática não gerou linha nenhuma salva.
+  const listaProducaoComQuantidade = useMemo(
+    () =>
+      (listaProducaoItens ?? []).filter((item) => {
+        const valor = listaProducaoQuantidades[item.id];
+        if (valor == null || valor.trim() === "") return false;
+        const num = Number(valor.replace(",", "."));
+        return Number.isFinite(num) && num > 0;
+      }),
+    [listaProducaoItens, listaProducaoQuantidades]
+  );
+
+  function handleListaProducaoChange(productionItemId: string, valor: string) {
+    setListaProducaoQuantidades((prev) => ({ ...prev, [productionItemId]: valor }));
+  }
 
   function handleChange(perguntaId: string, patch: FechamentoRespostaInput) {
     setRespostas((prev) => {
@@ -229,10 +278,28 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
 
     setSubmitting(true);
     try {
+      // `listaProducao` só entra no corpo para o cargo Cozinha (`listaProducaoItens !== null`) —
+      // omitir o campo pros demais cargos não altera nada já salvo (ver comentário da rota). Só
+      // os itens com quantidade > 0 são enviados: a própria rota trata quantidade vazia/0/negativa
+      // como "não precisa produzir" e nunca grava linha pra eles, então mandar só os preenchidos
+      // já basta — inclusive quando o chefe zera um item que tinha informado antes, mandar o
+      // array (mesmo sem aquele item) já faz a rota substituir o conjunto salvo.
+      const listaProducao = listaProducaoItens
+        ? Object.entries(listaProducaoQuantidades)
+            .map(([productionItemId, valor]) => ({
+              productionItemId,
+              quantidade: valor.trim() === "" ? 0 : Number(valor.replace(",", ".")),
+            }))
+            .filter((item) => Number.isFinite(item.quantidade) && item.quantidade > 0)
+        : undefined;
+
       const res = await fetch(`/api/fechamento-dia/cargos/${cargoId}/submissoes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ respostas: Object.entries(respostas).map(([perguntaId, r]) => ({ perguntaId, ...r })) }),
+        body: JSON.stringify({
+          respostas: Object.entries(respostas).map(([perguntaId, r]) => ({ perguntaId, ...r })),
+          ...(listaProducao !== undefined ? { listaProducao } : {}),
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -394,6 +461,73 @@ export function FormularioClient({ cargoId, produtos, colaboradores }: { cargoId
               </div>
             ))}
           </div>
+
+          {/* Última etapa do fechamento — só existe para o cargo Cozinha (`listaProducaoItens`
+              vem `null` para qualquer outro cargo, ver comentário do tipo). Fica de fora do
+              array `visiveis`/`respondidasCount` de propósito: não é uma "pergunta" do
+              catálogo, nunca é obrigatória, e um item em branco nunca bloqueia o envio. */}
+          {listaProducaoItens && (
+            <div className="nord-card p-4 space-y-3">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-nord-blue/15 flex items-center justify-center shrink-0 mt-0.5">
+                  <ClipboardList size={16} className="text-nord-blue-light" />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-medium">Lista de produção para amanhã</p>
+                  <p className="text-xs text-nord-gray mt-0.5">
+                    Última etapa: informe quanto a cozinha precisa produzir de cada item para o dia seguinte. Pode deixar
+                    em branco os itens que não precisam de produção.
+                  </p>
+                </div>
+              </div>
+
+              {listaProducaoItens.length === 0 ? (
+                <p className="text-sm text-nord-gray italic">
+                  Nenhum item de produção cadastrado ainda. Peça para um administrador cadastrar os itens em Produção &gt;
+                  Produtos.
+                </p>
+              ) : modo === "view" ? (
+                listaProducaoComQuantidade.length === 0 ? (
+                  <p className="text-sm text-nord-gray italic">Nenhuma quantidade informada para o dia seguinte.</p>
+                ) : (
+                  <div className="divide-y divide-nord-border/60">
+                    {listaProducaoComQuantidade.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                        <p className="text-sm text-white truncate min-w-0">{item.name}</p>
+                        <p className="text-sm text-white font-medium shrink-0">
+                          {listaProducaoQuantidades[item.id]} {item.unidade}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="divide-y divide-nord-border/60">
+                  {listaProducaoItens.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <div className="min-w-0 pr-3">
+                        <p className="text-sm text-white truncate">{item.name}</p>
+                        {item.category && <p className="text-xs text-nord-gray truncate">{item.category.name}</p>}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          placeholder="0"
+                          className="input w-20 text-right"
+                          value={listaProducaoQuantidades[item.id] ?? ""}
+                          onChange={(e) => handleListaProducaoChange(item.id, e.target.value)}
+                        />
+                        <span className="text-xs text-nord-gray shrink-0">{item.unidade}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {modo === "edit" && (
             <button
