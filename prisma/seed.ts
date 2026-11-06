@@ -11,6 +11,7 @@ import {
 } from "../src/lib/permissions";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
+import { seedChefDeliveryCargo } from "../src/lib/seed-chef-delivery";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -1381,80 +1382,12 @@ async function main() {
         { texto: "O que precisa ser preparado, comprado ou corrigido amanhã?", tipo: "TEXTO", obrigatoria: false },
       ],
     },
-    {
-      // Fase 4, Parte 1 (Otavio): 4º cargo do Fechamento do Dia, mesmo padrão dos outros 3.
-      // Texto/decisões de polaridade e "sem ocorrência" vindos literalmente do pedido do líder:
-      // - "Como foi o movimento hoje?": avaliativo (NOTA_1_5, igual às outras "nota do dia"),
-      //   nunca abre ocorrência — é só o insumo da "nota média por cargo" do indicador.
-      // - "Os motoboys foram suficientes?": redação mantida afirmativa de propósito, mas é
-      //   "Não" que indica problema — `inverterPolaridade: true` (ver comentário do campo no
-      //   schema). A filha "Descrição" usa `valorPaiQueExibe: "false"` por isso (aparece quando
-      //   a resposta É a que indica problema, igual ao padrão normal das outras).
-      // - "Precisa de troco?": SIM_NAO, mas puramente informativo — `abreOcorrencia: false` (não
-      //   gera ocorrência nem entra na contagem de problemas do dashboard da Parte 3/4).
-      // - Demais (atraso/cancelamento/erro/tempo/fechar loja): padrão normal (Sim = problema),
-      //   com filha "Descrição" opcional seguindo o precedente de 100% das perguntas
-      //   SIM_NAO+abreOcorrencia já existentes em Chef de Salão/Cozinha (decisão minha: o pedido
-      //   só citou a filha explicitamente para 3 das 6, mas estender às outras 3 mantém o
-      //   catálogo consistente — fácil de remover depois se não for o esperado).
-      key: "delivery",
-      nome: "Chef Delivery",
-      icon: "Bike",
-      ordem: 3,
-      perguntas: [
-        { texto: "Como foi o movimento hoje?", tipo: "NOTA_1_5" },
-        {
-          texto: "Os motoboys foram suficientes?",
-          tipo: "SIM_NAO",
-          abreOcorrencia: true,
-          inverterPolaridade: true,
-          categoriaSugerida: "Delivery",
-          gravidadeSugerida: "ATENCAO",
-          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false, valorPaiQueExibe: "false" }],
-        },
-        {
-          texto: "Teve atraso nos pedidos?",
-          tipo: "SIM_NAO",
-          abreOcorrencia: true,
-          categoriaSugerida: "Delivery",
-          gravidadeSugerida: "ATENCAO",
-          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
-        },
-        {
-          texto: "Teve Cancelamento?",
-          tipo: "SIM_NAO",
-          abreOcorrencia: true,
-          categoriaSugerida: "Delivery",
-          gravidadeSugerida: "IMPORTANTE",
-          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
-        },
-        {
-          texto: "Teve Algum erro?",
-          tipo: "SIM_NAO",
-          abreOcorrencia: true,
-          categoriaSugerida: "Produto",
-          gravidadeSugerida: "ATENCAO",
-          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
-        },
-        {
-          texto: "Precisou aumentar o tempo?",
-          tipo: "SIM_NAO",
-          abreOcorrencia: true,
-          categoriaSugerida: "Delivery",
-          gravidadeSugerida: "ATENCAO",
-          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
-        },
-        {
-          texto: "Precisou fechar a loja?",
-          tipo: "SIM_NAO",
-          abreOcorrencia: true,
-          categoriaSugerida: "Delivery",
-          gravidadeSugerida: "CRITICO",
-          filhas: [{ texto: "Descrição", tipo: "TEXTO", obrigatoria: false }],
-        },
-        { texto: "Precisa de troco?", tipo: "SIM_NAO", abreOcorrencia: false },
-      ],
-    },
+    // 4º cargo do Fechamento do Dia, "Chef Delivery" (`key: "delivery"`), foi extraído daqui pra
+    // `src/lib/seed-chef-delivery.ts` (`seedChefDeliveryCargo`) — reaproveitado também pela rota
+    // temporária `GET /api/cron/rh/seed-chef-delivery`, que roda só essa parte contra produção
+    // (ver comentário no topo daquele arquivo). Chamado logo após o loop abaixo, não dentro dele,
+    // porque a função já itera as empresas sozinha. Ver aquele arquivo pro catálogo completo
+    // (texto/polaridade/categorias) e o racional de cada decisão.
   ];
 
   const todasEmpresasFechamento = await prisma.empresa.findMany();
@@ -1589,6 +1522,9 @@ async function main() {
       sharedOrdem++;
     }
   }
+
+  // 4º cargo do Fechamento do Dia ("Chef Delivery") — ver comentário em FECHAMENTO_CARGOS acima.
+  await seedChefDeliveryCargo(prisma);
 
   const today = new Date();
 
