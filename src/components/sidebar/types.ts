@@ -8,6 +8,10 @@ export type SubcategoryDTO = {
   order: number;
   active: boolean;
   isSystem: boolean;
+  /** `true` = nunca aparece no menu lateral, nem pra admin (diferente de `active: false`, que
+   * ainda aparece esmaecida pro admin gerenciar). Ver comentário de Subcategory.hidden em
+   * prisma/schema.prisma. */
+  hidden: boolean;
   /** Loja dona desta subcategoria (id de Empresa) — `null` = compartilhada, aparece não importa
    * a loja ativa. Ver comentário de Subcategory.empresaId em prisma/schema.prisma. */
   empresaId: string | null;

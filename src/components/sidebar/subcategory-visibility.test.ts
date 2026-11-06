@@ -14,6 +14,7 @@ function makeSub(overrides: Partial<SubcategoryDTO> = {}): SubcategoryDTO {
     order: 0,
     active: true,
     isSystem: true,
+    hidden: false,
     empresaId: null,
     ...overrides,
   };
@@ -87,4 +88,26 @@ test("modo Grupo Nord: ignora empresaId mesmo diferente da loja ativa, mas ainda
     isSubcategoryVisible(inativaOutraLoja, { activeEmpresaId: "empresa-1", isGrupoNord: true, isAdmin: true }),
     true
   );
+});
+
+test('subcategoria "hidden" (ex.: Indicadores de Produção, incorporada à Visão Geral): nunca aparece, nem pra admin', () => {
+  const sub = makeSub({ active: false, hidden: true });
+  for (const isAdmin of [true, false]) {
+    const visible = isSubcategoryVisible(sub, {
+      activeEmpresaId: "empresa-1",
+      isGrupoNord: false,
+      isAdmin,
+    });
+    assert.equal(visible, false, `isAdmin=${isAdmin}`);
+  }
+});
+
+test('subcategoria "hidden" mesmo que active: true continua nunca aparecendo (hidden tem prioridade)', () => {
+  const sub = makeSub({ active: true, hidden: true });
+  const visible = isSubcategoryVisible(sub, {
+    activeEmpresaId: "empresa-1",
+    isGrupoNord: false,
+    isAdmin: true,
+  });
+  assert.equal(visible, false);
 });

@@ -17,11 +17,19 @@ import type { SubcategoryDTO } from "./types";
  *   abas antigas de tipo-de-prato da Zarki Sushi antes de serem excluídas), clicar nela dava 404
  *   pra um usuário que nem tem como agir sobre esse estado (só admin/gestor vê a opção
  *   Ativar/Desativar).
+ * - Filtro por `hidden` (pedido do Matheus pra "Indicadores" de Produção, depois de ter sido
+ *   incorporada à "Visão Geral"): diferente de `active: false`, `hidden: true` nunca aparece no
+ *   menu, nem pra admin/gestor. Pensado pra subcategoria permanentemente substituída por outra
+ *   tela, sem nenhuma ação de gestão esperada (reativar não faz sentido, excluir não é seguro por
+ *   causa de FK — ver comentário de Subcategory.hidden em prisma/schema.prisma). Checado antes do
+ *   filtro de `active`, já que uma subcategoria oculta nem precisa do tratamento "esmaecida pro
+ *   admin".
  */
 export function isSubcategoryVisible(
   sub: SubcategoryDTO,
   opts: { activeEmpresaId: string; isGrupoNord: boolean; isAdmin: boolean }
 ): boolean {
+  if (sub.hidden) return false;
   const empresaOk = !sub.empresaId || opts.isGrupoNord || sub.empresaId === opts.activeEmpresaId;
   const statusOk = sub.active || opts.isAdmin;
   return empresaOk && statusOk;

@@ -434,6 +434,14 @@ const CATEGORIES = [
       // prisma/migrations/20261105010000_escala_folgas_eventos (UPDATE "DayOffType" SET "ativo"
       // = false ...). A rota GET/POST /api/producao/indicadores continua existindo sem mudança,
       // só passa a ser consumida de outro lugar.
+      //
+      // Só `active = false` ainda deixava a linha aparecer esmaecida/clicável pro admin/gestor no
+      // menu lateral (pensado como estado transitório pra poder reativar/excluir — ver
+      // isSubcategoryVisible em src/components/sidebar/subcategory-visibility.ts), e era
+      // exatamente esse resíduo que o Matheus via e queria remover de vez. A migration
+      // prisma/migrations/20261106130000_hide_indicadores_subcategoria_producao marca também
+      // `hidden = true` nessa linha existente, que faz a subcategoria nunca mais aparecer no
+      // menu, nem pra admin — sem precisar de hard DELETE (mesmo motivo de FK acima).
       { key: "configuracoes", name: "Configurações", icon: "Settings" },
     ],
   },
