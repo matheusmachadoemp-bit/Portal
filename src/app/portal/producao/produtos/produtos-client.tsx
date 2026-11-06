@@ -406,18 +406,18 @@ export function ProdutosClient({
           })}
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
         {itens.map((item) => (
-          <div key={item.id} className="nord-card p-4 flex flex-col gap-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <DynamicIcon name={item.category.icon} size={16} style={{ color: item.category.color }} />
-                <p className="text-white font-medium text-sm truncate">{item.name}</p>
+          <div key={item.id} className="nord-card p-2.5 flex flex-col gap-1.5">
+            <div className="flex items-start justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <DynamicIcon name={item.category.icon} size={14} style={{ color: item.category.color }} />
+                <p title={item.name} className="text-white font-medium text-sm truncate">{item.name}</p>
               </div>
               <Badge tone={item.tipo === "FIXO" ? "info" : "default"}>{PRODUCTION_ITEM_TYPE_LABEL[item.tipo]?.split(" ")[0]}</Badge>
             </div>
-            <p className="text-xs text-nord-gray">{item.category.name}</p>
-            <div className="grid grid-cols-2 gap-2 text-xs text-nord-gray">
+            <p title={item.category.name} className="text-xs text-nord-gray truncate">{item.category.name}</p>
+            <div className="grid grid-cols-1 gap-0.5 text-xs text-nord-gray">
               <span>
                 Estoque pronto: <span className="text-white">{item.stock?.saldoAtual ?? 0} {item.unidade}</span>
               </span>
@@ -436,11 +436,11 @@ export function ProdutosClient({
               )}
             </div>
             {canCreate && (
-              <div className="flex items-center gap-2 pt-2 border-t border-nord-border/60 mt-1">
-                <button onClick={() => openEdit(item)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1.5">
+              <div className="flex items-center gap-1.5 pt-1.5 border-t border-nord-border/60 mt-0.5">
+                <button onClick={() => openEdit(item)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-white py-1">
                   <Pencil size={12} /> Editar
                 </button>
-                <button onClick={() => setConfirmDeleteId(item.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-nord-danger py-1.5">
+                <button onClick={() => setConfirmDeleteId(item.id)} className="flex-1 flex items-center justify-center gap-1 text-xs text-nord-gray hover:text-nord-danger py-1">
                   <Trash2 size={12} /> Desativar
                 </button>
               </div>

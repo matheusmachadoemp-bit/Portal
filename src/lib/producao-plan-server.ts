@@ -18,7 +18,10 @@ function dayBounds(date: Date): { dayStart: Date; dayEnd: Date } {
   return { dayStart, dayEnd };
 }
 
-function defaultPrazoFor(date: Date, horarioLimitePadrao: string | null): Date {
+/** Exportado para reuso por `aplicarListaProducaoAoDiaSeguinte` (@/lib/fechamento-server.ts) —
+ * mesma regra de prazo padrão (horário limite do item, ou 15:00 se não cadastrado) usada aqui
+ * pela geração automática. */
+export function defaultPrazoFor(date: Date, horarioLimitePadrao: string | null): Date {
   const prazo = new Date(date);
   prazo.setHours(0, 0, 0, 0);
   const [hh, mm] = (horarioLimitePadrao ?? "15:00").split(":").map(Number);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
+import { isUniqueIngredientIdViolation, PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 
@@ -104,48 +104,67 @@ export async function POST(req: Request) {
     }
   }
 
-  const item = await prisma.$transaction(async (tx) => {
-    const created = await tx.productionItem.create({
-      data: {
-        empresaId: empresa.id,
-        categoryId: body.categoryId,
-        setorId: body.setorId || null,
-        name: body.name,
-        unidade: body.unidade || "kg",
-        fotoUrl: body.fotoUrl || null,
-        descricao: body.descricao || null,
-        modoPreparo: body.modoPreparo || null,
-        tipo: body.tipo || "VARIAVEL",
-        quantidadeMinima: Number(body.quantidadeMinima) || 0,
-        margemSeguranca:
-          body.margemSeguranca === undefined || body.margemSeguranca === null || body.margemSeguranca === ""
-            ? 10
-            : Number(body.margemSeguranca) || 0,
-        tamanhoLote: body.tamanhoLote ? Number(body.tamanhoLote) : null,
-        validadeDias: body.validadeDias ? Number(body.validadeDias) : null,
-        horarioLimitePadrao: body.horarioLimitePadrao || null,
-        prioridadePadrao: body.prioridadePadrao || "NORMAL",
-        ingredientId: body.ingredientId || null,
-        createdById: session.user.id,
-      },
-    });
-
-    if (ingredientes.length > 0) {
-      await tx.productionItemIngredient.createMany({
-        data: ingredientes.map((ing, order) => ({
-          productionItemId: created.id,
-          ingredientId: ing.ingredientId,
-          quantidadeUsada: Number(ing.quantidadeUsada) || 0,
-          unidade: ing.unidade || "g",
-          order,
-        })),
+  let item;
+  try {
+    item = await prisma.$transaction(async (tx) => {
+      const created = await tx.productionItem.create({
+        data: {
+          empresaId: empresa.id,
+          categoryId: body.categoryId,
+          setorId: body.setorId || null,
+          name: body.name,
+          unidade: body.unidade || "kg",
+          fotoUrl: body.fotoUrl || null,
+          descricao: body.descricao || null,
+          modoPreparo: body.modoPreparo || null,
+          tipo: body.tipo || "VARIAVEL",
+          quantidadeMinima: Number(body.quantidadeMinima) || 0,
+          margemSeguranca:
+            body.margemSeguranca === undefined || body.margemSeguranca === null || body.margemSeguranca === ""
+              ? 10
+              : Number(body.margemSeguranca) || 0,
+          tamanhoLote: body.tamanhoLote ? Number(body.tamanhoLote) : null,
+          validadeDias: body.validadeDias ? Number(body.validadeDias) : null,
+          horarioLimitePadrao: body.horarioLimitePadrao || null,
+          prioridadePadrao: body.prioridadePadrao || "NORMAL",
+          ingredientId: body.ingredientId || null,
+          createdById: session.user.id,
+        },
       });
+
+      if (ingredientes.length > 0) {
+        await tx.productionItemIngredient.createMany({
+          data: ingredientes.map((ing, order) => ({
+            productionItemId: created.id,
+            ingredientId: ing.ingredientId,
+            quantidadeUsada: Number(ing.quantidadeUsada) || 0,
+            unidade: ing.unidade || "g",
+            order,
+          })),
+        });
+      }
+
+      await tx.productionStock.create({ data: { productionItemId: created.id, empresaId: empresa.id, saldoAtual: 0 } });
+
+      return tx.productionItem.findUniqueOrThrow({ where: { id: created.id }, include: { ingredientes: true, stock: true } });
+    });
+  } catch (error) {
+    // `ProductionItem.ingredientId` é `@unique` (um insumo só alimenta o cálculo automático de
+    // UM produto de produção por vez, ver `rollUpToProductionItems` em
+    // `@/lib/producao-forecast.ts`) — sem este catch, a violação (Prisma P2002) subia sem
+    // tratamento, o Next.js devolvia um 500 sem JSON válido e a tela ficava "travada" sem
+    // nenhuma mensagem (achado do usuário ao tentar vincular "Mussarela" duas vezes).
+    if (isUniqueIngredientIdViolation(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Este insumo já está vinculado a outro produto de produção. Um insumo só pode alimentar o cálculo automático de um produto por vez.",
+        },
+        { status: 409 }
+      );
     }
-
-    await tx.productionStock.create({ data: { productionItemId: created.id, empresaId: empresa.id, saldoAtual: 0 } });
-
-    return tx.productionItem.findUniqueOrThrow({ where: { id: created.id }, include: { ingredientes: true, stock: true } });
-  });
+    throw error;
+  }
 
   return NextResponse.json({ item });
 }

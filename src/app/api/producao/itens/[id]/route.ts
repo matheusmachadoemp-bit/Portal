@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
+import { isUniqueIngredientIdViolation, PRODUCTION_MANAGER_ROLES } from "@/lib/producao-server";
 import { hasModulePermission } from "@/lib/authz";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
@@ -106,46 +106,63 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  const item = await prisma.$transaction(async (tx) => {
-    await tx.productionItem.update({
-      where: { id },
-      data: {
-        categoryId: body.categoryId ?? undefined,
-        setorId: body.setorId !== undefined ? body.setorId || null : undefined,
-        name: body.name ?? undefined,
-        unidade: body.unidade ?? undefined,
-        fotoUrl: body.fotoUrl ?? undefined,
-        descricao: body.descricao ?? undefined,
-        modoPreparo: body.modoPreparo ?? undefined,
-        tipo: body.tipo ?? undefined,
-        quantidadeMinima: body.quantidadeMinima !== undefined ? Number(body.quantidadeMinima) : undefined,
-        margemSeguranca: body.margemSeguranca !== undefined ? Number(body.margemSeguranca) : undefined,
-        tamanhoLote: body.tamanhoLote !== undefined ? (body.tamanhoLote ? Number(body.tamanhoLote) : null) : undefined,
-        validadeDias: body.validadeDias !== undefined ? (body.validadeDias ? Number(body.validadeDias) : null) : undefined,
-        horarioLimitePadrao: body.horarioLimitePadrao ?? undefined,
-        prioridadePadrao: body.prioridadePadrao ?? undefined,
-        ingredientId: body.ingredientId !== undefined ? body.ingredientId || null : undefined,
-        active: body.active ?? undefined,
-      },
-    });
+  let item;
+  try {
+    item = await prisma.$transaction(async (tx) => {
+      await tx.productionItem.update({
+        where: { id },
+        data: {
+          categoryId: body.categoryId ?? undefined,
+          setorId: body.setorId !== undefined ? body.setorId || null : undefined,
+          name: body.name ?? undefined,
+          unidade: body.unidade ?? undefined,
+          fotoUrl: body.fotoUrl ?? undefined,
+          descricao: body.descricao ?? undefined,
+          modoPreparo: body.modoPreparo ?? undefined,
+          tipo: body.tipo ?? undefined,
+          quantidadeMinima: body.quantidadeMinima !== undefined ? Number(body.quantidadeMinima) : undefined,
+          margemSeguranca: body.margemSeguranca !== undefined ? Number(body.margemSeguranca) : undefined,
+          tamanhoLote: body.tamanhoLote !== undefined ? (body.tamanhoLote ? Number(body.tamanhoLote) : null) : undefined,
+          validadeDias: body.validadeDias !== undefined ? (body.validadeDias ? Number(body.validadeDias) : null) : undefined,
+          horarioLimitePadrao: body.horarioLimitePadrao ?? undefined,
+          prioridadePadrao: body.prioridadePadrao ?? undefined,
+          ingredientId: body.ingredientId !== undefined ? body.ingredientId || null : undefined,
+          active: body.active ?? undefined,
+        },
+      });
 
-    if (ingredientes) {
-      await tx.productionItemIngredient.deleteMany({ where: { productionItemId: id } });
-      if (ingredientes.length > 0) {
-        await tx.productionItemIngredient.createMany({
-          data: ingredientes.map((ing, order) => ({
-            productionItemId: id,
-            ingredientId: ing.ingredientId,
-            quantidadeUsada: Number(ing.quantidadeUsada) || 0,
-            unidade: ing.unidade || "g",
-            order,
-          })),
-        });
+      if (ingredientes) {
+        await tx.productionItemIngredient.deleteMany({ where: { productionItemId: id } });
+        if (ingredientes.length > 0) {
+          await tx.productionItemIngredient.createMany({
+            data: ingredientes.map((ing, order) => ({
+              productionItemId: id,
+              ingredientId: ing.ingredientId,
+              quantidadeUsada: Number(ing.quantidadeUsada) || 0,
+              unidade: ing.unidade || "g",
+              order,
+            })),
+          });
+        }
       }
-    }
 
-    return tx.productionItem.findUniqueOrThrow({ where: { id }, include: { ingredientes: true, stock: true } });
-  });
+      return tx.productionItem.findUniqueOrThrow({ where: { id }, include: { ingredientes: true, stock: true } });
+    });
+  } catch (error) {
+    // Mesmo cenário do POST em ../route.ts (ver comentário lá): trocar o insumo vinculado deste
+    // produto para um que já está em uso por outro também viola `ProductionItem.ingredientId`
+    // (@unique) e, sem este catch, subia como 500 sem tratamento.
+    if (isUniqueIngredientIdViolation(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "Este insumo já está vinculado a outro produto de produção. Um insumo só pode alimentar o cálculo automático de um produto por vez.",
+        },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 
   return NextResponse.json({ item });
 }

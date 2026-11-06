@@ -6,6 +6,8 @@ import { createNotification } from "@/lib/notifications";
 import { getStoreManagers } from "@/lib/manutencao-server";
 import { hasModulePermission } from "@/lib/authz";
 import { GOAL_CATEGORY_LABEL, GOAL_CATEGORY_ROUTE, type GoalCategoryKey } from "@/lib/goals";
+import { defaultPrazoFor } from "@/lib/producao-plan-server";
+import { logProductionOrderHistory } from "@/lib/producao-server";
 
 /**
  * Decide se um usuário pode de fato preencher o formulário de UM `FechamentoCargo` específico —
@@ -336,6 +338,169 @@ async function notificarFechamentoOcorrenciaCritica(ocorrencia: FechamentoOcorre
       })
     )
   );
+}
+
+// ---------------------------------------------------------------------------
+// FECHAMENTO DO DIA — última etapa da Cozinha: lista de produção do dia
+// seguinte (pedido literal do usuário, ver comentário de
+// `FechamentoListaProducaoResposta` em schema.prisma para o racional completo
+// de modelagem). Só esta função (chamada pela rota de submissão, igual
+// `gerarFechamentoOcorrencias`) sabe transformar a lista em `ProductionOrder`.
+// ---------------------------------------------------------------------------
+
+export const COZINHA_LISTA_PRODUCAO_CARGO_KEY = "cozinha";
+
+/**
+ * Cria/atualiza, para cada linha de `FechamentoListaProducaoResposta` da submissão informada, a
+ * `ProductionOrder` do dia SEGUINTE ao do fechamento (`submissao.data + 1 dia`) com
+ * `quantidadeAprovada` = valor que o chefe de cozinha informou. Chamada pela rota de submissão
+ * (`POST /api/fechamento-dia/cargos/[cargoId]/submissoes`) depois de gravar as linhas da lista,
+ * só quando `cargo.key === COZINHA_LISTA_PRODUCAO_CARGO_KEY`.
+ *
+ * Decisões registradas (ver relatório da tarefa):
+ *
+ * 1. **Colisão com o planejamento automático** (`generateProductionPlan`, @/lib/
+ *    producao-plan-server.ts, cron `mode=plan` às 04h UTC = 01h América/São_Paulo todo dia): como
+ *    o cron gera o plano de "amanhã" de madrugada e o fechamento da Cozinha é enviado à noite
+ *    (horas depois, ainda no "hoje" daquele cron), na prática QUASE SEMPRE já existe uma
+ *    `ProductionOrder` para `productionItemId`+`empresaId`+`date` quando este código roda — o
+ *    `@@unique` nesses 3 campos não permite duas linhas, então a pergunta não é "cria ou
+ *    atualiza", é sempre "atualiza quando já existe, cria quando não existe (ainda)". Quando JÁ
+ *    EXISTE, atualizamos só `quantidadeAprovada` — os campos computados pelo motor de previsão
+ *    (`necessidadePrevista`/`estoqueProntoSnapshot`/`quantidadeSugerida`/`forecastId`) são
+ *    preservados como estão, nunca zerados: são dados reais e úteis (dá pra comparar "sugerido
+ *    automaticamente X, aprovado pelo chefe Y" no Planejamento), zerá-los destruiria essa
+ *    informação sem necessidade.
+ * 2. **Ordem já avançada**: se a ordem já existente tiver `ajusteEm` preenchido (alguém já
+ *    ajustou manualmente no Planejamento, ver PATCH /api/producao/ordens/[id]) OU `status` já
+ *    diferente de PENDENTE (em produção/atrasada/finalizada), o valor do fechamento é IGNORADO
+ *    para aquele item — mesma proteção que `generateProductionPlan` já aplica ao plano
+ *    automático, pelo mesmo motivo: uma decisão humana ou um progresso real já aconteceu nessa
+ *    ordem, e sobrescrever silenciosamente seria pior do que não aplicar. A linha em
+ *    `FechamentoListaProducaoResposta` continua gravada (é o registro do que o chefe informou),
+ *    só a propagação pra `ProductionOrder` é que é pulada.
+ * 3. **Nenhuma ordem ainda existe** (ex.: item cadastrado depois do cron do dia, empresa reativada
+ *    no meio do dia, ou o cron falhou): cria uma `ProductionOrder` nova com `necessidadePrevista
+ *    = 0`, `quantidadeSugerida = 0` e `forecastId = null` (esta origem é 100% manual, não há
+ *    nenhuma previsão automática por trás) e `estoqueProntoSnapshot` = saldo atual real do
+ *    estoque do item (consulta barata, já que o item já foi carregado — mantém o campo
+ *    informativo coerente, mesmo sem vir do motor de previsão).
+ * 4. **Reenvio no mesmo dia** (antes do prazo, pra corrigir um valor): idempotente — roda de novo
+ *    sobre a mesma `ProductionOrder` (mesma chave única), sempre refletindo o ÚLTIMO valor
+ *    informado, contanto que a ordem ainda esteja PENDENTE e sem ajuste manual (regra 2). Importante:
+ *    remover um item da lista num reenvio (voltar a branco) NÃO reverte uma `ProductionOrder` já
+ *    criada/atualizada por um envio anterior no mesmo dia — a lista do Fechamento só EMPURRA
+ *    valores pra frente, nunca desfaz; uma correção depois desse ponto é feita como qualquer
+ *    outro ajuste, direto no Planejamento (PATCH /api/producao/ordens/[id]).
+ *
+ * **Achado do Teulis, corrigido**: `submissao.data` é "meia-noite de São Paulo" (`spStartOfDay`,
+ * @/lib/timezone.ts — em UTC isso é `...T03:00:00.000Z`, já que SP não tem mais horário de verão
+ * desde 2019). Já `ProductionOrder.date` é normalizada por `dayBounds`/`generateProductionPlan`
+ * (@/lib/producao-plan-server.ts) e por `GET /api/producao/ordens` com `date.setHours(0,0,0,0)`
+ * — meia-noite NO FUSO LOCAL DO PROCESSO NODE, que em produção (sem `TZ` configurada) é UTC, ou
+ * seja `...T00:00:00.000Z`. São convenções de "meia-noite" DIFERENTES (3h de diferença sempre,
+ * fuso fixo) — somar 1 dia direto a `submissao.data` sem renormalizar produzia um timestamp
+ * (`...T03:00:00.000Z`) que nunca batia com a `ProductionOrder` real do cron automático
+ * (`...T00:00:00.000Z`), fazendo esta função sempre cair no ramo "não existe ordem, cria uma
+ * nova" mesmo quando já existia uma do forecast — nunca preservando necessidadePrevista/
+ * quantidadeSugerida/forecastId nem respeitando uma ordem já EM_PRODUCAO/ajustada (regra 2 nunca
+ * disparava, porque a busca abaixo nunca encontrava a ordem de verdade). Por isso o `setHours(0,
+ * 0, 0, 0)` abaixo, depois de somar o dia — mesma normalização que `dayBounds` usa, pra cair na
+ * mesma convenção de "dia" que o resto do módulo Produção já usa pra `ProductionOrder.date`.
+ */
+export async function aplicarListaProducaoAoDiaSeguinte(
+  submissaoId: string,
+  userId: string | null
+): Promise<{ criadas: number; atualizadas: number; ignoradas: number }> {
+  const submissao = await prisma.fechamentoSubmissao.findUnique({ where: { id: submissaoId } });
+  if (!submissao) return { criadas: 0, atualizadas: 0, ignoradas: 0 };
+
+  const itensInformados = await prisma.fechamentoListaProducaoResposta.findMany({
+    where: { submissaoId, quantidade: { gt: 0 } },
+    select: { productionItemId: true, quantidade: true },
+  });
+  if (itensInformados.length === 0) return { criadas: 0, atualizadas: 0, ignoradas: 0 };
+
+  // Dia seguinte ao fechamento, já na convenção de "meia-noite" que `ProductionOrder.date` usa
+  // em todo o módulo Produção (ver comentário da função acima) — NUNCA a meia-noite de SP que
+  // `submissao.data` usa, senão o `findMany` abaixo nunca bate com a ordem real do cron.
+  const diaSeguinte = new Date(submissao.data);
+  diaSeguinte.setDate(diaSeguinte.getDate() + 1);
+  diaSeguinte.setHours(0, 0, 0, 0);
+
+  const productionItemIds = itensInformados.map((i) => i.productionItemId);
+  const [productionItems, existingOrders] = await Promise.all([
+    prisma.productionItem.findMany({
+      where: { id: { in: productionItemIds } },
+      select: {
+        id: true,
+        horarioLimitePadrao: true,
+        prioridadePadrao: true,
+        stock: { select: { saldoAtual: true } },
+      },
+    }),
+    prisma.productionOrder.findMany({
+      where: { productionItemId: { in: productionItemIds }, empresaId: submissao.empresaId, date: diaSeguinte },
+    }),
+  ]);
+  const itemPorId = new Map(productionItems.map((i) => [i.id, i]));
+  const ordemExistentePorItemId = new Map(existingOrders.map((o) => [o.productionItemId, o]));
+
+  let criadas = 0;
+  let atualizadas = 0;
+  let ignoradas = 0;
+
+  for (const { productionItemId, quantidade } of itensInformados) {
+    const item = itemPorId.get(productionItemId);
+    // Item desativado/excluído entre o preenchimento do fechamento e esta aplicação — pula com
+    // segurança (a linha de FechamentoListaProducaoResposta continua gravada como histórico).
+    if (!item) {
+      ignoradas++;
+      continue;
+    }
+
+    const existente = ordemExistentePorItemId.get(productionItemId);
+    if (existente) {
+      if (existente.ajusteEm || existente.status !== "PENDENTE") {
+        ignoradas++;
+        continue;
+      }
+      await prisma.productionOrder.update({ where: { id: existente.id }, data: { quantidadeAprovada: quantidade } });
+      await logProductionOrderHistory(
+        existente.id,
+        userId,
+        "APROVADO_FECHAMENTO",
+        `Quantidade definida pelo Fechamento do Dia (Cozinha): ${quantidade}.`
+      );
+      atualizadas++;
+      continue;
+    }
+
+    const prazo = defaultPrazoFor(diaSeguinte, item.horarioLimitePadrao);
+    const criada = await prisma.productionOrder.create({
+      data: {
+        productionItemId,
+        empresaId: submissao.empresaId,
+        date: diaSeguinte,
+        necessidadePrevista: 0,
+        estoqueProntoSnapshot: item.stock?.saldoAtual ?? 0,
+        quantidadeSugerida: 0,
+        quantidadeAprovada: quantidade,
+        forecastId: null,
+        prazo,
+        prioridade: item.prioridadePadrao,
+      },
+    });
+    await logProductionOrderHistory(
+      criada.id,
+      userId,
+      "CRIADO",
+      `Quantidade definida pelo Fechamento do Dia (Cozinha): ${quantidade}.`
+    );
+    criadas++;
+  }
+
+  return { criadas, atualizadas, ignoradas };
 }
 
 // ---------------------------------------------------------------------------

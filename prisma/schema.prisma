@@ -5621,11 +5621,12 @@ model ProductionItem {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  ingredientes ProductionItemIngredient[]
-  orders       ProductionOrder[]
-  stock        ProductionStock?
-  movements    ProductionStockMovement[]
-  forecasts    ProductionForecast[]
+  ingredientes                     ProductionItemIngredient[]
+  orders                           ProductionOrder[]
+  stock                            ProductionStock?
+  movements                        ProductionStockMovement[]
+  forecasts                        ProductionForecast[]
+  fechamentoListaProducaoRespostas FechamentoListaProducaoResposta[]
 
   @@index([empresaId, active])
 }
@@ -6084,9 +6085,10 @@ model FechamentoSubmissao {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  respostas      FechamentoResposta[]
-  escalationLogs FechamentoEscalationLog[]
-  ocorrencias    FechamentoOcorrencia[]
+  respostas          FechamentoResposta[]
+  escalationLogs     FechamentoEscalationLog[]
+  ocorrencias        FechamentoOcorrencia[]
+  listaProducaoItens FechamentoListaProducaoResposta[]
 
   @@unique([cargoId, data])
   @@index([empresaId, data])
@@ -6139,6 +6141,47 @@ model FechamentoResposta {
   ocorrencia FechamentoOcorrencia?
 
   @@unique([submissaoId, perguntaId])
+}
+
+/// Última etapa do Fechamento do Dia da Cozinha (pedido literal do usuário: "vamos criar uma
+/// lista como última tarefa dele, aí ele vai botar quanto precisa fazer de cada coisa" — ex.
+/// "Molho de tomate - 20L, Mussarela 240g - 300 unidades"): uma linha por `ProductionItem` ATIVO
+/// da empresa com a quantidade que o chefe de cozinha informou ser necessária para o DIA
+/// SEGUINTE ao fechamento. Não é uma `FechamentoResposta`/`FechamentoPergunta` do catálogo
+/// comum (decisão registrada no relatório da tarefa): o catálogo existente guarda um valor
+/// ESCALAR por pergunta (`FechamentoResposta` tem uma coluna por `FechamentoTipoResposta`) — esta
+/// etapa não é uma pergunta com UM valor, é uma lista inteira de pares item×quantidade (hoje
+/// todos os `ProductionItem` ativos da empresa), que não cabe em nenhuma das colunas existentes
+/// sem recorrer a um JSON texto não-relacional e não-validável. Por isso nasce como um
+/// mini-model próprio, com uma linha por item, em vez de forçar um tipo novo em
+/// `FechamentoTipoResposta`/`FechamentoResposta`.
+///
+/// Fixa na Cozinha por ora (nenhum CRUD de configuração — mesmo espírito de outras regras já
+/// hard-coded por `FechamentoCargo.key` nesta fase, ex. as perguntas-filha exclusivas do Gerente
+/// em `gerarFechamentoOcorrencias`, @/lib/fechamento-server.ts): a rota de submissão só processa
+/// este campo quando `cargo.key === "cozinha"`. Generalizar para outro cargo exigiria decidir o
+/// que "lista de produção" significa fora da Cozinha — não pedido ainda.
+///
+/// Só itens com quantidade > 0 ganham uma linha aqui (um item deixado em branco/zero não entra —
+/// não precisa de histórico de "não precisa produzir"); reenviar o mesmo dia substitui o
+/// conjunto inteiro (ver POST /api/fechamento-dia/cargos/[cargoId]/submissoes), então o estado
+/// aqui sempre reflete o ÚLTIMO envio do dia, igual `FechamentoResposta`.
+///
+/// `aplicarListaProducaoAoDiaSeguinte` (@/lib/fechamento-server.ts) usa estas linhas para
+/// criar/atualizar a `ProductionOrder` do dia seguinte de cada item (`quantidadeAprovada` = valor
+/// aqui) — ver o comentário daquela função para a regra de colisão com o planejamento automático.
+model FechamentoListaProducaoResposta {
+  id               String              @id @default(cuid())
+  submissaoId      String
+  submissao        FechamentoSubmissao @relation(fields: [submissaoId], references: [id], onDelete: Cascade)
+  productionItemId String
+  productionItem   ProductionItem      @relation(fields: [productionItemId], references: [id])
+  quantidade       Float
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([submissaoId, productionItemId])
+  @@index([productionItemId])
 }
 
 // ---------------------------------------------------------------------------
