@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { spDateKey, spStartOfDay } from "@/lib/checklist";
+import { COZINHA_LISTA_PRODUCAO_CARGO_KEY } from "@/lib/fechamento-server";
 
 const PERGUNTA_SELECT = {
   id: true,
@@ -66,10 +67,26 @@ export async function GET(req: Request, { params }: { params: Promise<{ cargoId:
   const dateKey = searchParams.get("date") || spDateKey();
   const day = spStartOfDay(dateKey);
 
+  // Última etapa (só Cozinha, ver comentário de `FechamentoListaProducaoResposta` em
+  // schema.prisma): inclui as linhas já salvas junto da submissão, pra tela poder pré-preencher
+  // ao reabrir o formulário no mesmo dia (mesmo papel de `respostas` para as perguntas comuns).
+  const ehCozinha = cargo.key === COZINHA_LISTA_PRODUCAO_CARGO_KEY;
+  // `listaProducaoItens` sempre incluído (relação vazia pra qualquer cargo que não seja a
+  // Cozinha) — mais simples do que condicionar o `include` em cima de uma variável não-literal.
   const submissaoAtual = await prisma.fechamentoSubmissao.findUnique({
     where: { cargoId_data: { cargoId: cargo.id, data: day } },
-    include: { respostas: true },
+    include: { respostas: true, listaProducaoItens: true },
   });
+
+  // Catálogo de itens pra montar a lista (todos os `ProductionItem` ATIVOS da empresa, sem
+  // filtrar por setor — ver relatório da tarefa: `setorId` é opcional e nem sempre preenchido).
+  const listaProducaoItens = ehCozinha
+    ? await prisma.productionItem.findMany({
+        where: { empresaId: cargo.empresaId, active: true },
+        select: { id: true, name: true, unidade: true, category: { select: { id: true, name: true } } },
+        orderBy: { name: "asc" },
+      })
+    : null;
 
   return NextResponse.json({
     cargo: {
@@ -85,5 +102,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ cargoId:
     podeExecutar,
     date: dateKey,
     submissaoAtual,
+    listaProducaoItens,
   });
 }
