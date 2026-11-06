@@ -1,34 +1,11 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { PageContainer } from "@/components/page-container";
-import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
-import { getConsumoComparativo, getIndicadoresData } from "@/lib/producao-indicadores-server";
-import { resolveRollingPeriod } from "@/lib/periods";
-import { IndicadoresClient } from "./indicadores-client";
-import { auth } from "@/auth";
-import { hasModulePermission } from "@/lib/authz";
 
-export default async function ProducaoIndicadoresPage() {
-  const session = await auth();
-  if (!session?.user || !(await hasModulePermission(session.user.id, "producao", "canView"))) {
-    redirect("/portal/inicio");
-  }
-
-  const ctx = await getActiveEmpresaContext();
-  const empresaIds = ctx ? empresaIdsForContext(ctx) : [];
-  const empresa = await requireActiveSingleEmpresa();
-
-  const range = resolveRollingPeriod("mes-atual");
-
-  const settings = empresa ? await prisma.productionSettings.findUnique({ where: { empresaId: empresa.id } }) : null;
-  const [data, consumoHoje] = await Promise.all([
-    getIndicadoresData(empresaIds, range.from, range.to, settings?.toleranciaAlertaPct ?? 10),
-    getConsumoComparativo(empresaIds, new Date()),
-  ]);
-
-  return (
-    <PageContainer title="Produção" subtitle="Indicadores" backHref="/portal/producao" backLabel="Produção">
-      <IndicadoresClient initialData={data} consumoHoje={consumoHoje} />
-    </PageContainer>
-  );
+// A subcategoria "Indicadores" foi incorporada à tela "Visão Geral" (pedido do usuário: "pegar a
+// categoria Indicadores e jogar pra Visão Geral, unificar as categorias" — ver
+// src/app/portal/producao/page.tsx). Essa rota deixou de existir como tela própria, mas a
+// subcategoria no menu lateral continua cadastrada como `active: false` (visível só pra
+// admin/gestor, esmaecida, até alguém excluí-la pelo menu "⋮") e ainda aponta pra esta URL — um
+// redirect simples evita que esse clique quebre em vez de simplesmente não existir mais.
+export default function ProducaoIndicadoresRedirect() {
+  redirect("/portal/producao/visao-geral");
 }
