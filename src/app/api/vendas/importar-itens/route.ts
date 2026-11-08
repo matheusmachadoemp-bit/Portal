@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidCronSecret } from "@/lib/cron-auth";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 import { spStartOfDay } from "@/lib/timezone";
@@ -97,26 +98,64 @@ function buildItems(categories: Category[]): { nome: string; quantidade: number;
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
-    return NextResponse.json(
-      { error: "Seu perfil de permissão não permite importar itens vendidos." },
-      { status: 403 }
-    );
-  }
+  // Caminho alternativo de autenticação: o robô que automatiza a exportação diária do Saipos
+  // (ver CRON_SECRET, mesmo padrão de src/app/api/cron/**) chama esta rota direto, sem sessão de
+  // usuário logado — nesse caso não há loja ativa pra inferir, então a empresa precisa vir
+  // explícita no FormData (campo `empresaId`, ver abaixo). Upload manual pela tela (usuário
+  // logado) continua exigindo sessão exatamente como antes; só entra aqui se o secret vier
+  // ausente/inválido.
+  const isCronAuth = await isValidCronSecret(req.headers.get("authorization"));
 
-  const empresa = await requireActiveSingleEmpresa();
-  if (!empresa) {
-    return NextResponse.json(
-      { error: "Selecione uma loja específica (não é possível importar no modo Grupo Nord)." },
-      { status: 400 }
-    );
+  let empresaId!: string;
+  let userId: string | null = null;
+
+  if (!isCronAuth) {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
+      return NextResponse.json(
+        { error: "Seu perfil de permissão não permite importar itens vendidos." },
+        { status: 403 }
+      );
+    }
+
+    const empresa = await requireActiveSingleEmpresa();
+    if (!empresa) {
+      return NextResponse.json(
+        { error: "Selecione uma loja específica (não é possível importar no modo Grupo Nord)." },
+        { status: 400 }
+      );
+    }
+    empresaId = empresa.id;
+    userId = session.user.id;
   }
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "Arquivo não informado." }, { status: 400 });
+
+  if (isCronAuth) {
+    const empresaIdRaw = formData.get("empresaId");
+    if (typeof empresaIdRaw !== "string" || !empresaIdRaw.trim()) {
+      return NextResponse.json(
+        { error: "Campo 'empresaId' é obrigatório para importação automatizada (sem sessão de usuário)." },
+        { status: 400 }
+      );
+    }
+    // `active: true` — mesmo critério de `requireActiveSingleEmpresa()` (caminho de sessão, usado
+    // acima): uma loja desativada nunca aparece pro usuário escolher no fluxo manual, então a
+    // importação via secret também não pode gravar venda numa loja desativada (achado do Teulis:
+    // sem este filtro, uma automação mal configurada ou apontando pra um `empresaId` antigo
+    // conseguia empurrar dado pra uma loja já desativada, sem aviso nenhum).
+    const empresa = await prisma.empresa.findFirst({ where: { id: empresaIdRaw.trim(), active: true } });
+    if (!empresa) {
+      return NextResponse.json(
+        { error: "Empresa informada em 'empresaId' não existe ou está inativa." },
+        { status: 400 }
+      );
+    }
+    empresaId = empresa.id;
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   let rows: (string | number)[][];
@@ -184,14 +223,14 @@ export async function POST(req: Request) {
   const parsedItems = buildItems(categories).filter((i) => i.nome && i.faturamento !== 0);
 
   const products = await prisma.product.findMany({
-    where: { empresaId: empresa.id },
+    where: { empresaId },
     select: { id: true, name: true },
   });
   const productByName = new Map(products.map((p) => [normalizeText(p.name), p.id]));
 
   const insertRows = parsedItems.map((item) => ({
     id: randomUUID(),
-    empresaId: empresa.id,
+    empresaId,
     productId: productByName.get(normalizeText(item.nome)) ?? null,
     nome: item.nome,
     quantidade: item.quantidade,
@@ -201,7 +240,7 @@ export async function POST(req: Request) {
   }));
 
   await prisma.importedSaleItem.deleteMany({
-    where: { empresaId: empresa.id, periodFrom, periodTo },
+    where: { empresaId, periodFrom, periodTo },
   });
 
   for (let i = 0; i < insertRows.length; i += INSERT_CHUNK_SIZE) {
@@ -210,8 +249,8 @@ export async function POST(req: Request) {
 
   await prisma.auditLog.create({
     data: {
-      userId: session.user.id,
-      empresaId: empresa.id,
+      userId,
+      empresaId,
       action: "IMPORT",
       entityType: "ImportedSaleItem",
       entityId: file.name,

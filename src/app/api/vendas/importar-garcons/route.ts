@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import type { ProductCategory } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidCronSecret } from "@/lib/cron-auth";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 import { readWorkbookRows } from "@/lib/xlsx-import";
 import { spStartOfDay } from "@/lib/timezone";
@@ -75,21 +76,36 @@ function mapCategoria(raw: string): ProductCategory | null {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
-    return NextResponse.json(
-      { error: "Seu perfil de permissão não permite importar o desempenho de garçons." },
-      { status: 403 }
-    );
-  }
+  // Caminho alternativo de autenticação: o robô que automatiza a exportação diária do Saipos
+  // (ver CRON_SECRET, mesmo padrão de src/app/api/cron/**) chama esta rota direto, sem sessão de
+  // usuário logado — nesse caso não há loja ativa pra inferir, então a empresa precisa vir
+  // explícita no FormData (campo `empresaId`, ver abaixo). Upload manual pela tela (usuário
+  // logado) continua exigindo sessão exatamente como antes; só entra aqui se o secret vier
+  // ausente/inválido.
+  const isCronAuth = await isValidCronSecret(req.headers.get("authorization"));
 
-  const empresa = await requireActiveSingleEmpresa();
-  if (!empresa) {
-    return NextResponse.json(
-      { error: "Selecione uma loja específica (não é possível importar no modo Grupo Nord)." },
-      { status: 400 }
-    );
+  let empresaId!: string;
+  let userId: string | null = null;
+
+  if (!isCronAuth) {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
+      return NextResponse.json(
+        { error: "Seu perfil de permissão não permite importar o desempenho de garçons." },
+        { status: 403 }
+      );
+    }
+
+    const empresa = await requireActiveSingleEmpresa();
+    if (!empresa) {
+      return NextResponse.json(
+        { error: "Selecione uma loja específica (não é possível importar no modo Grupo Nord)." },
+        { status: 400 }
+      );
+    }
+    empresaId = empresa.id;
+    userId = session.user.id;
   }
 
   const formData = await req.formData();
@@ -97,6 +113,29 @@ export async function POST(req: Request) {
   const periodFromRaw = formData.get("periodFrom") as string | null;
   const periodToRaw = formData.get("periodTo") as string | null;
   if (!file) return NextResponse.json({ error: "Arquivo não informado." }, { status: 400 });
+
+  if (isCronAuth) {
+    const empresaIdRaw = formData.get("empresaId");
+    if (typeof empresaIdRaw !== "string" || !empresaIdRaw.trim()) {
+      return NextResponse.json(
+        { error: "Campo 'empresaId' é obrigatório para importação automatizada (sem sessão de usuário)." },
+        { status: 400 }
+      );
+    }
+    // `active: true` — mesmo critério de `requireActiveSingleEmpresa()` (caminho de sessão, usado
+    // acima): uma loja desativada nunca aparece pro usuário escolher no fluxo manual, então a
+    // importação via secret também não pode gravar venda numa loja desativada (achado do Teulis:
+    // sem este filtro, uma automação mal configurada ou apontando pra um `empresaId` antigo
+    // conseguia empurrar dado pra uma loja já desativada, sem aviso nenhum).
+    const empresa = await prisma.empresa.findFirst({ where: { id: empresaIdRaw.trim(), active: true } });
+    if (!empresa) {
+      return NextResponse.json(
+        { error: "Empresa informada em 'empresaId' não existe ou está inativa." },
+        { status: 400 }
+      );
+    }
+    empresaId = empresa.id;
+  }
 
   const periodFrom = periodFromRaw ? parseBrDate(periodFromRaw) : null;
   const periodTo = periodToRaw ? parseBrDate(periodToRaw) : null;
@@ -140,7 +179,7 @@ export async function POST(req: Request) {
   }
 
   const employees = await prisma.employee.findMany({
-    where: { empresaId: empresa.id },
+    where: { empresaId },
     select: { id: true, name: true },
   });
   const employeeByName = new Map(employees.map((e) => [normalizeText(e.name), e.id]));
@@ -150,7 +189,7 @@ export async function POST(req: Request) {
     const categoriaRaw = idx.categoria !== -1 ? String(r[idx.categoria] ?? "") : "";
     return {
       id: randomUUID(),
-      empresaId: empresa.id,
+      empresaId,
       employeeId: employeeByName.get(normalizeText(garcomNome)) ?? null,
       garcomNome,
       categoria: mapCategoria(categoriaRaw),
@@ -163,7 +202,7 @@ export async function POST(req: Request) {
   });
 
   await prisma.importedGarcomItem.deleteMany({
-    where: { empresaId: empresa.id, periodFrom, periodTo },
+    where: { empresaId, periodFrom, periodTo },
   });
 
   for (let i = 0; i < insertRows.length; i += INSERT_CHUNK_SIZE) {
@@ -172,8 +211,8 @@ export async function POST(req: Request) {
 
   await prisma.auditLog.create({
     data: {
-      userId: session.user.id,
-      empresaId: empresa.id,
+      userId,
+      empresaId,
       action: "IMPORT",
       entityType: "ImportedGarcomItem",
       entityId: file.name,
