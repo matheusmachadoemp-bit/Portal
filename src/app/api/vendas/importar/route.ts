@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { requireActiveSingleEmpresa } from "@/lib/empresa";
 import type { PaymentMethod, SaleChannel, SalePlatform } from "@prisma/client";
 import { hasModulePermission } from "@/lib/authz";
+import { isValidCronSecret } from "@/lib/cron-auth";
 import { buildImportFallbackBucket, computeImportFallbackStats } from "@/lib/import-fallback";
 import { parseExcelDateCode, readWorkbookRows } from "@/lib/xlsx-import";
 import { spStartOfDay } from "@/lib/timezone";
@@ -237,29 +238,68 @@ function emptyDay(): DayAggregate {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  // Importa o resumo diário (cria ou atualiza o SalesEntry do dia) e substitui as vendas
-  // detalhadas do período (delete + createMany) na mesma chamada — trata como canCreate por ser
-  // fundamentalmente uma importação em massa, mesmo padrão usado em financeiro/conciliacao/import.
-  if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
-    return NextResponse.json(
-      { error: "Seu perfil de permissão não permite importar vendas." },
-      { status: 403 }
-    );
-  }
+  // Caminho alternativo de autenticação: o robô que automatiza a exportação diária do Saipos
+  // (ver CRON_SECRET, mesmo padrão de src/app/api/cron/** e das rotas irmãs importar-itens/
+  // importar-garcons) chama esta rota direto, sem sessão de usuário logado — nesse caso não há
+  // loja ativa pra inferir, então a empresa precisa vir explícita no FormData (campo `empresaId`,
+  // ver abaixo). Upload manual pela tela (usuário logado) continua exigindo sessão exatamente
+  // como antes; só entra aqui se o secret vier ausente/inválido.
+  const isCronAuth = await isValidCronSecret(req.headers.get("authorization"));
 
-  const empresa = await requireActiveSingleEmpresa();
-  if (!empresa) {
-    return NextResponse.json(
-      { error: "Selecione uma loja específica (não é possível importar vendas no modo Grupo Nord)." },
-      { status: 400 }
-    );
+  let empresaId!: string;
+  let userId: string | null = null;
+
+  if (!isCronAuth) {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Importa o resumo diário (cria ou atualiza o SalesEntry do dia) e substitui as vendas
+    // detalhadas do período (delete + createMany) na mesma chamada — trata como canCreate por ser
+    // fundamentalmente uma importação em massa, mesmo padrão usado em financeiro/conciliacao/import.
+    if (!(await hasModulePermission(session.user.id, "vendas", "canCreate"))) {
+      return NextResponse.json(
+        { error: "Seu perfil de permissão não permite importar vendas." },
+        { status: 403 }
+      );
+    }
+
+    const empresa = await requireActiveSingleEmpresa();
+    if (!empresa) {
+      return NextResponse.json(
+        { error: "Selecione uma loja específica (não é possível importar vendas no modo Grupo Nord)." },
+        { status: 400 }
+      );
+    }
+    empresaId = empresa.id;
+    userId = session.user.id;
   }
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "Arquivo não informado." }, { status: 400 });
+
+  if (isCronAuth) {
+    const empresaIdRaw = formData.get("empresaId");
+    if (typeof empresaIdRaw !== "string" || !empresaIdRaw.trim()) {
+      return NextResponse.json(
+        { error: "Campo 'empresaId' é obrigatório para importação automatizada (sem sessão de usuário)." },
+        { status: 400 }
+      );
+    }
+    // `active: true` — mesmo critério de `requireActiveSingleEmpresa()` (caminho de sessão, usado
+    // acima): uma loja desativada nunca aparece pro usuário escolher no fluxo manual, então a
+    // importação via secret também não pode gravar venda numa loja desativada (achado do Teulis
+    // nas rotas irmãs importar-itens/importar-garcons: sem este filtro, uma automação mal
+    // configurada ou apontando pra um `empresaId` antigo conseguia empurrar dado pra uma loja já
+    // desativada, sem aviso nenhum).
+    const empresa = await prisma.empresa.findFirst({ where: { id: empresaIdRaw.trim(), active: true } });
+    if (!empresa) {
+      return NextResponse.json(
+        { error: "Empresa informada em 'empresaId' não existe ou está inativa." },
+        { status: 400 }
+      );
+    }
+    empresaId = empresa.id;
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const isSpreadsheet = /\.xlsx?$/i.test(file.name);
@@ -391,7 +431,7 @@ export async function POST(req: Request) {
       const saleId = randomUUID();
       saleRows.push({
         id: saleId,
-        empresaId: empresa.id,
+        empresaId,
         dateTime,
         channel,
         platform,
@@ -460,11 +500,11 @@ export async function POST(req: Request) {
       mesasAtendidas: agg.mesasAtendidas,
       taxaServicoValor: agg.taxaServicoValor,
       source: "IMPORTADO" as const,
-      createdById: session.user.id,
+      createdById: userId,
     };
 
     const existing = await prisma.salesEntry.findFirst({
-      where: { empresaId: empresa.id, date: day, periodType: "DIARIO" },
+      where: { empresaId, date: day, periodType: "DIARIO" },
       select: { id: true },
     });
 
@@ -472,7 +512,7 @@ export async function POST(req: Request) {
       await prisma.salesEntry.update({ where: { id: existing.id }, data });
       updated += 1;
     } else {
-      await prisma.salesEntry.create({ data: { empresaId: empresa.id, date: day, periodType: "DIARIO", ...data } });
+      await prisma.salesEntry.create({ data: { empresaId, date: day, periodType: "DIARIO", ...data } });
       created += 1;
     }
   }
@@ -488,7 +528,7 @@ export async function POST(req: Request) {
     // Só apaga vendas com origem "IMPORTADO" — lançamentos manuais não são
     // tocados.
     await prisma.sale.deleteMany({
-      where: { empresaId: empresa.id, source: "IMPORTADO", dateTime: { gte: rangeStart, lt: rangeEnd } },
+      where: { empresaId, source: "IMPORTADO", dateTime: { gte: rangeStart, lt: rangeEnd } },
     });
 
     for (let i = 0; i < saleRows.length; i += SALE_INSERT_CHUNK_SIZE) {
@@ -515,8 +555,8 @@ export async function POST(req: Request) {
 
   await prisma.auditLog.create({
     data: {
-      userId: session.user.id,
-      empresaId: empresa.id,
+      userId,
+      empresaId,
       action: "IMPORT",
       entityType: "SalesEntry",
       entityId: file.name,
