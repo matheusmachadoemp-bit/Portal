@@ -49,10 +49,13 @@ const emptyForm = {
 const SEM_CATEGORIA = "__sem-categoria__";
 
 // Sugestões de unidade de medida mais comuns no dia a dia de uma pizzaria/hamburgueria + sushi —
-// o campo continua sendo texto livre (via <datalist>, mesmo padrão já usado em Produção > Produtos
-// de Produção para o nome), então uma unidade fora dessa lista (ex. "fardo", "dúzia" de um jeito
-// diferente, ou algo bem específico) ainda pode ser digitada normalmente.
+// aparecem como opções de um <select> (pra ficar com o mesmo visual escuro dos campos Categoria/
+// Fornecedor; o <datalist> usado antes não respeita o tema escuro no popup nativo do navegador).
+// Uma unidade fora dessa lista (ex. "fardo" escrito diferente, ou algo bem específico como
+// "balde 20L") ainda pode ser usada via a opção "Outro (digitar)", que revela um campo de texto livre.
 const UNIDADE_SUGESTOES = ["un", "kg", "g", "ml", "l", "pct", "cx", "fardo", "dz"];
+// Valor interno (nunca salvo) só pra identificar a opção "Outro (digitar)" do select acima.
+const UNIDADE_OUTRO = "__outro__";
 
 export function InsumosClient({
   initialIngredients,
@@ -97,6 +100,11 @@ export function InsumosClient({
     sucesso: number;
     falhas: { id: string; nome: string; motivo: string }[];
   } | null>(null);
+
+  // Estado derivado: se `form.unidade` não bate com nenhuma das sugestões (incluindo ao abrir o
+  // formulário de edição de um insumo com unidade livre já salva, ex. "balde 20L"), o select de
+  // unidade mostra "Outro (digitar)" e revela o campo de texto livre abaixo com o valor atual.
+  const unidadeEhSugestao = UNIDADE_SUGESTOES.includes(form.unidade);
 
   async function refresh() {
     const res = await fetch("/api/ficha-tecnica/insumos");
@@ -744,19 +752,33 @@ export function InsumosClient({
             </select>
           </Field>
           <Field label="Unidade de medida">
-            <input
-              value={form.unidade}
-              onChange={(e) => setForm({ ...form, unidade: e.target.value })}
-              list="insumo-unidade-sugestoes"
-              placeholder="kg, g, L, un..."
-              autoComplete="off"
+            <select
+              value={unidadeEhSugestao ? form.unidade : UNIDADE_OUTRO}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Ao trocar de uma sugestão para "Outro", limpa o campo pra começar a digitar do
+                // zero — se já estava em "Outro" (unidade livre), o próprio input de texto abaixo
+                // é quem edita o valor, então esse onChange só dispara ao trocar de sugestão.
+                setForm({ ...form, unidade: value === UNIDADE_OUTRO ? "" : value });
+              }}
               className="input"
-            />
-            <datalist id="insumo-unidade-sugestoes">
+            >
               {UNIDADE_SUGESTOES.map((u) => (
-                <option key={u} value={u} />
+                <option key={u} value={u}>
+                  {u}
+                </option>
               ))}
-            </datalist>
+              <option value={UNIDADE_OUTRO}>Outro (digitar)</option>
+            </select>
+            {!unidadeEhSugestao && (
+              <input
+                value={form.unidade}
+                onChange={(e) => setForm({ ...form, unidade: e.target.value })}
+                placeholder="Digite a unidade (ex.: balde 20L)"
+                autoComplete="off"
+                className="input mt-2"
+              />
+            )}
           </Field>
           <Field label="Preço atual (R$)">
             <input type="number" value={form.precoAtual} onChange={(e) => setForm({ ...form, precoAtual: e.target.value })} className="input" />
