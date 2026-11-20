@@ -5,6 +5,7 @@ import { empresaIdsForContext, getActiveEmpresaContext } from "@/lib/empresa";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
+import { sortByName } from "@/lib/text";
 
 // Estoque > Produtos e Estoque > Categorias foram unificadas nesta única
 // subcategoria ("Produtos" absorveu "Categorias" — ver DESIGN_SYSTEM.md e o
@@ -100,7 +101,9 @@ export default async function ProdutosPage() {
     prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
   ]);
 
-  const serializedIngredients = ingredients.map((i) => ({
+  // Ordenação alfabética de verdade (ignorando maiúscula/minúscula) — o orderBy: { name: "asc" }
+  // da query acima usa a colação padrão (case-sensitive) do Postgres. Ver src/lib/text.ts.
+  const serializedIngredients = sortByName(ingredients).map((i) => ({
     id: i.id,
     name: i.name,
     codigoInterno: i.codigoInterno,

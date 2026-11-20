@@ -9,6 +9,7 @@ import { isProductCategory } from "@/lib/ficha-code-core";
 import { cleanProductName, normalizeProductName } from "@/lib/ficha-nome";
 import { DuplicateProductNameError, withUniqueProductName } from "@/lib/ficha-nome-server";
 import { autoLinkResaleIngredient } from "@/lib/ficha-autolink";
+import { capitalizeFirstLetter, sortByName } from "@/lib/text";
 
 // Checagem de cargo (MANAGER_ROLES) — sem ela, qualquer COLABORADOR com o Perfil de Permissão
 // padrão "Funcionário" (ficha-tecnica:canView=true de fábrica) conseguia ver o custo/fornecedor
@@ -52,11 +53,15 @@ export async function GET(req: Request) {
       empresaId: { in: empresaIdsForContext(ctx) },
       ...(category ? { category: category as never } : {}),
     },
+    // `orderBy: { name: "asc" }` do Prisma usa a colação padrão (case-sensitive) do Postgres —
+    // deixado aqui só como ordenação de base; a ordenação alfabética de verdade (ignorando
+    // maiúscula/minúscula, aplica a TODAS as categorias, inclusive Combos) acontece em
+    // `sortByName` abaixo, depois da query. Ver src/lib/text.ts.
     orderBy: { name: "asc" },
     include: { ingredients: { include: { ingredient: true }, orderBy: { order: "asc" } } },
   });
 
-  return NextResponse.json({ products });
+  return NextResponse.json({ products: sortByName(products) });
 }
 
 export async function POST(req: Request) {
@@ -79,7 +84,11 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  const name = typeof body.name === "string" ? cleanProductName(body.name) : "";
+  // Primeira letra maiúscula automática (silenciosa) depois de limpar o nome — padrão definido
+  // pro Matheus pra todo item criado em Insumos/Combos; aplicado aqui pra TODAS as categorias de
+  // produto (não só Combos), já que é a mesma rota/tela pra todas as abas — ver relatório final
+  // pra essa decisão de escopo. Ver src/lib/text.ts.
+  const name = typeof body.name === "string" ? capitalizeFirstLetter(cleanProductName(body.name)) : "";
   if (!normalizeProductName(name)) {
     return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
   }
