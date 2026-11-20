@@ -48,6 +48,12 @@ const emptyForm = {
 
 const SEM_CATEGORIA = "__sem-categoria__";
 
+// Sugestões de unidade de medida mais comuns no dia a dia de uma pizzaria/hamburgueria + sushi —
+// o campo continua sendo texto livre (via <datalist>, mesmo padrão já usado em Produção > Produtos
+// de Produção para o nome), então uma unidade fora dessa lista (ex. "fardo", "dúzia" de um jeito
+// diferente, ou algo bem específico) ainda pode ser digitada normalmente.
+const UNIDADE_SUGESTOES = ["un", "kg", "g", "ml", "l", "pct", "cx", "fardo", "dz"];
+
 export function InsumosClient({
   initialIngredients,
   categories,
@@ -738,7 +744,19 @@ export function InsumosClient({
             </select>
           </Field>
           <Field label="Unidade de medida">
-            <input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="input" placeholder="kg, g, L, un" />
+            <input
+              value={form.unidade}
+              onChange={(e) => setForm({ ...form, unidade: e.target.value })}
+              list="insumo-unidade-sugestoes"
+              placeholder="kg, g, L, un..."
+              autoComplete="off"
+              className="input"
+            />
+            <datalist id="insumo-unidade-sugestoes">
+              {UNIDADE_SUGESTOES.map((u) => (
+                <option key={u} value={u} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Preço atual (R$)">
             <input type="number" value={form.precoAtual} onChange={(e) => setForm({ ...form, precoAtual: e.target.value })} className="input" />
