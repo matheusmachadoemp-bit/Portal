@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, X, GripVertical, ImagePlus, AlertTriangle, Search } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { sanitizeFileName } from "@/lib/upload";
 import { DndContext, DragEndEvent, closestCenter } from "@dnd-kit/core";
@@ -20,6 +20,7 @@ import {
   precoIfoodSugerido,
   productTotalCost,
 } from "@/lib/ficha";
+import { normalizeProductName } from "@/lib/ficha-nome";
 import { differenceInCalendarDays } from "date-fns";
 
 /** Mesmo critério do painel de qualidade (bucket "Desatualizadas" removido dali): ficha sem edição há mais de 90 dias. */
@@ -131,8 +132,21 @@ export function ProdutosClient({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Busca por nome do produto (mesmo critério da busca de Insumos): ignora maiúscula/minúscula e
+  // acento; várias palavras digitadas = todas precisam aparecer no nome, em qualquer ordem.
+  const [search, setSearch] = useState("");
 
   const sensors = useDndSensors();
+
+  const searchWords = useMemo(() => normalizeProductName(search).split(" ").filter(Boolean), [search]);
+  const searching = searchWords.length > 0;
+  const filteredProducts = useMemo(() => {
+    if (searchWords.length === 0) return products;
+    return products.filter((p) => {
+      const text = normalizeProductName(p.name);
+      return searchWords.every((w) => text.includes(w));
+    });
+  }, [products, searchWords]);
 
   async function refresh() {
     const res = await fetch(`/api/ficha-tecnica/produtos?category=${category}`);
@@ -291,8 +305,46 @@ export function ProdutosClient({
             : "Seu perfil de permissão não permite cadastrar ou editar fichas técnicas neste módulo."}
         </p>
       )}
+      {products.length > 0 && (
+        <div className="mb-4 relative w-full sm:max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-nord-gray pointer-events-none" />
+          <input
+            type="text"
+            inputMode="search"
+            autoComplete="off"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar produto..."
+            aria-label="Buscar produto"
+            className="input !pl-9 !pr-9"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Limpar busca"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-nord-gray hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+      {searching && filteredProducts.length === 0 ? (
+        <div className="nord-card p-8 text-center">
+          <Search size={28} className="text-nord-gray mx-auto mb-3" />
+          <p className="text-white text-sm font-medium mb-1">Nenhum produto encontrado para “{search.trim()}”</p>
+          <p className="text-xs text-nord-gray mb-3">Confira a grafia ou tente só uma parte do nome.</p>
+          <button
+            onClick={() => setSearch("")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-nord-blue hover:bg-nord-blue-light text-white"
+          >
+            Limpar busca
+          </button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {products.map((p) => {
+        {filteredProducts.map((p) => {
           const totalCost = productTotalCost(p.ingredients);
           const cmv = cmvPercent(totalCost, p.precoVenda);
           const margem = margemContribuicao(totalCost, p.precoVenda);
@@ -351,6 +403,7 @@ export function ProdutosClient({
           </p>
         )}
       </div>
+      )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editing ? "Editar produto" : "Novo produto"} widthClass="max-w-2xl">
         <div className="flex items-center gap-3 mb-4">
