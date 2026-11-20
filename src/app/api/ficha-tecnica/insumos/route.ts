@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { empresaIdsForContext, getActiveEmpresaContext, requireActiveSingleEmpresa } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
+import { capitalizeFirstLetter, sortByName } from "@/lib/text";
 
 // Checagem de cargo (MANAGER_ROLES) — mesmo motivo/gate de src/app/api/ficha-tecnica/produtos/route.ts
 // e de src/app/portal/ficha-tecnica/[sub]/page.tsx (a aba "insumos" dessa página, que consome este
@@ -47,6 +48,9 @@ export async function GET() {
 
   const ingredients = await prisma.ingredient.findMany({
     where: { empresaId: { in: empresaIdsForContext(ctx) } },
+    // `orderBy: { name: "asc" }` do Prisma usa a colação padrão (case-sensitive) do Postgres —
+    // deixado aqui só como ordenação de base; a ordenação alfabética de verdade (ignorando
+    // maiúscula/minúscula) acontece em `sortByName` abaixo, depois da query. Ver src/lib/text.ts.
     orderBy: { name: "asc" },
     include: {
       priceHistory: { orderBy: { createdAt: "desc" }, take: 10 },
@@ -55,7 +59,7 @@ export async function GET() {
     },
   });
   return NextResponse.json({
-    ingredients: ingredients.map((i) => ({
+    ingredients: sortByName(ingredients).map((i) => ({
       ...i,
       fornecedorNome: i.fornecedorPrincipal?.nomeFantasia ?? i.fornecedorPrincipal?.razaoSocial ?? null,
     })),
@@ -82,7 +86,9 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  const name = typeof body.name === "string" ? body.name.trim() : "";
+  // Primeira letra maiúscula automática (silenciosa, sem bloquear quem digitou minúsculo) — padrão
+  // definido pro Matheus pra todo item criado em Insumos/Combos. Ver src/lib/text.ts.
+  const name = typeof body.name === "string" ? capitalizeFirstLetter(body.name.trim()) : "";
   if (!name) {
     return NextResponse.json({ error: "Informe o nome do insumo." }, { status: 400 });
   }

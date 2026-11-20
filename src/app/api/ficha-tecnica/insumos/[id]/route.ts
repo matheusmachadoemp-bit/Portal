@@ -5,6 +5,7 @@ import { assertEmpresaAccess } from "@/lib/empresa";
 import { hasModulePermission } from "@/lib/authz";
 import { isValidBlobUrl } from "@/lib/manutencao-server";
 import { excluirIngredientSeNaoEmUso } from "@/lib/ficha-tecnica-server";
+import { capitalizeFirstLetter } from "@/lib/text";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -29,7 +30,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   let name: string | undefined;
   if (body.name !== undefined) {
-    name = typeof body.name === "string" ? body.name.trim() : "";
+    // Primeira letra maiúscula automática — mesmo padrão da criação (ver POST em
+    // src/app/api/ficha-tecnica/insumos/route.ts e src/lib/text.ts).
+    name = typeof body.name === "string" ? capitalizeFirstLetter(body.name.trim()) : "";
     if (!name) {
       return NextResponse.json({ error: "Informe o nome do insumo." }, { status: 400 });
     }

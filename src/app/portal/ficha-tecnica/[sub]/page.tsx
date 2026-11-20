@@ -11,6 +11,7 @@ import { formatPercent } from "@/lib/calc";
 import { auth } from "@/auth";
 import { hasModulePermission } from "@/lib/authz";
 import { GenericModulePage } from "@/components/generic-module/generic-module-page";
+import { sortByName } from "@/lib/text";
 
 const SUB_MAP = FICHA_TECNICA_SUB_MAP;
 
@@ -58,7 +59,9 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
       prisma.stockCategory.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { order: "asc" } }),
       prisma.supplier.findMany({ where: { empresaId: { in: empresaIds }, active: true }, orderBy: { razaoSocial: "asc" } }),
     ]);
-    const serialized = ingredients.map((i) => ({
+    // Ordenação alfabética de verdade (ignorando maiúscula/minúscula) — o orderBy: { name: "asc" }
+    // da query acima usa a colação padrão (case-sensitive) do Postgres. Ver src/lib/text.ts.
+    const serialized = sortByName(ingredients).map((i) => ({
       ...i,
       lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.toISOString() : null,
       validade: i.validade ? i.validade.toISOString() : null,
@@ -102,7 +105,7 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
     redirect(`/portal/ficha-tecnica/${defaultFichaTecnicaSub(ctx.empresa.key)}`);
   }
 
-  const [products, ingredients, qualityConfig] = await Promise.all([
+  const [productsUnsorted, ingredientsUnsorted, qualityConfig] = await Promise.all([
     prisma.product.findMany({
       where: { empresaId: { in: empresaIds }, category: info.category as never },
       orderBy: { name: "asc" },
@@ -115,6 +118,12 @@ export default async function FichaTecnicaSubPage({ params }: { params: Promise<
         })
       : Promise.resolve(null),
   ]);
+  // Ordenação alfabética de verdade (ignorando maiúscula/minúscula) — o orderBy: { name: "asc" }
+  // das queries acima usa a colação padrão (case-sensitive) do Postgres. Vale pra TODAS as
+  // categorias de produto desta página (inclusive Combos), já que é a mesma query pra todas as
+  // abas. Ver src/lib/text.ts.
+  const products = sortByName(productsUnsorted);
+  const ingredients = sortByName(ingredientsUnsorted);
 
   // Card "CMV médio — <categoria>": média do CMV% só dos produtos DESTA categoria (reaproveita a
   // query `products` acima, já filtrada por `category: info.category`, em vez de somar o cardápio

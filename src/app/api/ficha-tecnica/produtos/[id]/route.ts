@@ -8,6 +8,7 @@ import { isProductCategory } from "@/lib/ficha-code-core";
 import { cleanProductName, normalizeProductName } from "@/lib/ficha-nome";
 import { DuplicateProductNameError, withUniqueProductName } from "@/lib/ficha-nome-server";
 import { autoLinkResaleIngredientLocked } from "@/lib/ficha-autolink";
+import { capitalizeFirstLetter } from "@/lib/text";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -28,7 +29,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   let name: string | undefined;
   if (body.name !== undefined) {
-    name = typeof body.name === "string" ? cleanProductName(body.name) : "";
+    // Primeira letra maiúscula automática — mesmo padrão da criação (ver POST em
+    // src/app/api/ficha-tecnica/produtos/route.ts e src/lib/text.ts).
+    name = typeof body.name === "string" ? capitalizeFirstLetter(cleanProductName(body.name)) : "";
     if (!normalizeProductName(name)) {
       return NextResponse.json({ error: "Informe o nome do produto." }, { status: 400 });
     }
